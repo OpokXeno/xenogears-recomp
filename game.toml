@@ -16,7 +16,9 @@ disc = "../game/disc1.cue"
 seeds = "seeds/slus_00664_seeds.txt"
 strict = true
 out_dir = "generated"
-out_stem = "SLUS_00664"
+# NOTE: out_stem is parsed by config_loader but NOT forwarded by psxrecomp-game
+# (main_psx.cpp) at pin 678c71f — outputs are always named after the exe file
+# (TombaRecomp convention: SCUS_942.36_full_*.c), so ours are slus_006.64_*.
 discovery = "whole-image"
 
 [runtime]
