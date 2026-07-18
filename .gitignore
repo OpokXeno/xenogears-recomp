@@ -4,3 +4,5 @@ generated/
 overlay_captures.json
 *.mcd
 *.log
+psx_crash.txt
+psx_last_run_report.json

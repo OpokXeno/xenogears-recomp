@@ -1,0 +1,2 @@
+FAIL-FAST unknown dispatch: addr=0x80019524 phys=0x00019524 ra=0xBFC03D60 a0=0x00000001 a1=0x00000000 — see psx_last_run_report.json
+(recompiler discovery gap: if addr is BIOS ROM, seed it — recompiler/seeds/ — and regen; PSX_FAIL_FAST_UNKNOWN_DISPA
