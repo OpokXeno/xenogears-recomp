@@ -1,0 +1,6 @@
+game/
+build/
+generated/
+overlay_captures.json
+*.mcd
+*.log
