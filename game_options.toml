@@ -1,0 +1,15 @@
+# game_options.toml — player-facing per-game options (defaults).
+# Convention from the TombaRecomp ecosystem (see psxrecomp
+# docs/STRING_TRANSLATION.md). Not yet consumed by the pinned runtime;
+# kept as the single place future option plumbing will read.
+
+[video]
+widescreen = false
+texture_filtering = false
+frame_interpolation = false
+
+[audio]
+spu_hq = false
+
+[gameplay]
+language = "en"

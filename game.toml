@@ -1,0 +1,30 @@
+# Xenogears (USA) — Disc 1 game config (A1 step 5)
+# Bootstrapped by psxrecomp-toml from ../game/slus_006.64, then hand-completed.
+# Field names follow psxrecomp/docs/config_schema.md (pinned commit 678c71f).
+
+[game]
+name = "Xenogears (USA, Disc 1)"
+id = "SLUS-00664"
+exe = "../game/slus_006.64"
+load_address = "0x80010000"
+entry_pc = "0x80019524"
+text_size = "0x4A000"
+stack_base = "0x801FFFF0"
+disc = "../game/disc1.cue"
+
+[recompiler]
+seeds = "seeds/slus_00664_seeds.txt"
+strict = true
+out_dir = "generated"
+out_stem = "SLUS_00664"
+discovery = "whole-image"
+
+[runtime]
+debug_port = 4370
+window_title = "XenogearsRecomp"
+controller = "digital"
+memcard_dir = "."
+# NEVER "instant" — known-hangy upstream (master plan 4.A1; psxrecomp
+# docs/bios-hardening.md: divisor=0 hangs at the PlayStation logo).
+disc_speed = "1x"
+bios_hle = false
