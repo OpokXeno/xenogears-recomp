@@ -6,3 +6,4 @@ overlay_captures.json
 *.log
 psx_crash.txt
 psx_last_run_report.json
+psx_freeze_dump_*.json
