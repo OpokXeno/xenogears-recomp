@@ -36,10 +36,9 @@ No BIOS image, game disc image, game code, or game assets are included in or dis
 - ✅ **Boots and plays** — BIOS boot → game handoff, title screen, intro FMV, and the opening gameplay all run with rendering, audio, input, and memory-card saves
 - ✅ **Overlay pipeline** — field/battle/worldmap overlays capture in the interpreter and compile to native code in the background
 - ⚠️ **Not validated end-to-end** — no complete playthrough has been done; treat every area past the opening as unverified
-- 🐛 **Known issues** (tracked in [`docs/burndown/`](docs/burndown/)):
-  - Crash (`unknown dispatch 0x80019524`) when skipping FMVs / text too fast
-  - Occasional freezes under active investigation
+- 🐛 **Known issues**:
   - Intermittent black-polygon rendering glitches in some scenes
+  - Most of the enhancements are untested or not yet fully polished, so expect some bugs so expect some bugs if you use them.
 - **Scope:** USA Disc 1 (`SLUS-00664`) only — Disc 2 and other regions are untested
 
 ---
@@ -207,15 +206,12 @@ Overlays are chunks of code the game streams off the disc at runtime. Xenogears 
 Contributions are welcome. The highest-value ones:
 
 - **Reverse-engineering notes** — function names, behaviors, and struct layouts in [`annotations/`](annotations/), and entry-point seeds in [`seeds/`](seeds/). This is what makes the recompilation better over time.
-- **Bug reports** — open an issue with repro steps, your platform, and the scene/frame where it happens. Please **don't attach freeze dumps** (they contain console memory, i.e. game code); a description plus `psx_last_run_report.json` is enough.
-- **Code** — runtime, overlay pipeline, renderer, and launcher fixes. Keep PRs focused and describe what you tested; the interpreter failover and the DuckStation oracle scripts in [`tools/`](tools/) are the reference oracles.
+- **Bug reports** — open an issue with repro steps, your platform, and the scene/frame where it happens. A description plus `psx_last_run_report.json` is enough.
+- **Code** — runtime, overlay pipeline, renderer, and launcher fixes. Keep PRs focused and describe what you tested.
 
 Ground rules:
 
-1. **Never commit game-derived data.** The legal scanner rejects it at commit time — install it as your pre-commit hook:
-   ```sh
-   printf '#!/bin/sh\nexec python3 tools/legal_scan.py\n' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
-   ```
+1. **Never commit game-derived data.**
 2. You need your own legally obtained game EXE, disc image, and BIOS to build and test (see [Requirements](#requirements)).
 3. AI-assisted contributions are fine (see below) — you're responsible for what you submit regardless of how it was produced.
 
