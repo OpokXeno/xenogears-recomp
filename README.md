@@ -179,8 +179,8 @@ XenogearsRecomp/
 │   ├── slus_00664_seeds.txt
 │   └── slus_00664_bios_thunks.txt
 ├── annotations/            # Function annotation CSV for recompiler (tracked)
-├── psxrecomp/              # PSXRecomp framework submodule
-└── recomp-ui/              # Shared launcher UI submodule
+└── psxrecomp/              # PSXRecomp framework submodule
+    └── lib/recomp-ui       # Launcher UI (nested submodule, pinned upstream)
 ```
 
 ### How it works
