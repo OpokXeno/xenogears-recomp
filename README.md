@@ -1,8 +1,3 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mstan/psxrecomp/master/docs/assets/psxrecomp-logo.png">
-  <img alt="XenogearsRecomp" src="https://raw.githubusercontent.com/mstan/psxrecomp/master/docs/assets/psxrecomp-logo.png" width="640">
-</picture>
-
 # XenogearsRecomp
 
 **Static recompilation of *Xenogears* (USA, Disc 1) for the PlayStation 1.**
@@ -34,11 +29,26 @@ No BIOS image, game disc image, game code, or game assets are included in or dis
 
 ---
 
+## Status
+
+**Alpha.** What works today, and what doesn't:
+
+- ✅ **Boots and plays** — BIOS boot → game handoff, title screen, intro FMV, and the opening gameplay all run with rendering, audio, input, and memory-card saves
+- ✅ **Overlay pipeline** — field/battle/worldmap overlays capture in the interpreter and compile to native code in the background
+- ⚠️ **Not validated end-to-end** — no complete playthrough has been done; treat every area past the opening as unverified
+- 🐛 **Known issues** (tracked in [`docs/burndown/`](docs/burndown/)):
+  - Crash (`unknown dispatch 0x80019524`) when skipping FMVs / text too fast
+  - Occasional freezes under active investigation
+  - Intermittent black-polygon rendering glitches in some scenes
+- **Scope:** USA Disc 1 (`SLUS-00664`) only — Disc 2 and other regions are untested
+
+---
+
 ## Setup
 
 ### 1. Download a Release (recommended)
 
-Grab the archive for your platform from [Releases](https://github.com/OpokXeno/XenogearsRecomp/releases), extract it, and run the executable. A launcher window opens.
+Grab the archive for your platform from [Releases](https://github.com/OpokXeno/xenogears-recomp/releases), extract it, and run the executable. A launcher window opens.
 
 1. **Set your PlayStation BIOS** — select your legally obtained `SCPH1001.BIN` (a 512 KB file dumped from your own console) via Settings → System → Browse.
 2. **Set the game disc** — select your legally obtained *Xenogears* (USA, Disc 1) disc image. Click **Change Disc** on the main screen and pick your `.cue` file. The launcher verifies the ISO9660 header, region, and serial.
@@ -53,8 +63,8 @@ Selected paths persist next to the executable (`settings.toml`). Delete it to pi
 #### 2.1 Clone with submodules
 
 ```sh
-git clone --recurse-submodules https://github.com/OpokXeno/XenogearsRecomp.git
-cd XenogearsRecomp
+git clone --recurse-submodules https://github.com/OpokXeno/xenogears-recomp.git
+cd xenogears-recomp
 ```
 
 If you already cloned without `--recurse-submodules`:
@@ -71,8 +81,6 @@ XenogearsRecomp/
 │   ├── slus_006.64              # Xenogears (Disc 1) main EXE — your rip
 │   ├── Xenogears Disc 1.cue     # Disc index file (name depends on your rip)
 │   ├── Xenogears Disc 1.bin     # Track 1 (data)
-│   ├── Xenogears Disc 2.bin     # Track 2 (audio), etc.
-│   └── ...                      # more .bin tracks for CDDA
 └── bios/                        # (optional — launcher picks any path)
     └── SCPH1001.BIN              # PS1 BIOS — your rip
 ```
@@ -138,34 +146,6 @@ psxrecomp/recompiler/build/psxrecomp-game --config game.toml
 
 ---
 
-## Features
-
-| Feature | Status |
-|---|---|
-| **BIOS recompilation** (LLE) | ✅ Boots to shell, hands off to game |
-| **BIOS HLE tier** (boot-skip) | ✅ On by default, opt-out via `bios_hle = false` |
-| **Game EXE recompilation** | ✅ 38 shards, ~1.3M lines of generated C |
-| **Widescreen (16:9)** | ✅ GTE-based detection, HUD squash, cull widening |
-| **Overlay capture→compile→cache** | ✅ Auto-detects compiler on all platforms |
-| **Interpreter failover** | ✅ Correctness net for not-yet-native code |
-| **Memory card save/load** | ✅ |
-| **SPU audio** | ✅ Working |
-| **FMV playback** | ✅ Intro FMV plays |
-| **Overlay compilation** (background) | ✅ Windows auto; Linux/Mac via gcc |
-
-### Widescreen
-
-Xenogears is a fully-3D title. Widescreen is enabled by default via `[widescreen]` in `game.toml`:
-
-- **GTE activity detection** — automatically enables widescreen during 3D gameplay
-- **HUD squash** — centered text/portraits maintain native proportions in 16:9
-- **Cull widening** — map chunk pop-in, NPC visibility, terrain far-clip, and worldmap horizon all adjusted for the wider aspect ratio
-- **Per-vertex X reject widening** — 3D model terrain/building edge pop-in fixed
-
-Controls: press **F11** (or **Alt+Enter**, **Cmd+F**) to toggle fullscreen. Cycle aspect ratio in the settings.
-
----
-
 ## Controls
 
 | Action | Keyboard | Controller (Xbox) |
@@ -191,7 +171,7 @@ Full rebinding is available through in-app settings.
 XenogearsRecomp/
 ├── build.sh / build.ps1    # Build scripts (root, tracked)
 ├── regen.ps1               # Windows recompilation script
-├── CMakeLists.txt           # Game runtime CMake build
+├── CMakeLists.txt          # Game runtime CMake build
 ├── game.toml               # Game configuration (patches, widescreen, runtime)
 ├── game/                   # YOUR game EXE / disc image (not tracked)
 ├── generated/              # Recompiled C source from game EXE (not tracked)
@@ -222,6 +202,33 @@ Overlays are chunks of code the game streams off the disc at runtime. Xenogears 
 
 ---
 
+## Contributing
+
+Contributions are welcome. The highest-value ones:
+
+- **Reverse-engineering notes** — function names, behaviors, and struct layouts in [`annotations/`](annotations/), and entry-point seeds in [`seeds/`](seeds/). This is what makes the recompilation better over time.
+- **Bug reports** — open an issue with repro steps, your platform, and the scene/frame where it happens. Please **don't attach freeze dumps** (they contain console memory, i.e. game code); a description plus `psx_last_run_report.json` is enough.
+- **Code** — runtime, overlay pipeline, renderer, and launcher fixes. Keep PRs focused and describe what you tested; the interpreter failover and the DuckStation oracle scripts in [`tools/`](tools/) are the reference oracles.
+
+Ground rules:
+
+1. **Never commit game-derived data.** The legal scanner rejects it at commit time — install it as your pre-commit hook:
+   ```sh
+   printf '#!/bin/sh\nexec python3 tools/legal_scan.py\n' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+   ```
+2. You need your own legally obtained game EXE, disc image, and BIOS to build and test (see [Requirements](#requirements)).
+3. AI-assisted contributions are fine (see below) — you're responsible for what you submit regardless of how it was produced.
+
+---
+
+## AI-Assisted Development
+
+This project is developed with AI assistance: coding agents take part in reverse engineering, code generation, debugging, and documentation. Expect the occasional rough edge typical of AI-assisted code — reports and cleanups are welcome.
+
+AI output is held to the same bar as human work: it must build, boot, and match reference behavior (DuckStation oracle, interpreter failover) where applicable. If you use AI tools in a contribution, please disclose it; the legal and quality requirements are identical either way.
+
+---
+
 ## Legal
 
 **XenogearsRecomp** is licensed under **PolyForm Noncommercial 1.0.0**. See [`LICENSE`](LICENSE).
@@ -232,7 +239,7 @@ This project does **not** include or distribute:
 - Any game assets (textures, audio, models, scripts)
 - Any copyrighted game code as source
 
-The recompiled C output (`generated/`) is a machine translation of the original game binary — it is derived from copyrighted material and must **not** be redistributed. The overlay capture store (`overlay_captures.json`, `overlays/`) contains verbatim game code snapshots and is also **not redistributable**.
+The overlay capture store (`overlay_captures.json`, `overlays/`) contains verbatim game code snapshots and is **not redistributable**.
 
 Only the following are tracked in this repository:
 - Build configuration and scripts
@@ -245,13 +252,4 @@ Only the following are tracked in this repository:
 ## Acknowledgments
 
 - **[Matthew Stan](https://github.com/mstan)** — creator of [PSXRecomp](https://github.com/mstan/psxrecomp), the framework this project is built on
-- **PS1 Recompilation community** — N64Recomp (RT64 team), TombaRecomp, and the R.A.I.D. Discord
-- **Square Enix** — for creating *Xenogears*
-
----
-
-<p align="center">
-  <sub><b>R.A.I.D. — Retro AI Development</b></sub>
-  <br>
-  <sub>A community for AI-assisted retro reverse-engineering, decompilation, and recompilation</sub>
-</p>
+- **PS1 Recompilation community**
