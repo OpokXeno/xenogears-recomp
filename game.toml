@@ -1,32 +1,159 @@
-# Xenogears (USA) — Disc 1 game config (A1 step 5)
-# Bootstrapped by psxrecomp-toml from ../game/slus_006.64, then hand-completed.
+# Xenogears (USA) — Disc 1 game config
+# Bootstrapped by psxrecomp-toml for slus_006.64, then hand-completed.
 # Field names follow psxrecomp/docs/config_schema.md (pinned commit 678c71f).
 
 [game]
 name = "Xenogears (USA, Disc 1)"
 id = "SLUS-00664"
-exe = "../game/slus_006.64"
+exe = "./game/slus_006.64"
 load_address = "0x80010000"
 entry_pc = "0x80019524"
 text_size = "0x4A000"
 stack_base = "0x801FFFF0"
-disc = "../game/disc1.cue"
+# Path to the disc image (.cue / .bin / .iso). Required for overlays, FMVs,
+# and CDDA audio. The launcher will prompt for this on first run; set here as
+# a fallback default. Uncomment and set to your rip's path:
+# disc = "./game/Xenogears Disc 1.cue"
 
 [recompiler]
 seeds = "seeds/slus_00664_seeds.txt"
+bios_thunks = "seeds/slus_00664_bios_thunks.txt"
 strict = true
 out_dir = "generated"
 # NOTE: out_stem is parsed by config_loader but NOT forwarded by psxrecomp-game
 # (main_psx.cpp) at pin 678c71f — outputs are always named after the exe file
-# (TombaRecomp convention: SCUS_942.36_full_*.c), so ours are slus_006.64_*.
 discovery = "whole-image"
+
+[video]
+# FMV auto-skip: feature OFF by default. NO fmv_skip_total_table /
+# fmv_skip_movie_id addresses exist for Xenogears yet. With no table configured the
+# runtime uses the generic START-hold fallback. Verify once by hand.
+auto_skip_fmv = false
+
+[widescreen]
+# Xenogears is a FULLY-3D title: gameplay classification must use the
+# GTE-activity detector, NOT the sprite-tag path (default when no
+# sprite_tag_funcs are configured — ws_game_mode() falls back to
+# tag-stamp<=2, which NEVER fires without tags and pillarboxes everything
+# to 4:3 forever.
+gte_game_mode = true
+# HUD/2D: center-squash every UNtagged textured-rect (SPRT) prim (HUD, menus,
+# dialogue text/portraits) so the 16:9 present keeps native proportions.
+# Runtime-side hook at GP0 submission — works for main-EXE and overlay code
+# alike.
+hud_sprt_squash = true
+
+[widescreen.cull]
+nw_hud_corners = true
+# ---------------------------------------------------------------------------
+# 16:9 cull widening (Ghidra-evidenced 2026-07-19, program field_module.exe
+# @0x8006F000 in XenogearsDisc1.gpr; Xenogears' entire draw-cull surface is
+# overlay-resident — the main EXE carries ZERO screen-extent compares).
+# All sites are X-only (the aspect change widens horizontally; Y stays 224).
+# Identity at 4:3 (psx_ws_x_margin()==0); effective once native-wide engages.
+#
+# (1) @0x800AAA74 — per-object (map-chunk/prop) cull. With
+#     script margins param0/param1==0 the X window is exactly [0,320):
+#       0x800AAB90 addiu v1,a0,0x140   high edge -> bias_sites   (+m)
+#       0x800AABA0 subu  v0,zero,a0    low edge  -> negsub_sites (-m)
+#     => [-m, 320+m): covers the revealed margins, stops map-chunk pop-in.
+# (2) @0x80075B44 — sprite-actor visibility funnel
+#     (sets/clears script flag 0x200; gated draw in renderChars). Idiom
+#     (X+39)<u 0x18F == X in [-39,360):
+#       0x80075EA4 addiu v0,v0,0x27    bias  -> bias_sites  (+m)
+#       0x80075EA8 sltiu v0,v0,0x18f   range -> range_sites (+2m)
+#     => [-39-m, 360+m): NPCs/characters stop popping at the frame edges.
+# (3) @0x80095C00 — script visibility predicate
+#     (X-1)<u 0x13F == X in [1,320):
+#       0x80095C68 addiu v0,v0,-0x1    bias  -> bias_sites  (+m)
+#       0x80095C6C sltiu v0,v0,0x13f   range -> range_sites (+2m)
+#     => [1-m, 320+m): scripts see actors standing in the reveal as on-screen.
+# NOT widened: (func_80095B3C, window
+# [33,288)x[33,192)) — an intentional inner-proximity predicate, not a cull;
+# IsObjectOccluded's Y edges (0x800AAB64/0x800AAB74) — no vertical reveal.
+# (4) Per-primitive X reject in the main-EXE 3dModel kernel renderer (the
+#     ACTUAL terrain/building pop-in at the 4:3 edge — found 2026-07-19 after the
+#     sites above proved insufficient: every prim family (RTPT quad/tri renderers
+#     @0x8002E0FC-0x80030EF4 + the FUN_80030EE8 sprite-X funnels) rejects via
+#     `sltu t0, xN, bound` when ALL vertices have x >= bound; the bound is the
+#     RAM global @0x800500F8 (vanilla 319), loaded ONCE per renderer by a
+#     hoisted `lw v1,0xF8(v1)` (lui 0x8005). While the margins are revealed
+#     each flagged load yields INT32_MAX instead (reject disabled: the
+#     wide-surface scissor clips the overflow; wrapped off-left coords at
+#     655xx pass)
+#     The 20 loads below are EVERY reader of the global (Ghidra xref-complete
+#     2026-07-20); the Y clip global @0x800500FC (238<<16) stays untouched.
+xclip_load_sites = [
+  "0x8002E0A4", "0x8002E2C0", "0x8002E4DC", "0x8002E6E0",
+  "0x8002E948", "0x8002EB4C", "0x8002ED70", "0x8002EF64",
+  "0x8002F13C", "0x8002F32C", "0x8002F508", "0x8002F708",
+  "0x8002F920", "0x8002FB38", "0x8002FD54", "0x8002FF64",
+  "0x800307A4",
+  "0x80030F50", "0x80030FA8", "0x80031004",
+]
+bias_sites  = ["0x800AAB90", "0x80075EA4", "0x80095C68"]
+negsub_sites = ["0x800AABA0"]
+range_sites = ["0x80075EA8", "0x80095C6C"]
+# (6) Worldmap ground/water per-vertex X reject (module @0x8006F000 worldmap
+# variant): `andi t,sxy,0xffff; sltiu t,t,320` per vertex, poly dropped when
+# none passes — rs is the MASKED 16-bit SXY x, so off-left reads as 655xx
+# (no 32-bit sign extension; a plain +margin does NOT wrap — the widen must
+# compare in 16-bit space): ((x + m) & 0xFFFF) <u (320 + 2m) == [-m, 320+m).
+# Groups of 3 = ground triangles, groups of 4 = water/effects quads (@0x80086F34+).
+# Y tests (216) intentionally untouched.
+vxrange_sites = [
+  "0x8009992C", "0x80099938", "0x80099944",
+  "0x80099A98", "0x80099AA4", "0x80099AB0",
+  "0x80099D90", "0x80099D9C", "0x80099DA8",
+  "0x80086F38", "0x80086F48", "0x80086F58", "0x80086F68",
+  "0x800871B8", "0x800871C8", "0x800871D8", "0x800871E8",
+  "0x80087544", "0x80087554", "0x80087564", "0x80087574",
+]
+# (7) Worldmap sprite/effects quad X test @0x8008A0CC-0x8008A108 — SIGNED slti
+# per-vertex (4 verts, stride 8): left already passes; slti_sites widens the
+# right edge by +m. Y test (216) untouched.
+slti_sites = ["0x8008A0CC", "0x8008A0E0", "0x8008A0F4", "0x8008A108"]
+# (8) Model draw-distance gate (@0x80084C60): `slti v0,
+#     SZ, 0xD80` — models pop in at SZ=3456; at 4:3 that pop is OFF-frame at
+#     the sides. Scaled by the aspect factor (3456 -> 4608 at 16:9).
+#     WARNING (verified by regression): the GROUND/WATER tri far culls
+#     (0x800999A0/0x80099B0C @0xF00, 0x80099DE0 @0xE00, 0x8008A170 @0xC00)
+#     must NOT be widened with this knob — their bound is coupled to the OT
+#     bucket count (OTZ = maxSZ>>4 indexes the ordering table) and to the
+#     0x7FE primitive-buffer cap: widening them starves the prim buffer and
+#     the cell walker aborts mid-grid (half the terrain missing at some
+#     camera angles). Fixing the terrain far-pop needs an OT+prim-buffer
+#     enlargement patch, not a cull widen.
+depth_sites = ["0x80084C60"]
+# (10) The fix for the static far-side terrain pop: the 4 plane dots
+#     (@0x8009C7F0/828/844/874) are Recomputed every frame by FUN_80098044
+#     (11 call sites) from static source vectors via a GTE transform, so only
+#     transforming the LOAD inside the consumer works.
+#     @0x800987AC is the
+#     ONLY consumer of the side normals: it does a sign test of
+#     dot = nx*px + nz*pz per corner (plane through the camera; nx=+-3474,
+#     nz=2170 => half-angle atan(2170/3474)=32 deg, calibrated for 4:3).
+#     The plane angle goes as nz/nx, so WIDENING means REDUCING nx.
+#     plane_nx_sites scales the two nx loads by the inverse aspect factor
+#     (4*den)/(3*num): 16:9 -> nx = 3474*3/4 = 2606 => half-angle atan(2170/2606) = 39.8 deg
+#     = atan(4/3 * tan(32 deg)); the scale generalizes to any
+#     configured aspect and is identity at 4:3.
+#     The per-vertex vxrange rejects still clip to the real (widened)
+#     screen edges, so no overdraw beyond the reveal.
+plane_nx_sites = ["0x80098850", "0x80098974"]
 
 [runtime]
 debug_port = 4370
 window_title = "XenogearsRecomp"
 controller = "digital"
 memcard_dir = "."
-# NEVER "instant" — known-hangy upstream (master plan 4.A1; psxrecomp
-# docs/bios-hardening.md: divisor=0 hangs at the PlayStation logo).
+# NEVER "instant" — known-hangy upstream (divisor=0 hangs at the PlayStation logo; and the
+# WORLDMAP crash).
 disc_speed = "1x"
-bios_hle = false
+bios_hle = true
+# Overlay capture→compile→cache.
+# overlay_backend = "auto" selects the best available compiler on every
+# platform (gcc on Linux/macOS, MSVC or MinGW gcc on Windows). The
+# runtime compiles captured overlays automatically in the background.
+overlay_cache = true
+overlay_backend = "auto"

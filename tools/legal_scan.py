@@ -8,6 +8,7 @@ files, disc images, or the overlay_captures.json runtime capture.
 Exit 0 = clean. Exit 1 = at least one staged file tripped a rule.
 """
 
+import os
 import subprocess
 import sys
 
@@ -34,6 +35,11 @@ def scan(path):
     problems = []
     lower = path.lower()
     base = lower.rsplit("/", 1)[-1]
+
+    # A staged path that is a directory on disk is a submodule gitlink —
+    # a commit pointer with no content of its own to scan.
+    if os.path.isdir(path):
+        return problems
 
     if base in FORBIDDEN_NAMES:
         problems.append(f"forbidden filename '{base}' (runtime capture data)")

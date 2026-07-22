@@ -1,6 +1,6 @@
 # XenogearsRecomp — game runtime build.
 # Links the psxrecomp framework runtime (pinned submodule) with the recompiled
-# Xenogears main EXE (generated/, gitignored — regenerate per docs/recompile.md).
+# Xenogears main EXE (generated/, gitignored).
 cmake_minimum_required(VERSION 3.20)
 project(XenogearsRecomp C CXX)
 
@@ -23,4 +23,12 @@ psxrecomp_add_runtime_target(psx-runtime
     WINDOW_TITLE               "XenogearsRecomp"
     DEBUG_PORT                 4370
     DEFAULT_GAME_CONFIG_PATH   "game.toml"
+)
+
+# ── Integrated launcher (recomp-ui) ──────────────────────────────────────────
+# First-run GUI that prompts for BIOS and disc paths. Persists to settings.toml
+# next to the executable. Skippable via --no-launcher or PSX_NO_LAUNCHER=1.
+include(${CMAKE_CURRENT_SOURCE_DIR}/recomp-ui/recomp_ui.cmake)
+recomp_target_launcher_ui(psx-runtime
+    BOXART "${CMAKE_CURRENT_SOURCE_DIR}/assets/boxart.tga"
 )

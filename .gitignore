@@ -1,9 +1,75 @@
+# =============================================================================
+# XenogearsRecomp — .gitignore for public repository
+# =============================================================================
+# A game recompiled with PSXRecomp.
+# Game-derived content (copyrighted) MUST never be committed.
+# Local/editor/transient files SHOULD never be committed.
+# =============================================================================
+
+# ---- Game-derived content (copyrighted, not distributable) -------------------
+# Game disc images and extracted EXE binaries
 game/
-build/
+# Box art — copyrighted Square Enix artwork; the launcher has a fallback
+assets/boxart.tga
+# Recompiled C source — derived from the copyrighted game binary
 generated/
+# Captured overlay binaries — verbatim game code snapshots
+overlays/
+# Overlay capture store — contains verbatim game code
 overlay_captures.json
+# ---- Build directories ---------------------------------
+build/
+build-dbg/
+build*/
+
+# ---- Memory card saves -------------------------------------------
 *.mcd
-*.log
+*.mcr
+
+# ---- Runtime debug / crash / diagnostic dumps --------------------------------
 psx_crash.txt
+psx_diag.txt
+psx_dispatch_misses.txt
+psx_err.txt
+psx_out.txt
 psx_last_run_report.json
 psx_freeze_dump_*.json
+
+# ---- Log files ----------------------------------------------------
+*.log
+*.jsonl
+
+# ---- User configuration --------------------
+game_options.toml
+keybinds.ini
+opencode.json
+.psxrecomp.env
+.env
+.local/
+
+# ---- Editor / IDE files -----------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ---- OpenCode working files -------------------------
+.omo/
+
+# ---- Code intelligence index --------------------
+.codegraph/
+
+# ---- Python caches -----------------------------------------------------------
+__pycache__/
+*.pyc
+
+# ---- Docs runtime artifacts (burndown dumps — large RAM snapshots) ----------
+docs/burndown/*.json
+
+# ---- Probe / scratch directories --------------------------------------------
+probes/
+
+
