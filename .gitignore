@@ -68,8 +68,11 @@ __pycache__/
 
 # ---- Docs runtime artifacts (burndown dumps — large RAM snapshots) ----------
 docs/burndown/*.json
+docs/
 
 # ---- Probe / scratch directories --------------------------------------------
 probes/
 
+
+tools/
 
