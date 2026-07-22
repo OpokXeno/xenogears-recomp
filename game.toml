@@ -42,6 +42,7 @@ gte_game_mode = true
 # Runtime-side hook at GP0 submission — works for main-EXE and overlay code
 # alike.
 hud_sprt_squash = true
+full_2d = true
 
 [widescreen.cull]
 nw_hud_corners = true
