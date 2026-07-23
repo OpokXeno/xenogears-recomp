@@ -44,6 +44,14 @@ gte_game_mode = true
 hud_sprt_squash = true
 full_2d = true
 
+nw_backdrop=true
+
+[widescreen.backdrop]
+# Battle background vertex-X store sites (wtrace-evidenced 2026-07-24).
+# sh instructions in the main EXE that write POLY_FT4 vertex X coords for the
+# backdrop quads (texpages 0x87/0x89) into the OT.
+x_sites = ["0x80027BE8", "0x80027BEC", "0x80027BF0", "0x80027BF8"]
+
 [widescreen.cull]
 nw_hud_corners = true
 # ---------------------------------------------------------------------------
