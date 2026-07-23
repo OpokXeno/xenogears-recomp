@@ -21,6 +21,10 @@ overlay_captures.json
 build/
 build-dbg/
 build*/
+dist/
+
+# Maintainer-local release runbook (machine-specific paths; never commit)
+docs/self-hosted-runner.md
 
 # ---- Memory card saves -------------------------------------------
 *.mcd

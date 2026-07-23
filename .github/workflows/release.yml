@@ -1,0 +1,224 @@
+name: Release
+
+# Builds XenogearsRecomp for Linux x86_64 and Windows x86_64 and publishes a
+# GitHub Release with both archives.
+#
+# WHY SELF-HOSTED: the build consumes two copyrighted files that must never
+# leave the maintainer's machine — the game EXE (game/slus_006.64) and the PS1
+# BIOS (psxrecomp/bios/SCPH1001.BIN). GitHub-hosted runners cannot see them
+# and secrets are capped at 48 KB, so both build jobs run on a self-hosted
+# runner registered on the maintainer's Linux PC. Only the compiled archives
+# are uploaded. Setup: docs/self-hosted-runner.md.
+#
+# macOS is not built by this workflow (no Mac runner available); the doc
+# explains how to add one later.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create (e.g. v0.4.0)"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark as pre-release"
+        required: true
+        type: boolean
+        default: true
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  # Overridable via repo Settings → Secrets and variables → Actions → Variables.
+  # XGR_ASSETS_DIR holds the copyrighted inputs OUTSIDE the runner workspace
+  # (slus_006.64 + SCPH1001.BIN). XGR_DEPS_DIR caches the Windows cross
+  # toolchain between runs.
+  XGR_ASSETS_DIR: ${{ vars.XGR_ASSETS_DIR || '/home/pc/xenogears-assets' }}
+  XGR_DEPS_DIR: ${{ vars.XGR_DEPS_DIR || '/home/pc/xenogears-port/deps' }}
+
+jobs:
+  build-linux:
+    name: Linux x86_64
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Check host dependencies
+        run: |
+          set -e
+          for t in cmake ninja pkg-config git; do
+            command -v "$t" >/dev/null || { echo "::error::missing host tool: $t — see docs/self-hosted-runner.md"; exit 1; }
+          done
+          pkg-config --exists sdl2 || { echo "::error::SDL2 development files not found (pkg-config sdl2)"; exit 1; }
+
+      - name: Stage game EXE + BIOS from local disk (never uploaded)
+        run: |
+          set -e
+          [ -f "$XGR_ASSETS_DIR/slus_006.64" ]  || { echo "::error::$XGR_ASSETS_DIR/slus_006.64 missing — see docs/self-hosted-runner.md"; exit 1; }
+          [ -f "$XGR_ASSETS_DIR/SCPH1001.BIN" ] || { echo "::error::$XGR_ASSETS_DIR/SCPH1001.BIN missing — see docs/self-hosted-runner.md"; exit 1; }
+          install -Dm644 "$XGR_ASSETS_DIR/slus_006.64"  game/slus_006.64
+          install -Dm644 "$XGR_ASSETS_DIR/SCPH1001.BIN" psxrecomp/bios/SCPH1001.BIN
+
+      - name: Build recompiler (host tools)
+        run: |
+          cmake -S psxrecomp/recompiler -B psxrecomp/recompiler/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build psxrecomp/recompiler/build -j "$(nproc)"
+
+      - name: Regenerate BIOS C from the local BIOS
+        run: bash psxrecomp/tools/regen_bios.sh
+
+      - name: Game codegen + runtime build
+        run: ./build.sh build Release
+
+      - name: Package archive
+        run: |
+          set -e
+          pkg=dist/XenogearsRecomp-linux-x86_64
+          mkdir -p "$pkg"
+          strip build/XenogearsRecomp -o "$pkg/XenogearsRecomp"
+          cp game.toml LICENSE README.md "$pkg/"
+          tar -C dist -czf XenogearsRecomp-linux-x86_64.tar.gz XenogearsRecomp-linux-x86_64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XenogearsRecomp-linux-x86_64.tar.gz
+          path: XenogearsRecomp-linux-x86_64.tar.gz
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Scrub staged assets
+        if: always()
+        run: rm -f game/slus_006.64 psxrecomp/bios/SCPH1001.BIN
+
+  build-windows:
+    name: Windows x86_64 (cross via llvm-mingw)
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 90
+    env:
+      LLVM_MINGW_VER: "20260616"
+      SDL2_VER: "2.32.10"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Check host dependencies
+        run: |
+          set -e
+          for t in cmake ninja git curl; do
+            command -v "$t" >/dev/null || { echo "::error::missing host tool: $t — see docs/self-hosted-runner.md"; exit 1; }
+          done
+
+      - name: Stage game EXE + BIOS from local disk (never uploaded)
+        run: |
+          set -e
+          [ -f "$XGR_ASSETS_DIR/slus_006.64" ]  || { echo "::error::$XGR_ASSETS_DIR/slus_006.64 missing — see docs/self-hosted-runner.md"; exit 1; }
+          [ -f "$XGR_ASSETS_DIR/SCPH1001.BIN" ] || { echo "::error::$XGR_ASSETS_DIR/SCPH1001.BIN missing — see docs/self-hosted-runner.md"; exit 1; }
+          install -Dm644 "$XGR_ASSETS_DIR/slus_006.64"  game/slus_006.64
+          install -Dm644 "$XGR_ASSETS_DIR/SCPH1001.BIN" psxrecomp/bios/SCPH1001.BIN
+
+      # The recompiler RUNS during the build, so it is always compiled for the
+      # Linux host even though the runtime targets Windows.
+      - name: Build recompiler (host tools)
+        run: |
+          cmake -S psxrecomp/recompiler -B psxrecomp/recompiler/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build psxrecomp/recompiler/build -j "$(nproc)"
+
+      - name: Game codegen from the local EXE
+        run: ./psxrecomp/recompiler/build/psxrecomp-game --config game.toml
+
+      - name: Regenerate BIOS C from the local BIOS
+        run: bash psxrecomp/tools/regen_bios.sh
+
+      - name: Provision llvm-mingw + SDL2-mingw (cached in XGR_DEPS_DIR)
+        run: |
+          set -e
+          mkdir -p "$XGR_DEPS_DIR" && cd "$XGR_DEPS_DIR"
+          lmdir="llvm-mingw-${LLVM_MINGW_VER}-ucrt-ubuntu-22.04-x86_64"
+          if [ ! -x "$lmdir/bin/x86_64-w64-mingw32-clang" ]; then
+            echo "Downloading llvm-mingw ${LLVM_MINGW_VER}"
+            curl -fSL -o llvm-mingw.tar.xz "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VER}/${lmdir}.tar.xz"
+            tar xf llvm-mingw.tar.xz && rm llvm-mingw.tar.xz
+          fi
+          sdl="SDL2-${SDL2_VER}"
+          if [ ! -f "$sdl/x86_64-w64-mingw32/lib/pkgconfig/sdl2.pc" ]; then
+            echo "Downloading SDL2 ${SDL2_VER} (mingw devel)"
+            curl -fSL -o sdl2.tar.gz "https://github.com/libsdl-org/SDL/releases/download/release-${SDL2_VER}/SDL2-devel-${SDL2_VER}-mingw.tar.gz"
+            tar xf sdl2.tar.gz && rm sdl2.tar.gz
+          fi
+          # The shipped sdl2.pc carries a bogus build-machine prefix; point it
+          # at the real extraction dir or the link line gets garbage -L paths.
+          sed -i "s|^prefix=.*|prefix=$XGR_DEPS_DIR/$sdl/x86_64-w64-mingw32|" \
+            "$sdl/x86_64-w64-mingw32/lib/pkgconfig/sdl2.pc"
+          echo "LLVM_MINGW_ROOT=$XGR_DEPS_DIR/$lmdir" >> "$GITHUB_ENV"
+          echo "SDL2_MINGW_ROOT=$XGR_DEPS_DIR/$sdl" >> "$GITHUB_ENV"
+
+      - name: Cross-compile runtime for Windows
+        run: |
+          cmake -S . -B build-win -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-windows-x86_64-llvm-mingw.cmake \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-win -j "$(nproc)"
+
+      - name: Verify exe imports only system DLLs
+        run: |
+          imports="$("$LLVM_MINGW_ROOT/bin/x86_64-w64-mingw32-objdump" -p build-win/XenogearsRecomp.exe | grep 'DLL Name' | sort -u)"
+          echo "$imports"
+          if echo "$imports" | grep -qiE 'SDL2|libgcc|libstdc|libwinpthread'; then
+            echo "::error::exe is not self-contained (non-system DLL import found)"
+            exit 1
+          fi
+
+      - name: Package archive
+        run: |
+          set -e
+          pkg=dist/XenogearsRecomp-windows-x86_64
+          mkdir -p "$pkg"
+          "$LLVM_MINGW_ROOT/bin/llvm-strip" build-win/XenogearsRecomp.exe -o "$pkg/XenogearsRecomp.exe"
+          cp game.toml LICENSE README.md "$pkg/"
+          cmake -E chdir dist cmake -E tar cf ../XenogearsRecomp-windows-x86_64.zip --format=zip XenogearsRecomp-windows-x86_64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XenogearsRecomp-windows-x86_64.zip
+          path: XenogearsRecomp-windows-x86_64.zip
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Scrub staged assets
+        if: always()
+        run: rm -f game/slus_006.64 psxrecomp/bios/SCPH1001.BIN
+
+  release:
+    name: Publish GitHub Release
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: XenogearsRecomp-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          name: XenogearsRecomp ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          prerelease: ${{ github.event_name == 'push' || inputs.prerelease }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: dist/*
