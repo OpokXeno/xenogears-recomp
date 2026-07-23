@@ -88,6 +88,12 @@ jobs:
           mkdir -p "$pkg"
           strip build/XenogearsRecomp -o "$pkg/XenogearsRecomp"
           cp game.toml LICENSE README.md "$pkg/"
+          # Launcher assets (fonts + images) are staged next to the exe by the
+          # build and resolved from the exe dir at runtime — they must ship.
+          # Exclude boxart.tga: user-local copyrighted art (the launcher has a
+          # built-in fallback; users can drop their own next to the exe).
+          cp -r build/assets "$pkg/assets"
+          rm -f "$pkg/assets/img/boxart.tga"
           tar -C dist -czf XenogearsRecomp-linux-x86_64.tar.gz XenogearsRecomp-linux-x86_64
 
       - uses: actions/upload-artifact@v4
@@ -187,6 +193,12 @@ jobs:
           mkdir -p "$pkg"
           "$LLVM_MINGW_ROOT/bin/llvm-strip" build-win/XenogearsRecomp.exe -o "$pkg/XenogearsRecomp.exe"
           cp game.toml LICENSE README.md "$pkg/"
+          # Launcher assets (fonts + images) are staged next to the exe by the
+          # build and resolved from the exe dir at runtime — they must ship.
+          # Exclude boxart.tga: user-local copyrighted art (the launcher has a
+          # built-in fallback; users can drop their own next to the exe).
+          cp -r build-win/assets "$pkg/assets"
+          rm -f "$pkg/assets/img/boxart.tga"
           cmake -E chdir dist cmake -E tar cf ../XenogearsRecomp-windows-x86_64.zip --format=zip XenogearsRecomp-windows-x86_64
 
       - uses: actions/upload-artifact@v4
