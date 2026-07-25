@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<data>
+  <characters>
+    <character id="0" name="Alpha" alias="Alph"/>
+    <character id="1" name="Beta" alias="Bet"/>
+    <character id="2" name="Gamma" alias="Gam"/>
+  </characters>
+  <gears>
+    <gear id="0" name="Mecha-A"/>
+    <gear id="1" name="Mecha-B"/>
+    <gear id="2"/>
+    <gear id="3"/>
+  </gears>
+</data>

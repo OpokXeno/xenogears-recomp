@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flags>
+  <flagVar var="0" name="GameProgress">
+    <meaning value="0x3" desc="Prologue text done" />
+    <meaning value="0x6" desc="Fei painting intro done" />
+    <meaning value="0x7" desc="Talked to Dan (before leaving Fei's house)" />
+    <meaning value="0x8" desc="Talked to Alice" />
+    <meaning value="0xA" desc="Looking for Citan around his house" />
+    <meaning value="0xC" desc="Citan told Fei to look in storage room (music box)" />
+    <meaning value="0xD" desc="At Citan, night time, Fei leaves" />
+    <meaning value="0xF" desc="At Citan, night time, heading back to Lahan, Citan waiting outside after Fei's departure" />
+    <meaning value="0x15" desc="Threshold: if &gt; 0x15, Yui is not in Citan's kitchen" />
+  </flagVar>
+  <flagVar var="2" name="FieldEntryPoint" />
+  <flagVar var="4" name="LastFieldId" />
+  <flagVar var="6" name="PlayerDirection" />
+  <flagVar var="8" name="CameraDirection" />
+  <flagVar var="10" name="EventTime" />
+  <flagVar var="12" name="SystemTimeMinutesSeconds" />
+  <flagVar var="14" name="SystemTimeHours" />
+  <flagVar var="16" name="BootVar" status="unverified">
+    <meaning value="0x0" desc="Set to 0 at startAllEntityScripts" />
+  </flagVar>
+  <flagVar var="18" name="VisitCounter">
+    <meaning value="0x0" desc="Incremented on every field transition via SaveFieldAndDirections" />
+  </flagVar>
+  <flagVar var="24" name="SceneDIP" />
+  <flagVar var="30" name="PlayerPositionX" />
+  <flagVar var="32" name="PlayerPositionZ" />
+  <flagVar var="34" name="PlayerPositionY" />
+  <flagVar var="36" name="GearStateMap0">
+    <meaning value="0x0" desc="Gear state map ID (param 0)" />
+  </flagVar>
+  <flagVar var="38" name="GearStateFlag0">
+    <meaning value="0x0" desc="Gear state flag (param 0)" />
+  </flagVar>
+  <flagVar var="40" name="GearStateExtra0" />
+  <flagVar var="42" name="GearStateMap1">
+    <meaning value="0x0" desc="Gear state map ID (param 1)" />
+  </flagVar>
+  <flagVar var="44" name="GearStateFlag1">
+    <meaning value="0x0" desc="Gear state flag (param 1)" />
+  </flagVar>
+  <flagVar var="46" name="GearStateExtra1" />
+  <flagVar var="48" name="GearStateMap2">
+    <meaning value="0x0" desc="Gear state map ID (param 2)" />
+  </flagVar>
+  <flagVar var="50" name="GearStateFlag2">
+    <meaning value="0x0" desc="Gear state flag (param 2)" />
+  </flagVar>
+  <flagVar var="52" name="GearStateExtra2" />
+  <flagVar var="56" name="WorldmapMode" />
+  <flagVar var="60" name="FieldMapNumber" />
+  <flagVar var="62" name="MenuReturnState0" />
+  <flagVar var="70" name="DialogWindowX0" status="unverified" />
+  <flagVar var="72" name="DialogWindowZ0" status="unverified" />
+  <flagVar var="74" name="DialogWindowY0" status="unverified" />
+  <flagVar var="76" name="DialogWindowW0" status="unverified" />
+  <flagVar var="78" name="DialogWindowX1" status="unverified" />
+  <flagVar var="80" name="CurrentParty0" />
+  <flagVar var="82" name="CurrentParty1" />
+  <flagVar var="84" name="CurrentParty2" />
+  <flagVar var="96" name="FieldDebugDisable">
+    <meaning value="0x1" desc="Set to 1 when field debug mode is disabled" />
+  </flagVar>
+</flags>

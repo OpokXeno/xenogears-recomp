@@ -1,0 +1,795 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fields count="712">
+  <field id="0" name="Main debug room">
+    <entity id="0" name="Director"/>
+    <entity id="1" name="PartyChange (Margie?)"/>
+    <entity id="2" name="Fei"/>
+    <entity id="3" name="Elly"/>
+  </field>
+  <field id="1" name="Lahan village">
+    <entity id="0" name="Director"/>
+    <entity id="1" name="Fei"/>
+    <entity id="12" name="Tavern sign"/>
+    <entity id="13" name="Store sign"/>
+  </field>
+  <field id="2" name="Lahan battle(intro version)">
+    <entity id="0" name="Director"/>
+    <entity id="1" name="Fei"/>
+    <entity id="2" name="Citan"/>
+    <entity id="4" name="Weital"/>
+  </field>
+  <field id="3" name="Outside Lahan - after the battle">
+    <entity id="0" name="Director"/>
+    <entity id="1" name="Fei"/>
+    <entity id="2" name="Citan"/>
+    <entity id="3" name="Dan"/>
+  </field>
+  <field id="4" name="Introductory text at the start of the game">
+    <entity id="0" name="Director"/>
+    <entity id="12" name="Intro text display"/>
+  </field>
+  <field id="5" name="Lahan - Beginners hall">
+    <entity id="0" name="Director"/>
+    <entity id="1" name="Fei"/>
+    <entity id="10" name="Battle tuto NPC"/>
+    <entity id="11" name="Battle abilities tuto NPC"/>
+  </field>
+  <field id="6" name="Lahan - Item shop">
+    <entity id="11" name="Merchant girl"/>
+    <entity id="12" name="Walking girl"/>
+    <entity id="13" name="Cat"/>
+  </field>
+  <field id="7" name="Lahan - Rock - Paper - Scissors man"/>
+  <field id="8" name="Lahan - RPS man&apos;s basement"/>
+  <field id="9" name="Lahan - Pub"/>
+  <field id="10" name="Lahan - Pub, upstairs"/>
+  <field id="11" name="Lahan - Alice&apos;s house">
+    <entity id="12" name="TriggerToAliceRoom"/>
+  </field>
+  <field id="12" name="Lahan - Fei talks to Alice">
+    <entity id="0" name="Director"/>
+    <entity id="9" name="Alice"/>
+    <entity id="12" name="Stairs trigger"/>
+  </field>
+  <field id="13" name="Lahan - Fei&apos;s house"/>
+  <field id="14" name="Lahan - Looking at Fei&apos;s painting">
+    <entity id="0" name="Director"/>
+    <entity id="1" name="Fei"/>
+    <entity id="9" name="Bed"/>
+    <entity id="10" name="Maid"/>
+  </field>
+  <field id="15" name="Outside Lahan - Mountain path">
+    <entity id="13" name="Bird nest"/>
+  </field>
+  <field id="16" name="Outside Lahan - Gears fly over Citan&apos;s"/>
+  <field id="17" name="Citan&apos;s House">
+    <entity id="0" name="Director"/>
+    <entity id="1" name="Fei"/>
+    <entity id="2" name="Citan"/>
+    <entity id="12" name="Citan (NPC)"/>
+  </field>
+  <field id="18" name="Citan&apos;s house - Bedroom"/>
+  <field id="19" name="Citan&apos;s house - Kitchen">
+    <entity id="1" name="Fei"/>
+    <entity id="2" name="Citan"/>
+    <entity id="12" name="Citan NPC"/>
+    <entity id="13" name="Yui"/>
+  </field>
+  <field id="20" name="Citan&apos;s House - Upstairs room"/>
+  <field id="21" name="Citan&apos;s House - Workshop (with music box)">
+    <entity id="0" name="Director"/>
+    <entity id="1" name="Fei"/>
+    <entity id="2" name="Citan"/>
+    <entity id="12" name="Citan (NPC)"/>
+  </field>
+  <field id="22" name="Blackmoon Forest Entrance"/>
+  <field id="23" name="Blackmoon Forest - Fei &amp; Elly wake up by tree"/>
+  <field id="24" name="Blackmoon Forest - The &apos;Rankar&apos; opening.T"/>
+  <field id="25" name="Blackmoon Forest - Fei and Elly by campfire"/>
+  <field id="26" name="Blackmoon Forest - Citan chats with Elly"/>
+  <field id="27" name="Elly&apos;s Flashback (Flying Weltall)"/>
+  <field id="28" name="Elly&apos;s Flashback (Crash Landing)">
+    <entity id="0" name="Director"/>
+    <entity id="1" name="Elly"/>
+    <entity id="2" name="Mecha_26"/>
+    <entity id="3" name="camera"/>
+  </field>
+  <field id="29" name="Dazil - Water room"/>
+  <field id="30" name="Dazil - House with gossiping Aveh guards"/>
+  <field id="31" name="Dazil - House"/>
+  <field id="32" name="Dazil - House"/>
+  <field id="33" name="Dazil - House"/>
+  <field id="34" name="Dazil - House"/>
+  <field id="35" name="Dazil - Outside the waterworks"/>
+  <field id="36" name="Dazil - Buggy rental shop"/>
+  <field id="37" name="Dazil - &apos;Treasure Hunter Association&apos;"/>
+  <field id="38" name="Dazil - Aveh Guard station"/>
+  <field id="39" name="Dazil - Scene when Fei and Citan see the dig sites"/>
+  <field id="40" name="Dazil - &apos;Lucky Avenue&apos; bar"/>
+  <field id="41" name="Lahan - Id in Weltall(before Fei gets in Weltall)"/>
+  <field id="42" name="Weird room with 2 red guys(the Dora ? no textures)"/>
+  <field id="43" name="Dazil - Inn, upstairs"/>
+  <field id="44" name="Dazil - Gear Shop"/>
+  <field id="45" name="Dazil - Ethos Workshop"/>
+  <field id="46" name="Duneman Isle - Top of Sandfall"/>
+  <field id="47" name="Duneman Isle - Bottom of Sandfall Cliffs"/>
+  <field id="48" name="Duneman Desert"/>
+  <field id="49" name="Aveh Desert - UFO(Shevat) flies overhead"/>
+  <field id="50" name="Aveh Desert - Bikes ride by, Fei steals one"/>
+  <field id="51" name="Duneman Isle - Dino Skeleton"/>
+  <field id="52" name="Duneman Isle - Dino Skeleton(Camera zooms around it)"/>
+  <field id="53" name="Aveh Desert Entrance"/>
+  <field id="54" name="Aveh Desert - Fei ambushed by 2 gears, Citan brings Weltall"/>
+  <field id="55" name="Aveh Desert - Fei meets Grahf"/>
+  <field id="56" name="Aveh Transport(Fei&apos;s dream about Grahf &amp; Kahn)"/>
+  <field id="57" name="Aveh Transport(Near exit)"/>
+  <field id="58" name="Aveh Transport - Second room"/>
+  <field id="59" name="Aveh Transport - Fei climbs the crane to Weltall"/>
+  <field id="60" name="Aveh Transport hit by Yggdrasil"/>
+  <field id="70" name="Bottom of elevator in Stalactite Cavern(just before Calamity)"/>
+  <field id="80" name="Bart&apos;s Hideout - Yggdrasil docking"/>
+  <field id="81" name="Bart&apos;s Hideout - Maison explains the exacavation of gears"/>
+  <field id="82" name="Bart&apos;s Hideout - Fei fights Vance during Gebler attack"/>
+  <field id="83" name="Bart&apos;s Hideout - Fei, Citan and Bart fight the Schpariel boss"/>
+  <field id="84" name="Bart&apos;s Hideout - Gear hanger"/>
+  <field id="85" name="Nisan - Item shop"/>
+  <field id="86" name="Nisan - House"/>
+  <field id="87" name="Nisan - Inn"/>
+  <field id="88" name="Nisan - Town hall"/>
+  <field id="89" name="Nisan - The attack plan map(game hangs)"/>
+  <field id="90" name="Nisan - House"/>
+  <field id="91" name="Nisan - Artist&apos;s studio"/>
+  <field id="92" name="Nisan - House"/>
+  <field id="93" name="Nisan entrance"/>
+  <field id="94" name="Nisan map"/>
+  <field id="95" name="Nisan - Cathedral entrance"/>
+  <field id="96" name="Nisan - Secret dock(invisible Yggdrasil)"/>
+  <field id="97" name="Nisan - Cathedral library"/>
+  <field id="98" name="Nisan - Cathedral, Sophia&apos;s portrait"/>
+  <field id="99" name="Nisan - Cathedral, first staircase"/>
+  <field id="100" name="Nisan - Cathedral staircase(Margie standing still halfway)"/>
+  <field id="101" name="Bledavik map"/>
+  <field id="102" name="South Bledavik entrance"/>
+  <field id="103" name="South Bledavik entrance"/>
+  <field id="104" name="South Bledavik - Inn"/>
+  <field id="105" name="South Bledavik - Inn, sister&apos;s room (via window)"/>
+  <field id="106" name="South Bledavik - Inn, upstairs, next to sister&apos;s room"/>
+  <field id="107" name="South Bledavik - Inn, downstairs room"/>
+  <field id="108" name="South Bledavik - Inn, upstairs, southern room"/>
+  <field id="109" name="South Bledavik - schemer&apos;s house"/>
+  <field id="110" name="South Bledavik - schemer&apos;s house, upstairs"/>
+  <field id="111" name="South Bledavik - Soldier&apos;s family house"/>
+  <field id="112" name="South Bledavik - Soldier&apos;s family house, upstairs"/>
+  <field id="113" name="South Bledavik - Armor shopkeeper&apos;s house"/>
+  <field id="114" name="South Bledavik - Armor shop"/>
+  <field id="115" name="South Bledavik - Draft dodger&apos;s house"/>
+  <field id="116" name="South Bledavik - Cathouse"/>
+  <field id="117" name="South Bledavik - Cathouse, upstairs"/>
+  <field id="118" name="South Bledavik - Bar"/>
+  <field id="119" name="South Bledavik - Potion shop"/>
+  <field id="120" name="South Bledavik - Weapon shop"/>
+  <field id="121" name="South Bledavik - Ethos Gear shop"/>
+  <field id="122" name="South Bledavik - Gear shop back room"/>
+  <field id="123" name="South Bledavik - Bar"/>
+  <field id="124" name="North Bledavik entrance(no tents)"/>
+  <field id="125" name="North Bledavik entrance(festival day)"/>
+  <field id="126" name="North Bledavik - Games tent"/>
+  <field id="127" name="North Bledavik - Merry Go Pop"/>
+  <field id="128" name="North Bledavik - Whose Balloons"/>
+  <field id="129" name="North Bledavik - Mirror of Truth"/>
+  <field id="130" name="Bledavik Underground waterways - near - hotel ladder"/>
+  <field id="131" name="Aveh Castle - tournament sign - up"/>
+  <field id="132" name="Aveh Castle - courtyard"/>
+  <field id="133" name="Aveh Castle - waterways exit"/>
+  <field id="134" name="Aveh Castle - waterways exit, Shakhan&apos;s trap"/>
+  <field id="135" name="Aveh Castle - first floor hall"/>
+  <field id="136" name="Aveh Castle South - 2nd floor west bedroom"/>
+  <field id="137" name="Aveh Castle South - 2nd floor east bedroom"/>
+  <field id="138" name="Aveh Castle East - Cobra Cracka bedroom"/>
+  <field id="139" name="Aveh Castle East - bedroom"/>
+  <field id="140" name="Aveh Castle East - Armory"/>
+  <field id="141" name="Aveh Castle East, 2nd floor - Vanderkaum&apos;s room"/>
+  <field id="142" name="Aveh Castle East, 2nd floor - Minister&apos;s room, south"/>
+  <field id="143" name="Aveh Castle West - kitchen"/>
+  <field id="144" name="Aveh Castle West - mess hall"/>
+  <field id="145" name="Aveh Castle West, 2nd floor - library"/>
+  <field id="146" name="Aveh Castle West, 2nd floor - Minister&apos;s room, south"/>
+  <field id="147" name="Bledavik Underground waterways - Aveh Castle ladder"/>
+  <field id="148" name="Aveh Castle - Tournament fighters&apos; western tent (Joe)"/>
+  <field id="149" name="Aveh Castle - Tournament fighters&apos; eastern tent (Dan)"/>
+  <field id="150" name="Aveh Castle - Throne room"/>
+  <field id="151" name="Aveh Castle - Dining room"/>
+  <field id="152" name="Aveh Castle - East Tower corridor"/>
+  <field id="153" name="Aveh Castle - Suite"/>
+  <field id="154" name="Aveh Castle - Margie&apos;s room"/>
+  <field id="155" name="Aveh Castle - Shakhan&apos;s room"/>
+  <field id="156" name="Aveh Castle - Entrance hall"/>
+  <field id="157" name="Aveh Castle - Second floor hall"/>
+  <field id="158" name="Aveh Castle - Third floor hall"/>
+  <field id="159" name="Aveh Castle - Fourth floor hall"/>
+  <field id="160" name="Aveh Castle - Ramsus &amp; Miang in bed"/>
+  <field id="161" name="Aveh Castle - Ramsus&apos; Elru nightmare continued"/>
+  <field id="162" name="Aveh Castle, Gebler area - conference room(can&apos;t re-enter)"/>
+  <field id="163" name="Aveh Castle, Gebler area - hallway to airship dock"/>
+  <field id="164" name="Aveh Castle, Gebler area - hallway entrance"/>
+  <field id="165" name="Aveh Castle, Gebler area - Elly&apos;s quarters (can&apos;t re - enter)"/>
+  <field id="166" name="Aveh Castle, Gebler area - basement hallway to non - working elevator"/>
+  <field id="167" name="Aveh Castle, Gebler area - elevator to 3rd floor, basement"/>
+  <field id="168" name="Aveh Castle, Gebler area - Gear dock(no escape)"/>
+  <field id="169" name="Aveh Castle, Gebler area - Ramsus gets a message from Hyu, Margie rescued"/>
+  <field id="170" name="Aveh Castle, Gebler area - In a wall, somewhere(can&apos;t do anything)"/>
+  <field id="171" name="Aveh Castle, Gebler area - big hallway"/>
+  <field id="172" name="Assault on Aveh - Fei at bottom of inside mountain area"/>
+  <field id="173" name="Assault on Aveh - Fei at entrance to inside mountain area"/>
+  <field id="174" name="Assault on Aveh - Fei attacked by Elly&apos;s unit"/>
+  <field id="175" name="Assault on Aveh - Fei at bottom of outside mountain area"/>
+  <field id="176" name="Assault on Aveh - Elly&apos;s &apos;Drive&apos; flashback"/>
+  <field id="177" name="Assault on Aveh - Weltall beats Vierge, &apos;Drive&apos; wears off"/>
+  <field id="178" name="Assault on Aveh - Fei spots target Vanderkaum from mountain peak"/>
+  <field id="179" name="Assault on Aveh - Ramsus and Miang&apos;s destroyer damages the Yggdrasil"/>
+  <field id="180" name="Assault on Aveh - chasing Vanderkaum&apos;s flagship mini-game"/>
+  <field id="181" name="Assault on Aveh - chasing Vanderkaum&apos;s flagship midpoint"/>
+  <field id="182" name="Assault on Aveh - Fei reaches Vanderkaum&apos;s flagship"/>
+  <field id="183" name="Assault on Aveh - Yggdrasil bridge, Grahf&apos;s music (hangs)"/>
+  <field id="184" name="Assault on Aveh - Vanderkaum gets in the Dora"/>
+  <field id="185" name="Assault on Aveh - Dora breaks out of the flagship"/>
+  <field id="186" name="Assault on Aveh - Dora takes out Maitreya&apos;s unit"/>
+  <field id="187" name="Assault on Aveh - Bart tries to escape from Ramsus&apos; destroyer"/>
+  <field id="188" name="Assault on Aveh - Id takes out Ramsus&apos; fleet"/>
+  <field id="189" name="Assault on Aveh - Sigurd lands the Yggdrasil on Id"/>
+  <field id="190" name="Assault on Aveh - Id trashes Ramsus, attacks Bart"/>
+  <field id="191" name="Assault on Aveh - Yggdrasil accelerating for jump(hangs)"/>
+  <field id="192" name="Assault on Aveh - Miang grabs Ramsus and flees"/>
+  <field id="193" name="Assault on Aveh - same as 184 (? )"/>
+  <field id="194" name="Nortune map(before escape)"/>
+  <field id="195" name="Nortune, A block - outside doctor&apos;s house"/>
+  <field id="196" name="Nortune, D block - path from A block"/>
+  <field id="197" name="Nortune, D block - riding the train"/>
+  <field id="198" name="Nortune map(after escape)"/>
+  <field id="199" name="Nortune, D block - &apos;Baptism&apos; battle"/>
+  <field id="200" name="Nortune, A block - inside doctor&apos;s house"/>
+  <field id="201" name="Nortune, A block - doctor&apos;s toilet"/>
+  <field id="202" name="Nortune, A block - car house"/>
+  <field id="203" name="Nortune, A block - car house, back room"/>
+  <field id="204" name="Nortune, A block - car house, upstairs"/>
+  <field id="205" name="Nortune, A block - &apos;Wildcat&apos; bar"/>
+  <field id="206" name="Nortune, A block - armory"/>
+  <field id="207" name="Nortune, A block - potion shop"/>
+  <field id="208" name="Nortune, A block - house"/>
+  <field id="209" name="Nortune, Battling Arena reception area"/>
+  <field id="210" name="Nortune, D block - Ethos Room"/>
+  <field id="211" name="Nortune, D block - Battler&apos;s house, upstairs"/>
+  <field id="212" name="Nortune, D block - Battler&apos;s house, closet"/>
+  <field id="213" name="Nortune, D block - Fei awakes from dream in Battler&apos;s medical rest area"/>
+  <field id="214" name="Nortune, D block - Battler&apos;s house, showers"/>
+  <field id="215" name="Nortune, D block - orphanage"/>
+  <field id="216" name="Nortune, D block - orphanage, upstairs"/>
+  <field id="217" name="Nortune, D block - Latina&apos;s bar"/>
+  <field id="218" name="Nortune, D block - Latina&apos;s bar, upstairs (\&quot;Champ&apos;s room\&quot;)"/>
+  <field id="219" name="Nortune, D block - Champ&apos;s bedroom"/>
+  <field id="220" name="Nortune, D block - bad location house"/>
+  <field id="221" name="Nortune, Battling Arena - Fei signs up with Rue"/>
+  <field id="222" name="Nortune, Battling Arena reception area(after Nortune purge)"/>
+  <field id="223" name="Nortune, Battling Arena - Fei given Weltall for battling use"/>
+  <field id="224" name="Nortune, Battling Arena - Fei rescues Rico beginning"/>
+  <field id="225" name="Nortune, Battling Arena - Fei rescues Rico end"/>
+  <field id="226" name="Nortune Central District - chicken corridor"/>
+  <field id="227" name="Nortune Central District - kitchen"/>
+  <field id="228" name="Nortune Central District - warehouse"/>
+  <field id="229" name="Nortune Central District - Rico&apos;s childhood flashback"/>
+  <field id="230" name="Nortune Central District entrance"/>
+  <field id="231" name="Nortune Central District - main hall"/>
+  <field id="232" name="Nortune Central District - Goliath room"/>
+  <field id="233" name="Nortune Central District - stairwell"/>
+  <field id="234" name="Nortune Central District - Miang gives Sigmund a gate keeper, Fei dreams"/>
+  <field id="235" name="Nortune Central District - command center"/>
+  <field id="236" name="Nortune Central District - Kaiser&apos;s wife&apos;s room"/>
+  <field id="237" name="Nortune Central District - Kaiser&apos;s room"/>
+  <field id="238" name="black screen(hangs)"/>
+  <field id="239" name="Kislev sewers entrance"/>
+  <field id="240" name="Kislev sewers - outside locked door"/>
+  <field id="241" name="Kislev sewers - lower level entrance ladder"/>
+  <field id="242" name="Kislev sewers - inside locked door, pipe room"/>
+  <field id="243" name="Kislev sewers - Fei&apos;s childhood dream (after 234)"/>
+  <field id="244" name="Nortune Purge - Fei, Citanand Rico witness the beginning of the purge"/>
+  <field id="245" name="Nortune Purge - Fei encounters Elly&apos;s unit"/>
+  <field id="246" name="Nortune Purge - Elly&apos;s unit encounters Fei"/>
+  <field id="247" name="Nortune Purge - Citan helps evacuate Nortune"/>
+  <field id="248" name="Nortune Purge - Grahf saves Elly from Hecht explosion"/>
+  <field id="249" name="Nortune Purge intro"/>
+  <field id="250" name="Kislev Gear Dock - Hanger(beneath arena)"/>
+  <field id="251" name="Kislev Gear Dock entrance"/>
+  <field id="252" name="Kislev Gear Dock - stockroom"/>
+  <field id="253" name="Kislev Gear Dock - warehouse(crate duct junction)"/>
+  <field id="254" name="Kislev Gear Dock - factory"/>
+  <field id="255" name="Kislev Gear Dock - office(master key)"/>
+  <field id="256" name="Kislev Gear Dock - stairwell to hangar"/>
+  <field id="257" name="Kislev Gear Dock - hall between factory and office"/>
+  <field id="258" name="Kislev Gear Dock - other end of 257"/>
+  <field id="259" name="Kislev Gear Dock - ducts"/>
+  <field id="260" name="Goliath Factory - first \&quot;ambush room\&quot;"/>
+  <field id="261" name="Goliath Factory - second \&quot;ambush room\&quot;"/>
+  <field id="262" name="Goliath Factory entrance"/>
+  <field id="263" name="Goliath Factory - conveyor belt switch room"/>
+  <field id="264" name="Goliath Factory - hall to 260"/>
+  <field id="265" name="Goliath Factory - 263 after switching conveyor direction"/>
+  <field id="266" name="Goliath Factory - middle conveyor belt room"/>
+  <field id="267" name="Goliath Factory - conveyor to Fis - 6 room"/>
+  <field id="268" name="Goliath Factory - Fis - 6 room"/>
+  <field id="269" name="Goliath Factory - Fei and co.board the Goliath"/>
+  <field id="270" name="Goliath - Grahf attacks(Hammer:  \&quot;...MAD SKILLZ ? !\&quot;)"/>
+  <field id="271" name="Goliath - Bart missile hits Goliath"/>
+  <field id="272" name="Grahf, Ramsusand Miang broken cutscene"/>
+  <field id="273" name="Solaris - Gazel plans the Nortune purge"/>
+  <field id="274" name="Solaris - Gazel reprimands Ramsus after Fei reaches Shevat"/>
+  <field id="275" name="Assault on Aveh - Id - damaged Yggdrasil sinks, Citan ejected"/>
+  <field id="276" name="Assault on Aveh - Citan sees Yggdrasil sink, Dora ruin"/>
+  <field id="277" name="Assault on Aveh - Citan views the Dora up - close"/>
+  <field id="278" name="Assault on Aveh - same as 186"/>
+  <field id="279" name="Goliath - Bart spots Goliath through periscope"/>
+  <field id="280" name="Goliath - Yggdrasil surfaces"/>
+  <field id="281" name="Aveh Desert - Yggdrasil rescues Aveh Transport crew"/>
+  <field id="282" name="Assault on Aveh - on Yggdrasil, Maison&apos;s bar (after omen?  hangs)"/>
+  <field id="283" name="Assault on Aveh - on Yggdrasil, Bartand Sig discuss return to Aveh Castle"/>
+  <field id="284" name="Assault on Aveh - military briefing, Fei gives promise to Bart"/>
+  <field id="285" name="Aveh Desert - Bart and co.chew out Margie after rescue from Shakhan"/>
+  <field id="286" name="Thames - Elly sabotages the Yggdrasil"/>
+  <field id="287" name="Aveh Desert - Bart attacks the Aveh Transport"/>
+  <field id="288" name="Yggdrasil - bottom floor"/>
+  <field id="289" name="Yggdrasil - barracks"/>
+  <field id="290" name="Yggdrasil - bridge"/>
+  <field id="291" name="Yggdrasil - gear hanger"/>
+  <field id="292" name="Yggdrasil - gear shop"/>
+  <field id="293" name="Yggdrasil - Weltall&apos;s stall"/>
+  <field id="294" name="Shevat Battleship - bridge briefing room(disk2 ? hangs)"/>
+  <field id="295" name="Yggdrasil - engine room"/>
+  <field id="296" name="Yggdrasil - Fei and Elly sneak away from Shevat carbon - freeze"/>
+  <field id="297" name="Yggdrasil - Bart regrets shooting down the Goliath"/>
+  <field id="298" name="Yggdrasil - Rico&apos;s room"/>
+  <field id="299" name="Yggdrasil - infirmary"/>
+  <field id="300" name="Yggdrasil - Elly&apos;s room"/>
+  <field id="301" name="Yggdrasil - Margie&apos;s room"/>
+  <field id="302" name="Yggdrasil - elevator top"/>
+  <field id="303" name="Yggdrasil - bottom floor, apologize to Elly sequence"/>
+  <field id="304" name="Yggdrasil - elevator bottom"/>
+  <field id="305" name="Yggdrasil - world charts(hangs if no cities visited)"/>
+  <field id="306" name="Yggdrasil - same as 305"/>
+  <field id="307" name="Yggdrasil - same as 305"/>
+  <field id="308" name="Thames - Elly wakes on floating debris after Goliath shot down"/>
+  <field id="309" name="Thames - on floating debris, Feiand Elly start to &apos;awaken&apos;"/>
+  <field id="310" name="Thames - Vierge is recovered"/>
+  <field id="311" name="Thames - Yggdrasil under attack"/>
+  <field id="312" name="Thames - dock"/>
+  <field id="313" name="Thames - sickbay"/>
+  <field id="314" name="Thames - bridge"/>
+  <field id="315" name="Thames - beer hall"/>
+  <field id="316" name="Thames - deck"/>
+  <field id="317" name="Thames - screw elevator"/>
+  <field id="318" name="Thames - supply entrance"/>
+  <field id="319" name="Thames map"/>
+  <field id="320" name="Thames - deck, gang minus Fei goes looking for the \&quot;Etone\&quot;"/>
+  <field id="321" name="Thames - card game"/>
+  <field id="322" name="Thames - on Gebler destroyer, Dominiaand Miang argue over Elly"/>
+  <field id="323" name="Thames - Kelvena and Dominia attack the Yggdrasil"/>
+  <field id="324" name="Thames - same as 322"/>
+  <field id="325" name="Thames - on Gebler destroyer, Miang hypnotizes Elly"/>
+  <field id="326" name="Orphanage entrance"/>
+  <field id="327" name="Orphanage - main room"/>
+  <field id="328" name="Orphanage - Prim&apos;s room"/>
+  <field id="329" name="Orphanage - Billy&apos;s room"/>
+  <field id="330" name="Orphanage - toilet"/>
+  <field id="331" name="Orphanage - bedroom"/>
+  <field id="332" name="Orphanage - Billy&apos;s flashback"/>
+  <field id="333" name="Ethos Transport - outside, needs mappara or falls off - screen"/>
+  <field id="334" name="Ethos Transport - battle with Bloody boss"/>
+  <field id="335" name="Ethos Transport - battle with Giant Wels boss"/>
+  <field id="336" name="Ethos Transport - room after hallway"/>
+  <field id="337" name="Ethos Transport - freezer, needs mappara or stuck in wall"/>
+  <field id="338" name="Ethos Transport entrance"/>
+  <field id="339" name="Ethos HQ entrance"/>
+  <field id="340" name="Ethos HQ - upstairs, Etone room 3"/>
+  <field id="341" name="Ethos HQ - Bishop&apos;s room (exit to hidden treasure room hangs)"/>
+  <field id="342" name="Thames - after 360, Gazel(eliminate Ethos), Krelian(Zeboim)"/>
+  <field id="343" name="Ethos HQ - stairwell to infirmary(hangs)"/>
+  <field id="344" name="Ethos HQ Purge - stairwell with bishop(hangs)"/>
+  <field id="345" name="Ethos HQ - stairwell to 341"/>
+  <field id="346" name="Ethos HQ - Billy leads way downstairs to Ethos infirmary"/>
+  <field id="347" name="Ethos HQ - upstairs hallway leading to 348"/>
+  <field id="348" name="Ethos HQ - upstairs hallway to 340"/>
+  <field id="349" name="Ethos HQ Purge - library"/>
+  <field id="350" name="Ethos HQ Purge - dining room"/>
+  <field id="351" name="Ethos HQ Purge - kitchen"/>
+  <field id="352" name="Ethos HQ Purge - infirmary"/>
+  <field id="353" name="Ethos HQ Purge - infirmary hallway"/>
+  <field id="354" name="Ethos HQ Purge - confessional"/>
+  <field id="355" name="Ethos HQ Purge - hallway to 359"/>
+  <field id="356" name="Ethos HQ Purge - prison cell 1"/>
+  <field id="357" name="Ethos HQ Purge - diagonal elevator down at top"/>
+  <field id="358" name="Ethos HQ Purge - diagonal elevator down at bottom"/>
+  <field id="359" name="Ethos HQ Purge - Ethos = Solaris data room(hangs)"/>
+  <field id="360" name="Ethos HQ Purge - Alkanshel Rises(Stone heads for dig site)"/>
+  <field id="361" name="Ethos Dig Site entrance"/>
+  <field id="362" name="Ethos Dig Site - diagonal elevator down at bottom"/>
+  <field id="363" name="Ethos Dig Site - room between diagonal and vertical elevators"/>
+  <field id="364" name="Ethos Dig Site - Miang urges Grahf to help Stein steal Emeralda"/>
+  <field id="365" name="Ethos Dig Site - vertical elevator(hangs)"/>
+  <field id="366" name="Thames - Krelian&apos;s fishbowl after Thames attack"/>
+  <field id="367" name="Ethos Dig Site - nanomachine decontamination hallway 1"/>
+  <field id="368" name="Ethos Dig Site - hallway after 367"/>
+  <field id="369" name="Ethos Dig Site - inactive control room 1"/>
+  <field id="370" name="Ethos Dig Site - stairwell 1 top"/>
+  <field id="371" name="Ethos Dig Site - nanomachine decontamination hallway 2"/>
+  <field id="372" name="Ethos Dig Site - hallway after 371"/>
+  <field id="373" name="Ethos Dig Site - inactive control room 2"/>
+  <field id="374" name="Ethos Dig Site - memory cube room"/>
+  <field id="375" name="Ethos Dig Site - stairwell 2 top"/>
+  <field id="376" name="Ethos Dig Site - nanomachine decontamination airlock"/>
+  <field id="377" name="Ethos Dig Site - hall after 376"/>
+  <field id="378" name="Ethos Dig Site - nanoreactor control room"/>
+  <field id="379" name="Ethos Dig Site - hall to Emeralda&apos;s room (Elly&apos;s flashback ? )"/>
+  <field id="380" name="Ethos Dig Site - Yggdrasil infirmary, Fei&apos;s short Zeboim flashback"/>
+  <field id="381" name="Ethos Dig Site - Yggdrasil infirmary, end of 380, Id awakens"/>
+  <field id="382" name="Ethos Dig Site - outside vertical elevator bottom"/>
+  <field id="383" name="Ethos Dig Site - walkway over Zeboim(hangs)"/>
+  <field id="384" name="Ethos Dig Site - other end of 377"/>
+  <field id="385" name="Ethos Dig Site - hallway before 384"/>
+  <field id="386" name="Ethos Dig Site - vertical elevator bottom"/>
+  <field id="387" name="Ethos Dig Site - stairwell 2 bottom"/>
+  <field id="388" name="Ethos Dig Site - Stein and Grahf, Alkanshel battle"/>
+  <field id="389" name="Lighthouse - Emeralda, very end of Zeboim Christmas flashback"/>
+  <field id="390" name="Lighthouse - \&quot;pure life\&quot;, middle of Zeboim Christmas flashback"/>
+  <field id="391" name="Lighthouse - convenience store"/>
+  <field id="392" name="Lighthouse - convenience store, upstairs"/>
+  <field id="393" name="Lighthouse - Joe&apos;s shop!"/>
+  <field id="394" name="Lighthouse - stairs to upstairs news archive room"/>
+  <field id="395" name="Lighthouse - television station downstairs"/>
+  <field id="396" name="Lighthouse - Zeboim town square(Emeralda in party)"/>
+  <field id="397" name="Lighthouse - Zeboim subway end"/>
+  <field id="398" name="Lighthouse - Zeboim subway begin"/>
+  <field id="399" name="Lighthouse - Zeboim subway middle"/>
+  <field id="400" name="Lighthouse - entire Zeboim Christmas flashback"/>
+  <field id="401" name="Lighthouse - restaurant, middle of Zeboim Christmas flashback"/>
+  <field id="402" name="Lighthouse entrance"/>
+  <field id="403" name="Lighthouse - elevator bottom"/>
+  <field id="404" name="Lighthouse - elevator down"/>
+  <field id="405" name="Babel Tower entrance"/>
+  <field id="406" name="Babel Tower - entrance ramp"/>
+  <field id="407" name="Babel Tower - relay station"/>
+  <field id="408" name="Babel Tower - relay station control room"/>
+  <field id="409" name="Babel Tower - handrail room"/>
+  <field id="410" name="Babel Tower - Babel Tower tram"/>
+  <field id="411" name="Babel Tower - outer wall(hangs, no Ramsus)"/>
+  <field id="412" name="Babel Tower Ducts - inside from the mirror ledge"/>
+  <field id="413" name="Babel Tower Ducts - long corridor 1"/>
+  <field id="414" name="Babel Tower Ducts - long corridor 2"/>
+  <field id="415" name="Babel Tower Ducts - short \&quot;conduit - stairs\&quot; corridor"/>
+  <field id="416" name="Babel Tower Ducts - circular platform room"/>
+  <field id="417" name="Babel Tower - lock / mirror control room"/>
+  <field id="418" name="Babel Tower - floating platform(enemies) area"/>
+  <field id="419" name="Babel Tower - same as 418"/>
+  <field id="420" name="Babel Tower - top(Seibzehn battle)"/>
+  <field id="421" name="Babel Tower - walking on the clouds ?"/>
+  <field id="422" name="Babel Tower - tram ride"/>
+  <field id="423" name="Shevat map"/>
+  <field id="424" name="Shevat City entrance"/>
+  <field id="425" name="Shevat City - donut - shaped room inside first elevator"/>
+  <field id="426" name="Shevat City - inside 425. elevator bottom"/>
+  <field id="427" name="Shevat City - below 426"/>
+  <field id="428" name="Shevat City - sage&apos;s secret room"/>
+  <field id="429" name="Shevat City - Deep Sea Bros bar"/>
+  <field id="430" name="Shevat City - Chu - Chu room"/>
+  <field id="431" name="Shevat City - fisherman&apos;s fountain"/>
+  <field id="432" name="Shevat City - mirror room"/>
+  <field id="433" name="Shevat City - mirror room, upstairs"/>
+  <field id="434" name="Shevat City - child&apos;s memorial"/>
+  <field id="435" name="Shevat City - kitchen"/>
+  <field id="436" name="Shevat City - gear shop"/>
+  <field id="437" name="Shevat Dock - elevator room"/>
+  <field id="438" name="Shevat Dock - elevator shaft(hangs)"/>
+  <field id="439" name="Shevat Dock - hallway to Seibzehn dock"/>
+  <field id="440" name="Shevat Dock - Yggdrasil / gear dock"/>
+  <field id="441" name="Shevat Dock - Seibzehn dock"/>
+  <field id="442" name="Shevat Attacked - walking on clouds ? (Achtzehn battle, hangs)"/>
+  <field id="443" name="Shevat Attacked - Seibzehn launch(Achtzehn battle, hangs)"/>
+  <field id="444" name="Shevat Attacked - emergency shaft hallway 1 (start)"/>
+  <field id="445" name="Shevat Attacked - emergency shaft elevator 1"/>
+  <field id="446" name="Shevat Attacked - emergency shaft stairwell 1"/>
+  <field id="447" name="Shevat Attacked - emergency shaft hallway 2"/>
+  <field id="448" name="Shevat Attacked - emergency shaft elevator 2"/>
+  <field id="449" name="Shevat Attacked - emergency shaft elevator 3"/>
+  <field id="450" name="Shevat Attacked - outdoor emergency shaft(stuck near savepoint)"/>
+  <field id="451" name="Shevat Palace - elevator top"/>
+  <field id="452" name="Shevat Palace - hallway to Queen Zephyr&apos;s throne"/>
+  <field id="453" name="Shevat Palace - throne room"/>
+  <field id="454" name="Shevat Palace - Zephyr, Wisemanand Gaspar discuss deja vu"/>
+  <field id="455" name="Shevat Palace - Zephyr&apos;s personal chambers"/>
+  <field id="456" name="Shevat Palace - bottom of Zephyr&apos;s tower"/>
+  <field id="457" name="Shevat Palace - hallway to Shevat prison"/>
+  <field id="458" name="Shevat Palace - hallway to carbon freeze and \&quot;Miang cage\&quot;"/>
+  <field id="459" name="Shevat Palace - science lab(Krelian and limiters)"/>
+  <field id="460" name="Shevat Palace - &apos;tactical command room&apos;"/>
+  <field id="461" name="Shevat Palace - library(days of ruin)"/>
+  <field id="462" name="Shevat Palace - barracks(Khan)"/>
+  <field id="463" name="Shevat Palace - gabby old person&apos;s room (Zephyr)"/>
+  <field id="464" name="Shevat Palace - Balthazar&apos;s friends (Maria)"/>
+  <field id="465" name="Shevat Palace - historians(Mahanon)"/>
+  <field id="466" name="Shevat Palace - party rest area"/>
+  <field id="467" name="Shevat Palace - prison"/>
+  <field id="468" name="Shevat Palace - carbon freeze"/>
+  <field id="469" name="Shevat Palace - \&quot;Miang cage\&quot;"/>
+  <field id="470" name="Shevat Palace - mess(Yui in kitchen)"/>
+  <field id="471" name="Shevat Palace - food storeroom"/>
+  <field id="472" name="Shevat Palace - elevator emergency shaft entrance(hangs)"/>
+  <field id="473" name="Shevat Palace - Zephyr&apos;s throne, Achtzehn briefing (no battle)"/>
+  <field id="474" name="Occupied Nisan entrance"/>
+  <field id="475" name="Mausoleum entrance"/>
+  <field id="476" name="Mausoleum - stairwell"/>
+  <field id="477" name="Mausoleum - main door"/>
+  <field id="478" name="Mausoleum - main hall"/>
+  <field id="479" name="Mausoleum - elevator up"/>
+  <field id="480" name="Ft.Jasper - elevator 1 corridor"/>
+  <field id="481" name="Ft.Jasper - angel door"/>
+  <field id="482" name="Ft.Jasper - control room"/>
+  <field id="483" name="Ft.Jasper - atop(in gears)"/>
+  <field id="484" name="Ft.Jasper - elevator bottom"/>
+  <field id="485" name="Ft.Jasper - elevator 2 corridor"/>
+  <field id="486" name="Ft.Jasper - L - shaped hallway to Omnigear hanger"/>
+  <field id="487" name="Ft.Jasper - Jasper lock 2"/>
+  <field id="488" name="Ft.Jasper - Omnigear hanger"/>
+  <field id="489" name="Desert FMV - beeps and doesn&apos;t play cutscene (disk2?)"/>
+  <field id="490" name="Title Screen">
+    <entity id="0" name="Director"/>
+  </field>
+  <field id="491" name="Ft.Jasper - Omnigear bay"/>
+  <field id="492" name="Ft.Jasper - big round room, upstairs"/>
+  <field id="493" name="Mahanon - in Nisan, Ellyand Margie talk about the pendant"/>
+  <field id="494" name="Gate Generator 1 - treasure chest area(hangs)"/>
+  <field id="495" name="Gate Generator 1 - Shakhan battle"/>
+  <field id="496" name="Sargasso Point"/>
+  <field id="497" name="Sargasso Point"/>
+  <field id="498" name="Sargasso Point - before first Y"/>
+  <field id="499" name="Sargasso Point"/>
+  <field id="500" name="Sargasso Point - at strong current Y"/>
+  <field id="501" name="Sargasso Point - treasure chest area 1"/>
+  <field id="502" name="Sargasso Point - room before 505"/>
+  <field id="503" name="Sargasso Point - strong current off"/>
+  <field id="504" name="Sargasso Point - treasure chest area 2 (current switch)"/>
+  <field id="505" name="Gate Generator 3 - Crescens battle"/>
+  <field id="506" name="Solaris - the now - visible Solaris opens defensively"/>
+  <field id="507" name="Krelian&apos;s Lab - Krelian examines Elly"/>
+  <field id="508" name="Etrenank Soylent - conference room 1"/>
+  <field id="509" name="Etrenank - outside immigration office"/>
+  <field id="510" name="Etrenank - sewer chase"/>
+  <field id="511" name="Solaris - Seibzehn carries Fei, Ellyand Citan to Solaris"/>
+  <field id="512" name="Etrenank - Samson waiting room"/>
+  <field id="513" name="Etrenank - past the first security scanner"/>
+  <field id="514" name="Etrenank - the \&quot;dedication ceremony\&quot;, Fei remembers Krelian"/>
+  <field id="515" name="Aveh Transport - Cain and Citan discuss &apos;the time of the gospel&apos;"/>
+  <field id="516" name="Solaris - site of Elly&apos;s parents&apos; deaths"/>
+  <field id="517" name="Solaris - bridge after 516 (hangs)"/>
+  <field id="518" name="Solaris - like 514 but hangs"/>
+  <field id="519" name="Solaris, 3rd - Class main causeway"/>
+  <field id="520" name="Solaris, 3rd - Class - quarters with the savepoint">
+    <entity id="14" name="Save point"/>
+  </field>
+  <field id="521" name="Solaris, 3rd - Class - mutant&apos;s quarters (one time)"/>
+  <field id="522" name="Solaris, 3rd - Class - empty quarters"/>
+  <field id="523" name="Solaris, 3rd - Class - coward&apos;s quarters"/>
+  <field id="524" name="Solaris, 3rd - Class - Elly&apos;s hiding place"/>
+  <field id="525" name="Solaris, 3rd - Class - garbage chute entrance(Elly&apos;s parents)"/>
+  <field id="526" name="Solaris - labyrinth between 3rd - Class and Etrenank"/>
+  <field id="527" name="Etrenank - second security scanner"/>
+  <field id="528" name="Etrenank - immigration office"/>
+  <field id="529" name="Etrenank - \&quot;dedication ceremony\&quot; area(hangs)"/>
+  <field id="530" name="Etrenank - ticket office"/>
+  <field id="531" name="Etrenank - flying gear apartment(Tifa poster)"/>
+  <field id="532" name="Etrenank - generous lady&apos;s apartment (tickets)"/>
+  <field id="533" name="Etrenank - Joe&apos;s apartment"/>
+  <field id="534" name="Etrenank - brainwashed guy&apos;s apartment (memory cube)"/>
+  <field id="535" name="Etrenank - ground floor of apartments"/>
+  <field id="536" name="Etrenank - apartments elevator top"/>
+  <field id="537" name="Etrenank - hangs"/>
+  <field id="538" name="Etrenank - Elly&apos;s house, foyer"/>
+  <field id="539" name="Etrenank - Elly&apos;s house, living room"/>
+  <field id="540" name="Etrenank - Elly&apos;s house, kitchen and dining area"/>
+  <field id="541" name="Etrenank - Elly&apos;s house, Erich&apos;s room"/>
+  <field id="542" name="Etrenank - Elly&apos;s house, Elly&apos;s room"/>
+  <field id="543" name="Etrenank - Elly&apos;s house"/>
+  <field id="544" name="Etrenank - garbage chute"/>
+  <field id="545" name="Etrenank - garbage shredder"/>
+  <field id="546" name="Etrenank - garbage chute ladder"/>
+  <field id="547" name="Etrenank - \&quot;food\&quot; storage area"/>
+  <field id="548" name="Etrenank - hallway to 547"/>
+  <field id="549" name="Etrenank Soylent - code room"/>
+  <field id="550" name="Etrenank Soylent - foreign object scanner control room"/>
+  <field id="551" name="Etrenank Soylent entrance"/>
+  <field id="552" name="Etrenank Soylent - Citan explains about the &apos;M Plan&apos; (Erich, Nikolai)"/>
+  <field id="553" name="Etrenank Soylent - diagonal elevator bottom"/>
+  <field id="554" name="Etrenank Soylent - diagonal elevator top"/>
+  <field id="555" name="Krelian&apos;s Lab entrance"/>
+  <field id="556" name="Krelian&apos;s Lab - short corridor"/>
+  <field id="557" name="Krelian&apos;s Lab - inclined T corridor"/>
+  <field id="558" name="Krelian&apos;s Lab - short side corridor"/>
+  <field id="559" name="Krelian&apos;s Lab - wide corridor between caged Wels"/>
+  <field id="560" name="Krelian&apos;s Lab - inclined corridor, locked door"/>
+  <field id="561" name="Krelian&apos;s Lab - upstairs 555, wide corridor after red doors"/>
+  <field id="562" name="Krelian&apos;s Lab - wide corridor before Wels surgery"/>
+  <field id="563" name="Krelian&apos;s Lab - wide corridor with memory cube"/>
+  <field id="564" name="Krelian&apos;s Lab - corridor before nanomachine scanning rings"/>
+  <field id="565" name="Krelian&apos;s Lab - T corridor to musical locked door"/>
+  <field id="566" name="Krelian&apos;s Lab - long corridor SE to Citan&apos;s door"/>
+  <field id="567" name="Krelian&apos;s Lab - Wels surgery"/>
+  <field id="568" name="Krelian&apos;s Lab - room with cage of many Wels"/>
+  <field id="569" name="Krelian&apos;s Lab - Wels specimon room"/>
+  <field id="570" name="Krelian&apos;s Lab - first Wels room"/>
+  <field id="571" name="Krelian&apos;s Lab - second Wels room"/>
+  <field id="572" name="Krelian&apos;s Lab - Solaris Omnigear observation room"/>
+  <field id="573" name="Krelian&apos;s Lab - computer room 1"/>
+  <field id="574" name="Krelian&apos;s Lab - memory cube room"/>
+  <field id="575" name="Krelian&apos;s Lab - conference room 2"/>
+  <field id="576" name="Krelian&apos;s Lab - anima alignment lab 1"/>
+  <field id="577" name="Krelian&apos;s Lab - anima alignment lab 2"/>
+  <field id="578" name="Krelian&apos;s Lab - corridor after 563"/>
+  <field id="579" name="Krelian&apos;s Lab - interrogation room"/>
+  <field id="580" name="Krelian&apos;s Lab - hologram room"/>
+  <field id="581" name="Krelian&apos;s Lab - \&quot;drill\&quot; 1"/>
+  <field id="582" name="Krelian&apos;s Lab - \&quot;drill\&quot; 2"/>
+  <field id="583" name="Krelian&apos;s Lab - \&quot;drill\&quot; 3"/>
+  <field id="584" name="Krelian&apos;s Lab - ramp 1"/>
+  <field id="585" name="Krelian&apos;s Lab - ramp 2"/>
+  <field id="586" name="Krelian&apos;s Lab - ramp 3"/>
+  <field id="587" name="Krelian&apos;s Lab - Merkava hologram room"/>
+  <field id="588" name="Krelian&apos;s Lab - animus test area 1"/>
+  <field id="589" name="Krelian&apos;s Lab - Malakh Angel growth samples"/>
+  <field id="590" name="Krelian&apos;s Lab - nanomachine scanning rings"/>
+  <field id="591" name="Krelian&apos;s Lab - interrogation room rescue"/>
+  <field id="592" name="Krelian&apos;s Lab - corridor from Krelian&apos;s private lab"/>
+  <field id="593" name="Krelian&apos;s Lab - Citan blows the last gate generator"/>
+  <field id="594" name="Krelian&apos;s Lab - corridor to Krelian&apos;s private lab"/>
+  <field id="595" name="Krelian&apos;s Lab - Krelian&apos;s private lab"/>
+  <field id="596" name="Krelian&apos;s Lab - the rendezvous point">
+    <entity id="26" name="Party edit memory cube"/>
+    <entity id="27" name="Save point"/>
+  </field>
+  <field id="597" name="Krelian&apos;s Lab - corridor SE from 596"/>
+  <field id="598" name="Krelian&apos;s Lab - corridor SW from 596"/>
+  <field id="599" name="Krelian&apos;s Lab - useless corridor"/>
+  <field id="600" name="Krelian&apos;s Lab - +-shaped corridor"/>
+  <field id="601" name="Krelian&apos;s Lab - corridor after first landmark"/>
+  <field id="602" name="Krelian&apos;s Lab - second landmark"/>
+  <field id="603" name="Krelian&apos;s Lab - animus test area 2"/>
+  <field id="604" name="Krelian&apos;s Lab - computer room 2"/>
+  <field id="605" name="Krelian&apos;s Lab - conference room 3"/>
+  <field id="606" name="Krelian&apos;s Lab - black room (hang)"/>
+  <field id="607" name="Solaris - Hammer tries to kidnap Elly"/>
+  <field id="608" name="Solaris - Id awakens"/>
+  <field id="609" name="Solaris - red Weltall arrives at Solaris"/>
+  <field id="610" name="Solaris - Citan tells Elly about Id"/>
+  <field id="611" name="Solaris - Id attacks Yggdrasil, Elly stops him(long scenes follow)"/>
+  <field id="612" name="Taura&apos;s House - the all-new, improved, Weltall-2"/>
+  <field id="613" name="Taura&apos;s House - Ramsus&apos; Omnigear pursues Fei and Elly"/>
+  <field id="614" name="Taura&apos;s House - outside"/>
+  <field id="615" name="Taura&apos;s House - Citan shows up"/>
+  <field id="616" name="Taura&apos;s House - nanoreactor room"/>
+  <field id="617" name="Taura&apos;s House - Fei&apos;s dream"/>
+  <field id="618" name="Nortune - Yggdrasil IV versus Ft.Hurricane"/>
+  <field id="619" name="Mahanon - Razael&apos;s Tree"/>
+  <field id="620" name="Ignas Soylent System - partway into 621 cutscene"/>
+  <field id="621" name="Ignas Soylent System - Krelian&apos;s key infects the limiter-breaking nanomachines"/>
+  <field id="622" name="Ignas Soylent System - Sufal Mass battle"/>
+  <field id="623" name="Ignas Soylent System - further into 621 cutscene"/>
+  <field id="624" name="Ignas Soylent System - still further into 621 cutscene"/>
+  <field id="625" name="Ignas Soylent System - Sufal Mass, near end of 621 cutscene"/>
+  <field id="626" name="Ignas Soylent System - cutscene AGAIN, starts somewhere between 624and 625"/>
+  <field id="627" name="Anima Relic 1 - Elements combine and attack">
+    <entity id="2" name="Grandgrowl (lion)"/>
+    <entity id="3" name="Bladegash (humanoid)"/>
+  </field>
+  <field id="628" name="Anima Relic 1 entrance"/>
+  <field id="629" name="Anima Relic 1 - fuse room"/>
+  <field id="630" name="Anima Relic 1 - door lock B control room"/>
+  <field id="631" name="Anima Relic 1 - central elevator control room"/>
+  <field id="632" name="Anima Relic 1 - main hallway"/>
+  <field id="633" name="Anima Relic 1 - secondary hallway"/>
+  <field id="634" name="Anima Relic 1 - big round room"/>
+  <field id="635" name="Anima Relic 1 - big round ABCD - code room"/>
+  <field id="636" name="Anima Relic 1 - corridor with sealed doors"/>
+  <field id="637" name="Anima Relic 1 - bottom of big round elevator shaft"/>
+  <field id="638" name="Anima Relic 1 - Anima Relic room(Billy)"/>
+  <field id="639" name="Anima Relic 2 - corridor with sealed doors"/>
+  <field id="640" name="Anima Relic 2 - Anima Relic room(Rico)"/>
+  <field id="641" name="Anima Relic 2 entrance"/>
+  <field id="642" name="Anima Relic 2 - same as 641, except with pillar bridged gap"/>
+  <field id="643" name="Anima Relic 2 - three holes room"/>
+  <field id="644" name="Anima Relic 2 - water chasm"/>
+  <field id="645" name="Anima Relic 2 - corridor to pit trap room"/>
+  <field id="646" name="Anima Relic 2 - pit trap room"/>
+  <field id="647" name="Anima Relic 2 - spike room"/>
+  <field id="648" name="Anima Relic 2 - water control room"/>
+  <field id="649" name="Anima Relic 2 - return corridor"/>
+  <field id="650" name="Anima Relic 2 - after 651 (memory cube, Hammer ambush)"/>
+  <field id="651" name="Anima Relic 2 - same as 644 minus water"/>
+  <field id="652" name="Mahanon - entering the 10, 000 year old Eldridge"/>
+  <field id="653" name="Mahanon - later in 652 cutscene"/>
+  <field id="654" name="Mahanon - later in 652 cutscene, Deus battle"/>
+  <field id="655" name="Mahanon - Razael&apos;s Tree"/>
+  <field id="656" name="Mahanon - Grahf gloats over the defeated Fei"/>
+  <field id="657" name="Golgoda - Krelian tests Elly"/>
+  <field id="658" name="Shevat - Id shows Fei the Lacan memories(THE long cutscene)">
+    <entity id="1" name="Fei"/>
+    <entity id="13" name="Cross core and particles"/>
+    <entity id="14" name="Cross sub part"/>
+    <entity id="15" name="Cross sub part 2"/>
+  </field>
+  <field id="659" name="Point of Sephirot - Fei&apos;s friends interrupt Id&apos;s &apos;contact&apos;"/>
+  <field id="660" name="Point of Sephirot - birth of the pre - Xenogears"/>
+  <field id="661" name="Point of Sephirot - later in 660 cutscene"/>
+  <field id="662" name="Point of Sephirot - Id shows Fei the childhood memories"/>
+  <field id="663" name="Point of Sephirot - later in 662 cutscene"/>
+  <field id="664" name="Point of Sephirot - still later in 662, the death of Karen"/>
+  <field id="665" name="Point of Sephirot - still later in 662, the room of the coward(disk2)"/>
+  <field id="666" name="Point of Sephirot - end of 662 cutscene, Weltall-&gt;Xenogears"/>
+  <field id="667" name="Point of Sephirot - late in 662, after 665, Feiand Elly thru the ages"/>
+  <field id="668" name="Point of Sephirot - late in 662, after 667, Fei meets Wave Existence"/>
+  <field id="669" name="Point of Sephirot - after 666, Fei talks about Kadomony"/>
+  <field id="670" name="Etrenank - Lacan painting Sophia"/>
+  <field id="671" name="Etrenank - Krelian takes Lacan to get pigments"/>
+  <field id="672" name="Etrenank - Krelian talks about Melchior"/>
+  <field id="673" name="Taura&apos;s House - Krelian meets Karen/Miang, before 613"/>
+  <field id="674" name="Shevat - after 658, Roniand the gang"/>
+  <field id="675" name="Shevat - unused scene ? Sophia and sisters commission a portrait"/>
+  <field id="676" name="Shevat - unused scene ? dialogue slightly different from 675"/>
+  <field id="677" name="Shevat - Krelian curses the Solarian enemy"/>
+  <field id="678" name="Shevat - Krelian shows concern for Sophia"/>
+  <field id="679" name="Shevat - Sophia hears Lacan talking to himself"/>
+  <field id="680" name="Shevat - Miang posing as Elly in Shevat Prison"/>
+  <field id="681" name="Shevat - Lacan finds the point of Sephirot"/>
+  <field id="682" name="Shevat - Krelian loses faith"/>
+  <field id="683" name="Shevat - Sophia&apos;s suicide attack on Solaris"/>
+  <field id="684" name="Shevat - Wiseman leaves Fei with Chief Lee"/>
+  <field id="685" name="Snowfield Hideout - abandoned Chu - chu room"/>
+  <field id="686" name="Snowfield Hideout - command center"/>
+  <field id="687" name="Snowfield Hideout - rest / save area"/>
+  <field id="688" name="Snowfield Hideout - Y - room, to mirrorand penguins"/>
+  <field id="689" name="Snowfield Hideout - hall to prison corridor"/>
+  <field id="690" name="Snowfield Hideout - prison corridor(jumps to carbon freeze)"/>
+  <field id="691" name="Snowfield Hideout - hall to command center"/>
+  <field id="692" name="Snowfield Hideout - snowy hall"/>
+  <field id="693" name="Snowfield Hideout - hall to 701"/>
+  <field id="694" name="Snowfield Hideout - gold - diggin jukebox man"/>
+  <field id="695" name="Snowfield Hideout - big round main room"/>
+  <field id="696" name="Snowfield Hideout - carbon freeze room"/>
+  <field id="697" name="Snowfield Hideout - Midori and Dan"/>
+  <field id="698" name="Snowfield Hideout - prison"/>
+  <field id="699" name="Snowfield Hideout - mirror room(elevator to 685)"/>
+  <field id="700" name="Snowfield Hideout - Zephyr&apos;s Tower"/>
+  <field id="701" name="Snowfield Hideout - path to swordsmith"/>
+  <field id="702" name="Merkava - outside entrance"/>
+  <field id="703" name="Merkava - inside entrance"/>
+  <field id="704" name="Merkava - ledge over 1st laser tunnel to 706"/>
+  <field id="705" name="Merkava - 2nd laser tunnel leading to 709"/>
+  <field id="706" name="Merkava - platform puzzle start"/>
+  <field id="707" name="Merkava - tunnels north of puzzle room"/>
+  <field id="708" name="Merkava - tunnels west of puzzle room"/>
+  <field id="709" name="Merkava - angel room adjacent to 710"/>
+  <field id="710" name="Merkava - Ramsus waiting for Fei in Merkava."/>
+  <field id="711" name="Merkava - after beating Ramsus."/>
+  <field id="712" name="Merkava - Confronting Krelian and Miang."/>
+  <field id="713" name="Merkava - seconds before fighting Opiomorph."/>
+  <field id="714" name="Merkava - just after Elly shoots Fei."/>
+  <field id="715" name="Merkava - Room leading to the repairbot in the final dungeon."/>
+  <field id="716" name="Merkava - Repairbot at the end of the final dungeon."/>
+  <field id="717" name="Merkava - The inner chamber, about to fight Deus."/>
+  <field id="718" name="Ending - Fei persuing the destructing Deus."/>
+  <field id="719" name="Ending - Talking to Krelian before fighting Urobolus."/>
+  <field id="720" name="Debug room - Kato"/>
+  <field id="721" name="Debug room - Eto"/>
+  <field id="722" name="Debug room - Kazoumi"/>
+  <field id="723" name="Debug room - Suzuki"/>
+  <field id="724" name="Debug room - Tane"/>
+  <field id="725" name="Debug room - Koumoto"/>
+  <field id="726" name="Debug room - Kigoshi"/>
+  <field id="727" name="Debug room - Uchimichi"/>
+  <field id="728" name="Debug room - Saito"/>
+  <field id="729" name="Debug room - Matu"/>
+</fields>

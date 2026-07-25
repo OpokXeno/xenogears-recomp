@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Verified guest-RAM address book for the XenogearsRecomp debug overlay (N13).
+  status="verified"   -> safe for write actions (evidence attached)
+  status="unverified" -> hypothesis only; dependent overlay actions stay disabled
+  Every entry cites its evidence. No guessing (project rule 14).
+-->
+<addresses game="SLUS-00664">
+
+  <!-- ======================= game state core ======================= -->
+  <addr name="gameStateBase" value="0x8006D634" type="ptr" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="fieldID(0x8006F94E)-0x231A; gameState pointer loaded from 0x8005A39C in field-module init, fieldVars read at +0x1930"
+        desc="Game state struct base. Pointer to it lives at gameStatePtr."/>
+
+  <addr name="gameStatePtr" value="0x8005A39C" type="ptr" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="field_module init: lw a0,-0x5c64(0x8006xxxx) then lhu v0,0x1930(a0) (fieldVars)"
+        desc="Kernel global holding the gameState base pointer."/>
+
+  <addr name="fieldID" value="0x8006F94E" type="u16" size="2" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="boot dispatcher READ 0x8001b7a8: (fieldID&amp;0x7FF)&lt;0x400 -> module 1 Field else module 3 Worldmap; WRITE 0x8001b7ec sets 490 (title screen)"
+        desc="gameState+0x231A. Current field/map ID. &gt;=0x400 selects worldmap module."/>
+
+  <addr name="gold" value="0x8006EF58" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="FUN_8001c1a8 (native debug menu): DAT_8006ef58 = 999999999"
+        desc="gameState+0x1924. Money."/>
+
+  <addr name="fieldVars" value="0x8006EF64" type="u16" size="1024" count="512" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="field-module init copies 512 u16 from gameState+0x1930 to local mirror 0x800C3A68"
+        desc="gameState+0x1930. 512 script variables; var[0]=GameProgress, var[2]=field entry point (see flags.xml)."/>
+
+  <!-- ======================= party ======================= -->
+  <addr name="partyMemberBitField" value="0x8006F364" type="u16" size="2" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="battle setup FUN_801e5384 (battle module): read as mask together with partyFrameMask"
+        desc="gameState+0x1D30. Bitmask of unlocked party members."/>
+
+  <addr name="partyFrameMask" value="0x8006F366" type="u16" size="2" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="battle setup FUN_801e5384: ANDed with partyMemberBitField"
+        desc="gameState+0x1D32. Second party availability mask."/>
+
+  <addr name="kernelPartySlots" value="0x80062590" type="u32" size="4" count="3" status="verified"
+        verifiedBy="live-wtrace+readback" date="2026-07-25"
+        evidence="kernel sync 0x800A3200 copies these u32s (low byte) into currentParty every frame; live write of slot0=2 persisted and gameState+vars followed"
+        desc="MASTER party representation (field kernel BSS). Low byte = char id, 0xFF = empty. Write HERE, not currentParty."/>
+
+  <addr name="currentParty" value="0x8006F368" type="u8" size="3" count="3" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="battle setup FUN_801e5384: iterates 0x8006F368..0x8006F36A, value&amp;0x7F; live: per-frame copy of kernelPartySlots (writes reverted)"
+        desc="gameState+0x1D34. Active party character IDs (see characters.xml), 0xFF=empty. READ-ONLY mirror of kernelPartySlots — direct writes are reverted by the kernel sync."/>
+
+  <addr name="partyRoster" value="0x8006D8A0" type="struct" size="164" count="11" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="battle setup FUN_801e5384: memcpy(0xA4) from charId*0xA4+0x8006D8A0 per party member"
+        desc="gameState+0x26C. 11 character records of 0xA4 bytes (stats/level/equipment)."/>
+
+  <addr name="gearRoster" value="0x8006DFAC" type="struct" size="164" count="20" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="battle setup FUN_801e5384: gearId*0xA4+0x8006DFAC"
+        desc="gameState+0x978. 20 gear records of 0xA4 bytes."/>
+
+  <!-- ======================= battle ======================= -->
+  <addr name="battleEntities" value="0x800CCCE8" type="struct" size="368" count="11" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="battle setup FUN_801e5384: destination buffer filled per party member, stride 0x170"
+        desc="Battle entity slots (11 x 0x170 bytes), battle module BSS."/>
+
+  <addr name="battleModuleOverlay" value="0x8015F000" type="code" size="0" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="battle module loads at 0x8015F000-0x801F3FFF; contains battle setup entry FUN_801e5384"
+        desc="Battle module load region (informational, not a writable variable)."/>
+
+  <!-- ======================= field module / camera ======================= -->
+  <addr name="cameraMatrix" value="0x800AF990" type="matrix" size="32" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="field-module init calls matrix-init util 0x80070594(0x800AF990)"
+        desc="g_cameraMatrix (field module)."/>
+
+  <addr name="projectionMatrix" value="0x800AFA64" type="matrix" size="32" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="field-module init: second matrix-init call at 0x800AF990+0xD4"
+        desc="g_currentProjectionMatrix (field module)."/>
+
+  <addr name="cameraEye" value="0x800AF880" type="svector" size="8" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="WRITE in FUN_00021fe0 (field_module), READ at 0x5a0c"
+        desc="g_cameraEye (field module). Free-camera write target."/>
+
+  <addr name="cameraAt" value="0x800AF890" type="svector" size="8" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="WRITE in FUN_00021c00 and at 0x21ef0 (field_module)"
+        desc="g_cameraAt (field module). Free-camera write target."/>
+
+  <addr name="actorArrayPtr" value="0x800AFB10" type="ptr" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="lw in FUN_000320e8 (field_module)"
+        desc="Pointer to the field actor array."/>
+
+  <!-- ======================= native debug menu ======================= -->
+  <addr name="nativeDebugMenuEnable" value="0x80059178" type="u8" size="1" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="FUN_8001c1a8 gates the Menu=(%d)%s debug menu list on DAT_80059178 != 0"
+        desc="Nonzero enables the game's native Kernel debug menu list at boot."/>
+
+  <addr name="moduleSwitchFn" value="0x8001996C" type="code" size="0" status="verified"
+        verifiedBy="ghidra-static" date="2026-07-24"
+        evidence="jal 0x8001996c in boot dispatcher; a0=module id (1=Field,2=Battle,3=Worldmap,4=Battling,5=Menu,6=Movie)"
+        desc="module_switch(int module_id) - informational."/>
+
+  <!-- ======================= teleport mechanism (LIVE-VERIFIED 2026-07-24) ======================= -->
+  <!-- Full recipe, user-confirmed on a real Lahan(1) -> Blackmoon(22) transition:
+       write all seven in one batch; the fieldEntryPoint poll (0x800784A0) fires
+       loadNewField((fieldMapNumber&0xFFF)*2, 0) next frame and runs the full
+       completion sequence (bundle apply + var init + actor reset + script restart
+       + texture/stream re-init). fieldID becomes the target when the load engages
+       (D_8004F330 == target*2). Do NOT write fieldID directly (cosmetic mirror;
+       corrupts texture streaming). Do NOT call loadNewField from the debug poll
+       (incremental, not reentrant -> crash). Do NOT loop the arm write after
+       D_8004F330 engages (would re-arm forever). -->
+  <addr name="fieldMapNumber" value="0x8004F34C" type="u32" size="4" status="verified"
+        verifiedBy="live-experiment" date="2026-07-24"
+        evidence="write target id here; poll computes (id&amp;0xFFF)*2 as bundle file index. Confirmed: intro writer sw 4; gear-state reads &amp;0xFFF"
+        desc="TELEPORT TARGET. The map-change request channel."/>
+
+  <addr name="teleportGate1" value="0x800ADBEC" type="u32" size="4" status="verified"
+        verifiedBy="live-experiment" date="2026-07-24"
+        evidence="poll gate at 0x80078498: must be 0; idle is 0xFFFFFFFF and BLOCKS the poll if not cleared. The door handler clears it (sw zero,-9236(0x800B))"
+        desc="RECIPE: write 0."/>
+
+  <addr name="fieldChangePrevented" value="0x800ADB64" type="u32" size="4" status="verified"
+        verifiedBy="live-experiment" date="2026-07-24"
+        evidence="idle 0xFF/-1; must be exactly 0 to arm (reference: door opcode clears it)"
+        desc="RECIPE: write 0."/>
+
+  <addr name="teleportArm" value="0x800ADBC4" type="u32" size="4" status="verified"
+        verifiedBy="live-experiment" date="2026-07-24"
+        evidence="poll gate at 0x800784BC: must equal s3 (0xFF, set at 0x80078170); idle is already 0xFF in free-roam"
+        desc="RECIPE: write 0xFF (usually already 0xFF in free-roam; write defensively)."/>
+
+  <addr name="teleportGateMusic" value="0x8004F308" type="u32" size="4" status="verified"
+        verifiedBy="live-experiment" date="2026-07-24"
+        evidence="poll gate at 0x800784A8: must be 0 (usually already 0)"
+        desc="RECIPE: write 0 defensively."/>
+
+  <addr name="teleportGateAnim" value="0x800ADB90" type="u32" size="4" status="verified"
+        verifiedBy="live-experiment" date="2026-07-24"
+        evidence="poll gate at 0x800784D0: must be 0 (usually already 0)"
+        desc="RECIPE: write 0 defensively."/>
+
+  <addr name="loadNewFieldFn" value="0x8001B484" type="code" size="0" status="verified"
+        verifiedBy="ghidra-static+live" date="2026-07-24"
+        evidence="async bundle fetcher (file = index+0xB8); returns 0 when resident, -1 busy; D_8004F330=fileIndex while loading. NOT reentrant - let the poll call it"
+        desc="Informational only - do not call directly."/>
+
+  <addr name="fieldEntryPointFn" value="0x80077E88" type="code" size="0" status="verified"
+        verifiedBy="ghidra-static+live" date="2026-07-24"
+        evidence="field module entry (module jump table [1]); contains the per-frame teleport poll at 0x800784A0"
+        desc="Informational only."/>
+
+</addresses>

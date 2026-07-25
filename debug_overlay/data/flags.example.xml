@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flags>
+  <flagVar var="0" name="ExampleProgress">
+    <meaning value="0x1" desc="First milestone reached"/>
+    <meaning value="0x2" desc="Second milestone reached"/>
+  </flagVar>
+  <flagVar var="2" name="ExampleEntryPoint"/>
+  <flagVar var="99" name="ExampleCounter" status="unverified"/>
+</flags>

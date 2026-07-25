@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Named guest-RAM watch map for the debug overlay's RAM inspector.
+  Mirrors the verified entries of addrs.xml (same provenance rules:
+  only Ghidra-static or live-verified addresses; see addrs.xml for evidence).
+-->
+<ramMap game="SLUS-00664">
+
+  <region name="Game state">
+    <watch name="gameStateBase"       addr="0x8006D634" type="ptr"    size="4"    note="gameState struct base (ptr at gameStatePtr)"/>
+    <watch name="fieldID"             addr="0x8006F94E" type="u16"    size="2"    note="current field/map id (+0x231A)"/>
+    <watch name="cameraYaw"           addr="0x8006F950" type="s16"    size="2"    note="+0x231C"/>
+    <watch name="worldmapMode"        addr="0x8006F954" type="u16"    size="2"    note="+0x2320"/>
+    <watch name="gold"                addr="0x8006EF58" type="u32"    size="4"    note="money (+0x1924)"/>
+    <watch name="fieldVars"           addr="0x8006EF64" type="u16"    size="1024" note="512 script vars (+0x1930); see flags.xml"/>
+    <watch name="partyMemberBitField" addr="0x8006F364" type="u16"    size="2"    note="+0x1D30 unlocked roster mask"/>
+    <watch name="partyFrameMask"      addr="0x8006F366" type="u16"    size="2"    note="+0x1D32"/>
+    <watch name="currentParty"        addr="0x8006F368" type="u8"     size="3"    note="+0x1D34 active party ids, 0x7F=empty"/>
+    <watch name="partyRoster"         addr="0x8006D8A0" type="struct" size="1804" note="+0x26C, 11 records x 0xA4"/>
+    <watch name="gearRoster"          addr="0x8006DFAC" type="struct" size="3280" note="+0x978, 20 records x 0xA4"/>
+  </region>
+
+  <region name="Teleport / module system">
+    <watch name="fieldMapNumber"      addr="0x8004F34C" type="u32"    size="4"    note="map-change request (write target id to teleport)"/>
+    <watch name="teleportGate1"       addr="0x800ADBEC" type="u32"    size="4"    note="poll gate: write 0 to arm"/>
+    <watch name="fieldChangePrevented" addr="0x800ADB64" type="u32"   size="4"    note="write 0 to arm (idle 0xFF)"/>
+    <watch name="teleportArm"         addr="0x800ADBC4" type="u32"    size="4"    note="poll gate: must be 0xFF"/>
+    <watch name="teleportGateMusic"   addr="0x8004F308" type="u32"    size="4"    note="poll gate: must be 0"/>
+    <watch name="teleportGateAnim"    addr="0x800ADB90" type="u32"    size="4"    note="poll gate: must be 0"/>
+    <watch name="moduleRequested"     addr="0x80018088" type="u32"    size="4"    note="module id requested via module_switch"/>
+    <watch name="loadFileIndex"       addr="0x8004F330" type="u32"    size="4"    note="bundle file index while loading (-1 idle)"/>
+    <watch name="loadFileArg"         addr="0x8004F334" type="u32"    size="4"    note="loadNewField arg1 (-1 idle)"/>
+  </region>
+
+  <region name="Field module / camera / actors">
+    <watch name="cameraEye"           addr="0x800AF880" type="svector" size="8"   note="g_cameraEye"/>
+    <watch name="cameraAt"            addr="0x800AF890" type="svector" size="8"   note="g_cameraAt"/>
+    <watch name="cameraMatrix"        addr="0x800AF990" type="matrix"  size="32"  note="g_cameraMatrix"/>
+    <watch name="projectionMatrix"    addr="0x800AFA64" type="matrix"  size="32"  note="g_currentProjectionMatrix"/>
+    <watch name="actorArrayPtr"       addr="0x800AFB10" type="ptr"     size="4"   note="field actor array pointer"/>
+    <watch name="actorArrayCount"     addr="0x800AFB0C" type="u32"     size="4"   note="field actor array count/size"/>
+    <watch name="playerControlledActor" addr="0x800B226C" type="s32"   size="4"   note="index of player actor"/>
+    <watch name="fieldContextPtr"     addr="0x800B0078" type="ptr"     size="4"   note="field script context (script PC at +0xCC)"/>
+    <watch name="menuDisabled"        addr="0x800B21D0" type="u8"      size="1"   note="g_menuDisabled"/>
+  </region>
+
+  <region name="Battle">
+    <watch name="battleEntities"      addr="0x800CCCE8" type="struct" size="4048" note="11 battle slots x 0x170"/>
+    <watch name="partyKernelSlots"    addr="0x80062590" type="u32"     size="12"  note="kernel party slots (u32 each)"/>
+  </region>
+
+  <region name="Native debug menu">
+    <watch name="nativeDebugMenuEnable" addr="0x80059178" type="u8"    size="1"   note="nonzero enables Kernel debug menu list at boot"/>
+    <watch name="nativeDebugMenuSel"  addr="0x80059460" type="u8"      size="1"   note="selected menu index out"/>
+  </region>
+
+</ramMap>

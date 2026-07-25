@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<data>
+  <characters>
+    <character id="0" name="Fei" alias="Fei"/>
+    <character id="1" name="Elly" alias="Elly"/>
+    <character id="2" name="Citan" alias="Shitan"/>
+    <character id="3" name="Bart" alias="Baltho"/>
+    <character id="4" name="Billy" alias="Billy"/>
+    <character id="5" name="Rico" alias="Lico"/>
+    <character id="6" name="Emeralda" alias="Emerada"/>
+    <character id="7" name="Chu-Chu" alias="Chuchu"/>
+    <character id="8" name="Maria" alias="Maria"/>
+    <character id="9" name="Citan (2)" alias="Shitan2"/>
+    <character id="10" name="Emeralda (2)" alias="Emerada2"/>
+  </characters>
+  <gears>
+    <gear id="0" name="Weltall"/>
+    <gear id="1" name="Weltall-2"/>
+    <gear id="2" name="Vierge"/>
+    <gear id="3" name="Heimdal"/>
+    <gear id="4" name="Brigandier"/>
+    <gear id="5" name="Renmazuo"/>
+    <gear id="6" name="Stier"/>
+    <gear id="7" name="BigChu-chu"/>
+    <gear id="8" name="Seibzehn"/>
+    <gear id="9" name="Crescens"/>
+    <gear id="10" name="Regurus"/>
+    <gear id="11" name="Fenrir"/>
+    <gear id="12" name="Andvari"/>
+    <gear id="13" name="Renmazuo2"/>
+    <gear id="14" name="Stier-2"/>
+    <gear id="15" name="Xenogears"/>
+    <gear id="16"/>
+    <gear id="17"/>
+    <gear id="18"/>
+    <gear id="19"/>
+  </gears>
+</data>

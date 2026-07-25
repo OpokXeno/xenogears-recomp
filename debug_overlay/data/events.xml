@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<events>
+  <event id="0" name="Game start - Prologue text" mapId="4" entryPoint="0" status="verified">
+    <varWrite var="0" value="3" />
+  </event>
+  <event id="1" name="Fei painting intro done" mapId="14" entryPoint="0" status="verified">
+    <varWrite var="0" value="6" />
+  </event>
+  <event id="2" name="Talked to Dan - Fei's house" mapId="13" entryPoint="0" status="verified">
+    <varWrite var="0" value="7" />
+  </event>
+  <event id="3" name="Talked to Alice" mapId="12" entryPoint="0" status="verified">
+    <varWrite var="0" value="8" />
+  </event>
+  <event id="4" name="Looking for Citan around his house" mapId="17" entryPoint="0" status="verified">
+    <varWrite var="0" value="10" />
+  </event>
+  <event id="5" name="Citan - music box storage room" mapId="21" entryPoint="0" status="verified">
+    <varWrite var="0" value="12" />
+  </event>
+  <event id="6" name="Citan's house - night, Fei leaves" mapId="17" entryPoint="0" status="verified">
+    <varWrite var="0" value="13" />
+  </event>
+  <event id="7" name="Citan's house - heading back to Lahan" mapId="17" entryPoint="0" status="verified">
+    <varWrite var="0" value="15" />
+  </event>
+  <event id="8" name="Citan's kitchen - Yui threshold" mapId="19" entryPoint="0" status="verified">
+    <varWrite var="0" value="22" />
+  </event>
+  <event id="9" name="Lahan village - post-prologue" mapId="1" entryPoint="0" status="verified">
+    <varWrite var="0" value="3" />
+  </event>
+  <event id="10" name="Title screen" mapId="490" entryPoint="0" status="verified" />
+  <event id="11" name="Main debug room" mapId="0" entryPoint="0" status="verified" />
+  <event id="12" name="Blackmoon Forest - Rankar opening" mapId="24" entryPoint="0" status="verified">
+    <varWrite var="0" value="16" />
+  </event>
+  <event id="13" name="Aveh Desert - Fei meets Grahf" mapId="55" entryPoint="0" status="verified">
+    <varWrite var="0" value="25" />
+  </event>
+  <event id="14" name="Bart's Hideout - Yggdrasil docking" mapId="80" entryPoint="0" status="verified">
+    <varWrite var="0" value="30" />
+  </event>
+  <event id="15" name="Nisan entrance" mapId="93" entryPoint="0" status="verified">
+    <varWrite var="0" value="35" />
+  </event>
+  <event id="16" name="Aveh Castle - tournament sign-up" mapId="131" entryPoint="0" status="verified">
+    <varWrite var="0" value="40" />
+  </event>
+  <event id="17" name="Nortune map - before escape" mapId="194" entryPoint="0" status="verified">
+    <varWrite var="0" value="45" />
+  </event>
+  <event id="18" name="Yggdrasil - bridge" mapId="290" entryPoint="0" status="verified">
+    <varWrite var="0" value="50" />
+  </event>
+  <event id="19" name="Thames - dock" mapId="312" entryPoint="0" status="verified">
+    <varWrite var="0" value="55" />
+  </event>
+  <event id="20" name="Shevat map" mapId="423" entryPoint="0" status="verified">
+    <varWrite var="0" value="60" />
+  </event>
+  <event id="21" name="Etrenank - outside immigration office" mapId="509" entryPoint="0" status="verified">
+    <varWrite var="0" value="65" />
+  </event>
+  <event id="22" name="Krelian's Lab entrance" mapId="555" entryPoint="0" status="verified">
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="23" name="Taura's House - Weltall-2 reveal" mapId="612" entryPoint="0" status="verified">
+    <varWrite var="0" value="75" />
+  </event>
+  <event id="24" name="Mahanon - Razael's Tree" mapId="619" entryPoint="0" status="verified">
+    <varWrite var="0" value="80" />
+  </event>
+  <event id="25" name="Merkava - inside entrance" mapId="703" entryPoint="0" status="verified">
+    <varWrite var="0" value="90" />
+  </event>
+  <event id="26" name="Ending - Fei pursuing Deus" mapId="718" entryPoint="0" status="verified">
+    <varWrite var="0" value="99" />
+  </event>
+  <event id="27" name="Shevat Battleship - bridge briefing (disk2)" mapId="294" entryPoint="0" status="unverified">
+    <varWrite var="0" value="60" />
+  </event>
+  <event id="28" name="Desert FMV - beeps no cutscene (disk2)" mapId="489" entryPoint="0" status="unverified">
+    <varWrite var="0" value="50" />
+  </event>
+  <event id="29" name="Point of Sephirot - coward room (disk2)" mapId="665" entryPoint="0" status="unverified">
+    <varWrite var="0" value="85" />
+  </event>
+  <event id="30" name="Dazil - Water room" mapId="29" entryPoint="0" status="unverified">
+    <varWrite var="0" value="18" />
+  </event>
+  <event id="31" name="Bledavik map" mapId="101" entryPoint="0" status="unverified">
+    <varWrite var="0" value="38" />
+  </event>
+  <event id="32" name="Solaris - Gazel plans Nortune purge" mapId="273" entryPoint="0" status="unverified">
+    <varWrite var="0" value="52" />
+  </event>
+  <event id="33" name="Ethos HQ - Bishop's room" mapId="341" entryPoint="0" status="unverified">
+    <varWrite var="0" value="58" />
+  </event>
+  <event id="34" name="Babel Tower - top Seibzehn battle" mapId="420" entryPoint="0" status="unverified">
+    <varWrite var="0" value="62" />
+  </event>
+</events>

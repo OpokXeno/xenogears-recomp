@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<events>
+  <event id="0" name="Example event A" mapId="100" entryPoint="0" status="verified">
+    <varWrite var="0" value="5"/>
+    <varWrite var="2" value="1"/>
+  </event>
+  <event id="1" name="Example event B" mapId="200" entryPoint="3" status="unverified">
+    <varWrite var="4" value="100"/>
+  </event>
+  <event id="2" name="Example event C" mapId="300" entryPoint="0" status="verified"/>
+</events>

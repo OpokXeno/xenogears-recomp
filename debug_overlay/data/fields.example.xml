@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fields count="5">
+  <field id="0" name="Example Field A">
+    <entity id="0" name="Director"/>
+    <entity id="1" name="NPC One"/>
+  </field>
+  <field id="1" name="Example Field B"/>
+  <field id="5" name="Example Field C">
+    <entity id="0" name="Director"/>
+    <entity id="3" name="Trigger A"/>
+    <entity id="7" name="Save Point"/>
+  </field>
+  <field id="10" name="Example Field D">
+    <entity id="0" name="Director"/>
+  </field>
+  <field id="42" name="Example Field E"/>
+</fields>
