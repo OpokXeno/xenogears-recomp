@@ -109,6 +109,28 @@ This will:
 
 > **Note:** `build.sh` uses Ninja. Set `CMAKE_GENERATOR` env var to override (e.g. `CMAKE_GENERATOR="Unix Makefiles"`).
 
+#### 2.3.1 Debug builds
+
+A **Debug build** turns on the developer tooling that Release strips out: the
+TCP debug server (`PSX_DEBUG_TOOLS`) and the in-game **debug menu overlay**
+(`PSX_DEBUG_OVERLAY` — a Dear ImGui panel toggled with **Ctrl+F3** while the
+game is running). See [`debug_overlay/README.md`](debug_overlay/README.md) for
+the full overlay reference (sections, data tables, TCP commands).
+
+Both flags default **ON** for any non-Release build type (`Debug`,
+`RelWithDebInfo`) when the recomp-ui launcher submodule is present, so a debug
+binary is produced simply by choosing a debug `CMAKE_BUILD_TYPE`:
+
+```sh
+# Linux / macOS — debug build in ./build-dbg
+./build.sh build-dbg Debug
+# or, for optimized-with-debug-info:
+./build.sh build-dbg RelWithDebInfo
+
+# Windows (PowerShell)
+.\build.ps1 -BuildDir build-dbg -BuildType Debug
+```
+
 #### 2.4 Run
 
 ```sh
@@ -147,20 +169,26 @@ psxrecomp/recompiler/build/psxrecomp-game --config game.toml
 
 ## Controls
 
-| Action | Keyboard | Controller (Xbox) |
-|---|---|---|
-| D-Pad / Move | Arrow keys | Left stick / D-pad |
-| Cross / Confirm | Z | A |
-| Circle / Cancel | X | B |
-| Square / Menu | A | X |
-| Triangle | S | Y |
-| Start | Enter | Start |
-| Select | Shift | Back |
-| L1 / L2 | Q / W | LB / LT |
-| R1 / R2 | E / R | RB / RT |
-| Fullscreen toggle | F11 | — |
+| Action             | Keyboard   | Controller (Xbox) |
+|--------------------|------------|---|
+| D-Pad / Move       | Arrow keys | Left stick / D-pad |
+| Cross / Confirm    | Z          | A |
+| Circle / Cancel    | X          | B |
+| Square / Menu      | A          | X |
+| Triangle           | S          | Y |
+| Start              | Enter      | Start |
+| Select             | Shift      | Back |
+| L1 / L2            | Q / W      | LB / LT |
+| R1 / R2            | E / R      | RB / RT |
+| Fullscreen toggle  | F11        | — |
+| Debug menu overlay | Ctrl+F3    | — |
 
 Full rebinding is available through in-app settings.
+
+> The **Debug menu overlay** (Ctrl+F3) only exists in Debug / DebugTools builds
+> — Release carries zero code for it. See
+> [`debug_overlay/README.md`](debug_overlay/README.md) for what each section does
+> and how to drive the same actions over TCP.
 
 ---
 
@@ -168,19 +196,28 @@ Full rebinding is available through in-app settings.
 
 ```
 XenogearsRecomp/
-├── build.sh / build.ps1    # Build scripts (root, tracked)
-├── regen.ps1               # Windows recompilation script
-├── CMakeLists.txt          # Game runtime CMake build
-├── game.toml               # Game configuration (patches, widescreen, runtime)
-├── game/                   # YOUR game EXE / disc image (not tracked)
-├── generated/              # Recompiled C source from game EXE (not tracked)
-├── overlays/               # Captured overlay binaries (not tracked)
-├── seeds/                  # Recompiler seed addresses (tracked)
+├── build.sh / build.ps1      # Build scripts (root, tracked) — accept a build dir
+│                             #   + build type: ./build.sh build-dbg Debug
+├── regen.ps1                 # Windows recompilation script
+├── CMakeLists.txt            # Game runtime CMake build
+├── game.toml                 # Game configuration (patches, widescreen, runtime)
+├── game/                     # YOUR game EXE / disc image (not tracked)
+├── generated/                # Recompiled C source from game EXE (not tracked)
+├── overlays/                 # Captured overlay binaries (not tracked)
+├── seeds/                    # Recompiler seed addresses (tracked)
 │   ├── slus_00664_seeds.txt
 │   └── slus_00664_bios_thunks.txt
-├── annotations/            # Function annotation CSV for recompiler (tracked)
-└── psxrecomp/              # PSXRecomp framework submodule
-    └── lib/recomp-ui       # Launcher UI (nested submodule, pinned upstream)
+├── annotations/              # Function annotation CSV for recompiler (tracked)
+├── debug_overlay/            # In-game developer debug overlay (Debug builds only)
+│   ├── README.md             #   overlay reference — sections, TCP commands
+│   └── data/                 #   XML data tables (fields, chars, events, addrs…)
+├── docs/                     # Project docs (recompile, manual test guides, etc.)
+└── psxrecomp/                # PSXRecomp framework submodule
+    ├── runtime/              #   PS1 hw simulation + GL/VK/SW renderers
+    │   ├── src/              #     main.cpp, gpu_*, spu.c, debug_overlay.cpp, …
+    │   └── tests/            #     host-side hygiene/data tests
+    ├── recompiler/           #   MIPS→C static recompiler (builds psxrecomp-game)
+    └── lib/recomp-ui         #   Launcher UI (nested submodule, pinned upstream)
 ```
 
 ### How it works
