@@ -10,7 +10,7 @@
 | `name`    | yes      | string | Human-readable event / cutscene name. |
 | `mapId`   | yes      | int    | Target field ID. Must resolve against the known field ID set (0–729). |
 | `entryPoint` | yes   | int    | Value written to `var[2]` (FieldEntryPoint) before loading the field. |
-| `status`  | yes      | enum   | `verified` — both map and progress semantics are documented in the reference. `unverified` — map is known but the exact progress preset is speculative or the field is flagged disc-2 / hangs; these ship disabled until Ghidra verification. |
+| `status`  | yes      | enum   | `verified` — direct script write or retained live-tested preset. `unverified` — value inferred from a GameProgress equality check, or the destination is known to hang / was previously unsafe; these ship disabled. |
 
 ## `<varWrite>` child element
 Zero or more per `<event>`.
@@ -18,3 +18,6 @@ Zero or more per `<event>`.
 |-----------|----------|------|-------------|
 | `var`     | yes      | int  | Field variable index to overwrite. |
 | `value`   | yes      | int  | Value to write (decimal or hex in source, stored as string). |
+
+Verified script-derived entries use the GameProgress value written by that field,
+so they represent the state immediately after the corresponding story beat.

@@ -1,65 +1,192 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  fieldVars flag semantics. Var index = BYTE OFFSET into the 1024-u16 script
+  memory block @0x800C3A68 (g_FieldScriptMemory). The first 512 u16 (offsets
+  0-1022) are the persistent fieldVars (gameState+0x1930, saved); offsets
+  1024-2046 are per-field scratch. Script v80 args set bit 0x8000 = immediate.
+  Evidence: SLUS-006.64 binary (Ghidra), ladysilverberg/xenogears-decomp
+  (matching), and full disassembly of all 729 disc-1 field scripts.
+-->
 <flags>
   <flagVar var="0" name="GameProgress">
-    <meaning value="0x3" desc="Prologue text done" />
-    <meaning value="0x6" desc="Fei painting intro done" />
-    <meaning value="0x7" desc="Talked to Dan (before leaving Fei's house)" />
-    <meaning value="0x8" desc="Talked to Alice" />
-    <meaning value="0xA" desc="Looking for Citan around his house" />
-    <meaning value="0xC" desc="Citan told Fei to look in storage room (music box)" />
-    <meaning value="0xD" desc="At Citan, night time, Fei leaves" />
-    <meaning value="0xF" desc="At Citan, night time, heading back to Lahan, Citan waiting outside after Fei's departure" />
-    <meaning value="0x15" desc="Threshold: if &gt; 0x15, Yui is not in Citan's kitchen" />
+    <meaning value="0x3" desc="set by: Introductory text at the start of the game (field 4)" />
+    <meaning value="0x6" desc="set by: Lahan - Looking at Fei&apos;s painting (field 14)" />
+    <meaning value="0x7" desc="set by: Lahan - Fei&apos;s house (field 13)" />
+    <meaning value="0x8" desc="set by: Lahan - Fei talks to Alice (field 12)" />
+    <meaning value="0xA" desc="set by: Citan&apos;s house - Kitchen (field 19)" />
+    <meaning value="0xC" desc="Citan tells Fei to inspect the music-box workshop" />
+    <meaning value="0xD" desc="set by: Citan&apos;s House - Workshop (with music box) (field 21)" />
+    <meaning value="0xF" desc="Fei leaves Citan&apos;s house for Lahan" />
+    <meaning value="0x15" desc="set by: Lahan battle(intro version) (field 2); Yui kitchen threshold" />
+    <meaning value="0x18" desc="set by: Outside Lahan - after the battle (field 3)" />
+    <meaning value="0x1B" desc="set by: Blackmoon Forest - Fei &amp; Elly wake up by tree (field 23)" />
+    <meaning value="0x1E" desc="set by: Elly&apos;s Flashback (Crash Landing) (field 28)" />
+    <meaning value="0x1F" desc="set by: Blackmoon Forest - The &apos;Rankar&apos; opening.T (field 24)" />
+    <meaning value="0x20" desc="set by: Blackmoon Forest - Fei &amp; Elly wake up by tree (field 23)" />
+    <meaning value="0x21" desc="set by: Blackmoon Forest - The &apos;Rankar&apos; opening.T (field 24)" />
+    <meaning value="0x22" desc="set by: Blackmoon Forest - Citan chats with Elly (field 26)" />
+    <meaning value="0x24" desc="set by: Blackmoon Forest - The &apos;Rankar&apos; opening.T (field 24)" />
+    <meaning value="0x25" desc="set by: Blackmoon Forest - The &apos;Rankar&apos; opening.T (field 24)" />
+    <meaning value="0x27" desc="set by: Dazil - Buggy rental shop (field 36)" />
+    <meaning value="0x2A" desc="set by: Aveh Desert - Fei ambushed by 2 gears, Citan brings Weltall (field 54)" />
+    <meaning value="0x2B" desc="set by: Aveh Transport(Fei&apos;s dream about Grahf &amp; Kahn) (field 56)" />
+    <meaning value="0x2D" desc="set by: Desert - Bart&apos;s introduction in Bridgandier (field 62)" />
+    <meaning value="0x30" desc="set by: Stalactite Cave - Intro (field 72)" />
+    <meaning value="0x33" desc="set by: Stalactite Cave - Balthasar&apos;s Cave (field 71)" />
+    <meaning value="0x34" desc="set by: Stalactite Cave - Outside Bal&apos;s Cave (field 66)" />
+    <meaning value="0x36" desc="set by: Outside Stalactite Cave (field 73)" />
+    <meaning value="0x37" desc="set by: Bart&apos;s Hideout - Yggdrasil docking (field 80)" />
+    <meaning value="0x38" desc="set by: Pirate&apos;s Lair - Residential Section (field 74)" />
+    <meaning value="0x3B" desc="set by: Bart&apos;s Hideout - Yggdrasil docking (field 80)" />
+    <meaning value="0x3C" desc="set by: Bart&apos;s Hideout - Fei, Citan and Bart fight the Schpariel boss (field 83)" />
+    <meaning value="0x3D" desc="set by: South Bledavik - Inn (field 104)" />
+    <meaning value="0x3E" desc="set by: South Bledavik - Inn, sister&apos;s room (via window) (field 105)" />
+    <meaning value="0x3F" desc="set by: South Bledavik - Inn, sister&apos;s room (via window) (field 105)" />
+    <meaning value="0x40" desc="set by: South Bledavik - Inn, sister&apos;s room (via window) (field 105)" />
+    <meaning value="0x41" desc="set by: South Bledavik - Inn, sister&apos;s room (via window) (field 105)" />
+    <meaning value="0x42" desc="set by: Aveh Castle - Tournament fighters&apos; eastern tent (Dan) (field 149)" />
+    <meaning value="0x49" desc="set by: Aveh Castle, Gebler area - hallway entrance (field 164)" />
+    <meaning value="0x4B" desc="set by: Aveh Castle, Gebler area - Ramsus gets a message from Hyu, Margie rescued (field 169)" />
+    <meaning value="0x54" desc="set by: Nisan - Cathedral, Sophia&apos;s portrait (field 98)" />
+    <meaning value="0x57" desc="set by: Nisan - House (field 86)" />
+    <meaning value="0x5A" desc="set by: Assault on Aveh - Fei at bottom of inside mountain area (field 172)" />
+    <meaning value="0x5D" desc="set by: Aveh Castle - waterways exit, Shakhan&apos;s trap (field 134)" />
+    <meaning value="0x60" desc="set by: Assault on Aveh - Dora takes out Maitreya&apos;s unit (field 186)" />
+    <meaning value="0x63" desc="set by: Nortune, D block - Fei awakes from dream in Battler&apos;s medical rest area (field 213)" />
+    <meaning value="0x66" desc="set by: Nortune, D block - Latina&apos;s bar (field 217)" />
+    <meaning value="0x69" desc="set by: Nortune, D block - Latina&apos;s bar, upstairs (\&quot;Champ&apos;s room\&quot;) (field 218)" />
+    <meaning value="0x6C" desc="set by: Nortune, D block - Fei awakes from dream in Battler&apos;s medical rest area (field 213)" />
+    <meaning value="0x6F" desc="set by: Nortune, Battling Arena - Fei given Weltall for battling use (field 223)" />
+    <meaning value="0x75" desc="set by: Nortune, Battling Arena - Fei given Weltall for battling use (field 223)" />
+    <meaning value="0x78" desc="set by: Nortune, Battling Arena - Fei signs up with Rue (field 221)" />
+    <meaning value="0x7B" desc="set by: Nortune, A block - inside doctor&apos;s house (field 200)" />
+    <meaning value="0x81" desc="set by: Nortune, Battling Arena - Fei rescues Rico end (field 225)" />
+    <meaning value="0x84" desc="set by: Nortune Purge - Citan helps evacuate Nortune (field 247)" />
+    <meaning value="0x87" desc="set by: Nortune, A block - inside doctor&apos;s house (field 200)" />
+    <meaning value="0x8A" desc="set by: Goliath - Grahf attacks(Hammer:  \&quot;...MAD SKILLZ ? !\&quot;) (field 270)" />
+    <meaning value="0x8B" desc="set by: Yggdrasil - Bart regrets shooting down the Goliath (field 297)" />
+    <meaning value="0x8D" desc="set by: Thames - bridge (field 314)" />
+    <meaning value="0x8E" desc="set by: Thames - beer hall (field 315)" />
+    <meaning value="0x8F" desc="set by: Thames - bridge (field 314)" />
+    <meaning value="0x90" desc="set by: Thames - dock (field 312)" />
+    <meaning value="0x91" desc="set by: Yggdrasil - bridge (field 290)" />
+    <meaning value="0x92" desc="set by: Thames - bridge (field 314)" />
+    <meaning value="0x93" desc="set by: Thames - Elly sabotages the Yggdrasil (field 286)" />
+    <meaning value="0x94" desc="set by: Thames - sickbay (field 313)" />
+    <meaning value="0x95" desc="set by: Thames - deck, gang minus Fei goes looking for the \&quot;Etone\&quot; (field 320)" />
+    <meaning value="0x97" desc="set by: Ethos HQ entrance (field 339)" />
+    <meaning value="0x98" desc="set by: Ethos HQ Purge - infirmary (field 352)" />
+    <meaning value="0x99" desc="set by: Orphanage - main room (field 327)" />
+    <meaning value="0x9B" desc="set by: Orphanage - main room (field 327)" />
+    <meaning value="0x9E" desc="set by: Ethos Transport - battle with Giant Wels boss (field 335)" />
+    <meaning value="0xA0" desc="set by: Ethos HQ Purge - Alkanshel Rises(Stone heads for dig site) (field 360)" />
+    <meaning value="0xA5" desc="set by: Thames - deck (field 316)" />
+    <meaning value="0xA6" desc="set by: Ethos Dig Site - hall to Emeralda&apos;s room (Elly&apos;s flashback ? ) (field 379)" />
+    <meaning value="0xA8" desc="set by: Ethos Dig Site - Stein and Grahf, Alkanshel battle (field 388)" />
+    <meaning value="0xA9" desc="set by: Yggdrasil - bottom floor (field 288)" />
+    <meaning value="0xAB" desc="set by: Babel Tower entrance (field 405)" />
+    <meaning value="0xAE" desc="set by: Babel Tower - outer wall(hangs, no Ramsus) (field 411)" />
+    <meaning value="0xB0" desc="set by: Shevat Dock - elevator room (field 437)" />
+    <meaning value="0xB2" desc="set by: Shevat City - child&apos;s memorial (field 434)" />
+    <meaning value="0xB3" desc="set by: Shevat Palace - throne room (field 453)" />
+    <meaning value="0xB4" desc="set by: Shevat Dock - Seibzehn dock (field 441)" />
+    <meaning value="0xB5" desc="set by: Shevat Palace - Zephyr&apos;s throne, Achtzehn briefing (no battle) (field 473)" />
+    <meaning value="0xB6" desc="set by: Shevat Palace - Zephyr&apos;s throne, Achtzehn briefing (no battle) (field 473)" />
+    <meaning value="0xBA" desc="set by: Shevat Attacked - walking on clouds ? (Achtzehn battle, hangs) (field 442)" />
+    <meaning value="0xBB" desc="set by: Shevat Palace - Zephyr, Wisemanand Gaspar discuss deja vu (field 454)" />
+    <meaning value="0xC6" desc="set by: Nisan - House (field 86)" />
+    <meaning value="0xC9" desc="set by: Gate Generator 1 - Shakhan battle (field 495)" />
+    <meaning value="0xCA" desc="set by: Aveh Castle - Dining room (field 151)" />
+    <meaning value="0xCB" desc="set by: Babel Tower Ducts - inside from the mirror ledge (field 412)" />
+    <meaning value="0xCC" desc="set by: Yggdrasil - bottom floor, apologize to Elly sequence (field 303)" />
+    <meaning value="0xCD" desc="set by: Thames - bridge (field 314)" />
+    <meaning value="0xCF" desc="set by: Gate Generator 3 - Crescens battle (field 505)" />
+    <meaning value="0xD0" desc="set by: Shevat Palace - throne room (field 453)" />
+    <meaning value="0xD2" desc="set by: Solaris - Seibzehn carries Fei, Ellyand Citan to Solaris (field 511)" />
+    <meaning value="0xD5" desc="set by: Etrenank - \&quot;dedication ceremony\&quot; area(hangs) (field 529)" />
+    <meaning value="0xD8" desc="set by: Etrenank - Elly&apos;s house, foyer (field 538)" />
+    <meaning value="0xDB" desc="set by: Etrenank - Elly&apos;s house, Erich&apos;s room (field 541)" />
+    <meaning value="0xDE" desc="set by: Solaris, 3rd - Class - garbage chute entrance(Elly&apos;s parents) (field 525)" />
+    <meaning value="0xE4" desc="set by: Krelian&apos;s Lab - interrogation room (field 579)" />
+    <meaning value="0xE7" desc="set by: Krelian&apos;s Lab - interrogation room rescue (field 591)" />
+    <meaning value="0xEA" desc="set by: Krelian&apos;s Lab - Citan blows the last gate generator (field 593)" />
+    <meaning value="0xF0" desc="set by: Solaris - Id attacks Yggdrasil, Elly stops him(long scenes follow) (field 611)" />
+    <meaning value="0xF1" desc="set by: Krelian&apos;s Lab - interrogation room (field 579)" />
+    <meaning value="0xF2" desc="set by: Shevat Palace - &apos;tactical command room&apos; (field 460)" />
+    <meaning value="0xF3" desc="set by: Shevat Palace - prison (field 467)" />
+    <meaning value="0xF9" desc="set by: Taura&apos;s House - the all-new, improved, Weltall-2 (field 612)" />
+    <meaning value="0xFC" desc="set by: Taura&apos;s House - the all-new, improved, Weltall-2 (field 612)" />
+    <meaning value="0x102" desc="set by: Nortune - Yggdrasil IV versus Ft.Hurricane (field 618)" />
+    <meaning value="0x107" desc="set by: Ignas Soylent System - Sufal Mass battle (field 622)" />
+    <meaning value="0x118" desc="set by: Anima Relic 1 - Anima Relic room(Billy) (field 638)" />
+    <meaning value="0x119" desc="set by: Nortune - Yggdrasil IV versus Ft.Hurricane (field 618)" />
+    <meaning value="0x11B" desc="set by: Anima Relic 2 - Anima Relic room(Rico) (field 640)" />
+    <meaning value="0x11D" desc="set by: Aveh Transport - Cain and Citan discuss &apos;the time of the gospel&apos; (field 515)" />
+    <meaning value="0x120" desc="set by: Etrenank - Krelian talks about Melchior (field 672)" />
+    <meaning value="0x122" desc="set by: Mahanon - later in 652 cutscene, Deus battle (field 654)" />
+    <meaning value="0x12A" desc="set by: Merkava - tunnels west of puzzle room (field 708)" />
+    <meaning value="0x12C" desc="set by: Merkava - Ramsus waiting for Fei in Merkava. (field 710)" />
+    <meaning value="0x12D" desc="set by: Merkava - Confronting Krelian and Miang. (field 712)" />
+    <meaning value="0x12E" desc="set by: Merkava - after beating Ramsus. (field 711)" />
+    <meaning value="0x12F" desc="set by: Merkava - Confronting Krelian and Miang. (field 712)" />
+    <meaning value="0x132" desc="set by: Citan&apos;s House - Upstairs room (field 20)" />
+    <meaning value="0x136" desc="set by: Nortune - Yggdrasil IV versus Ft.Hurricane (field 618)" />
+    <meaning value="0x140" desc="set by: Snowfield Hideout - prison (field 698)" />
+    <meaning value="0x145" desc="set by: Point of Sephirot - late in 662, after 667, Fei meets Wave Existence (field 668)" />
+    <meaning value="0x14A" desc="set by: Point of Sephirot - late in 662, after 667, Fei meets Wave Existence (field 668)" />
+    <meaning value="0x154" desc="set by: Snowfield Hideout - rest / save area (field 687)" />
+    <meaning value="0x15E" desc="set by: Merkava - inside entrance (field 703)" />
   </flagVar>
   <flagVar var="2" name="FieldEntryPoint" />
   <flagVar var="4" name="LastFieldId" />
   <flagVar var="6" name="PlayerDirection" />
   <flagVar var="8" name="CameraDirection" />
-  <flagVar var="10" name="EventTime" />
-  <flagVar var="12" name="SystemTimeMinutesSeconds" />
-  <flagVar var="14" name="SystemTimeHours" />
-  <flagVar var="16" name="BootVar" status="unverified">
-    <meaning value="0x0" desc="Set to 0 at startAllEntityScripts" />
+  <flagVar var="10" name="EventTime" status="verified" />
+  <flagVar var="12" name="SystemTimeMinutesSeconds" status="verified" />
+  <flagVar var="14" name="SystemTimeHours" status="verified" />
+  <flagVar var="16" name="BootVar" status="verified">
+    <meaning value="0x0" desc="Zeroed by the kernel at script init (decomp: FieldScriptMemoryWriteU16(0x10,0))" />
   </flagVar>
   <flagVar var="18" name="VisitCounter">
     <meaning value="0x0" desc="Incremented on every field transition via SaveFieldAndDirections" />
   </flagVar>
+  <flagVar var="20" name="DialogActorUnk81" status="unverified">
+    <meaning value="0x0" desc="text_box.c writes curActor-&gt;unk81 here per dialog" />
+  </flagVar>
   <flagVar var="24" name="SceneDIP" />
-  <flagVar var="30" name="PlayerPositionX" />
-  <flagVar var="32" name="PlayerPositionZ" />
-  <flagVar var="34" name="PlayerPositionY" />
-  <flagVar var="36" name="GearStateMap0">
-    <meaning value="0x0" desc="Gear state map ID (param 0)" />
+  <flagVar var="30" name="PlayerPositionX" status="unverified" />
+  <flagVar var="32" name="PlayerPositionZ" status="unverified" />
+  <flagVar var="34" name="PlayerPositionY" status="unverified" />
+  <flagVar var="42" name="GearRideMap0" status="verified">
+    <meaning value="0x0" desc="Map&amp;0xFFF where party member 0 disembarked gear (decomp: func_8009FD10)" />
   </flagVar>
-  <flagVar var="38" name="GearStateFlag0">
-    <meaning value="0x0" desc="Gear state flag (param 0)" />
+  <flagVar var="44" name="GearRideFlag0" status="verified" />
+  <flagVar var="46" name="GearRideExtra0" status="verified" />
+  <flagVar var="48" name="GearRideMap1" status="verified">
+    <meaning value="0x0" desc="Map&amp;0xFFF where party member 1 disembarked gear" />
   </flagVar>
-  <flagVar var="40" name="GearStateExtra0" />
-  <flagVar var="42" name="GearStateMap1">
-    <meaning value="0x0" desc="Gear state map ID (param 1)" />
+  <flagVar var="50" name="GearRideFlag1" status="verified" />
+  <flagVar var="52" name="GearRideExtra1" status="verified" />
+  <flagVar var="54" name="GearRideMap2" status="verified">
+    <meaning value="0x0" desc="Map&amp;0xFFF where party member 2 disembarked gear" />
   </flagVar>
-  <flagVar var="44" name="GearStateFlag1">
-    <meaning value="0x0" desc="Gear state flag (param 1)" />
+  <flagVar var="56" name="GearRideFlag2" status="verified" />
+  <flagVar var="58" name="GearRideExtra2" status="verified" />
+  <flagVar var="60" name="FieldMapNumber" status="unverified" />
+  <flagVar var="62" name="CurrentParty0" status="verified">
+    <meaning value="0xFF" desc="Empty. Kernel writes party ids here at field init (FieldScriptWritePartyMemberIDs 0x800A30B4); mirror of gameState+0x1930+0x3E = 0x8006EFA2" />
   </flagVar>
-  <flagVar var="46" name="GearStateExtra1" />
-  <flagVar var="48" name="GearStateMap2">
-    <meaning value="0x0" desc="Gear state map ID (param 2)" />
+  <flagVar var="64" name="CurrentParty1" status="verified">
+    <meaning value="0xFF" desc="Empty" />
   </flagVar>
-  <flagVar var="50" name="GearStateFlag2">
-    <meaning value="0x0" desc="Gear state flag (param 2)" />
+  <flagVar var="66" name="CurrentParty2" status="verified">
+    <meaning value="0xFF" desc="Empty" />
   </flagVar>
-  <flagVar var="52" name="GearStateExtra2" />
-  <flagVar var="56" name="WorldmapMode" />
-  <flagVar var="60" name="FieldMapNumber" />
-  <flagVar var="62" name="MenuReturnState0" />
   <flagVar var="70" name="DialogWindowX0" status="unverified" />
   <flagVar var="72" name="DialogWindowZ0" status="unverified" />
   <flagVar var="74" name="DialogWindowY0" status="unverified" />
   <flagVar var="76" name="DialogWindowW0" status="unverified" />
   <flagVar var="78" name="DialogWindowX1" status="unverified" />
-  <flagVar var="80" name="CurrentParty0" />
-  <flagVar var="82" name="CurrentParty1" />
-  <flagVar var="84" name="CurrentParty2" />
   <flagVar var="96" name="FieldDebugDisable">
     <meaning value="0x1" desc="Set to 1 when field debug mode is disabled" />
   </flagVar>

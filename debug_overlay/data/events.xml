@@ -1,104 +1,759 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- GameProgress story states extracted from disc1 field scripts (op 0x87 writes).
+     Convention: teleport to mapId with var0 = value = state right after that field beat.
+     Early entries (GP 0-22) cross-checked with the previous hand-verified list.
+     Mid/late-game values from the old list were interpolated and have been REPLACED
+     by the real script values. -->
 <events>
-  <event id="0" name="Game start - Prologue text" mapId="4" entryPoint="0" status="verified">
+  <event id="0" name="Game start - Prologue text" mapId="4" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
     <varWrite var="0" value="3" />
   </event>
-  <event id="1" name="Fei painting intro done" mapId="14" entryPoint="0" status="verified">
+  <event id="1" name="Fei painting intro done" mapId="14" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
     <varWrite var="0" value="6" />
   </event>
-  <event id="2" name="Talked to Dan - Fei's house" mapId="13" entryPoint="0" status="verified">
+  <event id="2" name="Talked to Dan - Fei&#x27;s house" mapId="13" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
     <varWrite var="0" value="7" />
   </event>
-  <event id="3" name="Talked to Alice" mapId="12" entryPoint="0" status="verified">
+  <event id="3" name="Talked to Alice" mapId="12" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
     <varWrite var="0" value="8" />
   </event>
-  <event id="4" name="Looking for Citan around his house" mapId="17" entryPoint="0" status="verified">
+  <event id="4" name="Citan&#x27;s kitchen - Yui threshold" mapId="19" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
     <varWrite var="0" value="10" />
   </event>
-  <event id="5" name="Citan - music box storage room" mapId="21" entryPoint="0" status="verified">
-    <varWrite var="0" value="12" />
-  </event>
-  <event id="6" name="Citan's house - night, Fei leaves" mapId="17" entryPoint="0" status="verified">
+  <event id="5" name="Citan - music box storage room" mapId="21" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
     <varWrite var="0" value="13" />
   </event>
-  <event id="7" name="Citan's house - heading back to Lahan" mapId="17" entryPoint="0" status="verified">
-    <varWrite var="0" value="15" />
+  <event id="6" name="Lahan battle(intro version)" mapId="2" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="21" />
   </event>
-  <event id="8" name="Citan's kitchen - Yui threshold" mapId="19" entryPoint="0" status="verified">
-    <varWrite var="0" value="22" />
+  <event id="7" name="Outside Lahan - after the battle" mapId="3" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="24" />
   </event>
-  <event id="9" name="Lahan village - post-prologue" mapId="1" entryPoint="0" status="verified">
-    <varWrite var="0" value="3" />
+  <event id="8" name="Blackmoon Forest - Fei &amp; Elly wake up by tree (GP 27)" mapId="23" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="27" />
   </event>
-  <event id="10" name="Title screen" mapId="490" entryPoint="0" status="verified" />
-  <event id="11" name="Main debug room" mapId="0" entryPoint="0" status="verified" />
-  <event id="12" name="Blackmoon Forest - Rankar opening" mapId="24" entryPoint="0" status="verified">
-    <varWrite var="0" value="16" />
-  </event>
-  <event id="13" name="Aveh Desert - Fei meets Grahf" mapId="55" entryPoint="0" status="verified">
-    <varWrite var="0" value="25" />
-  </event>
-  <event id="14" name="Bart's Hideout - Yggdrasil docking" mapId="80" entryPoint="0" status="verified">
+  <event id="9" name="Elly&#x27;s Flashback (Crash Landing)" mapId="28" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
     <varWrite var="0" value="30" />
   </event>
-  <event id="15" name="Nisan entrance" mapId="93" entryPoint="0" status="verified">
-    <varWrite var="0" value="35" />
+  <event id="10" name="Blackmoon Forest - Rankar opening (GP 31)" mapId="24" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="31" />
   </event>
-  <event id="16" name="Aveh Castle - tournament sign-up" mapId="131" entryPoint="0" status="verified">
-    <varWrite var="0" value="40" />
+  <event id="11" name="Blackmoon Forest - Fei &amp; Elly wake up by tree (GP 32)" mapId="23" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="32" />
   </event>
-  <event id="17" name="Nortune map - before escape" mapId="194" entryPoint="0" status="verified">
+  <event id="12" name="Blackmoon Forest - Rankar opening (GP 33)" mapId="24" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="33" />
+  </event>
+  <event id="13" name="Blackmoon Forest - Citan chats with Elly" mapId="26" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="34" />
+  </event>
+  <event id="14" name="Blackmoon Forest - Rankar opening (GP 36)" mapId="24" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="36" />
+  </event>
+  <event id="15" name="Blackmoon Forest - Rankar opening (GP 37)" mapId="24" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="37" />
+  </event>
+  <event id="16" name="Dazil - Buggy rental shop" mapId="36" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="39" />
+  </event>
+  <event id="17" name="Aveh Desert - Fei ambushed by 2 gears, Citan brings Weltall" mapId="54" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="42" />
+  </event>
+  <event id="18" name="Aveh Transport(Fei&#x27;s dream about Grahf &amp; Kahn)" mapId="56" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="43" />
+  </event>
+  <event id="19" name="Desert - Bart&#x27;s introduction in Bridgandier" mapId="62" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
     <varWrite var="0" value="45" />
   </event>
-  <event id="18" name="Yggdrasil - bridge" mapId="290" entryPoint="0" status="verified">
-    <varWrite var="0" value="50" />
+  <event id="20" name="Stalactite Cave - Intro" mapId="72" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="48" />
   </event>
-  <event id="19" name="Thames - dock" mapId="312" entryPoint="0" status="verified">
-    <varWrite var="0" value="55" />
+  <event id="21" name="Stalactite Cave - Balthasar&#x27;s Cave" mapId="71" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="51" />
   </event>
-  <event id="20" name="Shevat map" mapId="423" entryPoint="0" status="verified">
-    <varWrite var="0" value="60" />
-  </event>
-  <event id="21" name="Etrenank - outside immigration office" mapId="509" entryPoint="0" status="verified">
-    <varWrite var="0" value="65" />
-  </event>
-  <event id="22" name="Krelian's Lab entrance" mapId="555" entryPoint="0" status="verified">
-    <varWrite var="0" value="70" />
-  </event>
-  <event id="23" name="Taura's House - Weltall-2 reveal" mapId="612" entryPoint="0" status="verified">
-    <varWrite var="0" value="75" />
-  </event>
-  <event id="24" name="Mahanon - Razael's Tree" mapId="619" entryPoint="0" status="verified">
-    <varWrite var="0" value="80" />
-  </event>
-  <event id="25" name="Merkava - inside entrance" mapId="703" entryPoint="0" status="verified">
-    <varWrite var="0" value="90" />
-  </event>
-  <event id="26" name="Ending - Fei pursuing Deus" mapId="718" entryPoint="0" status="verified">
-    <varWrite var="0" value="99" />
-  </event>
-  <event id="27" name="Shevat Battleship - bridge briefing (disk2)" mapId="294" entryPoint="0" status="unverified">
-    <varWrite var="0" value="60" />
-  </event>
-  <event id="28" name="Desert FMV - beeps no cutscene (disk2)" mapId="489" entryPoint="0" status="unverified">
-    <varWrite var="0" value="50" />
-  </event>
-  <event id="29" name="Point of Sephirot - coward room (disk2)" mapId="665" entryPoint="0" status="unverified">
-    <varWrite var="0" value="85" />
-  </event>
-  <event id="30" name="Dazil - Water room" mapId="29" entryPoint="0" status="unverified">
-    <varWrite var="0" value="18" />
-  </event>
-  <event id="31" name="Bledavik map" mapId="101" entryPoint="0" status="unverified">
-    <varWrite var="0" value="38" />
-  </event>
-  <event id="32" name="Solaris - Gazel plans Nortune purge" mapId="273" entryPoint="0" status="unverified">
+  <event id="22" name="Stalactite Cave - Outside Bal&#x27;s Cave" mapId="66" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
     <varWrite var="0" value="52" />
   </event>
-  <event id="33" name="Ethos HQ - Bishop's room" mapId="341" entryPoint="0" status="unverified">
-    <varWrite var="0" value="58" />
+  <event id="23" name="Outside Stalactite Cave" mapId="73" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="54" />
   </event>
-  <event id="34" name="Babel Tower - top Seibzehn battle" mapId="420" entryPoint="0" status="unverified">
+  <event id="24" name="Bart&#x27;s Hideout - Yggdrasil docking (GP 55)" mapId="80" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="55" />
+  </event>
+  <event id="25" name="Pirate&#x27;s Lair - Residential Section" mapId="74" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="56" />
+  </event>
+  <event id="26" name="Bart&#x27;s Hideout - Yggdrasil docking (GP 59)" mapId="80" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="59" />
+  </event>
+  <event id="27" name="Bart&#x27;s Hideout - Fei, Citan and Bart fight the Schpariel boss" mapId="83" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="60" />
+  </event>
+  <event id="28" name="South Bledavik - Inn" mapId="104" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="61" />
+  </event>
+  <event id="29" name="South Bledavik - Inn, sister&#x27;s room (via window) (GP 62)" mapId="105" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
     <varWrite var="0" value="62" />
   </event>
+  <event id="30" name="South Bledavik - Inn, sister&#x27;s room (via window) (GP 63)" mapId="105" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="63" />
+  </event>
+  <event id="31" name="South Bledavik - Inn, sister&#x27;s room (via window) (GP 64)" mapId="105" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="64" />
+  </event>
+  <event id="32" name="South Bledavik - Inn, sister&#x27;s room (via window) (GP 65)" mapId="105" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="65" />
+  </event>
+  <event id="33" name="Aveh Castle - Tournament fighters&#x27; eastern tent (Dan)" mapId="149" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="66" />
+  </event>
+  <event id="34" name="Aveh Castle, Gebler area - hallway entrance" mapId="164" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="73" />
+  </event>
+  <event id="35" name="Aveh Castle, Gebler area - Ramsus gets a message from Hyu, Margie rescued" mapId="169" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="75" />
+  </event>
+  <event id="36" name="Nisan - Cathedral, Sophia&#x27;s portrait" mapId="98" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="84" />
+  </event>
+  <event id="37" name="Nisan - House (GP 87)" mapId="86" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="87" />
+  </event>
+  <event id="38" name="Assault on Aveh - Fei at bottom of inside mountain area" mapId="172" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="90" />
+  </event>
+  <event id="39" name="Aveh Castle - waterways exit, Shakhan&#x27;s trap" mapId="134" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="93" />
+  </event>
+  <event id="40" name="Assault on Aveh - Dora takes out Maitreya&#x27;s unit" mapId="186" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="96" />
+  </event>
+  <event id="41" name="Nortune, D block - Fei awakes from dream in Battler&#x27;s medical rest area (GP 99)" mapId="213" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="99" />
+  </event>
+  <event id="42" name="Nortune, D block - Latina&#x27;s bar" mapId="217" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="102" />
+  </event>
+  <event id="43" name="Nortune, D block - Latina&#x27;s bar, upstairs (\&quot;Champ&#x27;s room\&quot;)" mapId="218" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="105" />
+  </event>
+  <event id="44" name="Nortune, D block - Fei awakes from dream in Battler&#x27;s medical rest area (GP 108)" mapId="213" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="108" />
+  </event>
+  <event id="45" name="Nortune, Battling Arena - Fei given Weltall for battling use (GP 111)" mapId="223" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="111" />
+  </event>
+  <event id="46" name="Nortune, Battling Arena - Fei given Weltall for battling use (GP 117)" mapId="223" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="117" />
+  </event>
+  <event id="47" name="Nortune, Battling Arena - Fei signs up with Rue" mapId="221" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="120" />
+  </event>
+  <event id="48" name="Nortune, A block - inside doctor&#x27;s house (GP 123)" mapId="200" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="123" />
+  </event>
+  <event id="49" name="Nortune, Battling Arena - Fei rescues Rico end" mapId="225" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="129" />
+  </event>
+  <event id="50" name="Nortune Purge - Citan helps evacuate Nortune (GP 132)" mapId="247" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="132" />
+  </event>
+  <event id="51" name="Nortune Purge - Grahf saves Elly from Hecht explosion (GP 132)" mapId="248" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="132" />
+  </event>
+  <event id="52" name="Nortune, A block - inside doctor&#x27;s house (GP 135)" mapId="200" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="135" />
+  </event>
+  <event id="53" name="Goliath - Grahf attacks(Hammer:  \&quot;...MAD SKILLZ ? !\&quot;) (GP 138)" mapId="270" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="138" />
+  </event>
+  <event id="54" name="Yggdrasil - Rico&#x27;s room (GP 138)" mapId="298" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="138" />
+  </event>
+  <event id="55" name="Thames - Elly wakes on floating debris after Goliath shot down (GP 138)" mapId="308" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="138" />
+  </event>
+  <event id="56" name="Yggdrasil - Bart regrets shooting down the Goliath (GP 139)" mapId="297" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="139" />
+  </event>
+  <event id="57" name="Thames - Elly wakes on floating debris after Goliath shot down (GP 139)" mapId="308" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="139" />
+  </event>
+  <event id="58" name="Thames - bridge (GP 141)" mapId="314" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="141" />
+  </event>
+  <event id="59" name="Thames - beer hall (GP 141)" mapId="315" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="141" />
+  </event>
+  <event id="60" name="Thames - beer hall (GP 142)" mapId="315" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="142" />
+  </event>
+  <event id="61" name="Thames - bridge (GP 143)" mapId="314" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="143" />
+  </event>
+  <event id="62" name="Thames - dock" mapId="312" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="144" />
+  </event>
+  <event id="63" name="Yggdrasil - bridge (GP 145)" mapId="290" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="145" />
+  </event>
+  <event id="64" name="Thames - beer hall (GP 145)" mapId="315" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="145" />
+  </event>
+  <event id="65" name="Thames - on Gebler destroyer, Miang hypnotizes Elly (GP 145)" mapId="325" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="145" />
+  </event>
+  <event id="66" name="Thames - bridge (GP 146)" mapId="314" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="146" />
+  </event>
+  <event id="67" name="Thames - beer hall (GP 146)" mapId="315" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="146" />
+  </event>
+  <event id="68" name="Thames - Elly sabotages the Yggdrasil" mapId="286" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="147" />
+  </event>
+  <event id="69" name="Thames - sickbay" mapId="313" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="148" />
+  </event>
+  <event id="70" name="Thames - deck, gang minus Fei goes looking for the \&quot;Etone\&quot;" mapId="320" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="149" />
+  </event>
+  <event id="71" name="Ethos HQ entrance" mapId="339" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="151" />
+  </event>
+  <event id="72" name="Ethos HQ Purge - infirmary" mapId="352" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="152" />
+  </event>
+  <event id="73" name="Orphanage - main room (GP 153)" mapId="327" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="153" />
+  </event>
+  <event id="74" name="Orphanage - main room (GP 155)" mapId="327" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="155" />
+  </event>
+  <event id="75" name="Ethos Transport - battle with Giant Wels boss" mapId="335" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="158" />
+  </event>
+  <event id="76" name="Ethos HQ Purge - Alkanshel Rises(Stone heads for dig site)" mapId="360" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="160" />
+  </event>
+  <event id="77" name="Thames - deck" mapId="316" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="165" />
+  </event>
+  <event id="78" name="Ethos Dig Site - hall to Emeralda&#x27;s room (Elly&#x27;s flashback ? )" mapId="379" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="166" />
+  </event>
+  <event id="79" name="Ethos Dig Site - Stein and Grahf, Alkanshel battle" mapId="388" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="168" />
+  </event>
+  <event id="80" name="Yggdrasil - bottom floor" mapId="288" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="169" />
+  </event>
+  <event id="81" name="Babel Tower entrance" mapId="405" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="171" />
+  </event>
+  <event id="82" name="Babel Tower - outer wall(hangs, no Ramsus)" mapId="411" entryPoint="0" status="unverified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="174" />
+  </event>
+  <event id="83" name="Shevat Dock - elevator room" mapId="437" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="176" />
+  </event>
+  <event id="84" name="Shevat City - child&#x27;s memorial" mapId="434" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="178" />
+  </event>
+  <event id="85" name="Shevat Palace - throne room (GP 179)" mapId="453" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="179" />
+  </event>
+  <event id="86" name="Shevat Dock - Seibzehn dock" mapId="441" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="180" />
+  </event>
+  <event id="87" name="Shevat Palace - Zephyr&#x27;s throne, Achtzehn briefing (no battle) (GP 181)" mapId="473" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="181" />
+  </event>
+  <event id="88" name="Shevat Palace - Zephyr&#x27;s throne, Achtzehn briefing (no battle) (GP 182)" mapId="473" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="182" />
+  </event>
+  <event id="89" name="Shevat Attacked - walking on clouds ? (Achtzehn battle, hangs)" mapId="442" entryPoint="0" status="unverified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="186" />
+  </event>
+  <event id="90" name="Shevat Palace - Zephyr, Wisemanand Gaspar discuss deja vu" mapId="454" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="187" />
+  </event>
+  <event id="91" name="Nisan - House (GP 198)" mapId="86" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="198" />
+  </event>
+  <event id="92" name="Gate Generator 1 - Shakhan battle" mapId="495" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="201" />
+  </event>
+  <event id="93" name="Aveh Castle - Dining room" mapId="151" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="202" />
+  </event>
+  <event id="94" name="Babel Tower Ducts - inside from the mirror ledge" mapId="412" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="203" />
+  </event>
+  <event id="95" name="Yggdrasil - bottom floor, apologize to Elly sequence" mapId="303" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="204" />
+  </event>
+  <event id="96" name="Thames - bridge (GP 205)" mapId="314" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="205" />
+  </event>
+  <event id="97" name="Gate Generator 3 - Crescens battle" mapId="505" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="207" />
+  </event>
+  <event id="98" name="Shevat Palace - throne room (GP 208)" mapId="453" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="208" />
+  </event>
+  <event id="99" name="Solaris - Seibzehn carries Fei, Ellyand Citan to Solaris" mapId="511" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="210" />
+  </event>
+  <event id="100" name="Etrenank - \&quot;dedication ceremony\&quot; area(hangs)" mapId="529" entryPoint="0" status="unverified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="213" />
+  </event>
+  <event id="101" name="Etrenank - Elly&#x27;s house, foyer" mapId="538" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="216" />
+  </event>
+  <event id="102" name="Etrenank - Elly&#x27;s house, Erich&#x27;s room" mapId="541" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="219" />
+  </event>
+  <event id="103" name="Solaris, 3rd - Class - garbage chute entrance(Elly&#x27;s parents) (GP 222)" mapId="525" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="222" />
+  </event>
+  <event id="104" name="Etrenank - Elly&#x27;s house (GP 222)" mapId="543" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="222" />
+  </event>
+  <event id="105" name="Krelian&#x27;s Lab - interrogation room (GP 228)" mapId="579" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="228" />
+  </event>
+  <event id="106" name="Krelian&#x27;s Lab - interrogation room rescue" mapId="591" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="231" />
+  </event>
+  <event id="107" name="Krelian&#x27;s Lab - Citan blows the last gate generator (GP 234)" mapId="593" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="234" />
+  </event>
+  <event id="108" name="Krelian&#x27;s Lab - Krelian&#x27;s private lab (GP 234)" mapId="595" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="234" />
+  </event>
+  <event id="109" name="Solaris - Id attacks Yggdrasil, Elly stops him(long scenes follow)" mapId="611" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="240" />
+  </event>
+  <event id="110" name="Krelian&#x27;s Lab - interrogation room (GP 241)" mapId="579" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="241" />
+  </event>
+  <event id="111" name="Shevat Palace - &#x27;tactical command room&#x27;" mapId="460" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="242" />
+  </event>
+  <event id="112" name="Shevat Palace - prison" mapId="467" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="243" />
+  </event>
+  <event id="113" name="Taura&#x27;s House - Weltall-2 reveal (GP 249)" mapId="612" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="249" />
+  </event>
+  <event id="114" name="Taura&#x27;s House - Weltall-2 reveal (GP 252)" mapId="612" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="252" />
+  </event>
+  <event id="115" name="Nortune - Yggdrasil IV versus Ft.Hurricane (GP 258)" mapId="618" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="258" />
+  </event>
+  <event id="116" name="Ignas Soylent System - Sufal Mass battle" mapId="622" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="263" />
+  </event>
+  <event id="117" name="Anima Relic 1 - Anima Relic room(Billy)" mapId="638" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="280" />
+  </event>
+  <event id="118" name="Nortune - Yggdrasil IV versus Ft.Hurricane (GP 281)" mapId="618" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="281" />
+  </event>
+  <event id="119" name="Anima Relic 2 - Anima Relic room(Rico)" mapId="640" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="283" />
+  </event>
+  <event id="120" name="Aveh Transport - Cain and Citan discuss &#x27;the time of the gospel&#x27;" mapId="515" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="285" />
+  </event>
+  <event id="121" name="Etrenank - Krelian talks about Melchior" mapId="672" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="288" />
+  </event>
+  <event id="122" name="Mahanon - later in 652 cutscene, Deus battle" mapId="654" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="290" />
+  </event>
+  <event id="123" name="Merkava - tunnels west of puzzle room" mapId="708" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="298" />
+  </event>
+  <event id="124" name="Merkava - Ramsus waiting for Fei in Merkava." mapId="710" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="300" />
+  </event>
+  <event id="125" name="Merkava - Confronting Krelian and Miang. (GP 301)" mapId="712" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="301" />
+  </event>
+  <event id="126" name="Merkava - after beating Ramsus." mapId="711" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="302" />
+  </event>
+  <event id="127" name="Merkava - Confronting Krelian and Miang. (GP 303)" mapId="712" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="303" />
+  </event>
+  <event id="128" name="Merkava - seconds before fighting Opiomorph. (GP 303)" mapId="713" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="303" />
+  </event>
+  <event id="129" name="Citan&#x27;s House - Upstairs room" mapId="20" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="306" />
+  </event>
+  <event id="130" name="Nortune - Yggdrasil IV versus Ft.Hurricane (GP 310)" mapId="618" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="310" />
+  </event>
+  <event id="131" name="Snowfield Hideout - prison" mapId="698" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="320" />
+  </event>
+  <event id="132" name="Point of Sephirot - late in 662, after 667, Fei meets Wave Existence (GP 325)" mapId="668" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="325" />
+  </event>
+  <event id="133" name="Point of Sephirot - late in 662, after 667, Fei meets Wave Existence (GP 330)" mapId="668" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="330" />
+  </event>
+  <event id="134" name="Snowfield Hideout - rest / save area" mapId="687" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="340" />
+  </event>
+  <event id="135" name="Merkava - inside entrance" mapId="703" entryPoint="0" status="verified"><!-- script-derived: field script sets GameProgress -->
+    <varWrite var="0" value="350" />
+  </event>
+  <event id="136" name="Lahan village - post-prologue" mapId="1" entryPoint="0" status="verified"><!-- preserved live-verified early-game preset -->
+    <varWrite var="0" value="3" />
+  </event>
+  <event id="137" name="Looking for Citan around his house" mapId="17" entryPoint="0" status="verified"><!-- preserved live-verified early-game preset -->
+    <varWrite var="0" value="10" />
+  </event>
+  <event id="138" name="Citan&#x27;s house - night, Fei leaves" mapId="17" entryPoint="0" status="verified"><!-- preserved live-verified early-game preset -->
+    <varWrite var="0" value="13" />
+  </event>
+  <event id="139" name="Citan&#x27;s house - heading back to Lahan" mapId="17" entryPoint="0" status="verified"><!-- preserved live-verified early-game preset -->
+    <varWrite var="0" value="15" />
+  </event>
+  <event id="140" name="Citan&#x27;s kitchen - Yui threshold" mapId="19" entryPoint="0" status="verified"><!-- preserved live-verified early-game preset -->
+    <varWrite var="0" value="22" />
+  </event>
+  <event id="141" name="Citan - music box storage room" mapId="21" entryPoint="0" status="verified"><!-- preserved live-verified early-game preset -->
+    <varWrite var="0" value="12" />
+  </event>
+  <event id="142" name="Lahan - Alice&#x27;s house" mapId="11" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="8" />
+  </event>
+  <event id="143" name="Citan&#x27;s house - Bedroom" mapId="18" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="15" />
+  </event>
+  <event id="144" name="Blackmoon Forest Entrance" mapId="22" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="32" />
+  </event>
+  <event id="145" name="Dazil - &#x27;Lucky Avenue&#x27; bar" mapId="40" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="39" />
+  </event>
+  <event id="146" name="Aveh Desert Entrance" mapId="53" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="39" />
+  </event>
+  <event id="147" name="Stalactite Cave" mapId="64" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="51" />
+  </event>
+  <event id="148" name="Stalactite Cave - Aveh Excavation Site" mapId="65" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="51" />
+  </event>
+  <event id="149" name="Pirate&#x27;s Lair - Dining Hall" mapId="75" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="56" />
+  </event>
+  <event id="150" name="Pirate&#x27;s Lair - Crew Quarters" mapId="76" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="56" />
+  </event>
+  <event id="151" name="Pirate&#x27;s Lair - Bart&#x27;s Room" mapId="77" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="56" />
+  </event>
+  <event id="152" name="Pirate&#x27;s Lair - Strategy Room" mapId="78" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="56" />
+  </event>
+  <event id="153" name="Bart&#x27;s Hideout - Fei fights Vance during Gebler attack" mapId="82" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="59" />
+  </event>
+  <event id="154" name="Bledavik map" mapId="101" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="60" />
+  </event>
+  <event id="155" name="North Bledavik entrance(festival day)" mapId="125" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="64" />
+  </event>
+  <event id="156" name="Bledavik Underground waterways - near - hotel ladder" mapId="130" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="157" name="Aveh Castle - first floor hall" mapId="135" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="158" name="Aveh Castle South - 2nd floor west bedroom" mapId="136" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="159" name="Aveh Castle South - 2nd floor east bedroom" mapId="137" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="160" name="Aveh Castle East - Cobra Cracka bedroom" mapId="138" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="161" name="Aveh Castle East - bedroom" mapId="139" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="162" name="Aveh Castle East - Armory" mapId="140" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="163" name="Aveh Castle East, 2nd floor - Vanderkaum&#x27;s room" mapId="141" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="164" name="Aveh Castle East, 2nd floor - Minister&#x27;s room, south" mapId="142" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="165" name="Aveh Castle West - kitchen" mapId="143" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="166" name="Aveh Castle West, 2nd floor - library" mapId="145" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="167" name="Aveh Castle West, 2nd floor - Minister&#x27;s room, south" mapId="146" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="168" name="Bledavik Underground waterways - Aveh Castle ladder" mapId="147" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="169" name="Aveh Castle - Throne room" mapId="150" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="170" name="Aveh Castle - East Tower corridor" mapId="152" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="60" />
+  </event>
+  <event id="171" name="Aveh Castle - Suite" mapId="153" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="172" name="Aveh Castle - Margie&#x27;s room" mapId="154" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="60" />
+  </event>
+  <event id="173" name="Aveh Castle - Shakhan&#x27;s room" mapId="155" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="60" />
+  </event>
+  <event id="174" name="Aveh Castle - Entrance hall" mapId="156" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="175" name="Aveh Castle - Second floor hall" mapId="157" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="176" name="Aveh Castle - Third floor hall" mapId="158" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="177" name="Aveh Castle - Fourth floor hall" mapId="159" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="70" />
+  </event>
+  <event id="178" name="Aveh Castle, Gebler area - conference room(can&#x27;t re-enter)" mapId="162" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="114" />
+  </event>
+  <event id="179" name="Aveh Castle, Gebler area - Elly&#x27;s quarters (can&#x27;t re - enter)" mapId="165" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="72" />
+  </event>
+  <event id="180" name="Aveh Castle, Gebler area - basement hallway to non - working elevator" mapId="166" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="60" />
+  </event>
+  <event id="181" name="Aveh Castle, Gebler area - elevator to 3rd floor, basement" mapId="167" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="60" />
+  </event>
+  <event id="182" name="Aveh Castle, Gebler area - Gear dock(no escape)" mapId="168" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="73" />
+  </event>
+  <event id="183" name="Aveh Castle, Gebler area - In a wall, somewhere(can&#x27;t do anything)" mapId="170" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="60" />
+  </event>
+  <event id="184" name="Aveh Castle, Gebler area - big hallway" mapId="171" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="60" />
+  </event>
+  <event id="185" name="Assault on Aveh - Id trashes Ramsus, attacks Bart" mapId="190" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="96" />
+  </event>
+  <event id="186" name="Goliath Factory entrance" mapId="262" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="135" />
+  </event>
+  <event id="187" name="Grahf, Ramsusand Miang broken cutscene" mapId="272" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="60" />
+  </event>
+  <event id="188" name="Assault on Aveh - Id - damaged Yggdrasil sinks, Citan ejected" mapId="275" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="166" />
+  </event>
+  <event id="189" name="Assault on Aveh - same as 186" mapId="278" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="43" />
+  </event>
+  <event id="190" name="Assault on Aveh - on Yggdrasil, Maison&#x27;s bar (after omen?  hangs)" mapId="282" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="90" />
+  </event>
+  <event id="191" name="Assault on Aveh - on Yggdrasil, Bartand Sig discuss return to Aveh Castle" mapId="283" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="166" />
+  </event>
+  <event id="192" name="Aveh Desert - Bart attacks the Aveh Transport" mapId="287" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="87" />
+  </event>
+  <event id="193" name="Yggdrasil - gear shop" mapId="292" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="87" />
+  </event>
+  <event id="194" name="Yggdrasil - engine room" mapId="295" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="93" />
+  </event>
+  <event id="195" name="Yggdrasil - infirmary" mapId="299" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="147" />
+  </event>
+  <event id="196" name="Yggdrasil - Elly&#x27;s room" mapId="300" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="93" />
+  </event>
+  <event id="197" name="Yggdrasil - elevator top" mapId="302" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="75" />
+  </event>
+  <event id="198" name="Yggdrasil - elevator bottom" mapId="304" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="87" />
+  </event>
+  <event id="199" name="Ethos HQ - upstairs, Etone room 3" mapId="340" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="158" />
+  </event>
+  <event id="200" name="Ethos HQ - Bishop&#x27;s room (exit to hidden treasure room hangs)" mapId="341" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="158" />
+  </event>
+  <event id="201" name="Ethos HQ - stairwell to infirmary(hangs)" mapId="343" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="158" />
+  </event>
+  <event id="202" name="Ethos HQ Purge - stairwell with bishop(hangs)" mapId="344" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="158" />
+  </event>
+  <event id="203" name="Ethos HQ - stairwell to 341" mapId="345" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="158" />
+  </event>
+  <event id="204" name="Ethos HQ - Billy leads way downstairs to Ethos infirmary" mapId="346" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="158" />
+  </event>
+  <event id="205" name="Ethos HQ - upstairs hallway leading to 348" mapId="347" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="158" />
+  </event>
+  <event id="206" name="Ethos HQ - upstairs hallway to 340" mapId="348" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="158" />
+  </event>
+  <event id="207" name="Ethos HQ Purge - library" mapId="349" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="158" />
+  </event>
+  <event id="208" name="Ethos HQ Purge - dining room" mapId="350" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="158" />
+  </event>
+  <event id="209" name="Ethos HQ Purge - kitchen" mapId="351" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="158" />
+  </event>
+  <event id="210" name="Ethos HQ Purge - hallway to 359" mapId="355" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="158" />
+  </event>
+  <event id="211" name="Ethos Dig Site entrance" mapId="361" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="166" />
+  </event>
+  <event id="212" name="Ethos Dig Site - diagonal elevator down at bottom" mapId="362" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="166" />
+  </event>
+  <event id="213" name="Ethos Dig Site - room between diagonal and vertical elevators" mapId="363" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="166" />
+  </event>
+  <event id="214" name="Ethos Dig Site - vertical elevator(hangs)" mapId="365" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="166" />
+  </event>
+  <event id="215" name="Ethos Dig Site - nanomachine decontamination hallway 1" mapId="367" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="166" />
+  </event>
+  <event id="216" name="Ethos Dig Site - hallway after 367" mapId="368" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="165" />
+  </event>
+  <event id="217" name="Ethos Dig Site - inactive control room 1" mapId="369" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="165" />
+  </event>
+  <event id="218" name="Ethos Dig Site - stairwell 1 top" mapId="370" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="166" />
+  </event>
+  <event id="219" name="Ethos Dig Site - nanomachine decontamination hallway 2" mapId="371" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="166" />
+  </event>
+  <event id="220" name="Ethos Dig Site - hallway after 371" mapId="372" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="165" />
+  </event>
+  <event id="221" name="Ethos Dig Site - inactive control room 2" mapId="373" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="165" />
+  </event>
+  <event id="222" name="Ethos Dig Site - stairwell 2 top" mapId="375" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="165" />
+  </event>
+  <event id="223" name="Ethos Dig Site - nanomachine decontamination airlock" mapId="376" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="165" />
+  </event>
+  <event id="224" name="Ethos Dig Site - hall after 376" mapId="377" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="166" />
+  </event>
+  <event id="225" name="Ethos Dig Site - nanoreactor control room" mapId="378" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="165" />
+  </event>
+  <event id="226" name="Ethos Dig Site - Yggdrasil infirmary, end of 380, Id awakens" mapId="381" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="234" />
+  </event>
+  <event id="227" name="Ethos Dig Site - outside vertical elevator bottom" mapId="382" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="166" />
+  </event>
+  <event id="228" name="Ethos Dig Site - walkway over Zeboim(hangs)" mapId="383" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="165" />
+  </event>
+  <event id="229" name="Ethos Dig Site - other end of 377" mapId="384" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="166" />
+  </event>
+  <event id="230" name="Ethos Dig Site - hallway before 384" mapId="385" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="166" />
+  </event>
+  <event id="231" name="Ethos Dig Site - vertical elevator bottom" mapId="386" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="166" />
+  </event>
+  <event id="232" name="Ethos Dig Site - stairwell 2 bottom" mapId="387" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="166" />
+  </event>
+  <event id="233" name="Shevat Dock - elevator shaft(hangs)" mapId="438" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="179" />
+  </event>
+  <event id="234" name="Shevat Dock - hallway to Seibzehn dock" mapId="439" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="183" />
+  </event>
+  <event id="235" name="Shevat Palace - bottom of Zephyr&#x27;s tower" mapId="456" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="179" />
+  </event>
+  <event id="236" name="Shevat Palace - barracks(Khan)" mapId="462" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="179" />
+  </event>
+  <event id="237" name="Shevat Palace - party rest area" mapId="466" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="179" />
+  </event>
+  <event id="238" name="Shevat Palace - mess(Yui in kitchen)" mapId="470" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="179" />
+  </event>
+  <event id="239" name="Shevat Palace - elevator emergency shaft entrance(hangs)" mapId="472" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="183" />
+  </event>
+  <event id="240" name="Ft.Jasper - elevator 1 corridor" mapId="480" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="189" />
+  </event>
+  <event id="241" name="Ft.Jasper - control room" mapId="482" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="203" />
+  </event>
+  <event id="242" name="Ft.Jasper - big round room, upstairs" mapId="492" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="203" />
+  </event>
+  <event id="243" name="Solaris, 3rd - Class - quarters with the savepoint" mapId="520" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="219" />
+  </event>
+  <event id="244" name="Solaris, 3rd - Class - empty quarters" mapId="522" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="210" />
+  </event>
+  <event id="245" name="Solaris, 3rd - Class - Elly&#x27;s hiding place" mapId="524" entryPoint="0" status="unverified"><!-- field has GameProgress checks but no writes; value = first equal-check -->
+    <varWrite var="0" value="210" />
+  </event>
+  <event id="246" name="Title screen" mapId="490" entryPoint="0" status="verified"><!-- boot dispatcher sets fieldID 490 --></event>
+  <event id="247" name="Main debug room" mapId="0" entryPoint="0" status="verified"><!-- debug room map --></event>
+  <event id="248" name="Debug/jump room - Ending (Krelian)" mapId="719" entryPoint="0" status="verified"><!-- debug room map --></event>
+  <event id="249" name="Debug room - Kato" mapId="720" entryPoint="0" status="verified"><!-- debug room map --></event>
+  <event id="250" name="Debug room - Eto" mapId="721" entryPoint="0" status="verified"><!-- debug room map --></event>
+  <event id="251" name="Debug room - Kazoumi" mapId="722" entryPoint="0" status="verified"><!-- debug room map --></event>
+  <event id="252" name="Debug room - Suzuki" mapId="723" entryPoint="0" status="verified"><!-- debug room map --></event>
+  <event id="253" name="Debug room - Tane" mapId="724" entryPoint="0" status="verified"><!-- debug room map --></event>
+  <event id="254" name="Debug room - Koumoto" mapId="725" entryPoint="0" status="verified"><!-- debug room map --></event>
+  <event id="255" name="Debug room - Kigoshi" mapId="726" entryPoint="0" status="verified"><!-- debug room map --></event>
+  <event id="256" name="Debug room - Uchimichi" mapId="727" entryPoint="0" status="verified"><!-- debug room map --></event>
+  <event id="257" name="Debug room - Saito" mapId="728" entryPoint="0" status="verified"><!-- debug room map --></event>
+  <event id="258" name="Debug room - Matu" mapId="729" entryPoint="0" status="verified"><!-- debug room map --></event>
 </events>

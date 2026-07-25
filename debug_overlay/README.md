@@ -45,10 +45,10 @@ All widget actions are also reachable over TCP as
 
 XML tables loaded at init via the vendored pugixml (`debug_overlay_data.*`):
 
-- `fields.xml` — 712 field ids (map names/ids for teleport)
+- `fields.xml` — all 730 field ids (0–729; map names/ids for teleport)
 - `characters.xml` — 11 characters + 20 gears
-- `events.xml` — event ids for Event Jump
-- `flags.xml` — named fieldVars flag offsets
+- `events.xml` — script-derived GameProgress beats and research presets for Event Jump
+- `flags.xml` — named fieldVars byte offsets + the GameProgress timeline
 - `addrs.xml` — verified guest address book (evidence + status per entry)
 - `ram_map.xml` — named watches/regions for the RAM inspector
 
