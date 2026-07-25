@@ -8,7 +8,7 @@
 ## Child Elements
 
 - `<field>` — represents a single map/field.
-  - Attribute `id` (integer): unique field identifier. Sparse — not all integers are used.
+  - Attribute `id` (integer): unique field identifier in the complete 0–729 range.
   - Attribute `name` (string): human-readable field name. XML-escaped, UTF-8, trimmed whitespace.
   - Child elements (optional): up to 4 `<entity>` elements when script entities are present.
   - Self-closing (`<field .../>`) when no entities are attached.
@@ -19,7 +19,7 @@
 
 ## Notes
 
-- Field IDs are sparse (e.g. 0–60, 70, 80–329, 600–729). Gaps are normal.
+- The table contains every field ID from 0 through 729.
 - Entity children are optional and omitted when a field has no named script entities.
 - All text values are trimmed of leading/trailing whitespace before XML escaping.
 - The file encoding is UTF-8.

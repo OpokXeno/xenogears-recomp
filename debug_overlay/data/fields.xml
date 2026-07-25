@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<fields count="712">
+<fields count="730">
   <field id="0" name="Main debug room">
     <entity id="0" name="Director"/>
     <entity id="1" name="PartyChange (Margie?)"/>
@@ -126,7 +126,25 @@
   <field id="58" name="Aveh Transport - Second room"/>
   <field id="59" name="Aveh Transport - Fei climbs the crane to Weltall"/>
   <field id="60" name="Aveh Transport hit by Yggdrasil"/>
+  <field id="61" name="Sand Cruiser Top - Fei in Weltall takes Citan to Desert"/>
+  <field id="62" name="Desert - Bart&apos;s introduction in Bridgandier"/>
+  <field id="63" name="Sand Cruiser - driving with Weltall on top"/>
+  <field id="64" name="Stalactite Cave"/>
+  <field id="65" name="Stalactite Cave - Aveh Excavation Site"/>
+  <field id="66" name="Stalactite Cave - Outside Bal&apos;s Cave"/>
+  <field id="67" name="Stalactite Cave - Passageway"/>
+  <field id="68" name="Stalactite Cave - Passageway2"/>
+  <field id="69" name="Stalactite Cave - Excavation Site"/>
   <field id="70" name="Bottom of elevator in Stalactite Cavern(just before Calamity)"/>
+  <field id="71" name="Stalactite Cave - Balthasar&apos;s Cave"/>
+  <field id="72" name="Stalactite Cave - Intro"/>
+  <field id="73" name="Outside Stalactite Cave"/>
+  <field id="74" name="Pirate&apos;s Lair - Residential Section"/>
+  <field id="75" name="Pirate&apos;s Lair - Dining Hall"/>
+  <field id="76" name="Pirate&apos;s Lair - Crew Quarters"/>
+  <field id="77" name="Pirate&apos;s Lair - Bart&apos;s Room"/>
+  <field id="78" name="Pirate&apos;s Lair - Strategy Room"/>
+  <field id="79" name="Pirate&apos;s Lair - Yggdrasil Dock"/>
   <field id="80" name="Bart&apos;s Hideout - Yggdrasil docking"/>
   <field id="81" name="Bart&apos;s Hideout - Maison explains the exacavation of gears"/>
   <field id="82" name="Bart&apos;s Hideout - Fei fights Vance during Gebler attack"/>
