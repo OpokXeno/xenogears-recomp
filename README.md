@@ -2,7 +2,7 @@
 
 **Static recompilation of *Xenogears* (USA, Disc 1) for the PlayStation 1.**
 
-Built on [PSXRecomp](https://github.com/mstan/psxrecomp) — a MIPS R3000A → C → native x64 static recompilation framework. The PS1 BIOS (`SCPH1001.BIN`) is recompiled to native code alongside the game executable, producing a single binary that runs without an emulator.
+Built on [PSXRecomp](https://github.com/mstan/psxrecomp) — a MIPS R3000A → C → native x64 static recompilation framework. Both the OpenBIOS and retail `SCPH1001.BIN` BIOS backends are recompiled alongside the game executable, producing a single binary that runs without an emulator.
 
 > ⚠️ **Alpha status.** The game boots, reaches the title screen and intro FMV, and is playable — but not fully validated end to end. See [Status](#status).
 
@@ -10,12 +10,15 @@ Built on [PSXRecomp](https://github.com/mstan/psxrecomp) — a MIPS R3000A → C
 
 ## Requirements
 
-To build and run XenogearsRecomp, you **must** provide your own legally obtained copies of:
+To run a release of XenogearsRecomp, you need your own legally obtained copy of:
 
-- **PS1 BIOS** — `SCPH1001.BIN` (any region, SCPH-1001 tested)
-- **Xenogears (USA, Disc 1)** — game EXE (`SLUS-006.64`) and disc image (`.cue`/`.bin`)
+- **Xenogears (USA, Disc 1)** — disc image (`.cue`/`.bin`)
 
-No BIOS image, game disc image, game code, or game assets are included in or distributed by this repository.
+The separate game EXE (`SLUS-006.64`) is required only for source generation; it is not needed to run a release.
+
+Release packages include the redistributable OpenBIOS image and its MIT notice. At runtime, a legally obtained matching `SCPH1001.BIN` is optional because OpenBIOS runs by default. From-source dual-backend generation currently requires a local, legally obtained `SCPH1001.BIN` matching the compiled retail backend.
+
+No retail BIOS image, game disc image, or game assets are included in or distributed by this repository or its releases.
 
 ### Build dependencies
 
@@ -49,8 +52,8 @@ No BIOS image, game disc image, game code, or game assets are included in or dis
 
 Grab the archive for your platform from [Releases](https://github.com/OpokXeno/xenogears-recomp/releases), extract it, and run the executable. A launcher window opens.
 
-1. **Set your PlayStation BIOS** — select your legally obtained `SCPH1001.BIN` (a 512 KB file dumped from your own console) via Settings → System → Browse.
-2. **Set the game disc** — select your legally obtained *Xenogears* (USA, Disc 1) disc image. Click **Change Disc** on the main screen and pick your `.cue` file. The launcher verifies the ISO9660 header, region, and serial.
+1. **Set the game disc** — on first launch, select your legally obtained *Xenogears* (USA, Disc 1) disc image. Click **Change Disc** on the main screen and pick your `.cue` file. The launcher verifies the ISO9660 header, region, and serial.
+2. **Optional: select a retail BIOS** — OpenBIOS runs by default. To use the retail backend, select your legally obtained matching `SCPH1001.BIN` (a 512 KB file dumped from your own console) via Settings → System → Browse.
 3. Optionally adjust renderer, supersampling, screen look, widescreen, and controller settings, then press **Launch**. Your choices are remembered.
 
 **Accepted disc formats:** `.cue` + `.bin` (preferred — pick the `.cue`), direct `.bin`, and `.iso`. If the header or game ID does not match SLUS-00664, the launcher warns and tries to run the image anyway.
@@ -80,13 +83,14 @@ XenogearsRecomp/
 │   ├── slus_006.64              # Xenogears (Disc 1) main EXE — your rip
 │   ├── Xenogears Disc 1.cue     # Disc index file (name depends on your rip)
 │   ├── Xenogears Disc 1.bin     # Track 1 (data)
-└── bios/                        # (optional — launcher picks any path)
-    └── SCPH1001.BIN              # PS1 BIOS — your rip
+└── psxrecomp/
+    └── bios/
+        └── SCPH1001.BIN          # Retail BIOS — your local dump, required to build
 ```
 
 You need both the `.cue` and its `.bin` tracks together. The disc and BIOS paths are configured at runtime through the launcher GUI.
 
-> The `disc` and `bios_path` fields in `game.toml` can be set as a fallback, but are optional — the launcher will prompt for both BIOS and disc on first run.
+> The `disc` and `bios_path` fields in `game.toml` can be set as a fallback, but are optional. The launcher prompts for the disc on first run and uses OpenBIOS unless you select the matching retail BIOS in Settings.
 
 #### 2.3 Build
 
@@ -104,10 +108,13 @@ You need both the `.cue` and its `.bin` tracks together. The disc and BIOS paths
 
 This will:
 1. Build the recompiler (`psxrecomp-game`)
-2. Recompile the game EXE to C (if `game/slus_006.64` is present)
-3. Build the runtime → `build/XenogearsRecomp`
+2. Generate both BIOS backends: OpenBIOS from the tracked redistributable image and retail SCPH1001 from your local `psxrecomp/bios/SCPH1001.BIN`
+3. Recompile the game EXE to C (if `game/slus_006.64` is present)
+4. Build the runtime → `build/XenogearsRecomp` with Ninja/single-config generators, or `build/<BuildType>/XenogearsRecomp.exe` with Visual Studio
 
-> **Note:** `build.sh` uses Ninja. Set `CMAKE_GENERATOR` env var to override (e.g. `CMAKE_GENERATOR="Unix Makefiles"`).
+The source build needs the local retail BIOS to generate the compiled SCPH1001 backend, even though runtime use of that backend is optional. The build stages only the redistributable OpenBIOS image and `OpenBIOS.LICENSE`; it does not package `SCPH1001.BIN`.
+
+> **Note:** `build.sh` uses Ninja. Set `CMAKE_GENERATOR` env var to override (e.g. `CMAKE_GENERATOR="Unix Makefiles"`). Ninja and other single-config generators write directly under `build/`; Visual Studio writes under `build/<BuildType>/`.
 
 #### 2.3.1 Debug builds
 
@@ -134,10 +141,14 @@ binary is produced simply by choosing a debug `CMAKE_BUILD_TYPE`:
 #### 2.4 Run
 
 ```sh
+# Ninja/single-config
 ./build/XenogearsRecomp
+
+# Visual Studio multi-config (replace Release as needed)
+.\build\Release\XenogearsRecomp.exe
 ```
 
-**First launch** — the integrated launcher GUI will open. Select your BIOS (`SCPH1001.BIN`) in the Settings → System panel (Browse button), then pick your disc image (`.cue`) from the main screen (Change Disc button), and press **Launch**. Choices are saved to `settings.toml` next to the executable.
+**First launch** — the integrated launcher GUI will open. Pick your disc image (`.cue`) from the main screen (Change Disc button), then press **Launch**. OpenBIOS runs by default. To use the retail backend, select your matching `SCPH1001.BIN` in the Settings → System panel (Browse button). Choices are saved to `settings.toml` next to the executable.
 
 **Subsequent launches** — settings are loaded from `settings.toml`. Skip the launcher GUI with `--no-launcher` or `PSX_NO_LAUNCHER=1`.
 
@@ -151,8 +162,11 @@ If you only need to regenerate the game C source (after changing game config or 
 # Linux / macOS
 ./psxrecomp/recompiler/build/psxrecomp-game --config game.toml
 
-# Windows
+# Windows with Ninja/single-config
 .\psxrecomp\recompiler\build\psxrecomp-game.exe --config game.toml
+
+# Windows with Visual Studio multi-config (replace Release as needed)
+.\psxrecomp\recompiler\build\Release\psxrecomp-game.exe --config game.toml
 ```
 
 Or use the regen script:
@@ -213,6 +227,9 @@ XenogearsRecomp/
 │   └── data/                 #   XML data tables (fields, chars, events, addrs…)
 ├── docs/                     # Project docs (recompile, manual test guides, etc.)
 └── psxrecomp/                # PSXRecomp framework submodule
+    ├── bios/
+    │   └── SCPH1001.BIN     # YOUR local retail BIOS, required for source builds
+    ├── generated/            # Recompiled BIOS C sources (not tracked)
     ├── runtime/              #   PS1 hw simulation + GL/VK/SW renderers
     │   ├── src/              #     main.cpp, gpu_*, spu.c, debug_overlay.cpp, …
     │   └── tests/            #     host-side hygiene/data tests
@@ -224,7 +241,7 @@ XenogearsRecomp/
 
 1. **Recompilation:** `psxrecomp-game` reads the game EXE (`slus_006.64`) and translates MIPS R3000A instructions into C code, guided by seed addresses and annotations.
 2. **Runtime build:** The generated C is compiled with a PS1 hardware simulation runtime (GPU, SPU, CD-ROM, DMA, timers, interrupt controller, GTE, SIO, memory cards) and linked into a native executable.
-3. **Execution:** The recompiled BIOS (`SCPH1001.BIN`) boots as native code — no emulation, no interpreter on the hot path. Game code that was statically recompiled runs as native functions. Disc-streamed overlays are captured at runtime and compiled to native code on demand.
+3. **Execution:** Both BIOS backends compile into the executable. OpenBIOS is the default; a selected matching retail `SCPH1001.BIN` backend can be used instead. The active BIOS boots as native code — no emulation, no interpreter on the hot path. Game code that was statically recompiled runs as native functions. Disc-streamed overlays are captured at runtime and compiled to native code on demand.
 
 ---
 
@@ -249,7 +266,7 @@ Contributions are welcome. The highest-value ones:
 Ground rules:
 
 1. **Never commit game-derived data.**
-2. You need your own legally obtained game EXE, disc image, and BIOS to build and test (see [Requirements](#requirements)).
+2. You need your own legally obtained game EXE and disc image, plus a local legally obtained `SCPH1001.BIN` to generate the retail backend from source (see [Requirements](#requirements)).
 3. AI-assisted contributions are fine (see below) — you're responsible for what you submit regardless of how it was produced.
 
 ---
@@ -266,8 +283,11 @@ AI output is held to the same bar as human work: it must build, boot, and match 
 
 **XenogearsRecomp** is licensed under **PolyForm Noncommercial 1.0.0**. See [`LICENSE`](LICENSE).
 
+No retail PS1 BIOS image, including `SCPH1001.BIN`, is included in or distributed by this project.
+
+Release packages include the redistributable OpenBIOS image at `bios/openbios.bin` and its MIT notice at `bios/OpenBIOS.LICENSE`.
+
 This project does **not** include or distribute:
-- Any PS1 BIOS image
 - Any game disc image or EXE
 - Any game assets (textures, audio, models, scripts)
 - Any copyrighted game code as source

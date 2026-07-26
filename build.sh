@@ -13,6 +13,7 @@
 #   - pkg-config
 #   - SDL2 development library
 #   - Place your legally owned Xenogears disc 1 EXE at ./game/slus_006.64
+#   - Place your legally owned retail BIOS at ./psxrecomp/bios/SCPH1001.BIN for source generation
 #
 # Examples:
 #   ./build.sh                     # Release build in ./build
@@ -26,6 +27,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="${1:-build}"
 BUILD_TYPE="${2:-Release}"
+GENERATOR="${CMAKE_GENERATOR:-Ninja}"
 RECOMPILER_DIR="$ROOT/psxrecomp/recompiler"
 RECOMPILER_BUILD="$RECOMPILER_DIR/build"
 
@@ -40,10 +42,18 @@ fi
 
 # --- Step 1: Build the recompiler (psxrecomp-game) ---
 echo "==> Building recompiler (psxrecomp-game)..."
-cmake -S "$RECOMPILER_DIR" -B "$RECOMPILER_BUILD" -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake -S "$RECOMPILER_DIR" -B "$RECOMPILER_BUILD" -G "$GENERATOR" -DCMAKE_BUILD_TYPE=Release
 cmake --build "$RECOMPILER_BUILD" -j "$PARALLEL"
 
-# --- Step 2: Regenerate game C source from the EXE ---
+# --- Step 2: Regenerate BIOS C sources ---
+echo "==> Regenerating BIOS C sources..."
+for BIOS_STEM in OpenBIOS SCPH1001; do
+    PSXRECOMP_BIOS_BUILD="$RECOMPILER_BUILD" \
+        "$ROOT/psxrecomp/tools/regen_bios.sh" \
+        --config "$ROOT/psxrecomp/bios/${BIOS_STEM}.toml"
+done
+
+# --- Step 3: Regenerate game C source from the EXE ---
 if [ -f "$ROOT/game/slus_006.64" ]; then
     echo "==> Regenerating game C code from game/slus_006.64..."
     "$RECOMPILER_BUILD/psxrecomp-game" --config "$ROOT/game.toml"
@@ -55,10 +65,11 @@ else
     echo "      $RECOMPILER_BUILD/psxrecomp-game --config $ROOT/game.toml"
 fi
 
-# --- Step 3: Build the game runtime ---
+# --- Step 4: Build the game runtime ---
 echo "==> Building game runtime ($BUILD_TYPE) in $BUILD_DIR..."
-cmake -S "$ROOT" -B "$ROOT/$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE="$BUILD_TYPE"
+cmake -S "$ROOT" -B "$ROOT/$BUILD_DIR" -G "$GENERATOR" -DCMAKE_BUILD_TYPE="$BUILD_TYPE"
 cmake --build "$ROOT/$BUILD_DIR" -j "$PARALLEL"
 
 echo "==> Done. Binary: $ROOT/$BUILD_DIR/XenogearsRecomp"
-echo "    Provide your legally owned SCPH1001.BIN BIOS when prompted."
+echo "    Bundled OpenBIOS is staged under $ROOT/$BUILD_DIR/bios and used by default."
+echo "    Retail SCPH1001.BIN is optional at runtime."
