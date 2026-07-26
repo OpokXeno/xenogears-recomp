@@ -37,7 +37,7 @@ No BIOS image, game disc image, game code, or game assets are included in or dis
 - ✅ **Overlay pipeline** — field/battle/worldmap overlays capture in the interpreter and compile to native code in the background
 - ⚠️ **Not validated end-to-end** — no complete playthrough has been done; treat every area past the opening as unverified
 - 🐛 **Known issues**:
-  - Intermittent black-polygon rendering glitches in some scenes
+  - ~~Intermittent black-polygon rendering glitches in some scenes~~ FIXED
   - Most of the enhancements are untested or not yet fully polished, so expect some bugs if you use them.
 - **Scope:** USA Disc 1 (`SLUS-00664`) only — Disc 2 and other regions are untested
 
