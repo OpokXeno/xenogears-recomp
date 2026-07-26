@@ -73,3 +73,8 @@ Each table has a `*.schema.md` and `*.example.xml`. Loader:
   `loadNewField`. NEVER write `fieldID` (`0x8006F94E`) directly (corrupts
   texture streaming) and NEVER call `loadNewField` from the debug poll
   (not reentrant).
+
+## Known Issues
+
+- **Teleporting** and **event jumps** can occasionally cause a bug in the music, resulting in incorrect music or sounds playing.
+- **Party** changes can cause a crash.
