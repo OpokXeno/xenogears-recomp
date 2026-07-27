@@ -50,21 +50,18 @@ jobs:
     runs-on: [self-hosted, linux]
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
       - name: Check host dependencies
         run: |
           set -e
-          for t in cmake ninja pkg-config git; do
+          for t in cmake ninja pkg-config git python3; do
             command -v "$t" >/dev/null || { echo "::error::missing host tool: $t — see docs/self-hosted-runner.md"; exit 1; }
           done
+          python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else "Python 3.11 or newer is required")'
           pkg-config --exists sdl2 || { echo "::error::SDL2 development files not found (pkg-config sdl2)"; exit 1; }
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
 
       - name: Test release archive verifier
         run: cmake -DPROJECT_ROOT="$PWD" -DTEST_WORK_DIR="$RUNNER_TEMP/xgr-release-verifier-tests-linux" -P cmake/tests/test_verify_release_archive.cmake
@@ -132,20 +129,17 @@ jobs:
       LLVM_MINGW_VER: "20260616"
       SDL2_VER: "2.32.10"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
       - name: Check host dependencies
         run: |
           set -e
-          for t in cmake ninja git curl; do
+          for t in cmake ninja git curl python3; do
             command -v "$t" >/dev/null || { echo "::error::missing host tool: $t — see docs/self-hosted-runner.md"; exit 1; }
           done
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+          python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else "Python 3.11 or newer is required")'
 
       - name: Test release archive verifier
         run: cmake -DPROJECT_ROOT="$PWD" -DTEST_WORK_DIR="$RUNNER_TEMP/xgr-release-verifier-tests-windows" -P cmake/tests/test_verify_release_archive.cmake
