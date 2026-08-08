@@ -1,0 +1,285 @@
+schema = "xg-render-overlay-ranges/v1"
+
+[[variants]]
+id = "ft4-2c-callers-v1"
+base_address = "0x801b2000"
+artifact_size = 270340
+artifact_sha256 = "6b9f505b5ea77f3bb7222e78d2b2550f038fb319db399b7d862b4bd236bb2dbe"
+required_ranges = [
+  { start = "0x801b2000", size = 270340, sha256 = "6b9f505b5ea77f3bb7222e78d2b2550f038fb319db399b7d862b4bd236bb2dbe" },
+]
+cutovers = [
+  { pc = "0x801cd984", instruction = "0x0c07a49f", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801cdb10", instruction = "0x27bd0058", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d3724", instruction = "0x0c07a49f", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d3970", instruction = "0x27bd0038", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d4fb4", instruction = "0x0c07a49f", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d50e0", instruction = "0x27bd0038", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d5fa8", instruction = "0x0c07a49f", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d6188", instruction = "0x27bd0038", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e574c", instruction = "0x0c07a49f", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e5918", instruction = "0x27bd0048", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e5be4", instruction = "0x0c07a49f", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e5e40", instruction = "0x27bd0030", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e5eb4", instruction = "0x0c07a49f", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e61a4", instruction = "0x27bd0038", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e6304", instruction = "0x0c07a49f", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e6444", instruction = "0x27bd0040", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e739c", instruction = "0x0c07a49f", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e76e0", instruction = "0x27bd0030", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e7cb0", instruction = "0x0c07a49f", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e7e5c", instruction = "0x27bd0040", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e927c", instruction = "0x27bdffe8", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e92c4", instruction = "0x03e00008", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e920c", instruction = "0x00a01821", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e9274", instruction = "0x03e00008", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e7c50", instruction = "0x27bdffc0", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801ce23c", instruction = "0x0c0129cf", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801ce26c", instruction = "0x0c010ed2", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801ced74", instruction = "0xa05208c4", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801cef58", instruction = "0xa0520006", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801cf074", instruction = "0xa05208c4", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801cf258", instruction = "0xa0520006", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801cf85c", instruction = "0x0c073866", transfer = "observe", continuation = "0x00000000" },
+]
+producer_scope = { entry = "0x801e927c", return = "0x801e92c4", writer = "0x801e92b4", opcode = "0x2c", semantic_source = "producer-state" }
+producer_callers = [
+  { entry = "0x801cd81c", call = "0x801cd984", finish = "0x801cdb10", semantic_family = "rectangle-helper", semantic_source = "caller-state" },
+  { entry = "0x801d36e0", call = "0x801d3724", finish = "0x801d3970", semantic_family = "rectangle-helper", semantic_source = "caller-state" },
+  { entry = "0x801d4f2c", call = "0x801d4fb4", finish = "0x801d50e0", semantic_family = "rectangle-helper", semantic_source = "caller-state" },
+  { entry = "0x801d5ed4", call = "0x801d5fa8", finish = "0x801d6188", semantic_family = "rectangle-helper", semantic_source = "caller-state" },
+  { entry = "0x801e61b0", call = "0x801e6304", finish = "0x801e6444", semantic_family = "rectangle-helper", semantic_source = "caller-state" },
+  { entry = "0x801e56e8", call = "0x801e574c", finish = "0x801e5918", semantic_family = "static-quad", semantic_source = "caller-state" },
+  { entry = "0x801e5b88", call = "0x801e5be4", finish = "0x801e5e40", semantic_family = "static-quad", semantic_source = "caller-state" },
+  { entry = "0x801e5e4c", call = "0x801e5eb4", finish = "0x801e61a4", semantic_family = "static-quad", semantic_source = "caller-state" },
+  { entry = "0x801e733c", call = "0x801e739c", finish = "0x801e76e0", semantic_family = "static-quad", semantic_source = "caller-state" },
+  { entry = "0x801e7c50", call = "0x801e7cb0", finish = "0x801e7e5c", semantic_family = "dynamic-uv-template", semantic_source = "caller-state" },
+]
+
+[[variants]]
+id = "ft4-2e-projected-v1"
+base_address = "0x801b2000"
+artifact_size = 270340
+artifact_sha256 = "75c675f9736365dded5373bbd851b4a8c763ba34c167ef223c47032e8068f69f"
+required_ranges = [
+  { start = "0x801b2000", size = 270340, sha256 = "75c675f9736365dded5373bbd851b4a8c763ba34c167ef223c47032e8068f69f" },
+]
+cutovers = [
+  { pc = "0x801e53cc", instruction = "0x27bdffc0", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e56e0", instruction = "0x03e00008", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d49d0", instruction = "0x27bdffc8", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d4ce0", instruction = "0x0c07a471", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d4d14", instruction = "0x03e00008", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d4688", instruction = "0x27bdffc8", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d4840", instruction = "0xa04402dd", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d4890", instruction = "0xa04402e5", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d48e0", instruction = "0xa04802ed", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d4930", instruction = "0xa04802f5", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d4994", instruction = "0x0c07a471", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d49c8", instruction = "0x03e00008", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d433c", instruction = "0x27bdffc8", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d44fc", instruction = "0xa044023d", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d454c", instruction = "0xa0440245", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d45a4", instruction = "0xa048024d", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d45f4", instruction = "0xa0480255", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d4648", instruction = "0x0c07a471", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d4680", instruction = "0x03e00008", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d3ff8", instruction = "0x27bdffc8", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d41b0", instruction = "0xa044019d", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d4200", instruction = "0xa04401a5", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d4250", instruction = "0xa04801ad", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d42a8", instruction = "0xa04801b5", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d42fc", instruction = "0x0c07a471", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d4334", instruction = "0x03e00008", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d3db0", instruction = "0x27bdffb8", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d3e28", instruction = "0x0c0099d7", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d3e68", instruction = "0x0c0099d7", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d3ea8", instruction = "0x0c0099d7", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d3ee8", instruction = "0x0c0099d7", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d3fb0", instruction = "0x0c07a471", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d3ff0", instruction = "0x03e00008", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e91c4", instruction = "0x27bdffe8", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e91f4", instruction = "0xa2020006", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801e9204", instruction = "0x03e00008", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d0954", instruction = "0x27bdffc0", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d09b0", instruction = "0x0c0129cf", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d09d0", instruction = "0x0c010ed2", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d09e8", instruction = "0x03e00008", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d09f0", instruction = "0x27bdffb8", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d0b34", instruction = "0x0c074255", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801d0c70", instruction = "0x03e00008", transfer = "observe", continuation = "0x00000000" },
+]
+producer_scope = { entry = "0x801e91c4", return = "0x801e9204", writer = "0x801e91f4", opcode = "0x2e", semantic_source = "producer-state" }
+producer_callers = [
+  { entry = "0x801d3db0", call = "0x801d3fb0", finish = "0x801d3ff0", semantic_family = "descriptor-template-material", semantic_source = "caller-state" },
+  { entry = "0x801d3ff8", call = "0x801d42fc", finish = "0x801d4334", semantic_family = "zero-u-template-material", semantic_source = "caller-state" },
+  { entry = "0x801d433c", call = "0x801d4648", finish = "0x801d4680", semantic_family = "narrow-template-uv-material", semantic_source = "caller-state" },
+  { entry = "0x801d4688", call = "0x801d4994", finish = "0x801d49c8", semantic_family = "alternate-template-uv-material", semantic_source = "caller-state" },
+  { entry = "0x801d49d0", call = "0x801d4ce0", finish = "0x801d4d14", semantic_family = "template-uv-material", semantic_source = "caller-state" },
+  { entry = "0x801d0954", call = "0x801d09b0", finish = "0x801d09e8", semantic_family = "projected-xy-addprim", semantic_source = "caller-state" },
+  { entry = "0x801d09f0", call = "0x801d0b34", finish = "0x801d0c70", semantic_family = "projected-ft4-driver", semantic_source = "caller-state" },
+]
+
+[[variants]]
+id = "field-target-polylines-v1"
+base_address = "0x801cf000"
+required_ranges = [
+  { start = "0x801cfb48", size = 1052, sha256 = "4a437e0b9997a056107bc06a49e5f978562829128c8eb67be707dac0052dc66a" },
+]
+cutovers = [
+  { pc = "0x801cfb48", instruction = "0x3c038006", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801cff3c", instruction = "0x8fbf0040", transfer = "observe", continuation = "0x00000000" },
+]
+
+[[variants]]
+id = "world-full-sky-v1"
+base_address = "0x8006f000"
+required_ranges = [
+  { start = "0x80071b50", size = 24, sha256 = "6c0dfd49800901d2d2ff6d328156c56d1fd96110a308f95a7f6f8e7776f17c39" },
+  { start = "0x800736dc", size = 272, sha256 = "6577666f984028af4833106049538d689edc911bb9e7fb2c45490915d5d97cd7" },
+  { start = "0x800737ec", size = 460, sha256 = "e967f7509aa004e89b3876a53b9673a0bac961055e2f298012d8abf01be9d621" },
+  { start = "0x8009a280", size = 128, sha256 = "7611adb9f30e9758d8535d350114ccad7715a8adc663cf4d17af0c39c298c422" },
+]
+cutovers = [
+  { pc = "0x800737ec", instruction = "0x27bdffb8", transfer = "return", continuation = "0x00000000" },
+]
+
+[[variants]]
+id = "world-full-terrain-water-v1"
+base_address = "0x8006f000"
+required_ranges = [
+  { start = "0x80071a58", size = 16, sha256 = "cfdf1152cdb582b10285c62a34715ab1931def5d8db96fb8963da50e4ca059dc" },
+  { start = "0x80071b1c", size = 28, sha256 = "0e877932e9000c17c6b9f4f6aec401ecf522f47844ac440a22978e02e41e6ccc" },
+  { start = "0x800983a0", size = 1036, sha256 = "8c012fd4c47caf2141eddc8ce4e35e047cc224218be8f968579966489ca3eb40" },
+  { start = "0x800987ac", size = 1300, sha256 = "48ba09864960e762a9ba98d99282c73f3a548652d99be7f82de5ba2c89422084" },
+  { start = "0x8009932c", size = 988, sha256 = "f48d22e707597c0d8898df5b0332da1264e18f3c164782198d95b741e16d67bd" },
+  { start = "0x80099708", size = 260, sha256 = "485d9bde370ded096d61e6711ef5e2a8af9525eb2eab0545b6c70c778fbcb7a9" },
+  { start = "0x8009980c", size = 1008, sha256 = "b1d6a066fc1b03a4496a3b31e7e9677503a7d3b9f3fbd6979b2bc7da4c42a523" },
+]
+cutovers = [
+  { pc = "0x80071a58", instruction = "0x3c02800a", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800983a0", instruction = "0x27bdff90", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x8009932c", instruction = "0x27bdffc8", transfer = "return", continuation = "0x00000000" },
+  { pc = "0x800996d4", instruction = "0x8fbf0034", transfer = "observe", continuation = "0x00000000" },
+]
+
+[[variants]]
+id = "world-full-models-v1"
+base_address = "0x8006f000"
+required_ranges = [
+  { start = "0x80071a58", size = 16, sha256 = "cfdf1152cdb582b10285c62a34715ab1931def5d8db96fb8963da50e4ca059dc" },
+  { start = "0x80071ac0", size = 8, sha256 = "c04adae74c99b4c43d499cc5913cd2aeeeadf63cce6278ea397475b4a0289979" },
+  { start = "0x80076a74", size = 8, sha256 = "c04adae74c99b4c43d499cc5913cd2aeeeadf63cce6278ea397475b4a0289979" },
+  { start = "0x800779a4", size = 8, sha256 = "c04adae74c99b4c43d499cc5913cd2aeeeadf63cce6278ea397475b4a0289979" },
+  { start = "0x800789a0", size = 8, sha256 = "c04adae74c99b4c43d499cc5913cd2aeeeadf63cce6278ea397475b4a0289979" },
+  { start = "0x800848f4", size = 1036, sha256 = "670f809b7d9c0bcbd32463495e24c057bda8469220f12f3d6de19b893830e93b" },
+]
+cutovers = [
+  { pc = "0x800848f4", instruction = "0x24020800", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x80084cd0", instruction = "0x8fbf0038", transfer = "observe", continuation = "0x00000000" },
+]
+
+[[variants]]
+id = "world-full-actor-sprites-v1"
+base_address = "0x8006f000"
+required_ranges = [
+  { start = "0x80071a58", size = 16, sha256 = "cfdf1152cdb582b10285c62a34715ab1931def5d8db96fb8963da50e4ca059dc" },
+  { start = "0x80071aa8", size = 16, sha256 = "27e17497c2238a3a4aaa75d0bb4f62ea92f759b61847d45cd3d2ccf9d184ee0e" },
+  { start = "0x80085cdc", size = 636, sha256 = "fc6f4405d1bd956051519f3db3ed6477e7c0c09ee09739aef2ceb5176ffa6ab6" },
+]
+cutovers = [
+  { pc = "0x80085cdc", instruction = "0x3c02800a", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x80085f38", instruction = "0x8fbf0020", transfer = "observe", continuation = "0x00000000" },
+]
+
+[[variants]]
+id = "world-full-entity-shadows-v1"
+base_address = "0x8006f000"
+required_ranges = [
+  { start = "0x80071a58", size = 16, sha256 = "cfdf1152cdb582b10285c62a34715ab1931def5d8db96fb8963da50e4ca059dc" },
+  { start = "0x80071ab8", size = 12, sha256 = "f065434cb83b7da3b04f69e69d3aa463faa210754f119af23d779948cdb023c8" },
+  { start = "0x80074794", size = 72, sha256 = "b2cd28447138a813ab14e2346f812dbea863226c0fce7a48afb3d7c1bd4fd105" },
+  { start = "0x800747dc", size = 1660, sha256 = "ca255b493d7948e43c2bea3ff15f14bd714f3729adbbaf821884b5195bd959d4" },
+]
+cutovers = [
+  { pc = "0x800747dc", instruction = "0x3c02800a", transfer = "return", continuation = "0x00000000" },
+  { pc = "0x80074c84", instruction = "0x8ecc0000", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x80074e24", instruction = "0x8fbf0064", transfer = "observe", continuation = "0x00000000" },
+]
+
+[[variants]]
+id = "world-full-clouds-v1"
+base_address = "0x8006f000"
+required_ranges = [
+  { start = "0x80071a58", size = 16, sha256 = "cfdf1152cdb582b10285c62a34715ab1931def5d8db96fb8963da50e4ca059dc" },
+  { start = "0x80071b50", size = 24, sha256 = "6c0dfd49800901d2d2ff6d328156c56d1fd96110a308f95a7f6f8e7776f17c39" },
+  { start = "0x80086700", size = 152, sha256 = "bbf18abe773b6415f1fe55e845838e506edb7c15f5e5f6db3594f31ef271b88c" },
+  { start = "0x80086798", size = 3960, sha256 = "08bbc5a58a1565f99ccce09832c9decf5c138aef37c07f63a15993fecf2f3ddb" },
+]
+cutovers = [
+  { pc = "0x80086798", instruction = "0x3c02800a", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x80086e3c", instruction = "0x8e2202d4", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800876dc", instruction = "0x8fbf004c", transfer = "observe", continuation = "0x00000000" },
+]
+
+[[variants]]
+id = "world-full-effects-v1"
+base_address = "0x8006f000"
+required_ranges = [
+  { start = "0x80071a58", size = 16, sha256 = "cfdf1152cdb582b10285c62a34715ab1931def5d8db96fb8963da50e4ca059dc" },
+  { start = "0x80071a90", size = 32, sha256 = "eba716d171938ac0f8e4b92ccf169ddee7df9b64908542bdad5e7ad676634775" },
+  { start = "0x8008901c", size = 268, sha256 = "e690d719b63773a12bd57ed8c0f491266d1b1fa7d60ac3217c5d1a8ee32cd4c7" },
+  { start = "0x80089748", size = 1328, sha256 = "bfa19d4b844d7814bedb336f1e9837944f935d5dad029a681557b5a65891da73" },
+  { start = "0x80089c78", size = 1616, sha256 = "693edc23d4e33a80b08c68767a9984fe3ebfc274e980a10693aead42ad5944a2" },
+  { start = "0x8009aff0", size = 80, sha256 = "d5c5fb5426960d96b00c31b0fcb2e0c7462cfabc57464cfc74279c540f9fa5ba" },
+  { start = "0x8009b040", size = 320, sha256 = "252dd326494c4e21b99e5a592fb7a17395708dc5dfeafb791e67b60ec90aa4f9" },
+]
+cutovers = [
+  { pc = "0x80089c78", instruction = "0x27bdffb0", transfer = "return", continuation = "0x00000000" },
+  { pc = "0x8008a294", instruction = "0x8fbf004c", transfer = "observe", continuation = "0x00000000" },
+]
+
+[[variants]]
+id = "world-full-decorations-v1"
+base_address = "0x8006f000"
+required_ranges = [
+  { start = "0x80071a58", size = 16, sha256 = "cfdf1152cdb582b10285c62a34715ab1931def5d8db96fb8963da50e4ca059dc" },
+  { start = "0x80071aa8", size = 16, sha256 = "27e17497c2238a3a4aaa75d0bb4f62ea92f759b61847d45cd3d2ccf9d184ee0e" },
+  { start = "0x8008615c", size = 644, sha256 = "576ed6052cea98877bad87f6e57519d0183e52cab9f5cbbc8b0b6ac1a3c88f43" },
+  { start = "0x80099bfc", size = 656, sha256 = "2bdb0bed8ab76eba5ed3aa5191cfac30cfd344e2127e19bf4d0ccedc14e838df" },
+]
+cutovers = [
+  { pc = "0x8008615c", instruction = "0x27bdffd8", transfer = "return", continuation = "0x00000000" },
+  { pc = "0x80099bfc", instruction = "0x27bdfff8", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x80099e78", instruction = "0x8fb10008", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800863bc", instruction = "0x8fbf0024", transfer = "observe", continuation = "0x00000000" },
+]
+
+[[variants]]
+id = "world-full-horizon-v1"
+base_address = "0x8006f000"
+required_ranges = [
+  { start = "0x80071a58", size = 16, sha256 = "cfdf1152cdb582b10285c62a34715ab1931def5d8db96fb8963da50e4ca059dc" },
+  { start = "0x80071b50", size = 24, sha256 = "6c0dfd49800901d2d2ff6d328156c56d1fd96110a308f95a7f6f8e7776f17c39" },
+  { start = "0x800739b8", size = 332, sha256 = "97e02c71d6cbb4647c892c623c2180c517f694568d7f175b3381874db00eba71" },
+  { start = "0x80073b04", size = 812, sha256 = "87f9ff21fffad640d8fb7ec9a96da4f5d29a71275c4b15452d49677b6ad23197" },
+  { start = "0x8009a300", size = 64, sha256 = "803ead29dd6551dcd37a6b279d1b703d8698340da3d8c9ffd9bf5494bb5371f3" },
+]
+cutovers = [
+  { pc = "0x80073b04", instruction = "0x27bdffc0", transfer = "return", continuation = "0x00000000" },
+  { pc = "0x80073e0c", instruction = "0x8fbf003c", transfer = "observe", continuation = "0x00000000" },
+]
+
+[[variants]]
+id = "world-full-minimap-v1"
+base_address = "0x8006f000"
+required_ranges = [
+  { start = "0x80071a58", size = 16, sha256 = "cfdf1152cdb582b10285c62a34715ab1931def5d8db96fb8963da50e4ca059dc" },
+  { start = "0x80071b68", size = 32, sha256 = "804bb7557fdf59175d862f39f4c00aac3e9f7f8e475ff7e9164c6372b0586c23" },
+  { start = "0x800740b8", size = 1244, sha256 = "a0b5afc3d5b4efc5970d5e730d4b466eaa6d5f94705830732bda346c2d3119ad" },
+]
+cutovers = [
+  { pc = "0x800740b8", instruction = "0x27bdffc8", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x8007412c", instruction = "0x266400b8", transfer = "local", continuation = "0x80074298" },
+  { pc = "0x80074564", instruction = "0x8fbf0030", transfer = "observe", continuation = "0x00000000" },
+]

@@ -34,7 +34,8 @@ if (-not (Test-Path $CONFIG)) {
 Write-Host "==> Regenerating game C code..."
 Write-Host "    Recompiler: $RECOMPILER_BIN"
 Write-Host "    Config:     $CONFIG"
-& $RECOMPILER_BIN "--config" $CONFIG
+& $RECOMPILER_BIN "--config" $CONFIG `
+    "--source-observation-plan" (Join-Path $ROOT "native_renderer/xg_render_resident_plan.txt")
 if ($LASTEXITCODE -ne 0) {
     throw "Regeneration failed (exit code $LASTEXITCODE)"
 }

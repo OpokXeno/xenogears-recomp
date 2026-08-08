@@ -25,12 +25,16 @@ out_dir = "generated"
 discovery = "whole-image"
 
 [video]
+#aspect_ratio = "16:9"
 # FMV auto-skip: feature OFF by default. NO fmv_skip_total_table /
 # fmv_skip_movie_id addresses exist for Xenogears yet. With no table configured the
 # runtime uses the generic START-hold fallback. Verify once by hand.
 auto_skip_fmv = false
 
 [widescreen]
+# Legacy GP0/GTE widescreen reference data. Native render mode does not activate
+# the mirrored legacy compositor; the backdrop x_sites below are the shared guest
+# coordinate transform used by both the recompiled and Native packet paths.
 # Xenogears is a FULLY-3D title: gameplay classification must use the
 # GTE-activity detector, NOT the sprite-tag path (default when no
 # sprite_tag_funcs are configured — ws_game_mode() falls back to
@@ -41,8 +45,8 @@ gte_game_mode = true
 # dialogue text/portraits) so the 16:9 present keeps native proportions.
 # Runtime-side hook at GP0 submission — works for main-EXE and overlay code
 # alike.
-hud_sprt_squash = true
-full_2d = true
+#hud_sprt_squash = true
+#full_2d = true
 
 nw_backdrop=true
 
@@ -53,7 +57,7 @@ nw_backdrop=true
 x_sites = ["0x80027BE8", "0x80027BEC", "0x80027BF0", "0x80027BF8"]
 
 [widescreen.cull]
-nw_hud_corners = true
+#nw_hud_corners = true
 # ---------------------------------------------------------------------------
 # 16:9 cull widening (Ghidra-evidenced 2026-07-19, program field_module.exe
 # @0x8006F000 in XenogearsDisc1.gpr; Xenogears' entire draw-cull surface is
@@ -63,19 +67,19 @@ nw_hud_corners = true
 #
 # (1) @0x800AAA74 — per-object (map-chunk/prop) cull. With
 #     script margins param0/param1==0 the X window is exactly [0,320):
-#       0x800AAB90 addiu v1,a0,0x140   high edge -> bias_sites   (+m)
-#       0x800AABA0 subu  v0,zero,a0    low edge  -> negsub_sites (-m)
+#       0x800AAB90 addiu v1,a0,0x140   high edge -> screen_bias_sites (+m)
+#       0x800AABA0 subu  v0,zero,a0    low edge  -> left_edge_sites (-m)
 #     => [-m, 320+m): covers the revealed margins, stops map-chunk pop-in.
 # (2) @0x80075B44 — sprite-actor visibility funnel
 #     (sets/clears script flag 0x200; gated draw in renderChars). Idiom
 #     (X+39)<u 0x18F == X in [-39,360):
-#       0x80075EA4 addiu v0,v0,0x27    bias  -> bias_sites  (+m)
-#       0x80075EA8 sltiu v0,v0,0x18f   range -> range_sites (+2m)
+#       0x80075EA4 addiu v0,v0,0x27    bias  -> screen_bias_sites  (+m)
+#       0x80075EA8 sltiu v0,v0,0x18f   range -> world_range_sites (+2m)
 #     => [-39-m, 360+m): NPCs/characters stop popping at the frame edges.
 # (3) @0x80095C00 — script visibility predicate
 #     (X-1)<u 0x13F == X in [1,320):
-#       0x80095C68 addiu v0,v0,-0x1    bias  -> bias_sites  (+m)
-#       0x80095C6C sltiu v0,v0,0x13f   range -> range_sites (+2m)
+#       0x80095C68 addiu v0,v0,-0x1    bias  -> screen_bias_sites  (+m)
+#       0x80095C6C sltiu v0,v0,0x13f   range -> world_range_sites (+2m)
 #     => [1-m, 320+m): scripts see actors standing in the reveal as on-screen.
 # NOT widened: (func_80095B3C, window
 # [33,288)x[33,192)) — an intentional inner-proximity predicate, not a cull;
@@ -92,7 +96,20 @@ nw_hud_corners = true
 #     655xx pass)
 #     The 20 loads below are EVERY reader of the global (Ghidra xref-complete
 #     2026-07-20); the Y clip global @0x800500FC (238<<16) stays untouched.
-xclip_load_sites = [
+[widescreen.cull.semantic]
+# Guest-side visibility policy used by both the static recompiler and the
+# dirty-RAM interpreter. These are semantic classes, not renderer/compositor
+# rewrites; the address lists are only the evidence that identifies each class.
+screen_bias_sites = ["0x800AAB90", "0x80075EA4", "0x80095C68"]
+world_range_sites = ["0x80075EA8", "0x80095C6C"]
+left_edge_sites = ["0x800AABA0"]
+signed_screen_x_sites = [
+  "0x8008A0CC", "0x8008A0E0", "0x8008A0F4", "0x8008A108",
+]
+# (4) Per-primitive X reject in the main-EXE 3dModel kernel renderer. The
+# configured loads return INT32_MAX while the Native view is wider, disabling
+# the old 4:3 reject while the wide-surface scissor remains authoritative.
+xclip_bound_load_sites = [
   "0x8002E0A4", "0x8002E2C0", "0x8002E4DC", "0x8002E6E0",
   "0x8002E948", "0x8002EB4C", "0x8002ED70", "0x8002EF64",
   "0x8002F13C", "0x8002F32C", "0x8002F508", "0x8002F708",
@@ -100,9 +117,6 @@ xclip_load_sites = [
   "0x800307A4",
   "0x80030F50", "0x80030FA8", "0x80031004",
 ]
-bias_sites  = ["0x800AAB90", "0x80075EA4", "0x80095C68"]
-negsub_sites = ["0x800AABA0"]
-range_sites = ["0x80075EA8", "0x80095C6C"]
 # (6) Worldmap ground/water per-vertex X reject (module @0x8006F000 worldmap
 # variant): `andi t,sxy,0xffff; sltiu t,t,320` per vertex, poly dropped when
 # none passes — rs is the MASKED 16-bit SXY x, so off-left reads as 655xx
@@ -110,7 +124,7 @@ range_sites = ["0x80075EA8", "0x80095C6C"]
 # compare in 16-bit space): ((x + m) & 0xFFFF) <u (320 + 2m) == [-m, 320+m).
 # Groups of 3 = ground triangles, groups of 4 = water/effects quads (@0x80086F34+).
 # Y tests (216) intentionally untouched.
-vxrange_sites = [
+masked_screen_x_sites = [
   "0x8009992C", "0x80099938", "0x80099944",
   "0x80099A98", "0x80099AA4", "0x80099AB0",
   "0x80099D90", "0x80099D9C", "0x80099DA8",
@@ -121,7 +135,7 @@ vxrange_sites = [
 # (7) Worldmap sprite/effects quad X test @0x8008A0CC-0x8008A108 — SIGNED slti
 # per-vertex (4 verts, stride 8): left already passes; slti_sites widens the
 # right edge by +m. Y test (216) untouched.
-slti_sites = ["0x8008A0CC", "0x8008A0E0", "0x8008A0F4", "0x8008A108"]
+# The sites are listed above as signed_screen_x_sites.
 # (8) Model draw-distance gate (@0x80084C60): `slti v0,
 #     SZ, 0xD80` — models pop in at SZ=3456; at 4:3 that pop is OFF-frame at
 #     the sides. Scaled by the aspect factor (3456 -> 4608 at 16:9).
@@ -133,7 +147,7 @@ slti_sites = ["0x8008A0CC", "0x8008A0E0", "0x8008A0F4", "0x8008A108"]
 #     the cell walker aborts mid-grid (half the terrain missing at some
 #     camera angles). Fixing the terrain far-pop needs an OT+prim-buffer
 #     enlargement patch, not a cull widen.
-depth_sites = ["0x80084C60"]
+depth_bound_sites = ["0x80084C60"]
 # (10) The fix for the static far-side terrain pop: the 4 plane dots
 #     (@0x8009C7F0/828/844/874) are Recomputed every frame by FUN_80098044
 #     (11 call sites) from static source vectors via a GTE transform, so only
@@ -143,15 +157,16 @@ depth_sites = ["0x80084C60"]
 #     dot = nx*px + nz*pz per corner (plane through the camera; nx=+-3474,
 #     nz=2170 => half-angle atan(2170/3474)=32 deg, calibrated for 4:3).
 #     The plane angle goes as nz/nx, so WIDENING means REDUCING nx.
-#     plane_nx_sites scales the two nx loads by the inverse aspect factor
+#     frustum_plane_x_sites scales the two nx loads by the inverse aspect factor
 #     (4*den)/(3*num): 16:9 -> nx = 3474*3/4 = 2606 => half-angle atan(2170/2606) = 39.8 deg
 #     = atan(4/3 * tan(32 deg)); the scale generalizes to any
 #     configured aspect and is identity at 4:3.
 #     The per-vertex vxrange rejects still clip to the real (widened)
 #     screen edges, so no overdraw beyond the reveal.
-plane_nx_sites = ["0x80098850", "0x80098974"]
+frustum_plane_x_sites = ["0x80098850", "0x80098974"]
 
 [runtime]
+render_mode = "native"
 debug_port = 4370
 window_title = "XenogearsRecomp"
 controller = "digital"

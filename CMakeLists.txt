@@ -4,9 +4,109 @@
 cmake_minimum_required(VERSION 3.20)
 project(XenogearsRecomp C CXX)
 
+include(CTest)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+set(XG_RENDER_MANIFEST
+    "${CMAKE_CURRENT_SOURCE_DIR}/native_renderer/xg_render_manifest.toml"
+    CACHE FILEPATH "Validated native renderer producer manifest")
+set(XG_RENDER_GAME_EXE
+    "${CMAKE_CURRENT_SOURCE_DIR}/game/slus_006.64"
+    CACHE FILEPATH "Game executable authenticated by the producer manifest")
+set(XG_RENDER_OVERLAYS
+    "${CMAKE_CURRENT_SOURCE_DIR}/overlays"
+    CACHE PATH "Overlay directory authenticated by the producer manifest")
+set(XG_RENDER_RUNTIME_VARIANTS
+    "${CMAKE_CURRENT_SOURCE_DIR}/native_renderer/xg_render_runtime_variants.toml"
+    CACHE FILEPATH "Identity-bound Field 5 runtime variant manifest")
+set(XG_RENDER_FIELD5_RUNTIME_ARTIFACT
+    "${CMAKE_CURRENT_SOURCE_DIR}/overlays/field5_runtime.bin"
+    CACHE FILEPATH "Private Field 5 runtime variant artifact")
+set(XG_RENDER_MANIFEST_TOOL_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest_fixture.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest_model.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest_output.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest_verify.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_runtime_variant_model.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_runtime_variant_output.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_runtime_variant_verify.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_runtime_variants.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_overlay_codegen.py")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${XG_RENDER_MANIFEST}"
+    "${XG_RENDER_RUNTIME_VARIANTS}"
+    "${XG_RENDER_GAME_EXE}"
+    "${XG_RENDER_FIELD5_RUNTIME_ARTIFACT}"
+    ${XG_RENDER_MANIFEST_TOOL_SOURCES})
+
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest.py" metadata
+        "${XG_RENDER_MANIFEST}"
+        --exe "${XG_RENDER_GAME_EXE}"
+        --overlays "${XG_RENDER_OVERLAYS}"
+    RESULT_VARIABLE XG_RENDER_METADATA_RESULT
+    OUTPUT_VARIABLE XG_RENDER_METADATA_JSON
+    ERROR_VARIABLE XG_RENDER_METADATA_STDERR)
+if(NOT XG_RENDER_METADATA_RESULT EQUAL 0)
+    message(FATAL_ERROR
+        "Native renderer manifest metadata validation failed:\n${XG_RENDER_METADATA_STDERR}")
+endif()
+
+string(JSON XG_RENDER_METADATA_FIELD_COUNT
+    ERROR_VARIABLE XG_RENDER_METADATA_PARSE_ERROR
+    LENGTH "${XG_RENDER_METADATA_JSON}")
+if(NOT XG_RENDER_METADATA_PARSE_ERROR STREQUAL "NOTFOUND"
+        OR NOT XG_RENDER_METADATA_FIELD_COUNT EQUAL 4)
+    message(FATAL_ERROR "Native renderer manifest metadata is malformed or not closed")
+endif()
+string(JSON XG_RENDER_METADATA_SCHEMA GET "${XG_RENDER_METADATA_JSON}" schema)
+string(JSON XG_RENDER_GAME_IDENTITY_SHA256 GET "${XG_RENDER_METADATA_JSON}" game_identity)
+string(JSON XG_RENDER_MANIFEST_IDENTITY_SHA256 GET "${XG_RENDER_METADATA_JSON}" manifest_identity)
+string(JSON XG_RENDER_NAMESPACE_CRC32 GET "${XG_RENDER_METADATA_JSON}" namespace_crc32)
+string(LENGTH "${XG_RENDER_GAME_IDENTITY_SHA256}" XG_RENDER_GAME_IDENTITY_LENGTH)
+string(LENGTH "${XG_RENDER_MANIFEST_IDENTITY_SHA256}" XG_RENDER_MANIFEST_IDENTITY_LENGTH)
+string(LENGTH "${XG_RENDER_NAMESPACE_CRC32}" XG_RENDER_NAMESPACE_LENGTH)
+if(NOT XG_RENDER_METADATA_SCHEMA STREQUAL "xg-render-config-metadata/v1"
+        OR NOT XG_RENDER_GAME_IDENTITY_LENGTH EQUAL 64
+        OR NOT XG_RENDER_GAME_IDENTITY_SHA256 MATCHES "^[0-9a-f]+$"
+        OR NOT XG_RENDER_MANIFEST_IDENTITY_LENGTH EQUAL 64
+        OR NOT XG_RENDER_MANIFEST_IDENTITY_SHA256 MATCHES "^[0-9a-f]+$"
+        OR NOT XG_RENDER_NAMESPACE_LENGTH EQUAL 8
+        OR NOT XG_RENDER_NAMESPACE_CRC32 MATCHES "^[0-9a-f]+$")
+    message(FATAL_ERROR "Native renderer manifest metadata has invalid fields")
+endif()
+
+add_subdirectory(native_renderer)
+
 set(PSXRECOMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp" CACHE PATH
     "psxrecomp framework root (pinned submodule)")
 include(${PSXRECOMP_ROOT}/runtime/runtime.cmake)
+
+if(BUILD_TESTING)
+    add_executable(xg_guest_render_native_stream
+        ${PSXRECOMP_ROOT}/runtime/tests/test_guest_render_native_stream.c
+        ${PSXRECOMP_ROOT}/runtime/src/guest_render_native_stream.c)
+    target_include_directories(xg_guest_render_native_stream PRIVATE
+        ${PSXRECOMP_ROOT}/runtime/include)
+    target_compile_definitions(xg_guest_render_native_stream PRIVATE
+        GUEST_RENDER_NATIVE_STREAM_TESTING=1
+        GUEST_RENDER_NATIVE_STREAM_CAPACITY=4)
+    add_test(NAME xg_guest_render_native_stream
+             COMMAND xg_guest_render_native_stream)
+
+    add_executable(xg_guest_render_native_stream_unit
+        ${PSXRECOMP_ROOT}/runtime/tests/test_guest_render_native_stream.c
+        ${PSXRECOMP_ROOT}/runtime/src/guest_render_native_stream.c)
+    target_include_directories(xg_guest_render_native_stream_unit PRIVATE
+        ${PSXRECOMP_ROOT}/runtime/include)
+    target_compile_definitions(xg_guest_render_native_stream_unit PRIVATE
+        GUEST_RENDER_NATIVE_STREAM_TESTING=1
+        GUEST_RENDER_NATIVE_STREAM_CAPACITY=4)
+    add_test(NAME xg_guest_render_native_stream_unit
+             COMMAND xg_guest_render_native_stream_unit)
+endif()
 
 # Recompiled game C (split-TU shards; see docs/recompile.md for regeneration).
 file(GLOB GAME_FULL_C CONFIGURE_DEPENDS
@@ -29,4 +129,266 @@ psxrecomp_add_runtime_target(psx-runtime
     WINDOW_TITLE               "XenogearsRecomp"
     DEBUG_PORT                 4370
     DEFAULT_GAME_CONFIG_PATH   "game.toml"
+    GAME_EXTRA_IDENTITY_SHA256 "${XG_RENDER_GAME_IDENTITY_SHA256}"
+    GAME_MANIFEST_DIGEST_SHA256 "${XG_RENDER_MANIFEST_IDENTITY_SHA256}"
 )
+
+target_link_libraries(psx-runtime PRIVATE
+    xg_visual_state
+    xg_render_ir
+    xg_render_static_auth
+    xg_field_character_runtime)
+target_sources(psx-runtime PRIVATE
+        native_renderer/src/xg_native_render_baseline.c)
+target_include_directories(psx-runtime PRIVATE native_renderer/include)
+target_compile_definitions(psx-runtime PRIVATE
+    PSX_INPUT_REPLAY_XG_BASELINE=1
+    PSX_INPUT_REPLAY_XG_AUTH_PROOF=1)
+
+if(BUILD_TESTING)
+    add_executable(native_render_mode_control_test
+        psxrecomp/runtime/tests/test_native_render_mode_control.c
+        psxrecomp/runtime/src/native_render_mode_control.c)
+    target_include_directories(native_render_mode_control_test PRIVATE
+        psxrecomp/runtime/include)
+    add_test(NAME native_render_mode_control
+        COMMAND native_render_mode_control_test)
+
+    add_executable(xenogears_timing_test
+        psxrecomp/runtime/tests/test_xenogears_timing.c
+        psxrecomp/runtime/src/xenogears_timing.c)
+    target_include_directories(xenogears_timing_test PRIVATE
+        psxrecomp/runtime/include)
+    add_test(NAME xenogears_timing COMMAND xenogears_timing_test)
+
+    add_executable(xenogears_field_hook_test
+        psxrecomp/runtime/tests/test_xenogears_field_hook.c
+        psxrecomp/runtime/src/xenogears_field_hook.c)
+    target_include_directories(xenogears_field_hook_test PRIVATE
+        psxrecomp/runtime/include)
+    add_test(NAME xenogears_field_hook COMMAND xenogears_field_hook_test)
+
+    add_executable(game_fps_meter_test
+        psxrecomp/runtime/tests/test_game_fps_meter.c
+        psxrecomp/runtime/src/game_fps_meter.c)
+    target_include_directories(game_fps_meter_test PRIVATE
+        psxrecomp/runtime/include ${SDL2_INCLUDE_DIRS})
+    target_link_libraries(game_fps_meter_test PRIVATE ${SDL2_LIBRARIES})
+    add_test(NAME game_fps_meter COMMAND game_fps_meter_test)
+
+    add_test(NAME xenogears_resident_codegen
+        COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp/recompiler/tests/test_xenogears_resident_codegen.py"
+            --recompiler "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp/recompiler/build/psxrecomp-game")
+
+    add_executable(native_fps_route_capture_overlay_provenance_test
+        psxrecomp/runtime/tests/test_native_fps_route_capture_overlay_provenance.c)
+    target_include_directories(native_fps_route_capture_overlay_provenance_test PRIVATE
+        psxrecomp/runtime/include)
+    add_test(NAME native_fps_route_capture_overlay_provenance
+        COMMAND native_fps_route_capture_overlay_provenance_test)
+
+    add_executable(xg_input_replay
+        native_renderer/tests/test_input_replay.cpp
+        native_renderer/tests/native_render_baseline_runtime_stubs.c
+        ${PSXRECOMP_ROOT}/runtime/src/input_replay.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/guest_render_native_stream.c
+        ${PSXRECOMP_ROOT}/runtime/src/native_render_baseline.c
+        ${PSXRECOMP_ROOT}/runtime/src/guest_render_bridge.c
+        ${PSXRECOMP_ROOT}/runtime/src/host_input_snapshot.cpp)
+    target_include_directories(xg_input_replay PRIVATE
+        ${PSXRECOMP_ROOT}/runtime/include
+        ${SDL2_INCLUDE_DIRS})
+    target_link_libraries(xg_input_replay PRIVATE ${SDL2_LIBRARIES})
+    add_test(NAME xg_input_replay COMMAND xg_input_replay)
+
+    add_executable(xg_input_replay_auth_proof
+        native_renderer/tests/test_input_replay_auth_proof.cpp
+        native_renderer/tests/native_render_baseline_runtime_stubs.c
+        native_renderer/src/xg_render_static_auth.c
+        native_renderer/src/xg_render_static_auth_metadata.c
+        native_renderer/src/xg_render_auth_runtime.c
+        native_renderer/src/xg_field_particles.c
+        native_renderer/src/xg_field_zoom.c
+        native_renderer/src/xg_field_projected.c
+        native_renderer/src/xg_field_compass.c
+        native_renderer/src/xg_render_runtime_variant_auth.c
+        native_renderer/src/xg_render_auth.c
+        native_renderer/src/xg_render_ir.c
+        native_renderer/tests/xg_render_runtime_variant_test_table.c
+        ${PSXRECOMP_ROOT}/runtime/src/input_replay.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/guest_render_native_stream.c
+        ${PSXRECOMP_ROOT}/runtime/src/native_render_baseline.c
+        ${PSXRECOMP_ROOT}/runtime/src/host_input_snapshot.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/guest_render_bridge.c)
+    target_include_directories(xg_input_replay_auth_proof PRIVATE
+        native_renderer/include
+        "${CMAKE_BINARY_DIR}/native_renderer/generated"
+        ${PSXRECOMP_ROOT}/runtime/include
+        ${SDL2_INCLUDE_DIRS})
+    add_dependencies(xg_input_replay_auth_proof
+        xg_render_overlay_cutovers_generated)
+    target_compile_definitions(xg_input_replay_auth_proof PRIVATE
+        GUEST_RENDER_BRIDGE_TESTING=1
+        PSX_INPUT_REPLAY_XG_AUTH_PROOF=1
+        PSX_XG_RENDER_AUTH_RUNTIME_TESTING=1)
+    target_link_libraries(xg_input_replay_auth_proof PRIVATE
+        xg_host_3d xg_field_character_shadow xg_field_character_runtime
+        xg_model_ft4_raw xg_sprite_ft4 xg_world_clouds xg_world_decorations
+        xg_world_effects xg_world_entity_shadows xg_world_horizon
+        xg_world_minimap xg_world_models xg_world_actor_sprites xg_world_sky
+        xg_world_terrain_water
+        ${SDL2_LIBRARIES})
+    add_test(NAME xg_input_replay_auth_proof COMMAND xg_input_replay_auth_proof)
+    set_tests_properties(xg_input_replay_auth_proof PROPERTIES
+        ENVIRONMENT "PSX_OVERLAY_NO_GATES=0")
+
+    add_executable(xg_input_replay_baseline
+        native_renderer/tests/test_input_replay_baseline.cpp
+        native_renderer/tests/native_render_frame_count_stub.c
+        native_renderer/src/xg_native_render_baseline.c
+        ${PSXRECOMP_ROOT}/runtime/src/input_replay.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/guest_render_native_stream.c
+        ${PSXRECOMP_ROOT}/runtime/src/native_render_baseline.c
+        ${PSXRECOMP_ROOT}/runtime/src/host_input_snapshot.cpp)
+    target_include_directories(xg_input_replay_baseline PRIVATE
+        native_renderer/include
+        ${PSXRECOMP_ROOT}/runtime/include
+        ${PSXRECOMP_ROOT}/runtime/src
+        ${SDL2_INCLUDE_DIRS})
+    target_compile_definitions(xg_input_replay_baseline PRIVATE
+        PSX_INPUT_REPLAY_XG_BASELINE=1)
+    target_link_libraries(xg_input_replay_baseline PRIVATE ${SDL2_LIBRARIES})
+    add_test(NAME xg_input_replay_baseline COMMAND xg_input_replay_baseline)
+
+    add_executable(xg_native_render_baseline
+        psxrecomp/runtime/tests/test_native_render_baseline.c
+        native_renderer/tests/native_render_frame_count_stub.c
+        ${PSXRECOMP_ROOT}/runtime/src/native_render_baseline.c
+        ${PSXRECOMP_ROOT}/runtime/src/native_render_baseline_runtime.c
+        ${PSXRECOMP_ROOT}/runtime/src/guest_render_native_stream.c
+        ${PSXRECOMP_ROOT}/runtime/src/gte_attribution.cpp)
+    target_include_directories(xg_native_render_baseline PRIVATE
+        ${PSXRECOMP_ROOT}/runtime/include)
+    target_compile_definitions(xg_native_render_baseline PRIVATE
+        PSX_NATIVE_RENDER_BASELINE_TEST=1
+        GTE_ATTRIBUTION_COUNTER_MAX=4)
+    add_test(NAME xg_native_render_baseline COMMAND xg_native_render_baseline)
+
+    add_executable(xg_input_record
+        native_renderer/tests/test_input_record.cpp
+        native_renderer/tests/native_render_baseline_runtime_stubs.c
+        ${PSXRECOMP_ROOT}/runtime/src/input_replay.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/guest_render_native_stream.c
+        ${PSXRECOMP_ROOT}/runtime/src/native_render_baseline.c
+        ${PSXRECOMP_ROOT}/runtime/src/guest_render_bridge.c
+        ${PSXRECOMP_ROOT}/runtime/src/host_input_snapshot.cpp)
+    target_include_directories(xg_input_record PRIVATE
+        ${PSXRECOMP_ROOT}/runtime/include
+        ${SDL2_INCLUDE_DIRS})
+    target_link_libraries(xg_input_record PRIVATE ${SDL2_LIBRARIES})
+    add_test(NAME xg_input_record COMMAND xg_input_record)
+
+    add_executable(xg_host_input_mapping
+        native_renderer/tests/test_host_input_mapping.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/host_input_snapshot.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/host_input_mapping.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/psx_keybinds.c)
+    target_include_directories(xg_host_input_mapping PRIVATE
+        ${PSXRECOMP_ROOT}/runtime/include
+        ${SDL2_INCLUDE_DIRS})
+    target_link_libraries(xg_host_input_mapping PRIVATE ${SDL2_LIBRARIES})
+    add_test(NAME xg_host_input_mapping COMMAND xg_host_input_mapping)
+
+    add_executable(xg_input_parity
+        native_renderer/tests/test_input_parity.cpp
+        native_renderer/tests/native_render_baseline_runtime_stubs.c
+        ${PSXRECOMP_ROOT}/runtime/src/host_input_snapshot.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/host_input_mapping.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/input_replay.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/guest_render_native_stream.c
+        ${PSXRECOMP_ROOT}/runtime/src/native_render_baseline.c
+        ${PSXRECOMP_ROOT}/runtime/src/guest_render_bridge.c
+        ${PSXRECOMP_ROOT}/runtime/src/psx_keybinds.c
+        ${PSXRECOMP_ROOT}/runtime/src/sio.c
+        ${PSXRECOMP_ROOT}/runtime/src/memcard.c)
+    target_include_directories(xg_input_parity PRIVATE
+        ${PSXRECOMP_ROOT}/runtime/include
+        ${SDL2_INCLUDE_DIRS})
+    target_link_libraries(xg_input_parity PRIVATE ${SDL2_LIBRARIES})
+    add_test(NAME xg_input_parity COMMAND xg_input_parity)
+
+    add_executable(gpu_gl_mask_order_test
+        psxrecomp/runtime/tests/test_gpu_gl_mask_order.c
+        psxrecomp/runtime/tests/native_render_baseline_gpu_test_double.c
+        ${PSXRECOMP_ROOT}/runtime/src/color_lut.c
+        ${PSXRECOMP_ROOT}/runtime/src/gpu.c
+        ${PSXRECOMP_ROOT}/runtime/src/gpu_render_oracle.c
+        ${PSXRECOMP_ROOT}/runtime/src/guest_render_native_stream.c
+        ${PSXRECOMP_ROOT}/runtime/src/guest_render_transaction.c
+        ${PSXRECOMP_ROOT}/runtime/src/gpu_sw_renderer.c
+        ${PSXRECOMP_ROOT}/runtime/src/gpu_render.c
+        ${PSXRECOMP_ROOT}/runtime/src/gpu_gl_renderer.c)
+    target_include_directories(gpu_gl_mask_order_test PRIVATE
+        ${PSXRECOMP_ROOT}/runtime/include ${SDL2_INCLUDE_DIRS})
+    target_compile_definitions(gpu_gl_mask_order_test PRIVATE
+        SDL_MAIN_HANDLED=1
+        PSX_NO_DEBUG_TOOLS=1)
+    target_link_libraries(gpu_gl_mask_order_test PRIVATE ${SDL2_LIBRARIES})
+    if(WIN32 OR MINGW)
+        target_link_libraries(gpu_gl_mask_order_test PRIVATE opengl32)
+        add_test(NAME gpu_gl_mask_order_test COMMAND gpu_gl_mask_order_test)
+    else()
+        find_package(OpenGL REQUIRED)
+        find_program(XVFB_RUN_EXECUTABLE xvfb-run REQUIRED)
+        target_link_libraries(gpu_gl_mask_order_test PRIVATE
+            ${CMAKE_DL_LIBS} OpenGL::GL m)
+        add_test(NAME gpu_gl_mask_order_test
+            COMMAND ${XVFB_RUN_EXECUTABLE} -a $<TARGET_FILE:gpu_gl_mask_order_test>)
+    endif()
+endif()
+
+set(XG_RENDER_MANIFEST_TABLE "${CMAKE_BINARY_DIR}/generated/xg_render_manifest_table.c")
+set(XG_RENDER_RUNTIME_VARIANT_TABLE "${CMAKE_BINARY_DIR}/generated/xg_render_runtime_variant_table.c")
+add_custom_command(
+    OUTPUT "${XG_RENDER_MANIFEST_TABLE}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_BINARY_DIR}/generated"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest.py"
+            validate "${XG_RENDER_MANIFEST}" --exe "${XG_RENDER_GAME_EXE}"
+            --overlays "${XG_RENDER_OVERLAYS}"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest.py"
+            emit "${XG_RENDER_MANIFEST}" --exe "${XG_RENDER_GAME_EXE}"
+            --overlays "${XG_RENDER_OVERLAYS}" --out "${XG_RENDER_MANIFEST_TABLE}"
+    DEPENDS
+        "${XG_RENDER_MANIFEST}"
+        "${XG_RENDER_GAME_EXE}"
+        "${XG_RENDER_OVERLAYS}"
+        ${XG_RENDER_MANIFEST_TOOL_SOURCES}
+    VERBATIM)
+add_custom_target(xg_render_manifest_table DEPENDS "${XG_RENDER_MANIFEST_TABLE}")
+add_custom_command(
+    OUTPUT "${XG_RENDER_RUNTIME_VARIANT_TABLE}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_BINARY_DIR}/generated"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_runtime_variants.py"
+            validate "${XG_RENDER_RUNTIME_VARIANTS}"
+            --artifact "${XG_RENDER_FIELD5_RUNTIME_ARTIFACT}"
+            --canonical-manifest "${XG_RENDER_MANIFEST}"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_runtime_variants.py"
+            emit "${XG_RENDER_RUNTIME_VARIANTS}"
+            --artifact "${XG_RENDER_FIELD5_RUNTIME_ARTIFACT}"
+            --canonical-manifest "${XG_RENDER_MANIFEST}"
+            --out "${XG_RENDER_RUNTIME_VARIANT_TABLE}"
+    DEPENDS
+        "${XG_RENDER_RUNTIME_VARIANTS}"
+        "${XG_RENDER_MANIFEST}"
+        "${XG_RENDER_FIELD5_RUNTIME_ARTIFACT}"
+        ${XG_RENDER_MANIFEST_TOOL_SOURCES}
+    VERBATIM)
+add_custom_target(xg_render_runtime_variant_table
+    DEPENDS "${XG_RENDER_RUNTIME_VARIANT_TABLE}")
+set_source_files_properties("${XG_RENDER_MANIFEST_TABLE}" PROPERTIES GENERATED TRUE)
+set_source_files_properties("${XG_RENDER_RUNTIME_VARIANT_TABLE}" PROPERTIES GENERATED TRUE)
+target_sources(psx-runtime PRIVATE "${XG_RENDER_MANIFEST_TABLE}"
+    "${XG_RENDER_RUNTIME_VARIANT_TABLE}")
+add_dependencies(psx-runtime xg_render_manifest_table)
+add_dependencies(psx-runtime xg_render_runtime_variant_table)

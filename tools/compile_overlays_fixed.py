@@ -23,6 +23,7 @@ Each DLL exports:
 import argparse
 import base64
 import binascii
+import hashlib
 from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
@@ -32,6 +33,17 @@ import subprocess
 import sys
 import tempfile
 import threading
+from pathlib import Path
+
+from native_render_manifest_model import ManifestError
+from native_render_overlay_codegen import source_observation_plan_for_artifact
+from native_render_overlay_ranges import (
+    OverlayRangeError,
+    load_overlay_range_variants,
+    merge_source_plans,
+    source_plan_for_overlay_ranges,
+)
+from native_render_runtime_variant_model import load_contract
 
 
 class _ThreadLocalStdout:
@@ -1021,7 +1033,124 @@ def load_dispatch_preamble(runtime_include: str) -> str:
             f"runtime/include. Without it no shard can be compiled.")
     return DISPATCH_PREAMBLE
 
-def patch_generated_c(src: str, load_addr: int, size: int) -> str:
+def overlay_pair_id(load_addr: int, size: int, artifact_crc: int) -> int:
+    metadata = struct.pack(">III", load_addr & 0xFFFFFFFF, size & 0xFFFFFFFF,
+                           artifact_crc & 0xFFFFFFFF)
+    return int.from_bytes(hashlib.sha256(metadata).digest()[:8], "big")
+
+
+def canonical_runtime_identity(game_sha256: str, manifest_sha256: str) -> tuple[bytes, bytes]:
+    return bytes.fromhex(game_sha256), bytes.fromhex(manifest_sha256)
+
+
+def identity_cache_namespace(game_sha256: str, manifest_sha256: str) -> str:
+    """Return the loader's canonical lower-case identity namespace."""
+    game_identity, manifest_identity = canonical_runtime_identity(
+        game_sha256, manifest_sha256)
+    return f"game_{game_identity.hex()}/manifest_{manifest_identity.hex()}"
+
+
+def identity_preamble(game_sha256: str, manifest_sha256: str, pair_id: int) -> str:
+    """Return the overlay-local identity export required by the loader."""
+    game_identity, manifest_identity = canonical_runtime_identity(
+        game_sha256, manifest_sha256)
+    game_bytes = ', '.join(f'0x{byte:02X}' for byte in game_identity)
+    manifest_bytes = ', '.join(f'0x{byte:02X}' for byte in manifest_identity)
+    return (
+        '#include "game_identity.h"\n'
+        'static const PsxGameIdentity s_overlay_identity = {'
+        f'{{{game_bytes}}}, {{{manifest_bytes}}}'
+        '};\n'
+        '#ifdef _WIN32\n__declspec(dllexport)\n#else\n'
+        '__attribute__((visibility("default")))\n#endif\n'
+        'const PsxGameIdentity *overlay_game_identity(void) { return &s_overlay_identity; }\n'
+        '#ifdef _WIN32\n__declspec(dllexport)\n#else\n'
+        '__attribute__((visibility("default")))\n#endif\n'
+        f'uint64_t overlay_pair_id(void) {{ return UINT64_C(0x{pair_id:016X}); }}\n'
+    )
+
+
+def overlay_ranges_text(func_ids: list, game_sha256: str, manifest_sha256: str,
+                        load_addr: int, size: int, artifact_crc: int) -> str:
+    """Serialize the strict loader manifest for one captured overlay image."""
+    game_identity, manifest_identity = canonical_runtime_identity(
+        game_sha256, manifest_sha256)
+    lines = [
+        '# psxrecomp overlay code-range manifest v2 (entry+code_crc)\n',
+        f'P {overlay_pair_id(load_addr, size, artifact_crc):016X}\n',
+        f'I {game_identity.hex().upper()} {manifest_identity.hex().upper()}\n',
+        f'A {load_addr:08X} {size:08X} {artifact_crc:08X}\n',
+    ]
+    for entry, code_crc, ranges in func_ids:
+        lines.append(f'F {entry:08X} {code_crc & 0xFFFFFFFF:08X}\n')
+        for range_start, range_length in ranges:
+            lines.append(
+                f'R {(range_start & 0x1FFFFFFF) | 0x80000000:08X} {range_length:X}\n')
+    return ''.join(lines)
+
+
+def _publication_suffix(source: str, manifest: str) -> str:
+    digest = hashlib.sha256()
+    digest.update(source.encode('utf-8'))
+    digest.update(b'\0')
+    digest.update(manifest.encode('ascii'))
+    return digest.hexdigest()[:8].upper()
+
+
+def _publication_paths(logical_dll: str, source: str, manifest: str) -> tuple[str, str]:
+    base, extension = os.path.splitext(logical_dll)
+    final_dll = f'{base}_{_publication_suffix(source, manifest)}{extension}'
+    return final_dll, os.path.splitext(final_dll)[0] + '.ranges'
+
+
+def staged_overlay_dll(logical_dll: str) -> str:
+    """Reserve an ignored sibling pathname for the native compiler's output."""
+    directory = os.path.dirname(logical_dll)
+    descriptor, staged = tempfile.mkstemp(
+        dir=directory,
+        prefix=f'.{os.path.basename(logical_dll)}.',
+        suffix=overlay_ext(),
+    )
+    os.close(descriptor)
+    os.unlink(staged)
+    return staged
+
+
+def publish_overlay_pair(staged_dll: Path, logical_dll: Path, manifest: str,
+                         source: str) -> Path:
+    """Publish a complete immutable pair, with the DLL as the loader-visible commit."""
+    final_dll_text, final_ranges_text = _publication_paths(
+        str(logical_dll), source, manifest)
+    final_dll = Path(final_dll_text)
+    final_ranges = Path(final_ranges_text)
+    if final_dll.exists() or final_ranges.exists():
+        if (final_dll.is_file() and final_ranges.is_file() and
+                final_ranges.read_text(encoding='ascii') == manifest):
+            staged_dll.unlink(missing_ok=True)
+            return final_dll
+        raise FileExistsError(f'conflicting immutable overlay pair: {final_dll.name}')
+
+    descriptor, staged_ranges_text = tempfile.mkstemp(
+        dir=final_ranges.parent,
+        prefix=f'.{final_ranges.name}.',
+        suffix='.tmp',
+    )
+    staged_ranges = Path(staged_ranges_text)
+    try:
+        with os.fdopen(descriptor, 'w', encoding='ascii', newline='') as output:
+            output.write(manifest)
+            output.flush()
+            os.fsync(output.fileno())
+        os.link(staged_ranges, final_ranges)
+        os.link(staged_dll, final_dll)
+    finally:
+        staged_ranges.unlink(missing_ok=True)
+        staged_dll.unlink(missing_ok=True)
+    return final_dll
+
+
+def patch_generated_c(src: str, load_addr: int, size: int,
+                      game_sha256: str, manifest_sha256: str, artifact_crc: int) -> str:
     """
     Post-process psxrecomp-game's _full.c output for standalone DLL compilation:
 
@@ -1044,9 +1173,12 @@ def patch_generated_c(src: str, load_addr: int, size: int) -> str:
     for m in re.finditer(r'^#include\s+[<"].*[>"]\s*$', src, re.MULTILINE):
         last_inc = m.end()
     if last_inc == -1:
-        src = DISPATCH_PREAMBLE + src
+        src = identity_preamble(game_sha256, manifest_sha256,
+                               overlay_pair_id(load_addr, size, artifact_crc)) + DISPATCH_PREAMBLE + src
     else:
-        src = src[:last_inc] + '\n' + DISPATCH_PREAMBLE + src[last_inc:]
+        src = (src[:last_inc] + '\n' + identity_preamble(game_sha256, manifest_sha256,
+               overlay_pair_id(load_addr, size, artifact_crc)) +
+               DISPATCH_PREAMBLE + src[last_inc:])
 
     # 2. Remove out-of-range forward declarations
     def drop_extern(m):
@@ -1398,29 +1530,30 @@ def parse_overlay_func_ids(src_path: str, data: bytes, load_addr: int,
     return out
 
 
-def write_overlay_ranges_from(func_ids: list, out_path: str) -> int:
+def write_overlay_ranges_from(func_ids: list, out_path: str,
+                               game_sha256: str, manifest_sha256: str,
+                               load_addr: int, size: int, artifact_crc: int) -> int:
     """Write the {phys}_{key}.ranges manifest (v2) from a func-id list produced by
     parse_overlay_func_ids. Returns the number of functions written.
 
     Manifest v2 line format:
       F <entry_hex> <code_crc_hex>     one per function
       R <lo_hex> <len_hex>             one per coalesced code range"""
-    out_lines = ['# psxrecomp overlay code-range manifest v2 (entry+code_crc)\n']
-    for ev, crc, ranges in func_ids:
-        out_lines.append(f'F {ev:08X} {crc & 0xFFFFFFFF:08X}\n')
-        for lo, length in ranges:
-            out_lines.append(f'R {(lo & 0x1FFFFFFF) | 0x80000000:08X} {length:X}\n')
     with open(out_path, 'w') as f:
-        f.writelines(out_lines)
+        f.write(overlay_ranges_text(
+            func_ids, game_sha256, manifest_sha256, load_addr, size, artifact_crc))
     return len(func_ids)
 
 
 def write_overlay_ranges(src_path: str, out_path: str,
-                         data: bytes, load_addr: int, size: int) -> int:
+                         data: bytes, load_addr: int, size: int,
+                         game_sha256: str, manifest_sha256: str) -> int:
     """Back-compat wrapper: parse the recompiler manifest and write the v2 .ranges.
     See parse_overlay_func_ids / write_overlay_ranges_from."""
     return write_overlay_ranges_from(
-        parse_overlay_func_ids(src_path, data, load_addr, size), out_path)
+        parse_overlay_func_ids(src_path, data, load_addr, size), out_path,
+        game_sha256, manifest_sha256, load_addr, size,
+        binascii.crc32(data) & 0xFFFFFFFF)
 
 
 def load_region_coverage(cache_dir: str, phys_addr: int) -> set:
@@ -1541,6 +1674,24 @@ def append_interior_fail_memo(cache_dir: str, key: str, reason: str) -> None:
         pass   # best-effort; a memo write failure must never break the compile
 
 
+def source_observation_plan_args(plan: str | None,
+                                 directory: str) -> list[str]:
+    if plan is None:
+        return []
+    path = Path(directory) / 'source-observation.plan'
+    path.write_text(plan, encoding='ascii', newline='\n')
+    return ['--source-observation-plan', str(path)]
+
+
+def source_observation_plan(args, data: bytes, load_address: int) -> str | None:
+    return merge_source_plans(
+        source_observation_plan_for_artifact(
+            args.runtime_variant_contract, data, load_address),
+        source_plan_for_overlay_ranges(
+            args.overlay_range_variants, data, load_address),
+    )
+
+
 def generate_interior_fragment_static(interior: int, data: bytes,
                                       load_addr: int, size: int,
                                       phys_addr: int, args):
@@ -1557,6 +1708,8 @@ def generate_interior_fragment_static(interior: int, data: bytes,
         cmd = [args.recompiler, psx, '--seeds', seeds_path,
                '--out-dir', out_dir_tmp, '--overlay',
                '--ws-config', os.path.abspath(args.game_toml)]
+        plan = source_observation_plan(args, data, load_addr)
+        cmd.extend(source_observation_plan_args(plan, tmp))
         sub_env = dict(os.environ)
         if args.cps:
             sub_env['PSX_CPS'] = '1'
@@ -1646,6 +1799,8 @@ def compile_interior_fragment(interior: int, data: bytes, load_addr: int,
         cmd = [args.recompiler, psx, '--seeds', seeds_path,
                '--out-dir', out_dir_tmp, '--overlay',
                '--ws-config', os.path.abspath(args.game_toml)]
+        plan = source_observation_plan(args, data, load_addr)
+        cmd.extend(source_observation_plan_args(plan, tmp))
         r = subprocess.run(cmd, capture_output=True, text=True,
                            cwd=os.path.dirname(os.path.abspath(args.game_toml)),
                            env=sub_env)
@@ -1658,7 +1813,10 @@ def compile_interior_fragment(interior: int, data: bytes, load_addr: int,
         src_text = read_generated_c(out_dir_tmp, os.path.basename(psx))
         if src_text is None or not ranges_src:
             return None, 'no-generated-output (_full.c/_full.ranges missing)'
-        src = patch_generated_c(src_text, load_addr, size)
+        src = patch_generated_c(src_text, load_addr, size,
+                                args.game_identity_sha256,
+                                args.manifest_identity_sha256,
+                                binascii.crc32(data) & 0xFFFFFFFF)
         c_audit = audit_generated_c(src, load_addr, size,
                                     binascii.crc32(data) & 0xFFFFFFFF, {})
         if c_audit['unknown_bad'] or c_audit['unsupported_todo_addrs']:
@@ -1702,7 +1860,7 @@ def compile_interior_fragment(interior: int, data: bytes, load_addr: int,
             for ev, crc, _ in sorted(frag_ids))) & 0xFFFFFFFF
         dll_path = os.path.join(cache_dir, f'{phys_addr:08X}_{key:08X}{overlay_ext()}')
         if os.path.exists(dll_path) and not args.force:
-            return frag_ids, 'cached'   # already built
+            return frag_ids, 'cached'
         patched_c = os.path.join(tmp, 'frag_patched.c')
         with open(patched_c, 'w') as f:
             f.write(src)
@@ -1724,11 +1882,19 @@ def compile_interior_fragment(interior: int, data: bytes, load_addr: int,
         # PATH) EVERY interior-fragment shard silently failed to build — the
         # FMV-driver / orphan-interior class ran interpreted forever. The cache
         # dir already namespaces by args.compiler, so only the invocation was wrong.
-        if not compile_dll(patched_c, dll_path, include_dirs,
-                           gcc=args.gcc, flavor=args.flavor,
-                           compiler=args.compiler, tcc=args.tcc):
+        staged_dll = staged_overlay_dll(dll_path)
+        if not compile_dll(patched_c, staged_dll, include_dirs,
+                            gcc=args.gcc, flavor=args.flavor,
+                            compiler=args.compiler, tcc=args.tcc):
+            Path(staged_dll).unlink(missing_ok=True)
             return None, 'compile-error (see COMPILE ERROR above)'
-        write_overlay_ranges_from(frag_ids, os.path.splitext(dll_path)[0] + '.ranges')
+        manifest = overlay_ranges_text(
+            frag_ids, args.game_identity_sha256, args.manifest_identity_sha256,
+            load_addr, size, binascii.crc32(data) & 0xFFFFFFFF)
+        try:
+            publish_overlay_pair(Path(staged_dll), Path(dll_path), manifest, src)
+        except OSError as error:
+            return None, f'publication-error: {error}'
         return frag_ids, 'built'
 
 
@@ -1903,6 +2069,20 @@ def main():
                     help='path to psxrecomp-game.exe')
     ap.add_argument('--runtime-include', required=True,
                     help='path to psxrecomp runtime/include dir')
+    ap.add_argument('--game-identity-sha256', required=True,
+                    help='runtime game identity SHA-256')
+    ap.add_argument('--manifest-identity-sha256', required=True,
+                    help='runtime manifest identity SHA-256')
+    ap.add_argument(
+        '--runtime-variants-manifest',
+        default=str(Path(__file__).resolve().parents[1] / 'native_renderer' /
+                    'xg_render_runtime_variants.toml'),
+        help='Xenogears authenticated runtime-variant descriptor')
+    ap.add_argument(
+        '--overlay-ranges-manifest',
+        default=str(Path(__file__).resolve().parents[1] / 'native_renderer' /
+                    'xg_render_overlay_ranges.toml'),
+        help='Xenogears immutable overlay-range descriptors')
     ap.add_argument('--out-dir',         default='build-dev/cache',
                     help='cache root dir (default: build-dev/cache)')
     ap.add_argument('--gcc',             default='gcc',
@@ -1947,6 +2127,21 @@ def main():
                          'captures within one region stay ordered. 1 = the '
                          'sequential path. --static always runs sequential.')
     args = ap.parse_args()
+    for identity in (args.game_identity_sha256, args.manifest_identity_sha256):
+        if not re.fullmatch(r'[0-9a-f]{64}', identity):
+            ap.error('game and manifest identities must be lowercase SHA-256 hex values')
+    try:
+        args.runtime_variant_contract = load_contract(
+            Path(args.runtime_variants_manifest))
+        args.overlay_range_variants = load_overlay_range_variants(
+            Path(args.overlay_ranges_manifest))
+    except (ManifestError, OverlayRangeError) as error:
+        ap.error(str(error))
+    if (args.runtime_variant_contract.canonical.game_identity.hex() !=
+            args.game_identity_sha256 or
+            args.runtime_variant_contract.canonical.manifest_identity.hex() !=
+            args.manifest_identity_sha256):
+        ap.error('runtime variant descriptor does not match runtime identities')
     forced_interiors = {int(v, 0) for v in args.force_interior}
 
     # ---- Framework-injected cache location wins over CLI flags ----------------
@@ -2021,7 +2216,10 @@ def main():
         # overlay_loader.c scan_cache_dir(). Pre-1.0: no legacy fallback.
         cg = codegen_ver(args.runtime_include)
         ch = codegen_hash(args.runtime_include)
-        cache_dir = os.path.join(args.out_dir, game_id, args.compiler, cache_arch_abi(),
+        identity_namespace = identity_cache_namespace(
+            args.game_identity_sha256, args.manifest_identity_sha256)
+        cache_dir = os.path.join(args.out_dir, game_id, identity_namespace,
+                                 args.compiler, cache_arch_abi(),
                                  f'cg{cg}_{ch:08x}')
         os.makedirs(cache_dir, exist_ok=True)
         print(f'Cache dir: {cache_dir}  (codegen ver {cg}, hash {ch:08x})')
@@ -2154,11 +2352,6 @@ def main():
             stats.add_skip()
             return
 
-        if not args.static and os.path.exists(dll_path) and not args.force:
-            print('  SKIP: DLL already exists (use --force to recompile)\n')
-            stats.add_skip()
-            return
-
         with tempfile.TemporaryDirectory() as tmp:
             # Write fake PS-EXE. The header entry PC becomes a walk root in the
             # recompiler, so it must be a walk-root seed — never an 'interior'
@@ -2190,8 +2383,10 @@ def main():
                    # Forward the [widescreen] site lists so overlay-resident
                    # emits (backdrop screenX squash, and any sprite-tag/cull
                    # sites that resolve into overlay code) are applied. --ws-config
-                   # only adopts the widescreen lists, not the game's exe/paths.
-                   '--ws-config', os.path.abspath(args.game_toml)]
+                    # only adopts the widescreen lists, not the game's exe/paths.
+                    '--ws-config', os.path.abspath(args.game_toml)]
+            plan = source_observation_plan(args, data, load_addr)
+            cmd.extend(source_observation_plan_args(plan, tmp))
             print(f'  recompile: {args.recompiler} ...{" [CPS]" if args.cps else ""}')
             toml_dir = os.path.dirname(os.path.abspath(args.game_toml))
             sub_env = dict(os.environ)
@@ -2282,7 +2477,9 @@ def main():
                       f'{len(variants)} exact identities\n')
                 stats.add_ok()
             else:
-                src = patch_generated_c(src, load_addr, size)
+                src = patch_generated_c(src, load_addr, size,
+                                        args.game_identity_sha256,
+                                        args.manifest_identity_sha256, crc32)
                 c_audit = audit_generated_c(src, load_addr, size, crc32, toml)
                 print_generated_c_audit(load_addr, size, crc32, c_audit)
                 # Always save the debug copy for inspection — including on audit
@@ -2336,38 +2533,32 @@ def main():
                     if os.path.isdir(p):
                         include_dirs.append(p)
 
-                success = compile_dll(patched_c, dll_path, include_dirs,
+                if not this_ids:
+                    print('  GENERATED-C AUDIT FAILED: no dispatchable range identities\n')
+                    stats.add_fail(_label, 'no_ranges', 'no dispatchable range identities')
+                    return
+                manifest = overlay_ranges_text(
+                    this_ids, args.game_identity_sha256,
+                    args.manifest_identity_sha256, load_addr, size, crc32)
+                staged_dll = staged_overlay_dll(dll_path)
+                success = compile_dll(patched_c, staged_dll, include_dirs,
                                       gcc=args.gcc, flavor=args.flavor,
                                       compiler=args.compiler, tcc=args.tcc)
                 if success:
-                    # Emit the per-entry code-range manifest beside the DLL from
-                    # the same func-id list we keyed the dedup on. The loader keys
-                    # it by the same filename stem with .ranges (replacing .dll).
-                    ranges_out = os.path.splitext(dll_path)[0] + '.ranges'
-                    if this_ids:
-                        nfn = write_overlay_ranges_from(this_ids, ranges_out)
-                        print(f'  ranges: {nfn} functions -> {ranges_out}')
-                        # New identities are now available for this region_start;
-                        # keep the warm coverage set current so later captures in
-                        # this same run dedup against them. (Parallel note: the
-                        # check→build→update window is deliberately unlocked, so
-                        # two concurrent captures can both build overlapping DLLs.
-                        # That is redundancy, not corruption — the loader content-
-                        # matches every function by (entry, code_crc) across all
-                        # DLLs at a region.)
-                        with cov_lock:
-                            covered |= this_set
-                        print(f'  OK -> {dll_path}\n')
-                        stats.add_ok()
-                    else:
-                        print('  WARNING: recompiler emitted no _full.ranges — '
-                              'loader will leave this region to the interpreter')
-                        # A DLL with no .ranges is dead weight: the loader has no
-                        # per-function identities to dispatch, so the region stays
-                        # interpreted. Tally it as a failure, not a silent "OK".
-                        stats.add_fail(_label, 'no_ranges',
-                                       'DLL built but no _full.ranges (undispatchable)')
+                    try:
+                        published = publish_overlay_pair(
+                            Path(staged_dll), Path(dll_path), manifest, src)
+                    except OSError as error:
+                        stats.add_fail(_label, 'publication', str(error))
+                        return
+                    print(f'  ranges: {len(this_ids)} functions -> '
+                          f'{published.with_suffix(".ranges")}')
+                    with cov_lock:
+                        covered |= this_set
+                    print(f'  OK -> {published}\n')
+                    stats.add_ok()
                 else:
+                    Path(staged_dll).unlink(missing_ok=True)
                     print(f'  FAILED\n')
                     stats.add_fail(_label, 'compile',
                                    'gcc/tcc compile failed (see COMPILE ERROR above)')

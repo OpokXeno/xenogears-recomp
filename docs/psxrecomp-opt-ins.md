@@ -178,6 +178,7 @@ Uso puntual, no features de juego. Los más relevantes para XG:
 | `PSXRECOMP_AUDIO_LEGACY=1` | SDL_QueueAudio legacy sin bridge |
 
 CLI runtime: `--debug-port`, `--renderer`, `--window-title`, `--memcard-dir`, `--launcher`/`--no-launcher`, `--headless` (`PSX_HEADLESS=1`), `--bios`, `--game`, `--disc`.
+Record helper: `tools/native_render_replay.py record --memcard-dir <project-root>` expects an existing directory with `card1.mcd` and/or `card2.mcd`.
 
 ---
 

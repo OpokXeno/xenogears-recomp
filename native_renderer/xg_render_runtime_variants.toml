@@ -1,0 +1,68 @@
+schema = "xg-render-runtime-variants/v1"
+
+[canonical]
+game_sha256 = "dc0b2dd786203d4cce5927c5a3fc85a18f39a3f7406078860076ebb0bbae7119"
+manifest_sha256 = "25b53839e2546e95b2c43496dee8c8001294ac237916de7d7f0e7e8fee5760bb"
+producer_record_id = 3
+site_record_id = 4
+producer_entry = "0x80075b44"
+capture_site = "0x800781bc"
+static_callee = "0x8004b54c"
+return_site = "0x800781c4"
+
+[artifact]
+file = "field5_runtime.bin"
+full_sha256 = "bc283d19e750f41c5dde5f3293805c37757c46ffe262ad55e82d107e0cf34b8a"
+full_crc32 = "b7ce1120"
+full_size = 282628
+base_address = "0x8006f000"
+range_offset = 0
+range_size = 282628
+range_sha256 = "bc283d19e750f41c5dde5f3293805c37757c46ffe262ad55e82d107e0cf34b8a"
+range_crc32 = "b7ce1120"
+
+[[variants]]
+id = "field5-runtime-v1"
+activation_window_start = "0x8007540c"
+activation_window_size = 16
+activation_window_sha256 = "f18c97fc2dedd254c9542832a7036dc576238270bbf50902696fe1232bb465f5"
+activation_site = "0x80075414"
+activation_target = "0x800764b4"
+activation_delay_instruction = "0x248400cc"
+physical_producer_entry = "0x800764b4"
+capture_window_start = "0x8007568c"
+capture_window_size = 16
+capture_window_sha256 = "19c6de2c55f08cdc8aa53457678c795f9047c54951ecf1ea798b70e5be9ece05"
+capture_site = "0x80075694"
+capture_target = "0x8004b54c"
+capture_delay_instruction = "0x34040001"
+physical_return_site = "0x8007569c"
+native_cutovers = [
+  { pc = "0x800765dc", instruction = "0xafa00028", transfer = "local", continuation = "0x80076a28" },
+  { pc = "0x8007ab6c", instruction = "0x27bdffb8", transfer = "return", continuation = "0x00000000" },
+  { pc = "0x8007ac58", instruction = "0x27bdffb8", transfer = "return", continuation = "0x00000000" },
+  { pc = "0x800a5600", instruction = "0x00003021", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800a5694", instruction = "0x28c20005", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800a6408", instruction = "0x27bdff78", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800a6490", instruction = "0xafa2004c", transfer = "local", continuation = "0x800a6608" },
+  { pc = "0x800a663c", instruction = "0x27bdff98", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800a68f0", instruction = "0x8fbf0064", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800a8eac", instruction = "0x27bdff68", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800a9b54", instruction = "0x27bdff38", transfer = "return", continuation = "0x00000000" },
+]
+source_sites = [
+  { pc = "0x80076858", instruction = "0xe8590000", operation = "swc2", width = 4, auxiliary = "effective-address" },
+  { pc = "0x8007685c", instruction = "0xe85a0004", operation = "swc2", width = 4, auxiliary = "effective-address" },
+  { pc = "0x80076860", instruction = "0xe85b0008", operation = "swc2", width = 4, auxiliary = "effective-address" },
+  { pc = "0x800769c8", instruction = "0x0c0129ef", operation = "call", width = 0, auxiliary = "none" },
+  { pc = "0x800769d4", instruction = "0x8e430008", operation = "read", width = 4, auxiliary = "effective-address" },
+  { pc = "0x800769d8", instruction = "0x8fa800d0", operation = "read", width = 4, auxiliary = "effective-address" },
+  { pc = "0x800769e4", instruction = "0x8c630100", operation = "read", width = 4, auxiliary = "effective-address" },
+  { pc = "0x800769e8", instruction = "0x8e040020", operation = "read", width = 4, auxiliary = "effective-address" },
+  { pc = "0x800769ec", instruction = "0x00621007", operation = "bucket", width = 0, auxiliary = "result-register" },
+  { pc = "0x800769f8", instruction = "0x8ca20000", operation = "read", width = 4, auxiliary = "effective-address" },
+  { pc = "0x80076a08", instruction = "0xae040020", operation = "write", width = 4, auxiliary = "effective-address" },
+  { pc = "0x80076a0c", instruction = "0x8ca30000", operation = "read", width = 4, auxiliary = "effective-address" },
+  { pc = "0x80076a10", instruction = "0x8e420008", operation = "read", width = 4, auxiliary = "effective-address" },
+  { pc = "0x80076a24", instruction = "0xaca30000", operation = "write", width = 4, auxiliary = "effective-address" },
+]

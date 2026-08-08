@@ -1,0 +1,67 @@
+schema = "xg-render-manifest/v3"
+
+[game]
+id = "main-disc1-exe"
+serial = "SLUS-00664"
+disc = 1
+sha256 = "dc0b2dd786203d4cce5927c5a3fc85a18f39a3f7406078860076ebb0bbae7119"
+crc32 = "25adc86e"
+size = 303104
+namespace_crc32 = "25adc86e"
+base_address = "0x80010000"
+image_format = "ps-x-exe"
+header_size = 2048
+loaded_size = 301056
+
+[overlay.field]
+id = "field-image"
+state = "authenticated"
+file = "field_module.exe"
+full_sha256 = "920a3e20ccc5d8aae32225c272066e819c427b566b2274df60b182e1265f04dd"
+full_crc32 = "4bba5a07"
+full_size = 284672
+base_address = "0x8006f000"
+image_format = "ps-x-exe"
+header_size = 2048
+loaded_size = 282624
+range_offset = 0
+range_size = 282624
+range_crc32 = "921c77f1"
+
+[[functions]]
+id = "draw-otag"
+image = "main-disc1-exe"
+name = "DrawOTag"
+entry_address = "0x80044bd0"
+confidence = "verified"
+
+[[functions]]
+id = "vsync"
+image = "main-disc1-exe"
+name = "VSync"
+entry_address = "0x8004b54c"
+confidence = "verified"
+
+[[producers]]
+id = "render-field-character-sprites"
+image = "field-image"
+name = "RenderFieldCharacterSprites"
+entry_address = "0x80075b44"
+framebuffer_context = "field-double-buffer"
+ot_context = "field-ot"
+confidence = "verified"
+
+[[sites]]
+id = "field-vsync-call-0x800781bc"
+state = "authenticated"
+producer = "render-field-character-sprites"
+image = "field-image"
+callee = "vsync"
+call_address = "0x800781bc"
+return_address = "0x800781c4"
+window_start = "0x800781b4"
+window_size = 16
+window_sha256 = "054c49c0f06e0be97357225d60be88b05f0a18b75c661c1724fd81a4a033fd8c"
+framebuffer_context = "field-double-buffer"
+ot_context = "field-ot"
+confidence = "verified"

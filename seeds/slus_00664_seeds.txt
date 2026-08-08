@@ -1,6 +1,6 @@
 # Seeds for Slus 006 (SLUS-00664)
 # JAL targets: 589
-# Total seeds: 589
+# Total seeds: 592
 # Function-start seeds for the recompiler.
 # One 0x-prefixe address per line. Lines starting with # are ignored.
 # The recompiler also discovers functions dynamically from entry_pc, so this
@@ -123,6 +123,7 @@
 0x80025180
 0x800251C8
 0x80025224
+0x8002675C
 0x800278F8
 0x8002804C
 0x80028230
@@ -167,6 +168,8 @@
 0x8002DC9C
 0x8002DDE4
 0x8002DFE0
+0x8002E484
+0x8002E688
 0x800301C8
 0x80030228
 0x800302D4

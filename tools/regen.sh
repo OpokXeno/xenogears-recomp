@@ -13,4 +13,5 @@ CONFIG="$ROOT/game.toml"
 [[ -f "$CONFIG" ]] || { echo "game.toml not found: $CONFIG" >&2; exit 1; }
 
 cd "$ROOT"
-exec "$TOOL" --config "$CONFIG"
+exec "$TOOL" --config "$CONFIG" \
+    --source-observation-plan "$ROOT/native_renderer/xg_render_resident_plan.txt"

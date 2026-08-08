@@ -1,0 +1,35 @@
+# P11 certification template. This file is intentionally not a certification.
+# Keep sealed=false until P0-P10 have produced every hash-pinned public receipt.
+# native_render_3d_certify.py rejects this template and never emits PASS evidence.
+schema = "xenogears.native-3d-certification/v1"
+sealed = false
+certification_id = "unsealed-p11-template"
+repetitions = 2
+nonsemantic_whitelist = []
+documents = []
+discs = []
+hosts = []
+toolchains = []
+builds = []
+images = []
+families = []
+producers = []
+branches = []
+scenarios = []
+matrix = []
+aggregate_receipts = []
+
+[parity]
+renderer = "opengl"
+present = "canonical"
+color_depth_bits = 15
+interpolation = false
+smooth = false
+wide = false
+hires = false
+
+[expected]
+ledger_render_sites = 0
+migrated_3d_sites = 0
+excluded_pure_2d_proven_sites = 0
+non_render_proven_sites = 0

@@ -1,0 +1,257 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "xg-native-3d-census-review/v3",
+  "title": "Xenogears P10 Disc 1 native 3D static census review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "artifacts", "functions", "render_targets", "classifications"],
+  "properties": {
+    "schema": {"const": "xg-native-3d-census-review/v3"},
+    "artifacts": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/artifact"}
+    },
+    "functions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/function"}
+    },
+    "render_targets": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/renderTarget"}
+    },
+    "classifications": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifacts", "sites", "branches"],
+      "properties": {
+        "artifacts": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/artifactClassification"}
+        },
+        "sites": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/siteClassification"}
+        },
+        "branches": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/branchClassification"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "token": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,199}$"
+    },
+    "tokenRefs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/token"}
+    },
+    "tokenList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/token"}
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "address": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{8}$"
+    },
+    "reviewStatus": {
+      "enum": [
+        "migrated-render",
+        "excluded-pure-2d-proven",
+        "non-render-proven",
+        "error"
+      ]
+    },
+    "mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "endian",
+        "header_size",
+        "payload_file_offset",
+        "payload_size",
+        "runtime_address",
+        "entry_address"
+      ],
+      "properties": {
+        "format": {"enum": ["ps-x-exe", "flat-binary"]},
+        "endian": {"const": "little"},
+        "header_size": {"type": "integer", "minimum": 0},
+        "payload_file_offset": {"type": "integer", "minimum": 0},
+        "payload_size": {"type": "integer", "minimum": 4},
+        "runtime_address": {"$ref": "#/$defs/address"},
+        "entry_address": {
+          "oneOf": [
+            {"$ref": "#/$defs/address"},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "executableRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["range_id", "payload_offset", "size", "provenance_refs", "evidence_refs"],
+      "properties": {
+        "range_id": {"$ref": "#/$defs/token"},
+        "payload_offset": {"type": "integer", "minimum": 0, "multipleOf": 4},
+        "size": {"type": "integer", "minimum": 4, "multipleOf": 4},
+        "provenance_refs": {"$ref": "#/$defs/tokenRefs"},
+        "evidence_refs": {"$ref": "#/$defs/tokenRefs"}
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sha256",
+        "size",
+        "discs",
+        "serials",
+        "role",
+        "mapping",
+        "executable_ranges"
+      ],
+      "properties": {
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size": {"type": "integer", "minimum": 4},
+        "discs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "uniqueItems": true,
+          "items": {"const": 1}
+        },
+        "serials": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "const": "SLUS-00664"
+          }
+        },
+        "role": {"enum": ["main-exe", "overlay"]},
+        "mapping": {"$ref": "#/$defs/mapping"},
+        "executable_ranges": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/executableRange"}
+        }
+      }
+    },
+    "function": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "function_id",
+        "artifact_id",
+        "executable_range_id",
+        "payload_offset",
+        "size",
+        "role",
+        "provenance_refs",
+        "evidence_refs"
+      ],
+      "properties": {
+        "function_id": {"$ref": "#/$defs/token"},
+        "artifact_id": {"$ref": "#/$defs/token"},
+        "executable_range_id": {"$ref": "#/$defs/token"},
+        "payload_offset": {"type": "integer", "minimum": 0, "multipleOf": 4},
+        "size": {"type": "integer", "minimum": 4, "multipleOf": 4},
+        "role": {"enum": ["producer", "render-support"]},
+        "provenance_refs": {"$ref": "#/$defs/tokenRefs"},
+        "evidence_refs": {"$ref": "#/$defs/tokenRefs"}
+      }
+    },
+    "renderTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_id",
+        "artifact_id",
+        "address",
+        "role",
+        "caller_artifact_ids",
+        "indirect_call_site_ids",
+        "provenance_refs",
+        "evidence_refs"
+      ],
+      "properties": {
+        "target_id": {"$ref": "#/$defs/token"},
+        "artifact_id": {"$ref": "#/$defs/token"},
+        "address": {"$ref": "#/$defs/address"},
+        "role": {
+          "enum": [
+            "gte-wrapper",
+            "matrix-function",
+            "light-function",
+            "addprim-function",
+            "ot-function"
+          ]
+        },
+        "caller_artifact_ids": {
+          "allOf": [
+            {"$ref": "#/$defs/tokenList"},
+            {"minItems": 1}
+          ]
+        },
+        "indirect_call_site_ids": {"$ref": "#/$defs/tokenList"},
+        "provenance_refs": {"$ref": "#/$defs/tokenRefs"},
+        "evidence_refs": {"$ref": "#/$defs/tokenRefs"}
+      }
+    },
+    "artifactClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "status", "subject", "evidence_refs"],
+      "properties": {
+        "artifact_id": {"$ref": "#/$defs/token"},
+        "status": {"$ref": "#/$defs/reviewStatus"},
+        "subject": {"$ref": "#/$defs/token"},
+        "evidence_refs": {"$ref": "#/$defs/tokenRefs"}
+      }
+    },
+    "siteClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["site_id", "status", "subject", "family_ids", "evidence_refs"],
+      "properties": {
+        "site_id": {"$ref": "#/$defs/token"},
+        "status": {"$ref": "#/$defs/reviewStatus"},
+        "subject": {"$ref": "#/$defs/token"},
+        "family_ids": {"$ref": "#/$defs/tokenList"},
+        "evidence_refs": {"$ref": "#/$defs/tokenRefs"}
+      }
+    },
+    "branchClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branch_id",
+        "status",
+        "subject",
+        "reachability",
+        "family_ids",
+        "evidence_refs"
+      ],
+      "properties": {
+        "branch_id": {"$ref": "#/$defs/token"},
+        "status": {"$ref": "#/$defs/reviewStatus"},
+        "subject": {"$ref": "#/$defs/token"},
+        "reachability": {"enum": ["reachable", "unreachable"]},
+        "family_ids": {"$ref": "#/$defs/tokenList"},
+        "evidence_refs": {"$ref": "#/$defs/tokenRefs"}
+      }
+    }
+  }
+}

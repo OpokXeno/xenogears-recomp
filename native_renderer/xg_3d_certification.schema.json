@@ -1,0 +1,279 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "xenogears.native-3d-certification/v1",
+  "title": "Xenogears P11 native 3D certification manifest",
+  "description": "Closed schema for the TOML data model consumed by tools/native_render_3d_certify.py. A structurally valid document is not a PASS; all hash-pinned receipts are independently validated by the entry point.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "sealed",
+    "certification_id",
+    "repetitions",
+    "nonsemantic_whitelist",
+    "parity",
+    "expected",
+    "documents",
+    "discs",
+    "hosts",
+    "toolchains",
+    "builds",
+    "images",
+    "families",
+    "producers",
+    "branches",
+    "scenarios",
+    "matrix",
+    "aggregate_receipts"
+  ],
+  "properties": {
+    "schema": {"const": "xenogears.native-3d-certification/v1"},
+    "sealed": {"type": "boolean"},
+    "certification_id": {"$ref": "#/$defs/id"},
+    "repetitions": {"type": "integer", "minimum": 2, "maximum": 100},
+    "nonsemantic_whitelist": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/id"}
+    },
+    "parity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["renderer", "present", "color_depth_bits", "interpolation", "smooth", "wide", "hires"],
+      "properties": {
+        "renderer": {"const": "opengl"},
+        "present": {"const": "canonical"},
+        "color_depth_bits": {"const": 15},
+        "interpolation": {"const": false},
+        "smooth": {"const": false},
+        "wide": {"const": false},
+        "hires": {"const": false}
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ledger_render_sites", "migrated_3d_sites", "excluded_pure_2d_proven_sites", "non_render_proven_sites"],
+      "properties": {
+        "ledger_render_sites": {"$ref": "#/$defs/count"},
+        "migrated_3d_sites": {"$ref": "#/$defs/count"},
+        "excluded_pure_2d_proven_sites": {"$ref": "#/$defs/count"},
+        "non_render_proven_sites": {"$ref": "#/$defs/count"}
+      }
+    },
+    "documents": {
+      "type": "array",
+      "minItems": 3,
+      "items": {"$ref": "#/$defs/document"}
+    },
+    "discs": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {"$ref": "#/$defs/disc"}
+    },
+    "hosts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/host"}
+    },
+    "toolchains": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/toolchain"}
+    },
+    "builds": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"$ref": "#/$defs/build"}
+    },
+    "images": {
+      "type": "array",
+      "minItems": 6,
+      "items": {"$ref": "#/$defs/image"}
+    },
+    "families": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/family"}
+    },
+    "producers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/producer"}
+    },
+    "branches": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/branch"}
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/scenario"}
+    },
+    "matrix": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100000,
+      "items": {"$ref": "#/$defs/matrixRow"}
+    },
+    "aggregate_receipts": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {"$ref": "#/$defs/aggregateReceipt"}
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "relativePath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+    },
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "path", "sha256"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "kind": {"enum": ["ledger", "contract", "branch-ledger", "unreachable-branch-proof"]},
+        "path": {"$ref": "#/$defs/relativePath"},
+        "sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "disc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "number"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "number": {"enum": [1, 2]}
+      }
+    },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "os", "architecture"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "os": {"$ref": "#/$defs/id"},
+        "architecture": {"$ref": "#/$defs/id"}
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "hosts"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "version": {"type": "string", "minLength": 1, "maxLength": 128},
+        "hosts": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}}
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "configuration", "toolchain", "host", "sha256"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "configuration": {"enum": ["debug", "release"]},
+        "toolchain": {"$ref": "#/$defs/id"},
+        "host": {"$ref": "#/$defs/id"},
+        "sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "disc", "tier", "sha256", "base_address", "generation"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "disc": {"$ref": "#/$defs/id"},
+        "tier": {"enum": ["static", "cold", "warm"]},
+        "sha256": {"$ref": "#/$defs/digest"},
+        "base_address": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "generation": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      }
+    },
+    "family": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {"id": {"$ref": "#/$defs/id"}}
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "family", "discs", "tiers"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "family": {"$ref": "#/$defs/id"},
+        "discs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+        "tiers": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["static", "cold", "warm"]}}
+      }
+    },
+    "branch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "producer", "reachable", "proof_document"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "producer": {"$ref": "#/$defs/id"},
+        "reachable": {"type": "boolean"},
+        "proof_document": {"type": "string"}
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "disc", "producers", "branches", "tiers", "ordinary_input", "private_artifacts_authenticated"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "disc": {"$ref": "#/$defs/id"},
+        "producers": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+        "branches": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+        "tiers": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["static", "cold", "warm"]}},
+        "ordinary_input": {"const": true},
+        "private_artifacts_authenticated": {"const": true}
+      }
+    },
+    "matrixRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["disc", "build", "scenario", "producer", "tier", "requested_mode", "repetition", "receipt", "sha256"],
+      "properties": {
+        "disc": {"$ref": "#/$defs/id"},
+        "build": {"$ref": "#/$defs/id"},
+        "scenario": {"$ref": "#/$defs/id"},
+        "producer": {"$ref": "#/$defs/id"},
+        "tier": {"enum": ["static", "cold", "warm"]},
+        "requested_mode": {"enum": ["original", "shadow", "native"]},
+        "repetition": {"type": "integer", "minimum": 1},
+        "receipt": {"$ref": "#/$defs/relativePath"},
+        "sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "aggregateReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "receipt", "sha256"],
+      "properties": {
+        "kind": {"enum": ["shadow-layers", "gte-attribution-residual", "source-isolation-poisoning", "ordering-material-vram-framebuffer", "fault-rollback", "coverage"]},
+        "receipt": {"$ref": "#/$defs/relativePath"},
+        "sha256": {"$ref": "#/$defs/digest"}
+      }
+    }
+  }
+}
