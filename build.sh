@@ -57,6 +57,7 @@ RENDER_MANIFEST="$ROOT/native_renderer/xg_render_manifest.toml"
 GAME_EXE="$ROOT/game/slus_006.64"
 OVERLAYS_DIR="$ROOT/overlays"
 PYTHON="${PYTHON:-python3}"
+NATIVE_RENDER="${XG_RENDER_NATIVE:-ON}"
 
 # --- Auto-detect number of parallel jobs ---
 if command -v nproc &>/dev/null; then
@@ -67,14 +68,19 @@ else
     PARALLEL=4
 fi
 
-MANIFEST_METADATA="$("$PYTHON" "$MANIFEST_TOOL" metadata "$RENDER_MANIFEST" \
-    --exe "$GAME_EXE" --overlays "$OVERLAYS_DIR")"
-GAME_IDENTITY_SHA256="$("$PYTHON" -c \
-    'import json,sys; print(json.load(sys.stdin)["game_identity"])' \
-    <<<"$MANIFEST_METADATA")"
-MANIFEST_IDENTITY_SHA256="$("$PYTHON" -c \
-    'import json,sys; print(json.load(sys.stdin)["manifest_identity"])' \
-    <<<"$MANIFEST_METADATA")"
+if [[ "$NATIVE_RENDER" == "OFF" ]]; then
+    GAME_IDENTITY_SHA256="$("$PYTHON" -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$GAME_EXE")"
+    MANIFEST_IDENTITY_SHA256="$("$PYTHON" -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$RENDER_MANIFEST")"
+else
+    MANIFEST_METADATA="$("$PYTHON" "$MANIFEST_TOOL" metadata "$RENDER_MANIFEST" \
+        --exe "$GAME_EXE" --overlays "$OVERLAYS_DIR")"
+    GAME_IDENTITY_SHA256="$("$PYTHON" -c \
+        'import json,sys; print(json.load(sys.stdin)["game_identity"])' \
+        <<<"$MANIFEST_METADATA")"
+    MANIFEST_IDENTITY_SHA256="$("$PYTHON" -c \
+        'import json,sys; print(json.load(sys.stdin)["manifest_identity"])' \
+        <<<"$MANIFEST_METADATA")"
+fi
 
 # --- Step 1: Build the recompiler (psxrecomp-game) ---
 echo "==> Building recompiler (psxrecomp-game)..."
@@ -111,6 +117,7 @@ cmake -S "$ROOT" -B "$ROOT/$BUILD_DIR" -G "$GENERATOR" \
     -DCMAKE_BUILD_TYPE="$RUNTIME_BUILD_TYPE" \
     -DPSX_RECOMP_UI=ON \
     -DRECOMP_UI_ROOT="$ROOT/recomp-ui" \
+    -DXG_RENDER_NATIVE="$NATIVE_RENDER" \
     "${RUNTIME_CMAKE_ARGS[@]}"
 cmake --build "$ROOT/$BUILD_DIR" -j "$PARALLEL"
 

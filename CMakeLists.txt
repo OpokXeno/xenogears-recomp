@@ -33,6 +33,9 @@ set(XG_RENDER_MANIFEST_TOOL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_runtime_variant_verify.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_runtime_variants.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_overlay_codegen.py")
+option(XG_RENDER_NATIVE
+    "Enable authenticated native-render manifest validation and cutovers"
+    ON)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${XG_RENDER_MANIFEST}"
     "${XG_RENDER_RUNTIME_VARIANTS}"
@@ -40,6 +43,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${XG_RENDER_FIELD5_RUNTIME_ARTIFACT}"
     ${XG_RENDER_MANIFEST_TOOL_SOURCES})
 
+if(XG_RENDER_NATIVE)
 execute_process(
     COMMAND "${Python3_EXECUTABLE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest.py" metadata
@@ -76,6 +80,13 @@ if(NOT XG_RENDER_METADATA_SCHEMA STREQUAL "xg-render-config-metadata/v1"
         OR NOT XG_RENDER_NAMESPACE_LENGTH EQUAL 8
         OR NOT XG_RENDER_NAMESPACE_CRC32 MATCHES "^[0-9a-f]+$")
     message(FATAL_ERROR "Native renderer manifest metadata has invalid fields")
+endif()
+
+else()
+    file(SHA256 "${XG_RENDER_GAME_EXE}" XG_RENDER_GAME_IDENTITY_SHA256)
+    file(SHA256 "${XG_RENDER_MANIFEST}" XG_RENDER_MANIFEST_IDENTITY_SHA256)
+    set(XG_RENDER_NAMESPACE_CRC32 "00000000")
+    message(STATUS "Native renderer manifest validation disabled; release uses original rendering")
 endif()
 
 add_subdirectory(native_renderer)
@@ -350,6 +361,7 @@ endif()
 
 set(XG_RENDER_MANIFEST_TABLE "${CMAKE_BINARY_DIR}/generated/xg_render_manifest_table.c")
 set(XG_RENDER_RUNTIME_VARIANT_TABLE "${CMAKE_BINARY_DIR}/generated/xg_render_runtime_variant_table.c")
+if(XG_RENDER_NATIVE)
 add_custom_command(
     OUTPUT "${XG_RENDER_MANIFEST_TABLE}"
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_BINARY_DIR}/generated"
@@ -386,6 +398,23 @@ add_custom_command(
     VERBATIM)
 add_custom_target(xg_render_runtime_variant_table
     DEPENDS "${XG_RENDER_RUNTIME_VARIANT_TABLE}")
+else()
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
+file(WRITE "${XG_RENDER_MANIFEST_TABLE}"
+    "#include \"xg_render_manifest_generated.h\"\n"
+    "const uint8_t xg_render_game_identity[32] = {0};\n"
+    "const uint8_t xg_render_manifest_identity[32] = {0};\n"
+    "const uint32_t xg_render_namespace_crc32 = UINT32_C(0);\n"
+    "const XgRenderManifestValidation xg_render_manifest_validation = {0};\n"
+    "const XgRenderManifestRecord xg_render_manifest_records[] = {{0}};\n"
+    "const uint32_t xg_render_manifest_record_count = 0u;\n")
+file(WRITE "${XG_RENDER_RUNTIME_VARIANT_TABLE}"
+    "#include \"xg_render_runtime_variants_generated.h\"\n"
+    "const XgRenderRuntimeVariantDescriptor xg_render_runtime_variant_descriptors[] = {{0}};\n"
+    "const uint32_t xg_render_runtime_variant_descriptor_count = 0u;\n")
+add_custom_target(xg_render_manifest_table)
+add_custom_target(xg_render_runtime_variant_table)
+endif()
 set_source_files_properties("${XG_RENDER_MANIFEST_TABLE}" PROPERTIES GENERATED TRUE)
 set_source_files_properties("${XG_RENDER_RUNTIME_VARIANT_TABLE}" PROPERTIES GENERATED TRUE)
 target_sources(psx-runtime PRIVATE "${XG_RENDER_MANIFEST_TABLE}"

@@ -119,15 +119,28 @@ jobs:
           install -Dm644 "$XGR_ASSETS_DIR/slus_006.64"  game/slus_006.64
           install -Dm644 "$XGR_ASSETS_DIR/SCPH1001.BIN" psxrecomp/bios/SCPH1001.BIN
 
+      - name: Compute game and manifest identities
+        run: |
+          set -e
+          game_sha256="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' game/slus_006.64)"
+          manifest_sha256="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' native_renderer/xg_render_manifest.toml)"
+          echo "XGR_GAME_IDENTITY_SHA256=$game_sha256" >> "$GITHUB_ENV"
+          echo "XGR_MANIFEST_IDENTITY_SHA256=$manifest_sha256" >> "$GITHUB_ENV"
+
       # The recompiler RUNS during the build, so it is always compiled for the
       # Linux host even though the runtime targets Windows.
       - name: Build recompiler (host tools)
         run: |
-          cmake -S psxrecomp/recompiler -B psxrecomp/recompiler/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake -S psxrecomp/recompiler -B psxrecomp/recompiler/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPSX_GAME_EXTRA_IDENTITY_SHA256="$XGR_GAME_IDENTITY_SHA256" \
+            -DPSX_GAME_MANIFEST_DIGEST_SHA256="$XGR_MANIFEST_IDENTITY_SHA256"
           cmake --build psxrecomp/recompiler/build -j "$(nproc)"
 
       - name: Game codegen from the local EXE
-        run: ./psxrecomp/recompiler/build/psxrecomp-game --config game.toml
+        run: ./psxrecomp/recompiler/build/psxrecomp-game --config game.toml \
+          --game-identity-sha256 "$XGR_GAME_IDENTITY_SHA256" \
+          --manifest-digest-sha256 "$XGR_MANIFEST_IDENTITY_SHA256"
 
       - name: Regenerate OpenBIOS and SCPH1001 C
         run: |
@@ -164,6 +177,7 @@ jobs:
         run: |
           cmake -S . -B build-win -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-windows-x86_64-llvm-mingw.cmake \
+            -DXG_RENDER_NATIVE=OFF \
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build-win -j "$(nproc)"
 
