@@ -95,6 +95,9 @@ include(${PSXRECOMP_ROOT}/runtime/runtime.cmake)
 if(SDL2_LIBRARY_DIRS)
     link_directories(${SDL2_LIBRARY_DIRS})
 endif()
+if(WIN32 OR MINGW)
+    add_compile_definitions(SDL_MAIN_HANDLED=1)
+endif()
 
 add_subdirectory(native_renderer)
 
