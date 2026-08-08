@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ASSETS_DIR="${1:-${XGR_ASSETS_DIR:-}}"
 BUILD_DIR="${2:-build}"
-RECOMPILER_BUILD="${3:-${PSX_RECOMPILER_BUILD:-}}"
+RECOMPILER_BUILD="${3:-${PSX_RECOMPILER_BUILD:-psxrecomp/recompiler/build-glibc-2.31}}"
 IMAGE="${XGR_LINUX_BUILD_IMAGE:-localhost/xenogearsrecomp-linux-glibc:2.31}"
 
 if [[ -z "$ASSETS_DIR" ]]; then

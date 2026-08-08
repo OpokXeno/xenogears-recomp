@@ -94,6 +94,7 @@ tools/*
 !tools/native_render_runtime_variant_verify.py
 !tools/native_render_runtime_variants.py
 !tools/native_render_overlay_codegen.py
+!tools/native_render_overlay_ranges.py
 !tools/native_render_field_character_shadow_schema.py
 !tools/native_render_producer_family_schema.py
 !tools/native_render_producer_family_scratch.py
