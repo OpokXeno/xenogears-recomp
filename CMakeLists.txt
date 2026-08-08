@@ -89,11 +89,14 @@ else()
     message(STATUS "Native renderer manifest validation disabled; release uses original rendering")
 endif()
 
-add_subdirectory(native_renderer)
-
 set(PSXRECOMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp" CACHE PATH
     "psxrecomp framework root (pinned submodule)")
 include(${PSXRECOMP_ROOT}/runtime/runtime.cmake)
+if(SDL2_LIBRARY_DIRS)
+    link_directories(${SDL2_LIBRARY_DIRS})
+endif()
+
+add_subdirectory(native_renderer)
 
 if(BUILD_TESTING)
     add_executable(xg_guest_render_native_stream
