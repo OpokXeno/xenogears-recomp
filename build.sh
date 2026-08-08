@@ -48,7 +48,10 @@ if [[ "$BUILD_TYPE" == "ReleaseNoOpt" ]]; then
     )
 fi
 RECOMPILER_DIR="$ROOT/psxrecomp/recompiler"
-RECOMPILER_BUILD="$RECOMPILER_DIR/build"
+RECOMPILER_BUILD="${PSX_RECOMPILER_BUILD:-$RECOMPILER_DIR/build}"
+if [[ "$RECOMPILER_BUILD" != /* ]]; then
+    RECOMPILER_BUILD="$ROOT/$RECOMPILER_BUILD"
+fi
 MANIFEST_TOOL="$ROOT/tools/native_render_manifest.py"
 RENDER_MANIFEST="$ROOT/native_renderer/xg_render_manifest.toml"
 GAME_EXE="$ROOT/game/slus_006.64"

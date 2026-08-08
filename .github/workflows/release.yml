@@ -7,8 +7,10 @@ name: Release
 # leave the maintainer's machine — the game EXE (game/slus_006.64) and the PS1
 # BIOS (psxrecomp/bios/SCPH1001.BIN). GitHub-hosted runners cannot see them
 # and secrets are capped at 48 KB, so both build jobs run on a self-hosted
-# runner registered on the maintainer's Linux PC. Only the compiled archives
-# are uploaded. Setup: docs/self-hosted-runner.md.
+# runner registered on the maintainer's Linux PC. The Linux release is built
+# inside a pinned glibc-2.31 container so the host distribution cannot raise
+# the minimum runtime ABI. Only the compiled archives are uploaded. Setup:
+# docs/self-hosted-runner.md.
 #
 # macOS is not built by this workflow (no Mac runner available); the doc
 # explains how to add one later.
@@ -57,54 +59,19 @@ jobs:
       - name: Check host dependencies
         run: |
           set -e
-          for t in cmake ninja pkg-config git python3; do
+          for t in cmake git podman python3; do
             command -v "$t" >/dev/null || { echo "::error::missing host tool: $t — see docs/self-hosted-runner.md"; exit 1; }
           done
-          python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else "Python 3.11 or newer is required")'
-          pkg-config --exists sdl2 || { echo "::error::SDL2 development files not found (pkg-config sdl2)"; exit 1; }
+          podman info >/dev/null
 
       - name: Test release archive verifier
         run: cmake -DPROJECT_ROOT="$PWD" -DTEST_WORK_DIR="$RUNNER_TEMP/xgr-release-verifier-tests-linux" -P cmake/tests/test_verify_release_archive.cmake
 
-      - name: Stage game EXE + BIOS from local disk (never uploaded)
-        run: |
-          set -e
-          [ -f "$XGR_ASSETS_DIR/slus_006.64" ]  || { echo "::error::$XGR_ASSETS_DIR/slus_006.64 missing — see docs/self-hosted-runner.md"; exit 1; }
-          [ -f "$XGR_ASSETS_DIR/SCPH1001.BIN" ] || { echo "::error::$XGR_ASSETS_DIR/SCPH1001.BIN missing — see docs/self-hosted-runner.md"; exit 1; }
-          install -Dm644 "$XGR_ASSETS_DIR/slus_006.64"  game/slus_006.64
-          install -Dm644 "$XGR_ASSETS_DIR/SCPH1001.BIN" psxrecomp/bios/SCPH1001.BIN
+      - name: Build and package Linux release with glibc 2.31
+        run: bash ci/build-linux-release.sh "$XGR_ASSETS_DIR"
 
-      - name: Build recompiler (host tools)
+      - name: Verify Linux release archive
         run: |
-          cmake -S psxrecomp/recompiler -B psxrecomp/recompiler/build -G Ninja -DCMAKE_BUILD_TYPE=Release
-          cmake --build psxrecomp/recompiler/build -j "$(nproc)"
-
-      - name: Regenerate OpenBIOS and SCPH1001 C
-        run: |
-          set -e
-          for bios in OpenBIOS SCPH1001; do
-            PSXRECOMP_BIOS_BUILD="$PWD/psxrecomp/recompiler/build" \
-              bash psxrecomp/tools/regen_bios.sh --config "$PWD/psxrecomp/bios/$bios.toml"
-          done
-
-      - name: Game codegen + runtime build
-        run: ./build.sh build Release
-
-      - name: Package archive
-        run: |
-          set -e
-          pkg=dist/XenogearsRecomp-linux-x86_64
-          mkdir -p "$pkg"
-          strip build/XenogearsRecomp -o "$pkg/XenogearsRecomp"
-          cp game.toml LICENSE README.md "$pkg/"
-          cp -r build/bios "$pkg/bios"
-          # Launcher assets (fonts + images) are staged next to the exe by the
-          # build and resolved from the exe dir at runtime — they must ship.
-          # Exclude boxart.tga: user-local copyrighted art (the launcher has a
-          # built-in fallback; users can drop their own next to the exe).
-          cp -r build/assets "$pkg/assets"
-          rm -f "$pkg/assets/img/boxart.tga"
-          tar -C dist -czf XenogearsRecomp-linux-x86_64.tar.gz XenogearsRecomp-linux-x86_64
           cmake -DPROJECT_ROOT="$PWD" \
             -DARCHIVE="$PWD/XenogearsRecomp-linux-x86_64.tar.gz" \
             -DVERIFY_WORK_DIR="$RUNNER_TEMP/xgr-release-verifier-linux" \
