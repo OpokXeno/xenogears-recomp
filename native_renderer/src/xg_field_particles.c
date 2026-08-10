@@ -9,6 +9,7 @@
 static XgRenderParticleSourceState particle_sources = {
     .next_generation = 1u,
 };
+static uint32_t particle_source_count;
 
 static uint8_t clamp_uv(int32_t value) {
     if (value < 0) return 0u;
@@ -17,9 +18,11 @@ static uint8_t clamp_uv(int32_t value) {
 }
 
 void xg_field_particles_reset(void) {
+    if (particle_source_count == 0u && !particle_sources.blocked) return;
     particle_sources = (XgRenderParticleSourceState){
         .next_generation = 1u,
     };
+    particle_source_count = 0u;
 }
 
 XgRenderParticleSourceState *xg_field_particles_state(void) {
@@ -43,7 +46,10 @@ void xg_field_particles_invalidate(uint32_t particle_address) {
     XgRenderParticleSource *record =
         xg_field_particles_find(particle_address);
 
-    if (record != NULL) *record = (XgRenderParticleSource){ 0 };
+    if (record != NULL) {
+        *record = (XgRenderParticleSource){ 0 };
+        --particle_source_count;
+    }
 }
 
 bool xg_field_particles_observe_initializer(
@@ -120,6 +126,7 @@ bool xg_field_particles_observe_initializer(
         .semi_transparent = true,
         .valid = true,
     };
+    ++particle_source_count;
     return true;
 }
 

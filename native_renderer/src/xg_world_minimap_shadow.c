@@ -66,6 +66,7 @@ static bool stack_address_is_valid(uint32_t address) {
 static void clear_pending(void) {
     XgWorldMinimapShadowSnapshot snapshot = minimap_shadow.snapshot;
 
+    if (!snapshot.pending) return;
     snapshot.pending = false;
     memset(&minimap_shadow, 0, sizeof(minimap_shadow));
     minimap_shadow.snapshot = snapshot;

@@ -610,6 +610,18 @@ bool psx_xg_render_auth_source_site_lookup(
     uint32_t pc, uint32_t instruction_word,
     PsxXgRenderSourceSiteMetadata *out_metadata);
 bool psx_xg_render_auth_cold_source_pc_relevant(uint32_t pc);
+
+enum {
+    PSX_XG_RENDER_COLD_ENTRY = 1u << 0,
+    PSX_XG_RENDER_COLD_CAPTURE = 1u << 1,
+    PSX_XG_RENDER_COLD_SOURCE = 1u << 2,
+    PSX_XG_RENDER_COLD_NATIVE_PRE = 1u << 3,
+    PSX_XG_RENDER_COLD_NATIVE_POST = 1u << 4,
+    PSX_XG_RENDER_COLD_OVERLAY = 1u << 5,
+};
+
+uint32_t psx_xg_render_auth_cold_instruction_flags(
+    uint32_t pc, uint32_t instruction_word);
 bool psx_xg_render_auth_cold_source_observe(
     PsxXgRenderSourceStage stage, uint32_t pc, uint32_t instruction_word,
     uint32_t auxiliary);

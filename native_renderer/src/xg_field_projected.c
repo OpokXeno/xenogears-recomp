@@ -11,11 +11,16 @@ static XgRenderProjectedSourceState projected_sources = {
     .next_generation = 1u,
 };
 static XgRenderProjectedInitializerPending projected_initializer_pending;
+static uint32_t projected_source_count;
 
 void xg_field_projected_reset(void) {
+    if (projected_source_count == 0u && !projected_sources.blocked &&
+        !projected_initializer_pending.valid)
+        return;
     projected_sources = (XgRenderProjectedSourceState){
         .next_generation = 1u,
     };
+    projected_source_count = 0u;
     xg_field_projected_reset_pending();
 }
 
@@ -133,6 +138,7 @@ void xg_field_projected_observe_initializer_commit(CPUState *cpu) {
             (XgRenderProjectedInitializerPending){ 0 };
         return;
     }
+    const bool new_source = !source->valid;
     *source = (XgRenderProjectedSource){
         .generation = projected_sources.next_generation++,
         .object_address = object_address,
@@ -140,6 +146,7 @@ void xg_field_projected_observe_initializer_commit(CPUState *cpu) {
         .clut_y = projected_initializer_pending.clut_y,
         .valid = true,
     };
+    if (new_source) ++projected_source_count;
     memcpy(source->upper_color, projected_initializer_pending.upper_color,
            sizeof(source->upper_color));
     memcpy(source->middle_top_color,

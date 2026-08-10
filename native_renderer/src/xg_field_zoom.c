@@ -53,6 +53,9 @@ static void materialize_zoom_source(uint8_t semi_transparent, uint8_t abr,
 }
 
 void xg_field_zoom_reset(void) {
+    if (!zoom_source.valid && !zoom_initializer_pending.valid &&
+        !zoom_rgb_pending.valid && !zoom_invocation.valid)
+        return;
     zoom_source = (XgRenderZoomSource){ 0 };
     zoom_initializer_pending = (XgRenderZoomInitializerPending){ 0 };
     zoom_rgb_pending = (XgRenderZoomRgbPending){ 0 };
