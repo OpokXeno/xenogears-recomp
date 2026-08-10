@@ -193,6 +193,7 @@ jobs:
         run: |
           set -e
           pkg=dist/XenogearsRecomp-windows-x86_64
+          rm -rf "$pkg"
           mkdir -p "$pkg"
           "$LLVM_MINGW_ROOT/bin/llvm-strip" build-win/XenogearsRecomp.exe -o "$pkg/XenogearsRecomp.exe"
           cp game.toml LICENSE README.md "$pkg/"

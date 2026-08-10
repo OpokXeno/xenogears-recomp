@@ -62,6 +62,7 @@ podman run --rm --userns=keep-id \
         install -Dm644 /xgr-assets/SCPH1001.BIN psxrecomp/bios/SCPH1001.BIN
         ./build.sh "$XGR_RUNTIME_BUILD_DIR" Release
         pkg=dist/XenogearsRecomp-linux-x86_64
+        rm -rf "$pkg"
         mkdir -p "$pkg"
         strip "$XGR_RUNTIME_BUILD_DIR/XenogearsRecomp" -o "$pkg/XenogearsRecomp"
         cp game.toml LICENSE README.md "$pkg/"
