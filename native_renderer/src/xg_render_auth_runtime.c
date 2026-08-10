@@ -12557,8 +12557,9 @@ static bool native_field_actor_cutover(CPUState *cpu, uint32_t continuation) {
         bridge.modes.effective_render_mode != GUEST_RENDER_RENDER_NATIVE)
         return false;
     tier = state.pending_variant_tier;
-    if (!producer_family.enabled || producer_family.blocked ||
-        !ft4_geometry.enabled || ft4_geometry.blocked || pending->valid ||
+    if (!producer_family.enabled || producer_family.blocked)
+        return false;
+    if (!ft4_geometry.enabled || ft4_geometry.blocked || pending->valid ||
         !source_context_matches(tier) ||
         !stack_address_is_valid(cpu->gpr[29])) {
         reject_producer_family(17u);

@@ -3649,6 +3649,38 @@ static int test_native_stream_authority_starts_at_authenticated_scene(void) {
     return 1;
 }
 
+static int test_disabled_producer_family_does_not_abort_native_scene(void) {
+    CPUState cpu = {0};
+    GuestRenderBridgeSnapshot before = {0};
+    GuestRenderBridgeSnapshot after = {0};
+    PsxXgRenderProducerFamilySnapshot family = {0};
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    note_matching_field5_candidate();
+    psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
+                                 FIELD5_ACTIVATION_SITE,
+                                 FIELD5_ACTIVATION_JAL,
+                                 FIELD5_ACTIVATION_DELAY);
+    psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
+                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+    CHECK(guest_render_bridge_snapshot(&before) == GUEST_RENDER_OK);
+    CHECK(before.modes.effective_render_mode == GUEST_RENDER_RENDER_NATIVE);
+
+    psx_xg_render_auth_producer_family_enable(false);
+    CHECK(configure_host_geometry_cpu(&cpu, UINT32_C(0x80101000)));
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x800765dc), UINT32_C(0xafa00028)));
+    CHECK(guest_render_bridge_snapshot(&after) == GUEST_RENDER_OK);
+    CHECK(after.modes.effective_render_mode == GUEST_RENDER_RENDER_NATIVE);
+    CHECK(after.fallback_reason == before.fallback_reason);
+    CHECK(after.fallback_count == before.fallback_count);
+    psx_xg_render_auth_producer_family_snapshot(&family);
+    CHECK(!family.enabled && !family.blocked && family.blocker == 0u);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
 static int test_resident_residual_recaptures_after_producer_write(void) {
     const uint32_t command = UINT32_C(0x000b20e0);
     CPUState cpu = {0};
@@ -7924,6 +7956,7 @@ int main(void) {
     ok &= test_resident_ft4_geometry_accepts_scratchpad_stack();
     ok &= test_native_ft4_bypass_accepts_scratchpad_outputs();
     ok &= test_native_stream_authority_starts_at_authenticated_scene();
+    ok &= test_disabled_producer_family_does_not_abort_native_scene();
     ok &= test_resident_residual_recaptures_after_producer_write();
     ok &= test_native_particle_sidecar_and_cutover();
     ok &= test_native_particle_requires_authenticated_sidecar();
