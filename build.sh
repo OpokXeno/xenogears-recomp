@@ -57,7 +57,7 @@ RENDER_MANIFEST="$ROOT/native_renderer/xg_render_manifest.toml"
 GAME_EXE="$ROOT/game/slus_006.64"
 OVERLAYS_DIR="$ROOT/overlays"
 PYTHON="${PYTHON:-python3}"
-NATIVE_RENDER="${XG_RENDER_NATIVE:-ON}"
+NATIVE_RENDER="${XG_RENDER_NATIVE:-OFF}"
 
 # --- Auto-detect number of parallel jobs ---
 if command -v nproc &>/dev/null; then
