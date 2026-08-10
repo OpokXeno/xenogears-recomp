@@ -323,6 +323,26 @@ static int test_public_primitive_translation_uses_submit_validation(void) {
     CHECK(semantic.triangle_count == 2u);
     CHECK(semantic.triangles[0].vertices[0].x == 12 * INT32_C(65536));
     CHECK(semantic.material.texture_depth == GPU_RENDER_TEXTURE_15_BIT);
+    CHECK(semantic.screen_space_2d == GPU_RENDER_SCREEN_SPACE_2D_NONE);
+    item.native.material.tpage = UINT16_C(0x009b);
+    item.native.material.texture_page_x = 11u;
+    item.native.material.texture_page_y = 1u;
+    item.native.material.clut_x = 0u;
+    item.native.material.clut_y = UINT16_C(0x00e3);
+    item.native.material.texture_depth = XG_RENDER_IR_TEXTURE_8_BIT;
+    CHECK(xg_render_backend_translate_primitive(&item.native, &semantic) ==
+          XG_RENDER_BACKEND_OK);
+    CHECK(semantic.screen_space_2d ==
+          GPU_RENDER_SCREEN_SPACE_2D_PRESERVE_SIZE);
+    for (uint8_t triangle = 0u; triangle < item.native.triangle_count;
+         ++triangle) {
+        for (uint8_t vertex = 0u; vertex < 3u; ++vertex) {
+            item.native.triangles[triangle].vertices[vertex].native_view_position = true;
+        }
+    }
+    CHECK(xg_render_backend_translate_primitive(&item.native, &semantic) ==
+          XG_RENDER_BACKEND_OK);
+    CHECK(semantic.screen_space_2d == GPU_RENDER_SCREEN_SPACE_2D_NONE);
     for (uint8_t triangle = 0u; triangle < item.native.triangle_count;
          ++triangle) {
         for (uint8_t vertex = 0u; vertex < 3u; ++vertex) {

@@ -183,6 +183,13 @@ static bool copy_material(GpuRenderMaterial *out_material,
     return true;
 }
 
+static bool material_is_dialogue_portrait(
+        const XgRenderIrMaterialState *material) {
+    return material != NULL && material->textured &&
+        material->tpage == UINT16_C(0x009b) &&
+        material->clut_x == 0u && material->clut_y == UINT16_C(0x00e3);
+}
+
 static XgRenderBackendStatus validate_native_primitive(
         const XgRenderIrNativePrimitive *primitive) {
     MaterialValidation material_validation;
@@ -242,6 +249,11 @@ static XgRenderBackendStatus translate_native_primitive(
     memset(out_semantic, 0, sizeof(*out_semantic));
     if (!copy_material(&out_semantic->material, &primitive->material))
         return XG_RENDER_BACKEND_UNSUPPORTED_MATERIAL;
+    out_semantic->screen_space_2d =
+        material_is_dialogue_portrait(&primitive->material) &&
+        !primitive->triangles[0].vertices[0].native_view_position
+            ? GPU_RENDER_SCREEN_SPACE_2D_PRESERVE_SIZE
+            : GPU_RENDER_SCREEN_SPACE_2D_NONE;
     out_semantic->triangle_count = primitive->triangle_count;
     for (triangle_index = 0u;
          triangle_index < primitive->triangle_count;
