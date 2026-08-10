@@ -14,11 +14,12 @@
         }                                                                       \
     } while (0)
 
-enum {
-    TEST_MEMORY_BASE = 0x80050000u,
-    TEST_MEMORY_SIZE = 0x60000u,
-    TEST_PARTICLES = 0x8009e000u,
-};
+/* Guest addresses exceed INT_MAX — enum constants would take type int on
+ * clang/MSVC-ABI targets and sign-extend in 64-bit comparisons; UINT32_C
+ * keeps them unsigned everywhere. */
+#define TEST_MEMORY_BASE UINT32_C(0x80050000)
+#define TEST_MEMORY_SIZE UINT32_C(0x60000)
+#define TEST_PARTICLES UINT32_C(0x8009e000)
 
 typedef struct TestReader {
     uint8_t memory[TEST_MEMORY_SIZE];

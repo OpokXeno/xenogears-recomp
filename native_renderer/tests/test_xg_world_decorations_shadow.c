@@ -14,16 +14,17 @@
         }                                                                      \
     } while (0)
 
-enum {
-    TEST_MEMORY_BASE = 0x80050000u,
-    TEST_MEMORY_SIZE = 0x0e0000u,
-    TEST_POSITIONS = 0x8009e000u,
-    TEST_CONTEXT = 0x80100000u,
-    TEST_PACKET_BASE = 0x80110000u,
-    TEST_OT_BASE = 0x80120000u,
-    TEST_OUTER_SP = 0x8012f000u,
-    TEST_BUCKET = 160u,
-};
+/* Guest addresses exceed INT_MAX — enum constants would take type int on
+ * clang/MSVC-ABI targets and sign-extend in 64-bit comparisons; UINT32_C
+ * keeps them unsigned everywhere. */
+#define TEST_MEMORY_BASE UINT32_C(0x80050000)
+#define TEST_MEMORY_SIZE UINT32_C(0x0e0000)
+#define TEST_POSITIONS UINT32_C(0x8009e000)
+#define TEST_CONTEXT UINT32_C(0x80100000)
+#define TEST_PACKET_BASE UINT32_C(0x80110000)
+#define TEST_OT_BASE UINT32_C(0x80120000)
+#define TEST_OUTER_SP UINT32_C(0x8012f000)
+#define TEST_BUCKET UINT32_C(160)
 
 typedef struct TestMemory {
     uint8_t bytes[TEST_MEMORY_SIZE];
