@@ -57,7 +57,7 @@ RENDER_MANIFEST="$ROOT/native_renderer/xg_render_manifest.toml"
 GAME_EXE="$ROOT/game/slus_006.64"
 OVERLAYS_DIR="$ROOT/overlays"
 PYTHON="${PYTHON:-python3}"
-NATIVE_RENDER="${XG_RENDER_NATIVE:-OFF}"
+NATIVE_RENDER="${XG_RENDER_NATIVE:-ON}"
 
 # --- Auto-detect number of parallel jobs ---
 if command -v nproc &>/dev/null; then
@@ -72,8 +72,7 @@ if [[ "$NATIVE_RENDER" == "OFF" ]]; then
     GAME_IDENTITY_SHA256="$("$PYTHON" -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$GAME_EXE")"
     MANIFEST_IDENTITY_SHA256="$("$PYTHON" -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$RENDER_MANIFEST")"
 else
-    MANIFEST_METADATA="$("$PYTHON" "$MANIFEST_TOOL" metadata "$RENDER_MANIFEST" \
-        --exe "$GAME_EXE" --overlays "$OVERLAYS_DIR")"
+MANIFEST_METADATA="$("$PYTHON" "$MANIFEST_TOOL" metadata-declared "$RENDER_MANIFEST")"
     GAME_IDENTITY_SHA256="$("$PYTHON" -c \
         'import json,sys; print(json.load(sys.stdin)["game_identity"])' \
         <<<"$MANIFEST_METADATA")"

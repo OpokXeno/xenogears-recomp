@@ -177,7 +177,6 @@ jobs:
         run: |
           cmake -S . -B build-win -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-windows-x86_64-llvm-mingw.cmake \
-            -DXG_RENDER_NATIVE=OFF \
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build-win -j "$(nproc)"
 

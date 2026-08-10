@@ -36,6 +36,9 @@ set(XG_RENDER_MANIFEST_TOOL_SOURCES
 option(XG_RENDER_NATIVE
     "Enable authenticated native-render manifest validation and cutovers"
     ON)
+option(XG_RENDER_VALIDATE_OVERLAYS
+    "Verify private native-render overlay artifacts during the build"
+    OFF)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${XG_RENDER_MANIFEST}"
     "${XG_RENDER_RUNTIME_VARIANTS}"
@@ -44,6 +47,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     ${XG_RENDER_MANIFEST_TOOL_SOURCES})
 
 if(XG_RENDER_NATIVE)
+if(XG_RENDER_VALIDATE_OVERLAYS)
 execute_process(
     COMMAND "${Python3_EXECUTABLE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest.py" metadata
@@ -53,6 +57,15 @@ execute_process(
     RESULT_VARIABLE XG_RENDER_METADATA_RESULT
     OUTPUT_VARIABLE XG_RENDER_METADATA_JSON
     ERROR_VARIABLE XG_RENDER_METADATA_STDERR)
+else()
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest.py" metadata-declared
+        "${XG_RENDER_MANIFEST}"
+    RESULT_VARIABLE XG_RENDER_METADATA_RESULT
+    OUTPUT_VARIABLE XG_RENDER_METADATA_JSON
+    ERROR_VARIABLE XG_RENDER_METADATA_STDERR)
+endif()
 if(NOT XG_RENDER_METADATA_RESULT EQUAL 0)
     message(FATAL_ERROR
         "Native renderer manifest metadata validation failed:\n${XG_RENDER_METADATA_STDERR}")
@@ -367,7 +380,7 @@ endif()
 
 set(XG_RENDER_MANIFEST_TABLE "${CMAKE_BINARY_DIR}/generated/xg_render_manifest_table.c")
 set(XG_RENDER_RUNTIME_VARIANT_TABLE "${CMAKE_BINARY_DIR}/generated/xg_render_runtime_variant_table.c")
-if(XG_RENDER_NATIVE)
+if(XG_RENDER_NATIVE AND XG_RENDER_VALIDATE_OVERLAYS)
 add_custom_command(
     OUTPUT "${XG_RENDER_MANIFEST_TABLE}"
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_BINARY_DIR}/generated"
@@ -401,6 +414,29 @@ add_custom_command(
         "${XG_RENDER_MANIFEST}"
         "${XG_RENDER_FIELD5_RUNTIME_ARTIFACT}"
         ${XG_RENDER_MANIFEST_TOOL_SOURCES}
+    VERBATIM)
+add_custom_target(xg_render_runtime_variant_table
+    DEPENDS "${XG_RENDER_RUNTIME_VARIANT_TABLE}")
+elseif(XG_RENDER_NATIVE)
+add_custom_command(
+    OUTPUT "${XG_RENDER_MANIFEST_TABLE}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_BINARY_DIR}/generated"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest.py"
+            emit-declared "${XG_RENDER_MANIFEST}"
+            --out "${XG_RENDER_MANIFEST_TABLE}"
+    DEPENDS "${XG_RENDER_MANIFEST}"
+            ${XG_RENDER_MANIFEST_TOOL_SOURCES}
+    VERBATIM)
+add_custom_target(xg_render_manifest_table DEPENDS "${XG_RENDER_MANIFEST_TABLE}")
+add_custom_command(
+    OUTPUT "${XG_RENDER_RUNTIME_VARIANT_TABLE}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_BINARY_DIR}/generated"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_runtime_variants.py"
+            emit-declared "${XG_RENDER_RUNTIME_VARIANTS}"
+            --canonical-manifest "${XG_RENDER_MANIFEST}"
+            --out "${XG_RENDER_RUNTIME_VARIANT_TABLE}"
+    DEPENDS "${XG_RENDER_RUNTIME_VARIANTS}" "${XG_RENDER_MANIFEST}"
+            ${XG_RENDER_MANIFEST_TOOL_SOURCES}
     VERBATIM)
 add_custom_target(xg_render_runtime_variant_table
     DEPENDS "${XG_RENDER_RUNTIME_VARIANT_TABLE}")

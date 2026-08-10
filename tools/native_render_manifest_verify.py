@@ -223,3 +223,42 @@ def verify(contract: ManifestContract, inputs: VerificationInputs) -> VerifiedMa
     )
     manifest_identity = Digest32(hashlib.sha256(inputs.manifest.read_bytes()).digest())
     return VerifiedManifest(game_actual.sha256, manifest_identity, contract.game.namespace_crc32, tuple(sorted(records, key=lambda item: item.identifier)), validation)
+
+
+def declare(contract: ManifestContract, manifest: Path) -> VerifiedManifest:
+    """Emit the declared Native contract without reading private game data."""
+    if contract.blockers():
+        fail("contract blocked by unavailable authentication")
+    assert isinstance(contract.field, AuthenticatedOverlay)
+    assert isinstance(contract.site, AuthenticatedSite)
+    field = contract.field
+    site = contract.site
+    callee = next(function for function in contract.functions
+                  if function.identifier == "vsync")
+    zero = Digest32(bytes(32))
+    records = [
+        MetadataRecord(RECORD_IDS[GAME_ID], GAME_ID, 1, contract.game.base_address, 0,
+                       contract.game.identity.sha256, zero, "", ""),
+        MetadataRecord(RECORD_IDS[FIELD_ID], FIELD_ID, 2, field.base_address, 0,
+                       field.identity.sha256, zero, "", ""),
+        MetadataRecord(RECORD_IDS[PRODUCER_ID], PRODUCER_ID, 3,
+                       contract.producer.entry_address, 0, field.identity.sha256, zero,
+                       contract.producer.framebuffer_context, contract.producer.ot_context),
+        MetadataRecord(RECORD_IDS[SITE_ID], SITE_ID, 4, site.call_address,
+                       callee.entry_address, field.identity.sha256, site.window_sha256,
+                       site.framebuffer_context, site.ot_context),
+    ]
+    records.extend(MetadataRecord(RECORD_IDS[function.identifier], function.identifier,
+                   5, function.entry_address, 0, contract.game.identity.sha256, zero, "", "")
+                   for function in contract.functions)
+    validation = ManifestValidationMetadata(
+        RECORD_IDS[PRODUCER_ID], RECORD_IDS[SITE_ID], field.range_crc32,
+        field.range_crc32, field.base_address + field.range_offset, field.range_size,
+        contract.producer.entry_address, site.call_address, callee.entry_address,
+        site.return_address, site.window_start, site.window_size, site.window_sha256,
+        3, callee.entry_address, 1, 1)
+    return VerifiedManifest(
+        contract.game.identity.sha256,
+        Digest32(hashlib.sha256(manifest.read_bytes()).digest()),
+        contract.game.namespace_crc32, tuple(sorted(records, key=lambda item: item.identifier)),
+        validation)

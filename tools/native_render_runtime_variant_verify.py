@@ -27,6 +27,13 @@ class VerifiedRuntimeVariants:
     companion_identity: Digest32
 
 
+def declare(contract: RuntimeVariantContract, canonical_manifest: Path) -> VerifiedRuntimeVariants:
+    canonical_identity = Digest32(hashlib.sha256(canonical_manifest.read_bytes()).digest())
+    if canonical_identity != contract.canonical.manifest_identity:
+        fail("field5 canonical manifest binding mismatch")
+    return VerifiedRuntimeVariants(contract, canonical_identity)
+
+
 def range_contains(start: int, size: int, value: int, value_size: int) -> bool:
     return start <= value and value + value_size <= start + size
 

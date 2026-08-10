@@ -24,7 +24,7 @@ from native_render_manifest_output import (
     table_payload,
     validate_evidence_payload,
 )
-from native_render_manifest_verify import VerificationInputs, verify
+from native_render_manifest_verify import VerificationInputs, declare, verify
 
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -49,6 +49,11 @@ def main() -> int:
     emit.add_argument("--metadata-out", type=Path)
     metadata = commands.add_parser("metadata")
     add_inputs(metadata)
+    metadata_declared = commands.add_parser("metadata-declared")
+    metadata_declared.add_argument("manifest", type=Path)
+    emit_declared = commands.add_parser("emit-declared")
+    emit_declared.add_argument("manifest", type=Path)
+    emit_declared.add_argument("--out", type=Path, required=True)
     check = commands.add_parser("check-metadata")
     add_inputs(check)
     check.add_argument("--table", type=Path, required=True)
@@ -76,6 +81,14 @@ def main() -> int:
             validate_evidence_payload(payload)
             atomic_write(arguments.evidence, json_bytes(payload))
             print("self-test PASS: real validation/emission paths; temporary fixture removed")
+            return 0
+        if arguments.command in {"metadata-declared", "emit-declared"}:
+            verified = declare(load_contract(arguments.manifest), arguments.manifest)
+            if arguments.command == "metadata-declared":
+                print(json_bytes(configuration_payload(verified)).decode("ascii"), end="")
+                return 0
+            atomic_write(arguments.out, render_c(verified))
+            print("emit PASS: declared native-render metadata")
             return 0
         inputs = VerificationInputs(arguments.manifest, arguments.exe, arguments.overlays)
         verified = verify(load_contract(arguments.manifest), inputs)

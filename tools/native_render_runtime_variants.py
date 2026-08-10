@@ -14,7 +14,7 @@ from native_render_manifest_model import ManifestError
 from native_render_manifest_output import atomic_write
 from native_render_runtime_variant_model import load_contract
 from native_render_runtime_variant_output import render_c
-from native_render_runtime_variant_verify import VerificationInputs, verify
+from native_render_runtime_variant_verify import VerificationInputs, declare, verify
 
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -35,8 +35,18 @@ def main() -> int:
     emit = commands.add_parser("emit")
     add_inputs(emit)
     emit.add_argument("--out", type=Path, required=True)
+    emit_declared = commands.add_parser("emit-declared")
+    emit_declared.add_argument("companion", type=Path)
+    emit_declared.add_argument("--canonical-manifest", type=Path,
+                              default=CANONICAL_MANIFEST)
+    emit_declared.add_argument("--out", type=Path, required=True)
     arguments = parser.parse_args()
     try:
+        if arguments.command == "emit-declared":
+            atomic_write(arguments.out, render_c(declare(
+                load_contract(arguments.companion), arguments.canonical_manifest)))
+            print("emit PASS: declared field5 runtime descriptor")
+            return 0
         inputs = VerificationInputs(arguments.companion, arguments.canonical_manifest,
                                     arguments.artifact)
         verified = verify(load_contract(arguments.companion), inputs)

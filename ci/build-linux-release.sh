@@ -51,7 +51,7 @@ podman build --pull=always \
     --tag "$IMAGE" "$ROOT/ci"
 
 podman run --rm --userns=keep-id \
-    --env HOME=/tmp --env PYTHON=python3 --env XG_RENDER_NATIVE=OFF \
+    --env HOME=/tmp --env PYTHON=python3 \
     --env "XGR_RUNTIME_BUILD_DIR=$BUILD_DIR" \
     --env "PSX_RECOMPILER_BUILD=$RECOMPILER_BUILD" \
     --volume "$ROOT:/workspace:Z" \
