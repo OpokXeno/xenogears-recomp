@@ -332,8 +332,7 @@ static int test_public_primitive_translation_uses_submit_validation(void) {
     item.native.material.texture_depth = XG_RENDER_IR_TEXTURE_8_BIT;
     CHECK(xg_render_backend_translate_primitive(&item.native, &semantic) ==
           XG_RENDER_BACKEND_OK);
-    CHECK(semantic.screen_space_2d ==
-          GPU_RENDER_SCREEN_SPACE_2D_PRESERVE_SIZE);
+    CHECK(semantic.screen_space_2d == GPU_RENDER_SCREEN_SPACE_2D_NONE);
     for (uint8_t triangle = 0u; triangle < item.native.triangle_count;
          ++triangle) {
         for (uint8_t vertex = 0u; vertex < 3u; ++vertex) {
