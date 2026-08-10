@@ -136,6 +136,7 @@ set(_required_archive_entries
     "${PACKAGE_ROOT}/bios"
     "${PACKAGE_ROOT}/bios/OpenBIOS.LICENSE"
     "${PACKAGE_ROOT}/bios/openbios.bin"
+    "${PACKAGE_ROOT}/overlay_toolchain"
     "${PACKAGE_ROOT}/game.toml"
     "${PACKAGE_ROOT}/LICENSE"
     "${PACKAGE_ROOT}/README.md"
@@ -153,7 +154,7 @@ foreach(_entry IN LISTS _archive_entries)
     if(_is_banned)
         message(FATAL_ERROR "Archive contains a prohibited release artifact: ${_entry}")
     endif()
-    if(_relative_entry MATCHES "^assets/")
+    if(_relative_entry MATCHES "^(assets|overlay_toolchain)/")
         continue()
     endif()
     list(FIND _required_archive_entries "${_normalized_entry}" _known_entry_index)
@@ -228,6 +229,7 @@ set(_required_top_level
     "${EXECUTABLE_NAME}"
     assets
     bios
+    overlay_toolchain
     game.toml
     LICENSE
     README.md)
@@ -256,6 +258,35 @@ endif()
 if(NOT IS_DIRECTORY "${_package_directory}/bios")
     fail("Archive bios path is not a directory")
 endif()
+if(NOT IS_DIRECTORY "${_package_directory}/overlay_toolchain")
+    fail("Archive overlay_toolchain path is not a directory")
+endif()
+
+set(_required_toolchain_files
+    compile_overlays.py
+    include/overlay_api.h
+    include/overlay_codegen_hash.h
+    licenses/PYTHON-LICENSE.txt
+    licenses/TCC-COPYING.txt)
+if(PLATFORM STREQUAL "linux")
+    list(APPEND _required_toolchain_files
+        psxrecomp-game
+        python/bin/python3
+        tcc/tcc
+        tcc/tcc.real)
+else()
+    list(APPEND _required_toolchain_files
+        psxrecomp-game.exe
+        python/python.exe
+        tcc/tcc.exe)
+endif()
+foreach(_toolchain_file IN LISTS _required_toolchain_files)
+    set(_toolchain_path
+        "${_package_directory}/overlay_toolchain/${_toolchain_file}")
+    if(NOT EXISTS "${_toolchain_path}" OR IS_DIRECTORY "${_toolchain_path}")
+        fail("Archive is missing required overlay toolchain file: ${_toolchain_file}")
+    endif()
+endforeach()
 
 file(GLOB_RECURSE _bios_entries
     RELATIVE "${_package_directory}/bios"

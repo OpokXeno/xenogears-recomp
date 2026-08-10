@@ -103,7 +103,7 @@ jobs:
       - name: Check host dependencies
         run: |
           set -e
-          for t in cmake ninja git curl python3; do
+          for t in cmake ninja git curl python3 tar unzip; do
             command -v "$t" >/dev/null || { echo "::error::missing host tool: $t — see docs/self-hosted-runner.md"; exit 1; }
           done
           python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else "Python 3.11 or newer is required")'
@@ -180,14 +180,50 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build-win -j "$(nproc)"
 
+      - name: Build overlay recompiler for Windows
+        run: |
+          cmake -S psxrecomp/recompiler -B psxrecomp/recompiler/build-win -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/toolchain-windows-x86_64-llvm-mingw.cmake" \
+            -DCMAKE_BUILD_TYPE=Release \
+            "-DCMAKE_EXE_LINKER_FLAGS=-static -static-libgcc -static-libstdc++" \
+            -DPSX_GAME_EXTRA_IDENTITY_SHA256="$XGR_GAME_IDENTITY_SHA256" \
+            -DPSX_GAME_MANIFEST_DIGEST_SHA256="$XGR_MANIFEST_IDENTITY_SHA256"
+          cmake --build psxrecomp/recompiler/build-win --target psxrecomp-game -j "$(nproc)"
+
+      - name: Provision embedded Python and TinyCC
+        run: |
+          set -e
+          root="$XGR_DEPS_DIR/overlay-toolchain"
+          mkdir -p "$root"
+          py_archive=cpython-3.11.9+20240726-x86_64-pc-windows-msvc-shared-install_only.tar.gz
+          if [ ! -f "$root/python/python.exe" ]; then
+            curl -fL "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-pc-windows-msvc-shared-install_only.tar.gz" -o "$root/$py_archive"
+            echo "f694be48bdfec1dace6d69a19906b6083f4dd7c7c61f1138ba520e433e5598f8  $root/$py_archive" | sha256sum -c -
+            tar -C "$root" -xzf "$root/$py_archive"
+          fi
+          if [ ! -f "$root/tcc/tcc.exe" ]; then
+            curl -fL "https://download.savannah.gnu.org/releases/tinycc/tcc-0.9.27-win64-bin.zip" -o "$root/tcc.zip"
+            echo "34a721949a2583fdff725312da092fa0f5f1f284b702e6f811c6954714faabb2  $root/tcc.zip" | sha256sum -c -
+            unzip -q "$root/tcc.zip" -d "$root"
+          fi
+          if [ ! -f "$root/tcc-source/COPYING" ]; then
+            curl -fL "https://download.savannah.gnu.org/releases/tinycc/tcc-0.9.27.tar.bz2" -o "$root/tcc-source.tar.bz2"
+            echo "de23af78fca90ce32dff2dd45b3432b2334740bb9bb7b05bf60fdbfc396ceb9c  $root/tcc-source.tar.bz2" | sha256sum -c -
+            mkdir -p "$root/tcc-source"
+            tar -C "$root/tcc-source" --strip-components=1 -xjf "$root/tcc-source.tar.bz2"
+          fi
+
       - name: Verify exe imports only system DLLs
         run: |
-          imports="$("$LLVM_MINGW_ROOT/bin/x86_64-w64-mingw32-objdump" -p build-win/XenogearsRecomp.exe | grep 'DLL Name' | sort -u)"
-          echo "$imports"
-          if echo "$imports" | grep -qiE 'SDL2|libgcc|libstdc|libwinpthread'; then
-            echo "::error::exe is not self-contained (non-system DLL import found)"
-            exit 1
-          fi
+          for exe in build-win/XenogearsRecomp.exe psxrecomp/recompiler/build-win/psxrecomp-game.exe; do
+            imports="$("$LLVM_MINGW_ROOT/bin/x86_64-w64-mingw32-objdump" -p "$exe" | grep 'DLL Name' | sort -u)"
+            echo "$exe"
+            echo "$imports"
+            if echo "$imports" | grep -qiE 'SDL2|libgcc|libstdc|libc\+\+|libunwind|libwinpthread'; then
+              echo "::error::$exe is not self-contained (non-system DLL import found)"
+              exit 1
+            fi
+          done
 
       - name: Package archive
         run: |
@@ -204,6 +240,11 @@ jobs:
           # built-in fallback; users can drop their own next to the exe).
           cp -r build-win/assets "$pkg/assets"
           rm -f "$pkg/assets/img/boxart.tga"
+          bash ci/stage-overlay-toolchain.sh windows "$pkg/overlay_toolchain" \
+            psxrecomp/recompiler/build-win/psxrecomp-game.exe \
+            "$XGR_DEPS_DIR/overlay-toolchain/python" \
+            "$XGR_DEPS_DIR/overlay-toolchain/tcc" \
+            "$XGR_DEPS_DIR/overlay-toolchain/tcc-source/COPYING"
           cmake -E chdir dist cmake -E tar cf ../XenogearsRecomp-windows-x86_64.zip --format=zip XenogearsRecomp-windows-x86_64
           cmake -DPROJECT_ROOT="$PWD" \
             -DARCHIVE="$PWD/XenogearsRecomp-windows-x86_64.zip" \

@@ -176,6 +176,16 @@ target_compile_definitions(psx-runtime PRIVATE
     PSX_INPUT_REPLAY_XG_AUTH_PROOF=1)
 
 if(BUILD_TESTING)
+    if(NOT WIN32)
+        add_executable(autocompile_posix_test
+            psxrecomp/runtime/tests/test_autocompile_posix.c
+            psxrecomp/runtime/src/autocompile.c)
+        target_include_directories(autocompile_posix_test PRIVATE
+            psxrecomp/runtime/include)
+        target_link_libraries(autocompile_posix_test PRIVATE Threads::Threads)
+        add_test(NAME autocompile_posix COMMAND autocompile_posix_test)
+    endif()
+
     add_executable(native_render_mode_control_test
         psxrecomp/runtime/tests/test_native_render_mode_control.c
         psxrecomp/runtime/src/native_render_mode_control.c)
