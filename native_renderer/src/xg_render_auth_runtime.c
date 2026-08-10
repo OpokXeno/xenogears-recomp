@@ -3516,9 +3516,38 @@ bool psx_xg_render_auth_cold_source_pc_relevant(uint32_t pc) {
 
 uint32_t psx_xg_render_auth_cold_instruction_flags(
     uint32_t pc, uint32_t instruction_word) {
-    uint32_t flags = 0u;
+    enum { INVARIANT_CACHE_CAPACITY = 4096u };
+    typedef struct {
+        uint32_t pc;
+        uint32_t instruction_word;
+        uint32_t flags;
+        bool valid;
+    } XgRenderColdInvariantCacheEntry;
+    static XgRenderColdInvariantCacheEntry
+        invariant_cache[INVARIANT_CACHE_CAPACITY];
+    XgRenderColdInvariantCacheEntry *cached;
+    uint32_t flags;
 
     if (!g_psx_xg_render_auth_cold_enabled) return 0u;
+    cached = &invariant_cache[(pc >> 2u) & (INVARIANT_CACHE_CAPACITY - 1u)];
+    if (cached->valid && cached->pc == pc &&
+        cached->instruction_word == instruction_word) {
+        flags = cached->flags;
+    } else {
+        flags = 0u;
+        if (psx_xg_render_auth_native_cutover_pc_relevant(pc))
+            flags |= PSX_XG_RENDER_COLD_NATIVE_PRE;
+        if (psx_xg_render_auth_native_cutover_post_pc_relevant(pc))
+            flags |= PSX_XG_RENDER_COLD_NATIVE_POST;
+        if (psx_xg_render_auth_overlay_cutover_relevant(pc, instruction_word))
+            flags |= PSX_XG_RENDER_COLD_OVERLAY;
+        *cached = (XgRenderColdInvariantCacheEntry){
+            .pc = pc,
+            .instruction_word = instruction_word,
+            .flags = flags,
+            .valid = true,
+        };
+    }
     if (psx_xg_render_auth_cold_hook_relevant(
             PSX_XG_RENDER_AUTH_HOOK_ENTRY, pc, instruction_word))
         flags |= PSX_XG_RENDER_COLD_ENTRY;
@@ -3528,12 +3557,6 @@ uint32_t psx_xg_render_auth_cold_instruction_flags(
         flags |= PSX_XG_RENDER_COLD_CAPTURE;
     if (psx_xg_render_auth_cold_source_pc_relevant(pc))
         flags |= PSX_XG_RENDER_COLD_SOURCE;
-    if (psx_xg_render_auth_native_cutover_pc_relevant(pc))
-        flags |= PSX_XG_RENDER_COLD_NATIVE_PRE;
-    if (psx_xg_render_auth_native_cutover_post_pc_relevant(pc))
-        flags |= PSX_XG_RENDER_COLD_NATIVE_POST;
-    if (psx_xg_render_auth_overlay_cutover_relevant(pc, instruction_word))
-        flags |= PSX_XG_RENDER_COLD_OVERLAY;
     return flags;
 }
 
