@@ -4345,12 +4345,10 @@ static int test_overlay_ft4_2e_projected_contract_uses_only_producers(void) {
 }
 
 static int test_overlay_ft4_2e_field_builder_sidecar_is_producer_scoped(void) {
-    enum {
-        SOURCE = 0x80062000u,
-        DESCRIPTOR = 0x80062100u,
-        PACKET = 0x8009e200u,
-        STACK = 0x801f8100u,
-    };
+#define SOURCE UINT32_C(0x80062000)
+#define DESCRIPTOR UINT32_C(0x80062100)
+#define PACKET UINT32_C(0x8009e200)
+#define STACK UINT32_C(0x801f8100)
     CPUState cpu = {0};
     PsxXgRenderOverlayFt4Snapshot overlay = {0};
     PsxXgRenderSpriteFt4ShadowSnapshot sprite = {0};
@@ -4426,12 +4424,10 @@ static int test_overlay_ft4_2e_field_builder_sidecar_is_producer_scoped(void) {
 }
 
 static int test_sidecar_rejects_address_reuse_across_scene_and_stale_packet(void) {
-    enum {
-        SOURCE = 0x80062000u,
-        DESCRIPTOR = 0x80062100u,
-        PACKET = 0x8009e200u,
-        STACK = 0x801f8100u,
-    };
+#define SOURCE UINT32_C(0x80062000)
+#define DESCRIPTOR UINT32_C(0x80062100)
+#define PACKET UINT32_C(0x8009e200)
+#define STACK UINT32_C(0x801f8100)
     CPUState cpu = {0};
     GpuRenderSemantic first = {0};
     GpuRenderSemantic second = {0};
@@ -4536,12 +4532,10 @@ static int test_sidecar_rejects_address_reuse_across_scene_and_stale_packet(void
 }
 
 static int test_overlay_ft4_2e_descriptor_templates_do_not_read_packets(void) {
-    enum {
-        SOURCE = 0x80062000u,
-        DESCRIPTOR = 0x80062100u,
-        PACKET = 0x8009e200u,
-        STACK = 0x801f8100u,
-    };
+#define SOURCE UINT32_C(0x80062000)
+#define DESCRIPTOR UINT32_C(0x80062100)
+#define PACKET UINT32_C(0x8009e200)
+#define STACK UINT32_C(0x801f8100)
     CPUState cpu = {0};
     PsxXgRenderOverlayFt4Snapshot overlay = {0};
 
@@ -6108,18 +6102,16 @@ static uint32_t configure_all_family_world_models_native_cpu(CPUState *cpu) {
         0x28u, 0x2cu, 0x38u, 0x3cu, 0x28u, 0x2cu, 0x38u, 0x3cu,
         0x24u,
     };
-    enum {
-        RECORD = 0x80012000u,
-        MODEL = 0x80012100u,
-        VERTICES = 0x80012200u,
-        AUXILIARY_VERTICES = 0x80012300u,
-        TOPOLOGY = 0x80012400u,
-        ATTRIBUTES = 0x80013000u,
-        PACKETS = 0x80014000u,
-        REINITIALIZED_PACKETS = 0x80014240u,
-        CONTEXT = 0x80018000u,
-        OT = 0x80019000u,
-    };
+#define RECORD UINT32_C(0x80012000)
+#define MODEL UINT32_C(0x80012100)
+#define VERTICES UINT32_C(0x80012200)
+#define AUXILIARY_VERTICES UINT32_C(0x80012300)
+#define TOPOLOGY UINT32_C(0x80012400)
+#define ATTRIBUTES UINT32_C(0x80013000)
+#define PACKETS UINT32_C(0x80014000)
+#define REINITIALIZED_PACKETS UINT32_C(0x80014240)
+#define CONTEXT UINT32_C(0x80018000)
+#define OT UINT32_C(0x80019000)
     static const XgHost3dVector vertices[XG_HOST_3D_VERTEX_COUNT] = {
         {-32, -32, 0, 0u}, {32, -32, 0, 0u},
         {-32, 32, 0, 0u}, {32, 32, 0, 0u},
@@ -6326,12 +6318,10 @@ static int test_world_model_reinitialization_preserves_other_packet_buffer(void)
         0x18u, 0x28u, 0x24u, 0x34u, 0x18u, 0x28u, 0x24u, 0x34u,
         0x20u,
     };
-    enum {
-        RECORD = 0x80012000u,
-        MODEL = 0x80012100u,
-        PACKETS = 0x80014000u,
-        REINITIALIZED_PACKETS = 0x80014240u,
-    };
+#define RECORD UINT32_C(0x80012000)
+#define MODEL UINT32_C(0x80012100)
+#define PACKETS UINT32_C(0x80014000)
+#define REINITIALIZED_PACKETS UINT32_C(0x80014240)
     CPUState cpu;
     uint32_t family;
     uint32_t packet;
