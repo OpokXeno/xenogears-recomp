@@ -90,7 +90,7 @@ podman run --rm --userns=keep-id \
         make -C "$toolchain_tmp/tcc-0.9.27" BCHECK_O= -j"$(nproc)"
         make -C "$toolchain_tmp/tcc-0.9.27" BCHECK_O= install
         bash ci/stage-overlay-toolchain.sh linux "$pkg/overlay_toolchain" \
-            "$RECOMPILER_BUILD/psxrecomp-game" "$toolchain_tmp/python" \
+            "$PSX_RECOMPILER_BUILD/psxrecomp-game" "$toolchain_tmp/python" \
             "$toolchain_tmp/tcc-install" "$toolchain_tmp/tcc-0.9.27/COPYING"
         tar -C dist -czf XenogearsRecomp-linux-x86_64.tar.gz XenogearsRecomp-linux-x86_64
         bash ci/check-linux-glibc.sh "$pkg/XenogearsRecomp" GLIBC_2.31
