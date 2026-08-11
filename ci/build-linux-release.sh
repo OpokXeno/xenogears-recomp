@@ -85,7 +85,7 @@ podman run --rm --userns=keep-id \
         pushd "$toolchain_tmp/tcc-0.9.27" >/dev/null
         ./configure --prefix="$toolchain_tmp/tcc-install"
         popd >/dev/null
-        # Overlay builds never use TCC's -b bounds checker. Omitting bcheck.o
+        # Overlay builds never use the TCC -b bounds checker. Omitting bcheck.o
         # also keeps 0.9.27 buildable after glibc removed __malloc_hook.
         make -C "$toolchain_tmp/tcc-0.9.27" BCHECK_O= -j"$(nproc)"
         make -C "$toolchain_tmp/tcc-0.9.27" BCHECK_O= install
