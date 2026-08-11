@@ -41,7 +41,7 @@ done
 
 rm -rf "$DEST"
 mkdir -p "$DEST/include" "$DEST/licenses" "$DEST/tcc"
-cp -a "$PYTHON_ROOT" "$DEST/python"
+cp -aL "$PYTHON_ROOT" "$DEST/python"
 cp "$ROOT/psxrecomp/tools/compile_overlays.py" "$DEST/compile_overlays.py"
 cp -a "$ROOT/psxrecomp/runtime/include/." "$DEST/include/"
 # Runtime capture state is not part of the generated shard header closure and
