@@ -14,17 +14,18 @@
         }                                                                       \
     } while (0)
 
-enum {
-    RAM_SIZE = 0x200000u,
-    SCRATCH_SIZE = 0x400u,
-    POSITION_BASE = 0x800e0000u,
-    VELOCITY_BASE = 0x800e0500u,
-    CONTEXT_BASE = 0x800d0000u,
-    PACKET_BASE = 0x800f0000u,
-    OT_BASE = 0x800f4000u,
-    ENTRY_SP = 0x801ff000u,
-    FULL_RA = 0x80071b68u,
-};
+/* Guest addresses exceed INT_MAX — enum constants would take type int on
+ * clang/MSVC-ABI targets and sign-extend in 64-bit comparisons; UINT32_C
+ * keeps them unsigned everywhere. */
+#define RAM_SIZE UINT32_C(0x200000)
+#define SCRATCH_SIZE UINT32_C(0x400)
+#define POSITION_BASE UINT32_C(0x800e0000)
+#define VELOCITY_BASE UINT32_C(0x800e0500)
+#define CONTEXT_BASE UINT32_C(0x800d0000)
+#define PACKET_BASE UINT32_C(0x800f0000)
+#define OT_BASE UINT32_C(0x800f4000)
+#define ENTRY_SP UINT32_C(0x801ff000)
+#define FULL_RA UINT32_C(0x80071b68)
 
 static uint8_t ram[RAM_SIZE];
 static uint8_t scratch[SCRATCH_SIZE];

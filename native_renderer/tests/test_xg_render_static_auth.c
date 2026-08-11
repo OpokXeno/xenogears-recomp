@@ -160,12 +160,16 @@ static XgHost3dRotAverage4Input producer_family_host_input;
 static XgHost3dRotAverage4Output producer_family_host_output;
 static uint32_t producer_family_xy(int16_t x, int16_t y);
 
-enum {
-    PRODUCER_FAMILY_ACTOR_BASE = 0x80012000u,
-    PRODUCER_FAMILY_SECONDARY = 0x80013000u,
-    PRODUCER_FAMILY_STATE = 0x80014000u,
-    PRODUCER_FAMILY_OT_BASE = 0x80018000u,
-};
+/* Guest addresses exceed INT_MAX, so they must not be enumeration constants:
+ * on targets where such enumerators take type int (clang/MSVC ABI), the
+ * negative value sign-extends in 64-bit comparisons like
+ * `addr + 4u <= BASE + sizeof(mem)` and the optimizer deletes every
+ * subsequent branch of the read handlers. UINT32_C keeps them unsigned
+ * everywhere. */
+#define PRODUCER_FAMILY_ACTOR_BASE UINT32_C(0x80012000)
+#define PRODUCER_FAMILY_SECONDARY UINT32_C(0x80013000)
+#define PRODUCER_FAMILY_STATE UINT32_C(0x80014000)
+#define PRODUCER_FAMILY_OT_BASE UINT32_C(0x80018000)
 static bool presentation_gate_succeeds = true;
 static bool presentation_gate_saw_closed_state;
 
@@ -353,13 +357,11 @@ static void producer_family_write_word(uint32_t address, uint32_t value) {
             (address - producer_family_packet_address - 4u) / 4u] = value;
 }
 
-enum {
-    PARTICLE_BASE = 0x80016000u,
-    PARTICLE_MATRIX = 0x80017000u,
-    PARTICLE_SCALE = 0x80017100u,
-    PARTICLE_STACK = 0x801ff000u,
-    PARTICLE_OT_BASE = 0x80018000u,
-};
+#define PARTICLE_BASE UINT32_C(0x80016000)
+#define PARTICLE_MATRIX UINT32_C(0x80017000)
+#define PARTICLE_SCALE UINT32_C(0x80017100)
+#define PARTICLE_STACK UINT32_C(0x801ff000)
+#define PARTICLE_OT_BASE UINT32_C(0x80018000)
 
 static uint8_t particle_memory[0xc0];
 static uint32_t particle_matrix_words[8];
@@ -450,14 +452,12 @@ static void particle_write_byte(uint32_t address, uint8_t value) {
         particle_memory[address - PARTICLE_BASE] = value;
 }
 
-enum {
-    ZOOM_MEMORY_BASE = 0x800b1100u,
-    ZOOM_MEMORY_SIZE = 0x400u,
-    ZOOM_STACK_BASE = 0x801fc000u,
-    ZOOM_STACK_SIZE = 0x3000u,
-    ZOOM_INIT_ENTRY_SP = 0x801fd000u,
-    ZOOM_ENTRY_SP = 0x801fe000u,
-};
+#define ZOOM_MEMORY_BASE UINT32_C(0x800b1100)
+#define ZOOM_MEMORY_SIZE UINT32_C(0x400)
+#define ZOOM_STACK_BASE UINT32_C(0x801fc000)
+#define ZOOM_STACK_SIZE UINT32_C(0x3000)
+#define ZOOM_INIT_ENTRY_SP UINT32_C(0x801fd000)
+#define ZOOM_ENTRY_SP UINT32_C(0x801fe000)
 
 static uint8_t zoom_memory[ZOOM_MEMORY_SIZE];
 static uint8_t zoom_stack[ZOOM_STACK_SIZE];
@@ -555,21 +555,19 @@ static void zoom_store_word(uint32_t address, uint32_t value) {
         particle_store_u32(&zoom_stack[address - ZOOM_STACK_BASE], value);
 }
 
-enum {
-    PROJECTED_MEMORY_BASE = 0x800b4000u,
-    PROJECTED_MEMORY_SIZE = 0x1000u,
-    PROJECTED_OBJECT = PROJECTED_MEMORY_BASE,
-    PROJECTED_SECOND_OBJECT = PROJECTED_MEMORY_BASE + 0x800u,
-    PROJECTED_EYE = PROJECTED_MEMORY_BASE + 0x400u,
-    PROJECTED_AT = PROJECTED_MEMORY_BASE + 0x408u,
-    PROJECTED_MATRIX = PROJECTED_MEMORY_BASE + 0x420u,
-    PROJECTED_COLORS = PROJECTED_MEMORY_BASE + 0x460u,
-    PROJECTED_OT = PROJECTED_MEMORY_BASE + 0x500u,
-    PROJECTED_STACK_BASE = 0x801f8000u,
-    PROJECTED_STACK_SIZE = 0x4000u,
-    PROJECTED_INIT_SP = 0x801fa000u,
-    PROJECTED_CALL_SP = 0x801fb000u,
-};
+#define PROJECTED_MEMORY_BASE UINT32_C(0x800b4000)
+#define PROJECTED_MEMORY_SIZE UINT32_C(0x1000)
+#define PROJECTED_OBJECT PROJECTED_MEMORY_BASE
+#define PROJECTED_SECOND_OBJECT (PROJECTED_MEMORY_BASE + 0x800u)
+#define PROJECTED_EYE (PROJECTED_MEMORY_BASE + 0x400u)
+#define PROJECTED_AT (PROJECTED_MEMORY_BASE + 0x408u)
+#define PROJECTED_MATRIX (PROJECTED_MEMORY_BASE + 0x420u)
+#define PROJECTED_COLORS (PROJECTED_MEMORY_BASE + 0x460u)
+#define PROJECTED_OT (PROJECTED_MEMORY_BASE + 0x500u)
+#define PROJECTED_STACK_BASE UINT32_C(0x801f8000)
+#define PROJECTED_STACK_SIZE UINT32_C(0x4000)
+#define PROJECTED_INIT_SP UINT32_C(0x801fa000)
+#define PROJECTED_CALL_SP UINT32_C(0x801fb000)
 
 static uint8_t projected_memory[PROJECTED_MEMORY_SIZE];
 static uint8_t projected_stack[PROJECTED_STACK_SIZE];
@@ -806,19 +804,17 @@ static uint32_t pack_s16(int16_t low, int16_t high) {
     return (uint16_t)low | ((uint32_t)(uint16_t)high << 16u);
 }
 
-enum {
-    WORLD_NATIVE_RAM_SIZE = 0x200000u,
-    WORLD_NATIVE_SCRATCH_SIZE = 0x400u,
-    WORLD_NATIVE_CONTEXT = 0x80010000u,
-    WORLD_NATIVE_OT = 0x80011000u,
-    WORLD_NATIVE_ACTOR = 0x80012000u,
-    WORLD_NATIVE_ACTOR_DATA = 0x80012100u,
-    WORLD_NATIVE_ACTOR_DESCRIPTOR = 0x80012200u,
-    WORLD_NATIVE_DECORATION_PACKETS = 0x80016000u,
-    WORLD_NATIVE_PACKETS = 0x80018000u,
-    WORLD_NATIVE_STACK = 0x801ff000u,
-    WORLD_NATIVE_SCRATCH_STACK = 0x1f800310u,
-};
+#define WORLD_NATIVE_RAM_SIZE UINT32_C(0x200000)
+#define WORLD_NATIVE_SCRATCH_SIZE UINT32_C(0x400)
+#define WORLD_NATIVE_CONTEXT UINT32_C(0x80010000)
+#define WORLD_NATIVE_OT UINT32_C(0x80011000)
+#define WORLD_NATIVE_ACTOR UINT32_C(0x80012000)
+#define WORLD_NATIVE_ACTOR_DATA UINT32_C(0x80012100)
+#define WORLD_NATIVE_ACTOR_DESCRIPTOR UINT32_C(0x80012200)
+#define WORLD_NATIVE_DECORATION_PACKETS UINT32_C(0x80016000)
+#define WORLD_NATIVE_PACKETS UINT32_C(0x80018000)
+#define WORLD_NATIVE_STACK UINT32_C(0x801ff000)
+#define WORLD_NATIVE_SCRATCH_STACK UINT32_C(0x1f800310)
 
 static uint8_t world_native_ram[WORLD_NATIVE_RAM_SIZE];
 static uint8_t world_native_scratch[WORLD_NATIVE_SCRATCH_SIZE];
@@ -922,13 +918,11 @@ static void configure_empty_world_native_cpu(CPUState *cpu) {
     cpu->gte_ctrl[30] = 1024u;
 }
 
-enum {
-    RESIDENT_LINE_F2_HEAP = 0x800d3a2cu,
-    RESIDENT_LINE_F2_STATE = 0x800d3000u,
-    RESIDENT_LINE_F2_LEVEL = 4u,
-    RESIDENT_LINE_F2_COUNT = 3u,
-    RESIDENT_LINE_F2_BUFFER = 1u,
-};
+#define RESIDENT_LINE_F2_HEAP UINT32_C(0x800d3a2c)
+#define RESIDENT_LINE_F2_STATE UINT32_C(0x800d3000)
+#define RESIDENT_LINE_F2_LEVEL UINT32_C(4)
+#define RESIDENT_LINE_F2_COUNT UINT32_C(3)
+#define RESIDENT_LINE_F2_BUFFER UINT32_C(1)
 
 static uint32_t resident_line_f2_packet(uint32_t index) {
     return RESIDENT_LINE_F2_HEAP + 0x908u +
@@ -971,19 +965,17 @@ static void materialize_resident_line_f2_output(void) {
         RESIDENT_LINE_F2_STATE + 0x98u, RESIDENT_LINE_F2_BUFFER);
 }
 
-enum {
-    WORLD_MEMORY_BASE = 0x80050000u,
-    WORLD_MEMORY_SIZE = 0x50000u,
-    WORLD_VERTEX_BASE = 0x8009a280u,
-    WORLD_CAMERA_MATRIX = 0x8009c808u,
-    WORLD_CONTEXT_OBJECT = 0x8009bf00u,
-    WORLD_OT_BASE = 0x800b0000u,
-    WORLD_OT_SIZE = 0x4000u,
-    WORLD_SCRATCH_BASE = 0x1f800000u,
-    WORLD_SCRATCH_SIZE = 0x110u,
-    WORLD_STACK_BASE = 0x801fe000u,
-    WORLD_STACK_SIZE = 0x2000u,
-};
+#define WORLD_MEMORY_BASE UINT32_C(0x80050000)
+#define WORLD_MEMORY_SIZE UINT32_C(0x50000)
+#define WORLD_VERTEX_BASE UINT32_C(0x8009a280)
+#define WORLD_CAMERA_MATRIX UINT32_C(0x8009c808)
+#define WORLD_CONTEXT_OBJECT UINT32_C(0x8009bf00)
+#define WORLD_OT_BASE UINT32_C(0x800b0000)
+#define WORLD_OT_SIZE UINT32_C(0x4000)
+#define WORLD_SCRATCH_BASE UINT32_C(0x1f800000)
+#define WORLD_SCRATCH_SIZE UINT32_C(0x110)
+#define WORLD_STACK_BASE UINT32_C(0x801fe000)
+#define WORLD_STACK_SIZE UINT32_C(0x2000)
 
 static uint8_t world_memory[WORLD_MEMORY_SIZE];
 static uint8_t world_ot[WORLD_OT_SIZE];
@@ -1408,19 +1400,17 @@ static void configure_world_minimap_cpu(CPUState *cpu) {
     world_store_word(stack_pointer + 0x30u, cpu->gpr[31]);
 }
 
-enum {
-    MODEL_SHADOW_MEMORY_BASE = 0x8004f000u,
-    MODEL_SHADOW_MEMORY_SIZE = 0x71000u,
-    MODEL_SHADOW_STACK_BASE = 0x801f0000u,
-    MODEL_SHADOW_STACK_SIZE = 0x10000u,
-    MODEL_SHADOW_MODEL = 0x80060000u,
-    MODEL_SHADOW_VERTICES = 0x80060100u,
-    MODEL_SHADOW_TOPOLOGY = 0x80060200u,
-    MODEL_SHADOW_MATERIAL = 0x80060300u,
-    MODEL_SHADOW_PACKET = 0x8009e000u,
-    MODEL_SHADOW_OT = 0x800b0000u,
-    MODEL_SHADOW_SP = 0x801f8000u,
-};
+#define MODEL_SHADOW_MEMORY_BASE UINT32_C(0x8004f000)
+#define MODEL_SHADOW_MEMORY_SIZE UINT32_C(0x71000)
+#define MODEL_SHADOW_STACK_BASE UINT32_C(0x801f0000)
+#define MODEL_SHADOW_STACK_SIZE UINT32_C(0x10000)
+#define MODEL_SHADOW_MODEL UINT32_C(0x80060000)
+#define MODEL_SHADOW_VERTICES UINT32_C(0x80060100)
+#define MODEL_SHADOW_TOPOLOGY UINT32_C(0x80060200)
+#define MODEL_SHADOW_MATERIAL UINT32_C(0x80060300)
+#define MODEL_SHADOW_PACKET UINT32_C(0x8009e000)
+#define MODEL_SHADOW_OT UINT32_C(0x800b0000)
+#define MODEL_SHADOW_SP UINT32_C(0x801f8000)
 
 static uint8_t model_shadow_memory[MODEL_SHADOW_MEMORY_SIZE];
 static uint8_t model_shadow_stack[MODEL_SHADOW_STACK_SIZE];
@@ -1538,13 +1528,11 @@ static void configure_model_ft4_shadow_cpu(CPUState *cpu) {
     cpu->gte_ctrl[30] = 1024u;
 }
 
-enum {
-    SPRITE_SHADOW_INSTANCE = 0x80061000u,
-    SPRITE_SHADOW_DATA = 0x80061100u,
-    SPRITE_SHADOW_DESCRIPTOR = 0x80061200u,
-    SPRITE_SHADOW_VERTICES = 0x8004fb98u,
-    SPRITE_SHADOW_PACKET = 0x8009e100u,
-};
+#define SPRITE_SHADOW_INSTANCE UINT32_C(0x80061000)
+#define SPRITE_SHADOW_DATA UINT32_C(0x80061100)
+#define SPRITE_SHADOW_DESCRIPTOR UINT32_C(0x80061200)
+#define SPRITE_SHADOW_VERTICES UINT32_C(0x8004fb98)
+#define SPRITE_SHADOW_PACKET UINT32_C(0x8009e100)
 
 static void configure_sprite_ft4_shadow_cpu(CPUState *cpu) {
     static const XgHost3dVector vertices[4] = {
@@ -4357,12 +4345,10 @@ static int test_overlay_ft4_2e_projected_contract_uses_only_producers(void) {
 }
 
 static int test_overlay_ft4_2e_field_builder_sidecar_is_producer_scoped(void) {
-    enum {
-        SOURCE = 0x80062000u,
-        DESCRIPTOR = 0x80062100u,
-        PACKET = 0x8009e200u,
-        STACK = 0x801f8100u,
-    };
+#define SOURCE UINT32_C(0x80062000)
+#define DESCRIPTOR UINT32_C(0x80062100)
+#define PACKET UINT32_C(0x8009e200)
+#define STACK UINT32_C(0x801f8100)
     CPUState cpu = {0};
     PsxXgRenderOverlayFt4Snapshot overlay = {0};
     PsxXgRenderSpriteFt4ShadowSnapshot sprite = {0};
@@ -4438,12 +4424,10 @@ static int test_overlay_ft4_2e_field_builder_sidecar_is_producer_scoped(void) {
 }
 
 static int test_sidecar_rejects_address_reuse_across_scene_and_stale_packet(void) {
-    enum {
-        SOURCE = 0x80062000u,
-        DESCRIPTOR = 0x80062100u,
-        PACKET = 0x8009e200u,
-        STACK = 0x801f8100u,
-    };
+#define SOURCE UINT32_C(0x80062000)
+#define DESCRIPTOR UINT32_C(0x80062100)
+#define PACKET UINT32_C(0x8009e200)
+#define STACK UINT32_C(0x801f8100)
     CPUState cpu = {0};
     GpuRenderSemantic first = {0};
     GpuRenderSemantic second = {0};
@@ -4548,12 +4532,10 @@ static int test_sidecar_rejects_address_reuse_across_scene_and_stale_packet(void
 }
 
 static int test_overlay_ft4_2e_descriptor_templates_do_not_read_packets(void) {
-    enum {
-        SOURCE = 0x80062000u,
-        DESCRIPTOR = 0x80062100u,
-        PACKET = 0x8009e200u,
-        STACK = 0x801f8100u,
-    };
+#define SOURCE UINT32_C(0x80062000)
+#define DESCRIPTOR UINT32_C(0x80062100)
+#define PACKET UINT32_C(0x8009e200)
+#define STACK UINT32_C(0x801f8100)
     CPUState cpu = {0};
     PsxXgRenderOverlayFt4Snapshot overlay = {0};
 
@@ -6120,18 +6102,16 @@ static uint32_t configure_all_family_world_models_native_cpu(CPUState *cpu) {
         0x28u, 0x2cu, 0x38u, 0x3cu, 0x28u, 0x2cu, 0x38u, 0x3cu,
         0x24u,
     };
-    enum {
-        RECORD = 0x80012000u,
-        MODEL = 0x80012100u,
-        VERTICES = 0x80012200u,
-        AUXILIARY_VERTICES = 0x80012300u,
-        TOPOLOGY = 0x80012400u,
-        ATTRIBUTES = 0x80013000u,
-        PACKETS = 0x80014000u,
-        REINITIALIZED_PACKETS = 0x80014240u,
-        CONTEXT = 0x80018000u,
-        OT = 0x80019000u,
-    };
+#define RECORD UINT32_C(0x80012000)
+#define MODEL UINT32_C(0x80012100)
+#define VERTICES UINT32_C(0x80012200)
+#define AUXILIARY_VERTICES UINT32_C(0x80012300)
+#define TOPOLOGY UINT32_C(0x80012400)
+#define ATTRIBUTES UINT32_C(0x80013000)
+#define PACKETS UINT32_C(0x80014000)
+#define REINITIALIZED_PACKETS UINT32_C(0x80014240)
+#define CONTEXT UINT32_C(0x80018000)
+#define OT UINT32_C(0x80019000)
     static const XgHost3dVector vertices[XG_HOST_3D_VERTEX_COUNT] = {
         {-32, -32, 0, 0u}, {32, -32, 0, 0u},
         {-32, 32, 0, 0u}, {32, 32, 0, 0u},
@@ -6338,12 +6318,10 @@ static int test_world_model_reinitialization_preserves_other_packet_buffer(void)
         0x18u, 0x28u, 0x24u, 0x34u, 0x18u, 0x28u, 0x24u, 0x34u,
         0x20u,
     };
-    enum {
-        RECORD = 0x80012000u,
-        MODEL = 0x80012100u,
-        PACKETS = 0x80014000u,
-        REINITIALIZED_PACKETS = 0x80014240u,
-    };
+#define RECORD UINT32_C(0x80012000)
+#define MODEL UINT32_C(0x80012100)
+#define PACKETS UINT32_C(0x80014000)
+#define REINITIALIZED_PACKETS UINT32_C(0x80014240)
     CPUState cpu;
     uint32_t family;
     uint32_t packet;

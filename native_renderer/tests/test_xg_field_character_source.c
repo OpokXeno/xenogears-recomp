@@ -7,19 +7,23 @@
 
 #define CHECK(expression) do { if (!(expression)) return 0; } while (0)
 
-enum {
-    ACTOR_BASE = 0x80012000u,
-    ACTOR_INDEX = 2u,
-    ACTOR_ADDRESS = ACTOR_BASE + ACTOR_INDEX * 0x5cu,
-    SECONDARY_ADDRESS = 0x80013000u,
-    STATE_ADDRESS = 0x80014000u,
-    MODEL_ADDRESS = 0x80015000u,
-    STACK_ADDRESS = 0x801ff000u,
-    SCRATCHPAD_STACK_ADDRESS = 0x1f8002c0u,
-    OT_ADDRESS = 0x80018000u,
-    FT4_INDEX = 1u,
-    PACKET_ADDRESS = MODEL_ADDRESS + 0x20u + FT4_INDEX * 0x28u,
-};
+/* Guest addresses exceed INT_MAX, so they must not be enumeration constants:
+ * on targets where such enumerators take type int (clang/MSVC ABI), the
+ * negative value sign-extends in 64-bit comparisons like
+ * `addr + 4u <= BASE + sizeof(mem)` and the optimizer deletes every
+ * subsequent branch of the read handlers. UINT32_C keeps them unsigned
+ * everywhere. */
+#define ACTOR_BASE UINT32_C(0x80012000)
+#define ACTOR_INDEX UINT32_C(2)
+#define ACTOR_ADDRESS (ACTOR_BASE + ACTOR_INDEX * 0x5cu)
+#define SECONDARY_ADDRESS UINT32_C(0x80013000)
+#define STATE_ADDRESS UINT32_C(0x80014000)
+#define MODEL_ADDRESS UINT32_C(0x80015000)
+#define STACK_ADDRESS UINT32_C(0x801ff000)
+#define SCRATCHPAD_STACK_ADDRESS UINT32_C(0x1f8002c0)
+#define OT_ADDRESS UINT32_C(0x80018000)
+#define FT4_INDEX UINT32_C(1)
+#define PACKET_ADDRESS (MODEL_ADDRESS + 0x20u + FT4_INDEX * 0x28u)
 
 typedef struct Fixture {
     uint32_t poison;

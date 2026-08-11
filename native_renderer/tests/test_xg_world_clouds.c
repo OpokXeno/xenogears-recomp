@@ -14,10 +14,11 @@
         }                                                                       \
     } while (0)
 
-enum {
-    TEST_POSITION_BASE = 0x800e0000u,
-    TEST_VELOCITY_BASE = 0x800e0500u,
-};
+/* Guest addresses exceed INT_MAX — enum constants would take type int on
+ * clang/MSVC-ABI targets and sign-extend in 64-bit comparisons; UINT32_C
+ * keeps them unsigned everywhere. */
+#define TEST_POSITION_BASE UINT32_C(0x800e0000)
+#define TEST_VELOCITY_BASE UINT32_C(0x800e0500)
 
 typedef struct TestReader {
     int32_t camera_translation_z;
