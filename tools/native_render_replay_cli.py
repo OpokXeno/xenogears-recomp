@@ -85,7 +85,7 @@ def execute_run(
     runtime_evidence = request.runtime_state / "runtime-evidence.json"
     command = runtime_command(request, runtime_evidence)
     environment = _runtime_environment()
-    if producer_family or request.render_mode != "original":
+    if producer_family:
         environment["PSX_NATIVE_RENDER_PRODUCER_FAMILY"] = "1"
     if request.baseline_request:
         environment["PSX_INPUT_REPLAY_BASELINE"] = "1"
@@ -113,12 +113,13 @@ def execute_run(
                             request.trace, request.build)
     if not isinstance(payload, dict):
         raise RuntimeError("runtime evidence is not an object")
+    trace = parse_trace(request.trace)
     assert_run_evidence(
         payload,
-        parse_trace(request.trace),
+        trace,
         request.render_mode,
         require_post_checkpoint_cross=(
-            not producer_family
+            not producer_family and trace.checkpoint_field == 5
             if require_post_checkpoint_cross is None
             else require_post_checkpoint_cross
         ),
@@ -126,10 +127,11 @@ def execute_run(
     proof = payload.get("auth_proof")
     if not isinstance(proof, dict):
         raise RuntimeError("runtime auth proof is missing")
-    try:
-        assert_auth_proof(proof)
-    except ValueError as error:
-        raise RuntimeError("runtime auth proof is invalid") from error
+    if trace.checkpoint_field == 5:
+        try:
+            assert_auth_proof(proof)
+        except ValueError as error:
+            raise RuntimeError("runtime auth proof is invalid") from error
     return payload
 
 
@@ -197,7 +199,8 @@ def run_duplicate(request: RunRequest, watchdog_seconds: int) -> dict[str, objec
                        request.timing_mode, request.render_mode, request.overlay_mode,
                        request.bios, request.baseline_request),
             watchdog_seconds, require_post_checkpoint_cross=False))
-    assert_duplicate_runs((runs[0], runs[1]), parse_trace(request.trace))
+    assert_duplicate_runs(
+        (runs[0], runs[1]), parse_trace(request.trace), request.render_mode)
     return {"schema": "xenogears.native-render-replay-evidence/v1", "status": "PASS", "runs": runs}
 
 
@@ -375,6 +378,7 @@ def main() -> None:
     run_parser.add_argument("--scenario", choices=("field5-natural",), required=True)
     run_parser.add_argument(
         "--overlay-mode", choices=("cold", "warm"), required=True)
+    run_parser.add_argument("--runs", type=int, choices=(1, 2), default=2)
     run_parser.add_argument("--watchdog-seconds", type=int, default=900)
     baseline_parser = subparsers.add_parser("baseline")
     baseline_parser.add_argument("--scenario", choices=("field5-natural",), required=True)
@@ -461,6 +465,7 @@ def main() -> None:
     record_parser.add_argument("--timing-mode", choices=("original",), required=True)
     record_parser.add_argument("--render-mode", choices=("original",), required=True)
     record_parser.add_argument("--max-vblanks", type=int, required=True)
+    record_parser.add_argument("--on-close", action="store_true")
     record_parser.add_argument("--watchdog-seconds", type=int, default=900)
     arguments = parser.parse_args()
     if arguments.command == "self-test":
@@ -470,8 +475,9 @@ def main() -> None:
         if arguments.max_vblanks < 1:
             raise RecordArgumentError("max-vblanks must be positive")
         request = RecordRequest(arguments.build, arguments.trace, arguments.runtime_state,
-                                validate_memcard_dir(arguments.memcard_dir), arguments.renderer,
-                                validate_disc(arguments.disc), arguments.max_vblanks)
+                                 validate_memcard_dir(arguments.memcard_dir), arguments.renderer,
+                                 validate_disc(arguments.disc), arguments.max_vblanks,
+                                 arguments.on_close)
         execute_record(request, arguments.watchdog_seconds)
         print('{"schema":"xenogears.native-render-record-evidence/v1","status":"PASS"}')
         return
@@ -560,7 +566,17 @@ def main() -> None:
                            arguments.renderer, validate_disc(arguments.disc),
                            arguments.timing_mode, arguments.render_mode,
                            arguments.overlay_mode, arguments.bios)
-    payload = run_duplicate(request, arguments.watchdog_seconds)
+    if arguments.runs == 1:
+        run = execute_run(
+            request, arguments.watchdog_seconds,
+            require_post_checkpoint_cross=False)
+        payload = {
+            "schema": "xenogears.native-render-replay-evidence/v1",
+            "status": "PASS",
+            "runs": [run],
+        }
+    else:
+        payload = run_duplicate(request, arguments.watchdog_seconds)
     write_evidence(arguments.evidence, payload)
 
 

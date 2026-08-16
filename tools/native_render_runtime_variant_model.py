@@ -188,7 +188,7 @@ def parse_variant(raw: ManifestValue) -> RuntimeVariant:
     activation = parse_hook(value, "activation", ACTIVATION_WINDOW_SHA256,
                             0x80075414, 0x800764B4, 0x248400CC)
     capture = parse_hook(value, "capture", CAPTURE_WINDOW_SHA256,
-                         0x80075694, 0x8004B54C, 0x34040001)
+                          0x80075694, 0x8004B54C, 0x34040001)
     source_raw = value["source_sites"]
     if not isinstance(source_raw, list) or len(source_raw) != 14:
         fail("field5 source sites must contain exactly 14 entries")

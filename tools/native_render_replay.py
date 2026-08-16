@@ -87,6 +87,8 @@ class TraceState:
 class Trace:
     vblank_budget: int
     states: tuple[TraceState, ...]
+    checkpoint_field: int | None
+    record_on_close: bool
 
 
 @dataclass(slots=True)
@@ -106,7 +108,11 @@ class ReplayCursor:
 
     def latch_vblank(self) -> TraceState | None:
         if self._index >= self.trace.vblank_budget or self._index >= len(self.trace.states):
-            self.stop_reason = "checkpoint_not_reached"
+            self.stop_reason = (
+                "trace_complete" if self.trace.record_on_close and
+                self._index == self.trace.vblank_budget == len(self.trace.states)
+                else "checkpoint_not_reached"
+            )
             return None
         self._current = self.trace.states[self._index]
         self._index += 1
@@ -146,6 +152,7 @@ class RecordRequest:
     renderer: str
     disc: Path
     max_vblanks: int
+    on_close: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -368,11 +375,30 @@ def parse_trace(path: Path) -> Trace:
     if schema not in (SCHEMA, "xenogears.native-render-replay/v2", "xenogears.native-render-replay/v3"):
         raise ValueError("trace schema must be xenogears.native-render-replay/v1")
     if schema in ("xenogears.native-render-replay/v2", "xenogears.native-render-replay/v3"):
-        expected = {"schema", "complete", "vblank_budget", "record_stop_field", "record_stable_vblanks", "checkpoint", "vblank"}
+        checkpoint_fields = {
+            "schema", "complete", "vblank_budget", "record_stop_field",
+            "record_stable_vblanks", "checkpoint", "vblank",
+        }
         if document.get("baseline") is True:
-            expected.add("baseline")
-        if set(document) != expected or document.get("complete") is not True:
+            checkpoint_fields.add("baseline")
+        close_fields = {
+            "schema", "complete", "vblank_budget", "record_on_close", "vblank",
+        }
+        checkpoint_variant = set(document) == checkpoint_fields
+        close_variant = (
+            schema == "xenogears.native-render-replay/v3" and
+            set(document) == close_fields and document.get("record_on_close") is True
+        )
+        if (not checkpoint_variant and not close_variant) or document.get("complete") is not True:
             raise ValueError("trace v2 must be complete and use the closed record schema")
+        if checkpoint_variant:
+            checkpoint = document.get("checkpoint")
+            if (not isinstance(checkpoint, dict) or set(checkpoint) != {"kind", "address", "equals"} or
+                    checkpoint.get("kind") != "u16" or
+                    checkpoint.get("address") != "0x8006F94E" or
+                    checkpoint.get("equals") != document.get("record_stop_field") or
+                    document.get("record_stable_vblanks") != 4):
+                raise ValueError("trace checkpoint metadata is invalid")
     budget = document.get("vblank_budget")
     entries = document.get("vblank")
     if not isinstance(budget, int) or budget < 1:
@@ -390,7 +416,12 @@ def parse_trace(path: Path) -> Trace:
         states.extend(state for _ in range(repeat))
         if len(states) > budget:
             raise ValueError("trace states exceed guest vblank budget")
-    return Trace(budget, tuple(states))
+    checkpoint = document.get("checkpoint")
+    checkpoint_field = checkpoint.get("equals") if isinstance(checkpoint, dict) else None
+    record_on_close = document.get("record_on_close") is True
+    if record_on_close and len(states) != budget:
+        raise ValueError("close-record trace must exhaust its declared budget")
+    return Trace(budget, tuple(states), checkpoint_field, record_on_close)
 
 
 def validate_disc(path: Path) -> Path:
@@ -451,11 +482,13 @@ def runtime_command(request: RunRequest, runtime_evidence: Path | None = None) -
 
 def runtime_record_command(request: RecordRequest) -> tuple[str, ...]:
     memcard_dir = request.memcard_dir.resolve()
+    completion_arguments = ("--record-on-close",) if request.on_close else (
+        "--record-stop-field", "5")
     command = (
         str(request.build.resolve()), "--game", str((REPOSITORY_ROOT / "game.toml").resolve()),
         "--no-launcher", "--runtime-state", str(request.runtime_state.resolve()),
         "--memcard-dir", str(memcard_dir), "--renderer", request.renderer,
-        "--input-record", str(request.trace.resolve()), "--record-stop-field", "5",
+        "--input-record", str(request.trace.resolve()), *completion_arguments,
         "--record-max-vblanks", str(request.max_vblanks), "--disc", str(request.disc),
     )
     assert not any(token in command for token in PROHIBITED)
@@ -471,8 +504,15 @@ def assert_run_evidence(
     if run.get("timing_mode") != "original" or run.get("render_mode") != render_mode:
         raise ValueError("runtime modes are invalid")
     checkpoint = run.get("checkpoint")
-    if not isinstance(checkpoint, dict) or checkpoint.get("field_id") != 5:
-        raise ValueError("Field ID 5 was not reached")
+    if trace.record_on_close:
+        if checkpoint is not None or run.get("completion") != "trace_complete":
+            raise ValueError("manual trace did not complete cleanly")
+    elif (not isinstance(checkpoint, dict) or
+          checkpoint.get("field_id") != trace.checkpoint_field):
+        raise ValueError(
+            "Field ID 5 was not reached" if trace.checkpoint_field == 5
+            else "configured checkpoint was not reached"
+        )
     if run.get("backend") != "opengl":
         raise ValueError("effective backend is not opengl")
     native_render = run.get("native_render")
@@ -575,8 +615,10 @@ def assert_run_evidence(
                  "last_independent_fmv_depth24", "total_ui_ot_adapter_calls",
                   "total_guest_gp0_commands", "total_shared_vram_presents",
                    "total_native_lists", "total_native_packets",
-                    "total_native_bound_packets", "total_native_state_packets",
-                    "total_native_unbound_packets",
+                     "total_native_bound_packets", "total_native_state_packets",
+                     "total_native_unbound_packets",
+                    "total_native_producer_bound_draws",
+                    "total_native_packet_derived_draws",
                    "total_native_unsupported_packets",
                    "first_native_unsupported_opcode", "last_native_unsupported_opcode",
                    "first_native_unbound_opcode", "last_native_unbound_opcode",
@@ -586,7 +628,9 @@ def assert_run_evidence(
                    "first_native_unbound_return_address",
                    "first_native_unsupported_return_address",
                      "native_opcode_counts", "native_state_opcode_counts",
-                     "native_unbound_opcode_counts",
+                      "native_unbound_opcode_counts",
+                     "native_producer_bound_opcode_counts",
+                     "native_packet_derived_opcode_counts",
                     "native_unsupported_opcode_counts",
                     "native_unbound_source_by_opcode",
                     "native_unbound_pc_by_opcode",
@@ -595,7 +639,7 @@ def assert_run_evidence(
                     "native_unsupported_return_address_by_opcode",
                      "native_unbound_source_hotspots", "last_native_state",
                     "total_independent_vram_presents",
-                  "native_claim",
+                   "native_claim", "native_coverage_contract",
                  "total_visual_states", "last_command_id", "last_status",
                 "last_stage_status", "last_consume_status",
                 "stage_failure_count", "first_stage_failure_command_id",
@@ -625,7 +669,9 @@ def assert_run_evidence(
             native_packet_counters = tuple(stream.get(key) for key in (
                 "total_native_lists", "total_native_packets",
                  "total_native_bound_packets", "total_native_state_packets",
-                 "total_native_unbound_packets",
+                  "total_native_unbound_packets",
+                 "total_native_producer_bound_draws",
+                 "total_native_packet_derived_draws",
                 "total_native_unsupported_packets",
                 "first_native_unsupported_opcode", "last_native_unsupported_opcode",
                 "first_native_unbound_opcode", "last_native_unbound_opcode",
@@ -636,8 +682,10 @@ def assert_run_evidence(
             ))
             opcode_histograms = tuple(stream.get(key) for key in (
                  "native_opcode_counts", "native_state_opcode_counts",
-                 "native_unbound_opcode_counts",
-                "native_unsupported_opcode_counts",
+                  "native_unbound_opcode_counts",
+                 "native_producer_bound_opcode_counts",
+                 "native_packet_derived_opcode_counts",
+                 "native_unsupported_opcode_counts",
             ))
             attribution_arrays = tuple(stream.get(key) for key in (
                 "native_unbound_source_by_opcode",
@@ -676,14 +724,20 @@ def assert_run_evidence(
                      sum(opcode_histograms[0]) != stream.get("total_native_packets") or
                      sum(opcode_histograms[1]) != stream.get("total_native_state_packets") or
                      sum(opcode_histograms[2]) != stream.get("total_native_unbound_packets") or
-                     sum(opcode_histograms[3]) != stream.get("total_native_unsupported_packets") or
+                     sum(opcode_histograms[3]) !=
+                         stream.get("total_native_producer_bound_draws") or
+                     sum(opcode_histograms[4]) !=
+                         stream.get("total_native_packet_derived_draws") or
+                     sum(opcode_histograms[5]) != stream.get("total_native_unsupported_packets") or
                      type(stream.get("last_shared_fmv_depth24")) is not bool or
                     type(stream.get("last_independent_fmv_depth24")) is not bool or
-                     stream.get("native_claim") != (
-                         "packet-faithful"
-                         if stream.get("total_native_unbound_packets")
-                         else "independent"
-                     ) or
+                      stream.get("native_claim") != (
+                          "packet-faithful"
+                          if stream.get("total_native_packet_derived_draws")
+                          else "independent"
+                      ) or
+                     stream.get("native_coverage_contract") !=
+                         "eligible-3d-producer" or
                     stream.get("total_original_draws") != 0 or
                     stream.get("stage_failure_count") != 0 or
                     stream.get("total_not_found") != 0 or
@@ -783,6 +837,8 @@ def assert_run_evidence(
         if not isinstance(value, int) or value < latches:
             raise ValueError(f"missing replay traversal counter: {key}")
     if require_post_checkpoint_cross:
+        if trace.checkpoint_field != 5:
+            raise ValueError("post-checkpoint validation requires Field 5")
         replay = run.get("replay")
         sio = run.get("sio")
         if not isinstance(replay, dict) or not isinstance(sio, dict):
@@ -801,9 +857,14 @@ def assert_run_evidence(
         raise ValueError("a prohibited replay API was enabled")
 
 
-def assert_duplicate_runs(runs: tuple[dict[str, object], dict[str, object]], trace: Trace) -> None:
+def assert_duplicate_runs(
+    runs: tuple[dict[str, object], dict[str, object]], trace: Trace,
+    render_mode: str = "original",
+) -> None:
     for run in runs:
-        assert_run_evidence(run, trace)
+        assert_run_evidence(
+            run, trace, render_mode,
+            require_post_checkpoint_cross=trace.checkpoint_field == 5)
     first, second = runs
     for key in ("backend", "guest_sequence", "counters"):
         if first.get(key) != second.get(key):
@@ -861,14 +922,18 @@ def assert_task15_matrix_evidence(evidence: dict[str, object]) -> None:
                      type(stream.get("total_shared_fmv_frames")) is not int or
                      type(stream.get("total_ui_ot_adapter_calls")) is not int or
                      type(stream.get("total_guest_gp0_commands")) is not int or
-                      type(stream.get("total_shared_vram_presents")) is not int or
-                      type(stream.get("total_native_unbound_packets")) is not int or
-                      type(stream.get("total_native_unsupported_packets")) is not int or
+                       type(stream.get("total_shared_vram_presents")) is not int or
+                       type(stream.get("total_native_unbound_packets")) is not int or
+                       type(stream.get("total_native_producer_bound_draws")) is not int or
+                       type(stream.get("total_native_packet_derived_draws")) is not int or
+                       type(stream.get("total_native_unsupported_packets")) is not int or
                       stream.get("native_claim") != (
                           "packet-faithful"
-                          if stream.get("total_native_unbound_packets")
+                          if stream.get("total_native_packet_derived_draws")
                           else "independent"
                       ) or
+                     stream.get("native_coverage_contract") !=
+                         "eligible-3d-producer" or
                       type(stream.get("stage_failure_count")) is not int or
                       stream["total_staged"] < 1 or
                       stream["total_consumed"] < 1 or

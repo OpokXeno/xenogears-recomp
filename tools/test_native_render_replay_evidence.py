@@ -124,6 +124,35 @@ def test_duplicate_runs_when_given_private_disc_preserve_it_for_each_child() -> 
         ]
 
 
+def test_duplicate_run_validation_uses_requested_render_mode() -> None:
+    replay = replay_module()
+    replay_cli = replay_cli_module()
+    with TemporaryDirectory() as temporary:
+        request = replay.RunRequest(
+            build=Path("build-dbg/XenogearsRecomp"),
+            trace=Path(temporary) / "trace.toml",
+            runtime_state=Path(".omo/evidence/runtime-state/native"),
+            memcard_dir=Path("memcards"),
+            evidence=Path(".omo/evidence/native.json"),
+            renderer="opengl",
+            render_mode="native",
+        )
+        write_trace(request.trace, vblank_budget=3)
+        observed: list[str] = []
+        original_execute_run = replay_cli.execute_run
+        original_assert_duplicate_runs = replay_cli.assert_duplicate_runs
+        replay_cli.execute_run = lambda *_args, **_kwargs: {}
+        replay_cli.assert_duplicate_runs = (
+            lambda _runs, _trace, render_mode: observed.append(render_mode)
+        )
+        try:
+            replay_cli.run_duplicate(request, 1)
+        finally:
+            replay_cli.execute_run = original_execute_run
+            replay_cli.assert_duplicate_runs = original_assert_duplicate_runs
+        assert observed == ["native"]
+
+
 def test_field_five_trace_when_parsed_is_bounded_by_its_guest_budget() -> None:
     replay = replay_module()
     trace = replay.parse_trace(ROOT / "tools" / "native_render_replays" / "field5_clean_boot.toml")

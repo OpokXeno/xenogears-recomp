@@ -106,6 +106,7 @@ def test_world_contract_has_independent_family_authority() -> None:
         "field-target-polylines-v1",
         "world-full-sky-v1",
         "world-full-terrain-water-v1",
+        "world-partial-terrain-water-v1",
         "world-full-models-v1",
         "world-full-actor-sprites-v1",
         "world-full-entity-shadows-v1",
@@ -115,6 +116,11 @@ def test_world_contract_has_independent_family_authority() -> None:
         "world-full-horizon-v1",
         "world-full-minimap-v1",
     }
+    field_polylines = next(
+        variant for variant in variants
+        if variant.identifier == "field-target-polylines-v1"
+    )
+    assert field_polylines.base_address == 0x801CD000
     ft4 = next(variant for variant in variants
                if variant.identifier == "ft4-2c-callers-v1")
     assert ft4.artifact_size == 270340
@@ -157,6 +163,7 @@ def test_world_contract_has_independent_family_authority() -> None:
             "world-full-horizon-v1",
             "world-full-minimap-v1",
             "world-full-terrain-water-v1",
+            "world-partial-terrain-water-v1",
             "world-full-models-v1",
             "world-full-entity-shadows-v1",
             "world-full-decorations-v1",
@@ -192,6 +199,24 @@ def test_world_contract_has_independent_family_authority() -> None:
             for cutover in effects.cutovers] == [
         (0x80089C78, 0x27BDFFB0, "return"),
         (0x8008A294, 0x8FBF004C, "observe"),
+    ]
+    partial_terrain = next(
+        variant for variant in variants
+        if variant.identifier == "world-partial-terrain-water-v1"
+    )
+    assert partial_terrain.base_address == 0x80090000
+    assert partial_terrain.artifact_size == 40964
+    assert partial_terrain.artifact_sha256.hex() == (
+        "6d4d865dea73b55b4decaa9027701ca65f15f2375c4f08890a92e0c3f449f45d"
+    )
+    assert {(required.start, required.size, required.sha256.hex())
+            for required in partial_terrain.required_ranges} == {
+        (0x80090000, 40964,
+         "6d4d865dea73b55b4decaa9027701ca65f15f2375c4f08890a92e0c3f449f45d"),
+    }
+    assert [(cutover.pc, cutover.instruction, cutover.transfer)
+            for cutover in partial_terrain.cutovers] == [
+        (0x8009932C, 0x27BDFFC8, "return"),
     ]
     actor_sprites = next(
         variant for variant in variants

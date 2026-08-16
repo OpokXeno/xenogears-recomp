@@ -44,7 +44,8 @@ def main() -> int:
     try:
         if arguments.command == "emit-declared":
             atomic_write(arguments.out, render_c(declare(
-                load_contract(arguments.companion), arguments.canonical_manifest)))
+                load_contract(arguments.companion), arguments.companion,
+                arguments.canonical_manifest)))
             print("emit PASS: declared field5 runtime descriptor")
             return 0
         inputs = VerificationInputs(arguments.companion, arguments.canonical_manifest,

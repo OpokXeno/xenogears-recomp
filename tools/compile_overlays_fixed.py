@@ -1050,6 +1050,33 @@ def identity_cache_namespace(game_sha256: str, manifest_sha256: str) -> str:
     return f"game_{game_identity.hex()}/manifest_{manifest_identity.hex()}"
 
 
+OVERLAY_PLAN_TOOL_INPUTS = (
+    'tools/compile_overlays_fixed.py',
+    'tools/native_render_manifest_model.py',
+    'tools/native_render_overlay_codegen.py',
+    'tools/native_render_overlay_ranges.py',
+    'tools/native_render_runtime_variant_model.py',
+)
+
+
+def overlay_plan_hash(runtime_variants_manifest: str,
+                      overlay_ranges_manifest: str) -> int:
+    """Hash every game-side input that can change emitted overlay callbacks."""
+    repository = Path(__file__).resolve().parents[1]
+    inputs = (
+        ('native_renderer/xg_render_runtime_variants.toml',
+         Path(runtime_variants_manifest)),
+        ('native_renderer/xg_render_overlay_ranges.toml',
+         Path(overlay_ranges_manifest)),
+        *((name, repository / name) for name in OVERLAY_PLAN_TOOL_INPUTS),
+    )
+    aggregate = ''.join(
+        f'{name}={hashlib.sha256(path.read_bytes()).hexdigest()}\n'
+        for name, path in inputs
+    )
+    return int(hashlib.sha256(aggregate.encode('ascii')).hexdigest()[:8], 16)
+
+
 def identity_preamble(game_sha256: str, manifest_sha256: str, pair_id: int) -> str:
     """Return the overlay-local identity export required by the loader."""
     game_identity, manifest_identity = canonical_runtime_identity(
@@ -1071,7 +1098,8 @@ def identity_preamble(game_sha256: str, manifest_sha256: str, pair_id: int) -> s
 
 
 def overlay_ranges_text(func_ids: list, game_sha256: str, manifest_sha256: str,
-                        load_addr: int, size: int, artifact_crc: int) -> str:
+                        load_addr: int, size: int, artifact_crc: int,
+                        runtime_variant_identity: str | None = None) -> str:
     """Serialize the strict loader manifest for one captured overlay image."""
     game_identity, manifest_identity = canonical_runtime_identity(
         game_sha256, manifest_sha256)
@@ -1081,6 +1109,10 @@ def overlay_ranges_text(func_ids: list, game_sha256: str, manifest_sha256: str,
         f'I {game_identity.hex().upper()} {manifest_identity.hex().upper()}\n',
         f'A {load_addr:08X} {size:08X} {artifact_crc:08X}\n',
     ]
+    if runtime_variant_identity is not None:
+        if not re.fullmatch(r'[0-9a-fA-F]{64}', runtime_variant_identity):
+            raise ValueError('runtime variant identity must be a SHA-256 digest')
+        lines.append(f'V {runtime_variant_identity.upper()}\n')
     for entry, code_crc, ranges in func_ids:
         lines.append(f'F {entry:08X} {code_crc & 0xFFFFFFFF:08X}\n')
         for range_start, range_length in ranges:
@@ -1546,14 +1578,22 @@ def write_overlay_ranges_from(func_ids: list, out_path: str,
 
 
 def write_overlay_ranges(src_path: str, out_path: str,
-                         data: bytes, load_addr: int, size: int,
-                         game_sha256: str, manifest_sha256: str) -> int:
+                          data: bytes, load_addr: int, size: int,
+                          game_sha256: str, manifest_sha256: str) -> int:
     """Back-compat wrapper: parse the recompiler manifest and write the v2 .ranges.
     See parse_overlay_func_ids / write_overlay_ranges_from."""
     return write_overlay_ranges_from(
         parse_overlay_func_ids(src_path, data, load_addr, size), out_path,
         game_sha256, manifest_sha256, load_addr, size,
         binascii.crc32(data) & 0xFFFFFFFF)
+
+
+IMMUTABLE_RANGES_NAME = re.compile(
+    r'^[0-9A-Fa-f]{8}_[0-9A-Fa-f]{8}_[0-9A-Fa-f]{8}\.ranges$')
+
+
+def immutable_ranges_name(name: str) -> bool:
+    return IMMUTABLE_RANGES_NAME.fullmatch(name) is not None
 
 
 def load_region_coverage(cache_dir: str, phys_addr: int) -> set:
@@ -1570,7 +1610,11 @@ def load_region_coverage(cache_dir: str, phys_addr: int) -> set:
     except OSError:
         return covered
     for name in names:
-        if not (name.startswith(prefix) and name.endswith('.ranges')):
+        # The runtime deliberately ignores legacy ADDR_CRC pairs because their
+        # replace protocol could publish a new manifest beside an old DLL. They
+        # remain useful only for seed migration and must never suppress an
+        # immutable ADDR_CRC_PUBLICATION repair here.
+        if not (name.startswith(prefix) and immutable_ranges_name(name)):
             continue
         try:
             with open(os.path.join(cache_dir, name)) as f:
@@ -1597,9 +1641,14 @@ def _addr_in_func_ids(addr: int, func_ids: list) -> bool:
     return False
 
 
-def load_region_entry_set(cache_dir: str, phys_addr: int) -> set:
-    """Set of phys-normalized F-line ENTRY addresses provided by ALL built DLLs
-    (region + fragment) for this region_start. This — not range coverage — is
+def load_region_entry_set(cache_dir: str, phys_addr: int,
+                          artifact_crc: int | None = None,
+                          load_addr: int | None = None,
+                          size: int | None = None) -> set:
+    """Set of phys-normalized F-line ENTRY addresses for one artifact image.
+
+    With no artifact identity, retain the region-wide view used by diagnostics.
+    This — not range coverage — is
     the dispatchability test: native code is enterable ONLY at F entries, so a
     dispatch-proven PC inside a compiled range but absent from every manifest's
     F set still runs its whole chain on the interpreter (the 0x80106D7C class,
@@ -1613,19 +1662,32 @@ def load_region_entry_set(cache_dir: str, phys_addr: int) -> set:
     except OSError:
         return out
     for name in names:
-        if not (name.startswith(prefix) and name.endswith('.ranges')):
+        if not (name.startswith(prefix) and immutable_ranges_name(name)):
             continue
         try:
             with open(os.path.join(cache_dir, name)) as f:
-                for ln in f:
-                    p = ln.split()
-                    if len(p) >= 2 and p[0] == 'F':
-                        try:
-                            out.add(int(p[1], 16) & 0x1FFFFFFF)
-                        except ValueError:
-                            pass
+                lines = [ln.split() for ln in f]
+            if artifact_crc is not None:
+                expected_load = (load_addr if load_addr is not None
+                                 else phys_addr) & 0x1FFFFFFF
+                if not any(
+                    len(parts) >= 4 and parts[0] == 'A' and
+                    (int(parts[1], 16) & 0x1FFFFFFF) == expected_load and
+                    (size is None or int(parts[2], 16) == size) and
+                    int(parts[3], 16) == artifact_crc
+                    for parts in lines
+                ):
+                    continue
+            for parts in lines:
+                if len(parts) >= 2 and parts[0] == 'F':
+                    try:
+                        out.add(int(parts[1], 16) & 0x1FFFFFFF)
+                    except ValueError:
+                        pass
         except OSError:
             pass
+        except ValueError:
+            continue
     return out
 
 
@@ -1690,6 +1752,76 @@ def source_observation_plan(args, data: bytes, load_address: int) -> str | None:
         source_plan_for_overlay_ranges(
             args.overlay_range_variants, data, load_address),
     )
+
+
+def runtime_variant_manifest_identity(
+        args, data: bytes, load_address: int) -> str | None:
+    if source_observation_plan_for_artifact(
+            args.runtime_variant_contract, data, load_address) is None:
+        return None
+    return hashlib.sha256(
+        Path(args.runtime_variants_manifest).read_bytes()).hexdigest()
+
+
+def capture_requires_plan_shard(static: bool, plan: str | None) -> bool:
+    """Keep plan-specific caches sparse; ordinary caches own unchanged code."""
+    return static or plan is not None
+
+
+def source_observation_plan_pcs(plan: str | None) -> set[int]:
+    if plan is None:
+        return set()
+    return {
+        int(parts[1], 16) & 0x1FFFFFFF
+        for line in plan.splitlines()[1:]
+        if len(parts := line.split()) >= 2
+        and parts[0] in {'lifecycle', 'cutover', 'site'}
+    }
+
+
+def plan_function_ids(func_ids: list, plan: str | None) -> list:
+    """Retain only function owners that contain an authenticated plan site."""
+    plan_pcs = source_observation_plan_pcs(plan)
+    return [
+        identity
+        for identity in func_ids
+        if any(
+            (lo & 0x1FFFFFFF) <= pc < (lo & 0x1FFFFFFF) + length
+            for pc in plan_pcs
+            for lo, length in identity[2]
+        )
+    ]
+
+
+def plan_entries_for_region(plan_pcs: set[int], region_start: int,
+                            region_size: int) -> set[int]:
+    """Make every authenticated plan PC directly enterable in its artifact."""
+    region_end = region_start + region_size
+    return {
+        (pc & 0x1FFFFFFF) | 0x80000000
+        for pc in plan_pcs
+        if region_start <= (pc & 0x1FFFFFFF) < region_end
+    }
+
+
+def forced_plan_pcs_for_region(forced_pcs: set[int], plan_pcs: set[int],
+                               region_start: int, region_size: int) -> set[int]:
+    """Canonicalize explicit owner roots inside a region with an active plan."""
+    if not plan_pcs:
+        return set()
+    region_end = region_start + region_size
+    return {
+        (pc & 0x1FFFFFFF) | 0x80000000
+        for pc in forced_pcs
+        if region_start <= (pc & 0x1FFFFFFF) < region_end
+    }
+
+
+def fragment_entry_needs_build(entry: int, executed: set[int],
+                               covered_entries: set[int], force: bool) -> bool:
+    """Allow an explicit rebuild to publish another exact-byte identity."""
+    return entry in executed and (
+        force or (entry & 0x1FFFFFFF) not in covered_entries)
 
 
 def generate_interior_fragment_static(interior: int, data: bytes,
@@ -1849,8 +1981,9 @@ def compile_interior_fragment(interior: int, data: bytes, load_addr: int,
                           f'{len(c_audit["unknown_bad"])} unknown_bad, '
                           f'{len(c_audit["unsupported_todo_addrs"])} unsupported')
         frag_ids = parse_overlay_func_ids(ranges_src, data, load_addr, size)
+        frag_ids = plan_function_ids(frag_ids, plan)
         if not frag_ids:
-            return None, 'no-func-ids (empty ranges manifest)'
+            return None, 'no-plan-func-ids (empty filtered ranges manifest)'
         # Key the fragment DLL by its func-identity SET (dedup like a region
         # bundle); the loader keys DLLs by the region_start filename prefix and
         # content-matches each function, so a fragment is just another DLL for
@@ -1890,7 +2023,8 @@ def compile_interior_fragment(interior: int, data: bytes, load_addr: int,
             return None, 'compile-error (see COMPILE ERROR above)'
         manifest = overlay_ranges_text(
             frag_ids, args.game_identity_sha256, args.manifest_identity_sha256,
-            load_addr, size, binascii.crc32(data) & 0xFFFFFFFF)
+            load_addr, size, binascii.crc32(data) & 0xFFFFFFFF,
+            runtime_variant_manifest_identity(args, data, load_addr))
         try:
             publish_overlay_pair(Path(staged_dll), Path(dll_path), manifest, src)
         except OSError as error:
@@ -2137,6 +2271,8 @@ def main():
             Path(args.overlay_ranges_manifest))
     except (ManifestError, OverlayRangeError) as error:
         ap.error(str(error))
+    args.overlay_plan_hash = overlay_plan_hash(
+        args.runtime_variants_manifest, args.overlay_ranges_manifest)
     if (args.runtime_variant_contract.canonical.game_identity.hex() !=
             args.game_identity_sha256 or
             args.runtime_variant_contract.canonical.manifest_identity.hex() !=
@@ -2220,9 +2356,10 @@ def main():
             args.game_identity_sha256, args.manifest_identity_sha256)
         cache_dir = os.path.join(args.out_dir, game_id, identity_namespace,
                                  args.compiler, cache_arch_abi(),
-                                 f'cg{cg}_{ch:08x}')
+                                 f'cg{cg}_{ch:08x}_p{args.overlay_plan_hash:08x}')
         os.makedirs(cache_dir, exist_ok=True)
-        print(f'Cache dir: {cache_dir}  (codegen ver {cg}, hash {ch:08x})')
+        print(f'Cache dir: {cache_dir}  (codegen ver {cg}, hash {ch:08x}, '
+              f'plan {args.overlay_plan_hash:08x})')
 
     with open(args.captures) as f:
         captures = json.load(f)
@@ -2258,6 +2395,15 @@ def main():
         crc32     = binascii.crc32(data) & 0xFFFFFFFF
         phys_addr = (load_addr & 0x1FFFFFFF)
         _label = f'overlay 0x{load_addr:08X} crc {crc32:08X}'
+        plan = source_observation_plan(args, data, load_addr)
+        if not capture_requires_plan_shard(args.static, plan):
+            print(f'Overlay  load=0x{load_addr:08X}  size={size}  '
+                  f'crc32=0x{crc32:08X}')
+            print('  SKIP: no source-observation plan; ordinary cache owns '
+                  'this unchanged capture\n')
+            stats.add_skip()
+            return
+        plan_pcs = source_observation_plan_pcs(plan)
         if args.static:
             for captured_entry in _parse_addr_list(
                     cap.get('dispatch_entry_pcs', [])):
@@ -2328,13 +2474,24 @@ def main():
         # driven recovery path for exactly that.
         if not args.static:
             _interiors = {a for a, r in seed_audit['included_reasons'].items()
-                          if r == 'DISPATCH_INTERIOR'}
+                          if r == 'DISPATCH_INTERIOR'
+                          and (a & 0x1FFFFFFF) in plan_pcs}
             _disp_roots = {a for a, r in seed_audit['included_reasons'].items()
-                           if r in ('DISPATCH_ENTRY', 'DISPATCH_ROOT')}
+                           if r in ('DISPATCH_ENTRY', 'DISPATCH_ROOT')
+                           and (a & 0x1FFFFFFF) in plan_pcs}
             _executed = seed_audit.get('executed_pcs', set())
-            if (_interiors or _disp_roots) and _executed:
+            _planned_entries = plan_entries_for_region(
+                plan_pcs, phys_addr, size)
+            _forced_plan = forced_plan_pcs_for_region(
+                forced_interiors, plan_pcs, phys_addr, size)
+            if (_interiors or _disp_roots or _planned_entries or
+                    _forced_plan) and (_executed or _planned_entries or
+                                       _forced_plan):
                 interior_frag_jobs.append((phys_addr, load_addr, size, data,
-                                           _interiors | _disp_roots, _executed))
+                                            _interiors | _disp_roots |
+                                            _planned_entries | _forced_plan,
+                                            _executed | _planned_entries |
+                                            _forced_plan))
 
         if not args.static:
             dll_path = os.path.join(cache_dir, f'{phys_addr:08X}_{crc32:08X}{overlay_ext()}')
@@ -2385,7 +2542,6 @@ def main():
                    # sites that resolve into overlay code) are applied. --ws-config
                     # only adopts the widescreen lists, not the game's exe/paths.
                     '--ws-config', os.path.abspath(args.game_toml)]
-            plan = source_observation_plan(args, data, load_addr)
             cmd.extend(source_observation_plan_args(plan, tmp))
             print(f'  recompile: {args.recompiler} ...{" [CPS]" if args.cps else ""}')
             toml_dir = os.path.dirname(os.path.abspath(args.game_toml))
@@ -2509,6 +2665,7 @@ def main():
                 # an endless pile of redundant DLLs.
                 this_ids = (parse_overlay_func_ids(ranges_src, data, load_addr, size)
                             if ranges_src else [])
+                this_ids = plan_function_ids(this_ids, plan)
                 this_set = {(ev, crc) for ev, crc, _ in this_ids}
 
                 with cov_lock:
@@ -2539,7 +2696,8 @@ def main():
                     return
                 manifest = overlay_ranges_text(
                     this_ids, args.game_identity_sha256,
-                    args.manifest_identity_sha256, load_addr, size, crc32)
+                    args.manifest_identity_sha256, load_addr, size, crc32,
+                    runtime_variant_manifest_identity(args, data, load_addr))
                 staged_dll = staged_overlay_dll(dll_path)
                 success = compile_dll(patched_c, staged_dll, include_dirs,
                                       gcc=args.gcc, flavor=args.flavor,
@@ -2586,20 +2744,17 @@ def main():
             phys_addr, load_addr, size, data, interior_pcs, executed = job
             region_crc = binascii.crc32(data) & 0xFFFFFFFF
             region_lo = load_addr & 0x1FFFFFFF
-            region_hi = region_lo + size
             interior_pcs = set(interior_pcs)
-            interior_pcs.update(
-                a for a in forced_interiors
-                if region_lo <= (a & 0x1FFFFFFF) < region_hi)
             # ENTRY-based orphan test, not range-based: native code is
             # enterable only at manifest F entries, so "inside a compiled
             # range" does NOT make a dispatch target servable — a range-
             # covered PC with no F entry anywhere still interps its whole
             # chain on every dispatch. Demand an entry at exactly this PC.
-            covered_entries = load_region_entry_set(cache_dir, phys_addr)
+            covered_entries = load_region_entry_set(
+                cache_dir, phys_addr, region_crc, load_addr, size)
             orphans = sorted(a for a in interior_pcs
-                             if (a in executed or a in forced_interiors)
-                             and (a & 0x1FFFFFFF) not in covered_entries)
+                             if fragment_entry_needs_build(
+                                 a, executed, covered_entries, args.force))
             if not orphans:
                 continue
             built = 0

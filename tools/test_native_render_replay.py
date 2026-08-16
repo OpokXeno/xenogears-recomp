@@ -49,6 +49,26 @@ def write_trace(path: Path, vblank_budget: int = 3) -> None:
     )
 
 
+def write_close_trace(path: Path) -> None:
+    lines = [
+        'schema = "xenogears.native-render-replay/v3"',
+        "complete = true",
+        "vblank_budget = 2",
+        "record_on_close = true",
+    ]
+    for _ in range(2):
+        lines.extend((
+            "[[vblank]]", "repeat = 1",
+            "p1_connected = true", 'p1_mode = "digital"', "p1_buttons = []",
+            "p1_left_x = 0", "p1_left_y = 0", "p1_right_x = 0", "p1_right_y = 0",
+            "p1_trigger_left = 0", "p1_trigger_right = 0",
+            "p2_connected = false", 'p2_mode = "digital"', "p2_buttons = []",
+            "p2_left_x = 0", "p2_left_y = 0", "p2_right_x = 0", "p2_right_y = 0",
+            "p2_trigger_left = 0", "p2_trigger_right = 0",
+        ))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def opcode_histogram(total: int, opcode: int = 0) -> list[int]:
     values = [0] * 256
     values[opcode] = total
@@ -263,6 +283,38 @@ def test_budget_when_trace_is_truncated_stops_at_guest_vblank_limit() -> None:
         assert cursor.counters.vblank_latches == 1
 
 
+def test_manual_close_trace_completes_without_checkpoint() -> None:
+    replay = replay_module()
+    with TemporaryDirectory() as temporary:
+        trace_path = Path(temporary) / "close.toml"
+        write_close_trace(trace_path)
+        trace = replay.parse_trace(trace_path)
+        assert trace.record_on_close is True
+        assert trace.checkpoint_field is None
+        cursor = replay.ReplayCursor(trace)
+        assert cursor.latch_vblank() is not None
+        assert cursor.latch_vblank() is not None
+        assert cursor.latch_vblank() is None
+        assert cursor.stop_reason == "trace_complete"
+
+
+def test_manual_close_trace_rejects_mixed_checkpoint_metadata() -> None:
+    replay = replay_module()
+    with TemporaryDirectory() as temporary:
+        trace_path = Path(temporary) / "mixed.toml"
+        write_close_trace(trace_path)
+        trace_path.write_text(
+            trace_path.read_text(encoding="utf-8").replace(
+                "record_on_close = true\n",
+                "record_on_close = true\nrecord_stop_field = 5\n",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="closed record schema"):
+            replay.parse_trace(trace_path)
+
+
 def test_runtime_command_when_clean_boot_uses_only_normal_input_path() -> None:
     replay = replay_module()
     request = replay.RunRequest(
@@ -347,6 +399,8 @@ def test_task15_matrix_schema_accepts_only_three_closed_metadata_rows() -> None:
                  "total_native_bound_packets": 4 if active else 0,
                  "total_native_state_packets": 0,
                  "total_native_unbound_packets": 0,
+                 "total_native_producer_bound_draws": 4 if active else 0,
+                 "total_native_packet_derived_draws": 0,
                  "total_native_unsupported_packets": 0,
                  "first_native_unsupported_opcode": 0,
                  "last_native_unsupported_opcode": 0,
@@ -363,6 +417,9 @@ def test_task15_matrix_schema_accepts_only_three_closed_metadata_rows() -> None:
                  "native_opcode_counts": opcode_histogram(4 if active else 0),
                  "native_state_opcode_counts": opcode_histogram(0),
                  "native_unbound_opcode_counts": opcode_histogram(0),
+                 "native_producer_bound_opcode_counts":
+                     opcode_histogram(4 if active else 0),
+                 "native_packet_derived_opcode_counts": opcode_histogram(0),
                  "native_unsupported_opcode_counts": opcode_histogram(0),
                  "native_unbound_source_by_opcode": opcode_attribution(),
                  "native_unbound_pc_by_opcode": opcode_attribution(),
@@ -372,6 +429,7 @@ def test_task15_matrix_schema_accepts_only_three_closed_metadata_rows() -> None:
                  "native_unbound_source_hotspots": [],
                  "last_native_state": native_state(),
                  "native_claim": "independent" if active else "none",
+                 "native_coverage_contract": "eligible-3d-producer",
                 "total_superseded": 0,
                 "stage_failure_count": 0,
             },
@@ -560,8 +618,10 @@ def test_runtime_evidence_accepts_a_clean_scene_after_an_earlier_fallback(
                   "total_native_packets": stream_total,
                    "total_native_bound_packets": stream_total,
                    "total_native_state_packets": 0,
-                  "total_native_unbound_packets": 0,
-                  "total_native_unsupported_packets": 0,
+                   "total_native_unbound_packets": 0,
+                   "total_native_producer_bound_draws": stream_total,
+                   "total_native_packet_derived_draws": 0,
+                   "total_native_unsupported_packets": 0,
                   "first_native_unsupported_opcode": 0,
                   "last_native_unsupported_opcode": 0,
                   "first_native_unbound_opcode": 0,
@@ -576,8 +636,11 @@ def test_runtime_evidence_accepts_a_clean_scene_after_an_earlier_fallback(
                   "first_native_unsupported_return_address": 0,
                    "native_opcode_counts": opcode_histogram(stream_total),
                    "native_state_opcode_counts": opcode_histogram(0),
-                  "native_unbound_opcode_counts": opcode_histogram(0),
-                  "native_unsupported_opcode_counts": opcode_histogram(0),
+                   "native_unbound_opcode_counts": opcode_histogram(0),
+                   "native_producer_bound_opcode_counts":
+                       opcode_histogram(stream_total),
+                   "native_packet_derived_opcode_counts": opcode_histogram(0),
+                   "native_unsupported_opcode_counts": opcode_histogram(0),
                   "native_unbound_source_by_opcode": opcode_attribution(),
                   "native_unbound_pc_by_opcode": opcode_attribution(),
                   "native_unsupported_pc_by_opcode": opcode_attribution(),
@@ -586,7 +649,8 @@ def test_runtime_evidence_accepts_a_clean_scene_after_an_earlier_fallback(
                    "native_unbound_source_hotspots": [],
                    "last_native_state": native_state(),
                   "total_independent_vram_presents": 1 if render_mode == "native" else 0,
-                 "native_claim": "independent" if render_mode == "native" else "none",
+                  "native_claim": "independent" if render_mode == "native" else "none",
+                  "native_coverage_contract": "eligible-3d-producer",
                 "total_visual_states": 1 if stream_total else 0,
                 "total_superseded": 0,
                 "stage_failure_count": 0,
@@ -678,6 +742,12 @@ def test_runtime_evidence_accepts_a_clean_scene_after_an_earlier_fallback(
                 stream["total_native_bound_packets"] = stream_total - 1
                 stream["total_native_unbound_packets"] = 1
                 stream["native_unbound_opcode_counts"] = opcode_histogram(1)
+                stream["total_native_producer_bound_draws"] = stream_total - 1
+                stream["total_native_packet_derived_draws"] = 1
+                stream["native_producer_bound_opcode_counts"] = opcode_histogram(
+                    stream_total - 1
+                )
+                stream["native_packet_derived_opcode_counts"] = opcode_histogram(1)
                 stream["native_claim"] = "packet-faithful"
                 replay.assert_run_evidence(payload, trace, render_mode)
                 stream["total_independent_vram_presents"] = 0
@@ -781,6 +851,26 @@ def test_record_command_when_private_disc_is_supplied_is_isolated_and_normal_inp
         assert "--record-max-vblanks" in command
         assert "--input-replay" not in command
         assert not any(token in command for token in ("--netplay", "press", "set_input", "teleport", "savestate", "write_ram"))
+
+
+def test_manual_record_command_uses_close_completion_without_field_checkpoint() -> None:
+    replay = replay_module()
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        disc = root / "disc1.cue"
+        disc.write_text('FILE "disc1.bin" BINARY\n', encoding="utf-8")
+        memcards = root / "memcards"
+        memcards.mkdir()
+        (memcards / "card1.mcd").write_bytes(b"card1")
+        request = replay.RecordRequest(
+            build=Path("build-dbg/XenogearsRecomp"), trace=root / "route.toml",
+            runtime_state=root / "state",
+            memcard_dir=replay.validate_memcard_dir(memcards), renderer="opengl",
+            disc=replay.validate_disc(disc), max_vblanks=60000, on_close=True,
+        )
+        command = replay.runtime_record_command(request)
+        assert "--record-on-close" in command
+        assert "--record-stop-field" not in command
 
 
 def test_record_command_when_memcard_dir_is_explicit_uses_that_directory() -> None:
