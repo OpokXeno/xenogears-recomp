@@ -10,6 +10,22 @@ enum {
     TERRAIN_ORDERING_BUCKET_COUNT = 0xf0,
 };
 
+static XgWorldTerrainWaterBuildDiagnostics build_diagnostics;
+static bool temporal_coverage_enabled;
+
+void xg_world_terrain_water_set_temporal_coverage(bool enabled) {
+    temporal_coverage_enabled = enabled;
+}
+
+bool xg_world_terrain_water_temporal_coverage(void) {
+    return temporal_coverage_enabled;
+}
+
+void xg_world_terrain_water_build_diagnostics(
+    XgWorldTerrainWaterBuildDiagnostics *out_diagnostics) {
+    if (out_diagnostics != NULL) *out_diagnostics = build_diagnostics;
+}
+
 static int32_t u32_as_i32(uint32_t value) {
     if (value <= INT32_MAX) return (int32_t)value;
     return -1 - (int32_t)(UINT32_MAX - value);
@@ -211,6 +227,92 @@ static void make_uv(uint32_t word, uint16_t uv[4]) {
     }
 }
 
+static void copy_interpolation_position(XgRenderIrVertex *destination,
+                                        const XgRenderIrVertex *source) {
+    destination->x = source->x;
+    destination->y = source->y;
+    destination->native_view_x = source->native_view_x;
+    destination->native_view_y = source->native_view_y;
+    destination->native_view_position = source->native_view_position;
+    destination->projective_view_x = source->projective_view_x;
+    destination->projective_view_y = source->projective_view_y;
+    destination->projective_view_z = source->projective_view_z;
+    destination->projective_offset_x = source->projective_offset_x;
+    destination->projective_offset_y = source->projective_offset_y;
+    destination->projective_native_offset_x =
+        source->projective_native_offset_x;
+    destination->projective_native_offset_y =
+        source->projective_native_offset_y;
+    destination->projective_distance = source->projective_distance;
+    destination->projective_position = source->projective_position;
+}
+
+static bool raster_position_equal(const XgRenderIrVertex *left,
+                                  const XgRenderIrVertex *right) {
+    return shift_right_floor(left->x, 16u) ==
+               shift_right_floor(right->x, 16u) &&
+           shift_right_floor(left->y, 16u) ==
+               shift_right_floor(right->y, 16u) &&
+           left->native_view_position == right->native_view_position &&
+           (!left->native_view_position ||
+            (shift_right_floor(left->native_view_x, 16u) ==
+                 shift_right_floor(right->native_view_x, 16u) &&
+             shift_right_floor(left->native_view_y, 16u) ==
+                 shift_right_floor(right->native_view_y, 16u)));
+}
+
+static void reconcile_shared_vertices(XgWorldTerrainWaterRecord *records,
+                                      uint32_t record_count) {
+    enum { WORLD_VERTEX_SIDE = 145, WORLD_VERTEX_COUNT = 145 * 145 };
+    uint16_t first_record[WORLD_VERTEX_COUNT];
+    uint8_t first_vertex[WORLD_VERTEX_COUNT];
+    uint32_t record_index;
+
+    memset(first_record, 0xff, sizeof(first_record));
+    memset(first_vertex, 0, sizeof(first_vertex));
+    for (record_index = 0u; record_index < record_count; ++record_index) {
+        XgRenderIrTriangle *triangle =
+            &records[record_index].primitive.triangles[0];
+        uint32_t vertex_index;
+
+        for (vertex_index = 0u; vertex_index < 3u; ++vertex_index) {
+            XgRenderIrVertex *vertex = &triangle->vertices[vertex_index];
+            const uint32_t tile_identity =
+                vertex->interpolation_group_id & UINT32_C(0x00ffffff);
+            const uint32_t grid_index = (tile_identity >> 8u) & 0xffu;
+            const uint32_t local_vertex = vertex->interpolation_vertex_id;
+            const uint32_t global_x =
+                (grid_index % 9u) * 16u + local_vertex % 17u;
+            const uint32_t global_z =
+                (grid_index / 9u) * 16u + local_vertex / 17u;
+            const uint32_t global_vertex =
+                global_z * WORLD_VERTEX_SIDE + global_x;
+            XgRenderIrVertex *first;
+
+            if (grid_index >= 81u || local_vertex >= 289u ||
+                global_vertex >= WORLD_VERTEX_COUNT)
+                continue;
+            if (first_record[global_vertex] == UINT16_MAX) {
+                first_record[global_vertex] = (uint16_t)record_index;
+                first_vertex[global_vertex] = (uint8_t)vertex_index;
+                vertex->interpolation_group_id = UINT32_C(0x63000000);
+                vertex->interpolation_vertex_id = global_vertex;
+                continue;
+            }
+            first = &records[first_record[global_vertex]].primitive.triangles[0]
+                         .vertices[first_vertex[global_vertex]];
+            ++build_diagnostics.shared_duplicate_vertices;
+            if (!raster_position_equal(first, vertex)) {
+                ++build_diagnostics.shared_raster_conflicts;
+                continue;
+            }
+            copy_interpolation_position(vertex, first);
+            vertex->interpolation_group_id = UINT32_C(0x63000000);
+            vertex->interpolation_vertex_id = global_vertex;
+        }
+    }
+}
+
 static XgWorldTerrainWaterResult emit_cell(
     const XgWorldTerrainWaterSource *source,
     const XgHost3dProjection *projection,
@@ -227,6 +329,9 @@ static XgWorldTerrainWaterResult emit_cell(
     uint16_t uv[4];
     const uint32_t diagonal = (word >> 15u) & 1u;
     const uint32_t page_selector = (word >> 8u) & 7u;
+    const uint32_t tile_identity =
+        ((uint32_t)source->tiles[tile_index].grid_index << 8u) |
+        source->tiles[tile_index].terrain_id;
     uint32_t triangle;
 
     corners[0] = grid[cell_z * 9u + cell_x];
@@ -245,6 +350,8 @@ static XgWorldTerrainWaterResult emit_cell(
         uint32_t vertex;
         uint32_t bucket;
 
+        ++build_diagnostics.considered_triangles;
+
         for (vertex = 0u; vertex < 3u; ++vertex) {
             input.vertices[vertex] =
                 corners[triangle_corners[diagonal][triangle][vertex]];
@@ -253,16 +360,48 @@ static XgWorldTerrainWaterResult emit_cell(
         input.projection = *projection;
         if (!xg_host_3d_rot_trans_pers4(&input, &output))
             return XG_WORLD_TERRAIN_WATER_BUILD_FAILED;
-        if ((int32_t)output.rtpt_flags < 0 ||
-            !triangle_is_on_screen(output.vertices,
-                                   source->screen_x_cull_margin) ||
-            !triangle_is_front_facing(output.vertices))
+        for (vertex = 0u; vertex < 3u; ++vertex) {
+            const XgHost3dProjectedVertex *projected =
+                &output.vertices[vertex];
+
+            if (projected->projective_position) {
+                ++build_diagnostics.projective_vertices;
+                continue;
+            }
+            if (projected->projective_view_x < -0x8000 ||
+                projected->projective_view_x > 0x7fff)
+                ++build_diagnostics.projective_invalid_x;
+            if (projected->projective_view_y < -0x8000 ||
+                projected->projective_view_y > 0x7fff)
+                ++build_diagnostics.projective_invalid_y;
+            if (projected->projective_view_z <= 0 ||
+                projected->projective_view_z > 0xffff)
+                ++build_diagnostics.projective_invalid_z;
+            else if ((uint32_t)projected->projective_view_z * 2u <=
+                     projected->projective_distance)
+                ++build_diagnostics.projective_invalid_near;
+        }
+        if ((int32_t)output.rtpt_flags < 0) {
+            ++build_diagnostics.projection_rejects;
             continue;
+        }
+        if (!triangle_is_on_screen(output.vertices,
+                                   source->screen_x_cull_margin)) {
+            ++build_diagnostics.screen_rejects;
+            continue;
+        }
+        if (!triangle_is_front_facing(output.vertices)) {
+            ++build_diagnostics.backface_rejects;
+            continue;
+        }
         for (vertex = 0u; vertex < 3u; ++vertex) {
             if (output.vertices[vertex].z > max_depth)
                 max_depth = output.vertices[vertex].z;
         }
-        if (max_depth >= 0x0f00u) continue;
+        if (max_depth >= 0x0f00u) {
+            ++build_diagnostics.depth_rejects;
+            continue;
+        }
 
         clut_index = (uint16_t)output.depth_cue;
         if (clut_index >= 0x1000u) clut_index = 0x0fffu;
@@ -281,6 +420,12 @@ static XgWorldTerrainWaterResult emit_cell(
         for (vertex = 0u; vertex < 3u; ++vertex) {
             const uint32_t corner =
                 triangle_corners[diagonal][triangle][vertex];
+            const uint32_t grid_x =
+                ((quadrant_index & 1u) != 0u ? 8u : 0u) + cell_x +
+                (corner & 1u);
+            const uint32_t grid_z =
+                ((quadrant_index & 2u) != 0u ? 8u : 0u) + cell_z +
+                (corner >> 1u);
 
             candidate.source_vertices[vertex] = input.vertices[vertex];
             candidate.projected_vertices[vertex] = output.vertices[vertex];
@@ -298,11 +443,35 @@ static XgWorldTerrainWaterResult emit_cell(
                     .b = 0x80u,
                     .native_view_x =
                         output.vertices[vertex].native_view_x_16_16,
-                    .native_view_y =
-                        output.vertices[vertex].native_view_y_16_16,
-                    .native_view_position =
-                        output.vertices[vertex].native_view_position != 0u,
+                     .native_view_y =
+                         output.vertices[vertex].native_view_y_16_16,
+                     .native_view_position =
+                          output.vertices[vertex].native_view_position != 0u,
+                    .projective_view_x =
+                        output.vertices[vertex].projective_view_x,
+                    .projective_view_y =
+                        output.vertices[vertex].projective_view_y,
+                    .projective_view_z =
+                        output.vertices[vertex].projective_view_z,
+                    .projective_offset_x =
+                        output.vertices[vertex].projective_offset_x_16_16,
+                    .projective_offset_y =
+                        output.vertices[vertex].projective_offset_y_16_16,
+                    .projective_native_offset_x = output.vertices[vertex]
+                        .projective_native_offset_x_16_16,
+                    .projective_native_offset_y = output.vertices[vertex]
+                        .projective_native_offset_y_16_16,
+                    .projective_distance =
+                        output.vertices[vertex].projective_distance,
+                    .projective_position =
+                        output.vertices[vertex].projective_position != 0u,
+                    .interpolation_group_id =
+                        UINT32_C(0x63000000) | tile_identity,
+                    .interpolation_vertex_id = grid_z * 17u + grid_x,
+                    .interpolation_vertex_identity_valid = true,
                 };
+            if (output.vertices[vertex].projective_position)
+                ++build_diagnostics.emitted_projective_vertices;
         }
         bucket = max_depth >> 4u;
         candidate.projection_flags = output.rtpt_flags;
@@ -311,6 +480,9 @@ static XgWorldTerrainWaterResult emit_cell(
         candidate.source_primitive_index =
             ((((tile_index * 4u + quadrant_index) * 64u) +
               cell_z * 8u + cell_x) * 2u) + triangle;
+        candidate.interpolation_primitive_id = tile_identity * 512u +
+            (((quadrant_index * 64u + cell_z * 8u + cell_x) * 2u) +
+             triangle);
         candidate.ordering_predecessor_record = bucket_heads[bucket];
         candidate.ordering_predecessor_is_external =
             bucket_heads[bucket] == UINT32_MAX;
@@ -330,15 +502,124 @@ static XgWorldTerrainWaterResult emit_cell(
         records[*record_count] = candidate;
         bucket_heads[bucket] = *record_count;
         ++*record_count;
+        ++build_diagnostics.emitted_triangles;
     }
     return XG_WORLD_TERRAIN_WATER_OK;
 }
 
-XgWorldTerrainWaterResult xg_world_terrain_water_build(
+static XgWorldTerrainWaterResult build_interpolation_anchors(
+        const XgWorldTerrainWaterSource *source,
+        const XgHost3dProjection *projection,
+        const bool selected[XG_WORLD_TERRAIN_WATER_TILE_COUNT]
+                           [XG_WORLD_TERRAIN_WATER_QUADRANT_COUNT],
+        int16_t first_x, int16_t first_z,
+        XgWorldTerrainWaterAnchor *anchors, uint32_t anchor_capacity,
+        uint32_t *out_anchor_count) {
+    bool seen[XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY] = {false};
+    uint32_t anchor_count = 0u;
+
+    if (anchors == NULL || out_anchor_count == NULL)
+        return XG_WORLD_TERRAIN_WATER_OK;
+    for (uint32_t tile = 0u; tile < XG_WORLD_TERRAIN_WATER_TILE_COUNT;
+         ++tile) {
+        const uint32_t tile_row = tile / 5u;
+        const uint32_t tile_column = tile % 5u;
+        const int16_t tile_x = wrap_i16(
+            (int32_t)first_x + (int32_t)tile_column * 0x800);
+        const int16_t tile_z = wrap_i16(
+            (int32_t)first_z - (int32_t)tile_row * 0x800);
+
+        if (!source->tiles[tile].active) continue;
+        for (uint32_t quadrant = 0u;
+             quadrant < XG_WORLD_TERRAIN_WATER_QUADRANT_COUNT; ++quadrant) {
+            XgHost3dVector grid[XG_WORLD_TERRAIN_WATER_SAMPLE_COUNT];
+            const int16_t origin_x = wrap_i16(
+                (int32_t)tile_x + ((quadrant & 1u) != 0u ? 0x400 : 0));
+            const int16_t origin_z = wrap_i16(
+                (int32_t)tile_z - ((quadrant & 2u) != 0u ? 0x400 : 0));
+
+            if (!selected[tile][quadrant]) continue;
+            make_grid(source, source->tiles[tile].samples[quadrant],
+                      origin_x, origin_z, grid);
+            for (uint32_t local_z = 0u;
+                 local_z < XG_WORLD_TERRAIN_WATER_SAMPLE_SIDE; ++local_z) {
+                for (uint32_t local_x = 0u;
+                     local_x < XG_WORLD_TERRAIN_WATER_SAMPLE_SIDE; ++local_x) {
+                    const uint32_t grid_index =
+                        source->tiles[tile].grid_index;
+                    const uint32_t grid_x =
+                        ((quadrant & 1u) != 0u ? 8u : 0u) + local_x;
+                    const uint32_t grid_z =
+                        ((quadrant & 2u) != 0u ? 8u : 0u) + local_z;
+                    const uint32_t global_x =
+                        (grid_index % 9u) * 16u + grid_x;
+                    const uint32_t global_z =
+                        (grid_index / 9u) * 16u + grid_z;
+                    const uint32_t global_vertex = global_z * 145u + global_x;
+                    XgHost3dProject4Input input = {0};
+                    XgHost3dRotTransPers4Output output;
+                    const XgHost3dProjectedVertex *projected;
+                    XgWorldTerrainWaterAnchor *anchor;
+
+                    if (global_vertex >= XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY ||
+                        seen[global_vertex])
+                        continue;
+                    for (uint32_t vertex = 0u; vertex < 4u; ++vertex)
+                        input.vertices[vertex] =
+                            grid[local_z * XG_WORLD_TERRAIN_WATER_SAMPLE_SIDE +
+                                 local_x];
+                    input.projection = *projection;
+                    if (!xg_host_3d_rot_trans_pers4(&input, &output))
+                        return XG_WORLD_TERRAIN_WATER_BUILD_FAILED;
+                    if ((int32_t)output.rtpt_flags < 0) continue;
+                    if (anchor_count == anchor_capacity)
+                        return XG_WORLD_TERRAIN_WATER_CAPACITY_EXCEEDED;
+                    projected = &output.vertices[0];
+                    anchor = &anchors[anchor_count++];
+                    *anchor = (XgWorldTerrainWaterAnchor){
+                        .material = source->material,
+                        .vertex = {
+                            .x = (int32_t)projected->x * INT32_C(65536),
+                            .y = (int32_t)projected->y * INT32_C(65536),
+                            .native_view_x = projected->native_view_x_16_16,
+                            .native_view_y = projected->native_view_y_16_16,
+                            .native_view_position =
+                                projected->native_view_position != 0u,
+                            .projective_view_x = projected->projective_view_x,
+                            .projective_view_y = projected->projective_view_y,
+                            .projective_view_z = projected->projective_view_z,
+                            .projective_offset_x =
+                                projected->projective_offset_x_16_16,
+                            .projective_offset_y =
+                                projected->projective_offset_y_16_16,
+                            .projective_native_offset_x =
+                                projected->projective_native_offset_x_16_16,
+                            .projective_native_offset_y =
+                                projected->projective_native_offset_y_16_16,
+                            .projective_distance = projected->projective_distance,
+                            .projective_position =
+                                projected->projective_position != 0u,
+                            .interpolation_group_id = UINT32_C(0x63000000),
+                            .interpolation_vertex_id = global_vertex,
+                            .interpolation_vertex_identity_valid = true,
+                        },
+                    };
+                    seen[global_vertex] = true;
+                }
+            }
+        }
+    }
+    *out_anchor_count = anchor_count;
+    return XG_WORLD_TERRAIN_WATER_OK;
+}
+
+static XgWorldTerrainWaterResult xg_world_terrain_water_build_internal(
     const XgWorldTerrainWaterSource *source,
     XgWorldTerrainWaterRecord *records,
     uint32_t record_capacity,
-    uint32_t *out_record_count) {
+    uint32_t *out_record_count,
+    XgWorldTerrainWaterAnchor *anchors, uint32_t anchor_capacity,
+    uint32_t *out_anchor_count) {
     XgHost3dMatrix transform;
     XgHost3dProjection projection = { 0 };
     uint32_t bucket_heads[TERRAIN_ORDERING_BUCKET_COUNT];
@@ -350,9 +631,12 @@ XgWorldTerrainWaterResult xg_world_terrain_water_build(
     uint32_t tile;
     uint32_t index;
 
-    if (source == NULL || records == NULL || out_record_count == NULL)
+    if (source == NULL || records == NULL || out_record_count == NULL ||
+        ((anchors == NULL) != (out_anchor_count == NULL)))
         return XG_WORLD_TERRAIN_WATER_INVALID_ARGUMENT;
+    memset(&build_diagnostics, 0, sizeof(build_diagnostics));
     *out_record_count = 0u;
+    if (out_anchor_count != NULL) *out_anchor_count = 0u;
     if (record_capacity < XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY)
         return XG_WORLD_TERRAIN_WATER_CAPACITY_EXCEEDED;
     memset(records, 0, sizeof(*records) *
@@ -366,7 +650,8 @@ XgWorldTerrainWaterResult xg_world_terrain_water_build(
         uint32_t quadrant;
 
         if (!source->tiles[tile].active) continue;
-        if (source->tiles[tile].terrain_id >= 256u)
+        if (source->tiles[tile].terrain_id >= 256u ||
+            source->tiles[tile].grid_index >= 81u)
             return XG_WORLD_TERRAIN_WATER_INVALID_SOURCE;
         for (quadrant = 0u; quadrant < 4u; ++quadrant) {
             uint32_t sample;
@@ -399,8 +684,17 @@ XgWorldTerrainWaterResult xg_world_terrain_water_build(
         uint32_t quadrant;
 
         if (!source->tiles[tile].active) continue;
-        select_tile_quadrants(source, tile, selected[tile]);
+        ++build_diagnostics.active_tiles;
+        if (!temporal_coverage_enabled)
+            select_tile_quadrants(source, tile, selected[tile]);
+        else
+            for (quadrant = 0u; quadrant < 4u; ++quadrant)
+                selected[tile][quadrant] = true;
         for (quadrant = 0u; quadrant < 4u; ++quadrant) {
+            if (selected[tile][quadrant])
+                ++build_diagnostics.selected_quadrants;
+            else
+                ++build_diagnostics.rejected_quadrants;
             if (selected[tile][quadrant] && !source->tiles[tile].has_data)
                 return XG_WORLD_TERRAIN_WATER_INVALID_SOURCE;
         }
@@ -408,6 +702,15 @@ XgWorldTerrainWaterResult xg_world_terrain_water_build(
 
     for (index = 0u; index < TERRAIN_ORDERING_BUCKET_COUNT; ++index)
         bucket_heads[index] = UINT32_MAX;
+    if (anchors != NULL) {
+        const XgWorldTerrainWaterResult anchor_result =
+            build_interpolation_anchors(
+                source, &projection, selected, first_x, first_z,
+                anchors, anchor_capacity, out_anchor_count);
+
+        if (anchor_result != XG_WORLD_TERRAIN_WATER_OK)
+            return anchor_result;
+    }
     for (tile = 0u; tile < XG_WORLD_TERRAIN_WATER_TILE_COUNT; ++tile) {
         const uint32_t tile_row = tile / 5u;
         const uint32_t tile_column = tile % 5u;
@@ -436,6 +739,8 @@ XgWorldTerrainWaterResult xg_world_terrain_water_build(
                     XgWorldTerrainWaterResult result;
 
                     if (record_count >= TERRAIN_PACKET_STOP_COUNT) {
+                        ++build_diagnostics.packet_limit_stops;
+                        reconcile_shared_vertices(records, record_count);
                         *out_record_count = record_count;
                         return XG_WORLD_TERRAIN_WATER_OK;
                     }
@@ -450,8 +755,19 @@ XgWorldTerrainWaterResult xg_world_terrain_water_build(
             }
         }
     }
+    reconcile_shared_vertices(records, record_count);
     *out_record_count = record_count;
     return XG_WORLD_TERRAIN_WATER_OK;
+}
+
+XgWorldTerrainWaterResult xg_world_terrain_water_build(
+        const XgWorldTerrainWaterSource *source,
+        XgWorldTerrainWaterRecord *records,
+        uint32_t record_capacity,
+        uint32_t *out_record_count) {
+    return xg_world_terrain_water_build_internal(
+        source, records, record_capacity, out_record_count,
+        NULL, 0u, NULL);
 }
 
 static bool native_ram_range_is_valid(uint32_t address, uint32_t size,
@@ -647,6 +963,7 @@ XgWorldTerrainWaterNativeResult xg_world_terrain_water_native_prepare(
     const XgWorldTerrainWaterNativeRequest *request,
     const XgWorldTerrainWaterAuthenticatedReader *reader,
     XgWorldTerrainWaterRecord *records, uint32_t record_capacity,
+    XgWorldTerrainWaterAnchor *anchors, uint32_t anchor_capacity,
     XgWorldTerrainWaterNativePreparation *out_preparation) {
     enum {
         CONTEXT_OT_OFFSET = 0x70,
@@ -666,9 +983,10 @@ XgWorldTerrainWaterNativeResult xg_world_terrain_water_native_prepare(
     if (out_preparation == NULL)
         return XG_WORLD_TERRAIN_WATER_NATIVE_INVALID_ARGUMENT;
     memset(out_preparation, 0, sizeof(*out_preparation));
-    if (request == NULL || reader == NULL || records == NULL ||
+    if (request == NULL || reader == NULL || records == NULL || anchors == NULL ||
         reader->read_u16 == NULL || reader->read_u32 == NULL ||
         record_capacity < XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY ||
+        anchor_capacity < XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY ||
         request->entry_pc != XG_WORLD_TERRAIN_WATER_NATIVE_ENTRY_PC ||
         request->position_address !=
             XG_WORLD_TERRAIN_WATER_NATIVE_POSITION_ADDRESS ||
@@ -702,8 +1020,9 @@ XgWorldTerrainWaterNativeResult xg_world_terrain_water_native_prepare(
         context_packets != request->packet_base)
         return XG_WORLD_TERRAIN_WATER_NATIVE_INVALID_OUTPUT;
 
-    build_result = xg_world_terrain_water_build(
-        &capture.source, records, record_capacity, &preparation.record_count);
+    build_result = xg_world_terrain_water_build_internal(
+        &capture.source, records, record_capacity, &preparation.record_count,
+        anchors, anchor_capacity, &preparation.anchor_count);
     if (build_result != XG_WORLD_TERRAIN_WATER_OK)
         return XG_WORLD_TERRAIN_WATER_NATIVE_BUILD_FAILED;
     if (preparation.record_count > XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY ||

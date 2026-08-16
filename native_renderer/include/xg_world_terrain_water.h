@@ -20,6 +20,7 @@ enum {
     XG_WORLD_TERRAIN_WATER_PAGE_COUNT = 8,
     XG_WORLD_TERRAIN_WATER_CLUT_COUNT = 64,
     XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY = 2047,
+    XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY = 145 * 145,
 };
 
 typedef enum XgWorldTerrainWaterResult {
@@ -35,6 +36,7 @@ typedef struct XgWorldTerrainWaterTileSource {
                     [XG_WORLD_TERRAIN_WATER_SAMPLE_COUNT];
     uint32_t resource_address;
     uint16_t terrain_id;
+    uint8_t grid_index;
     bool active;
     bool has_data;
 } XgWorldTerrainWaterTileSource;
@@ -69,6 +71,7 @@ typedef struct XgWorldTerrainWaterRecord {
     uint32_t ordering_bucket;
     uint32_t allocation_ordinal;
     uint32_t source_primitive_index;
+    uint32_t interpolation_primitive_id;
     uint32_t ordering_predecessor_record;
     int16_t depth_cue;
     uint16_t encoded_clut;
@@ -86,11 +89,41 @@ typedef struct XgWorldTerrainWaterRecord {
     bool ordering_predecessor_is_external;
 } XgWorldTerrainWaterRecord;
 
+typedef struct XgWorldTerrainWaterAnchor {
+    XgRenderIrMaterialState material;
+    XgRenderIrVertex vertex;
+} XgWorldTerrainWaterAnchor;
+
+typedef struct XgWorldTerrainWaterBuildDiagnostics {
+    uint32_t active_tiles;
+    uint32_t selected_quadrants;
+    uint32_t rejected_quadrants;
+    uint32_t considered_triangles;
+    uint32_t projective_vertices;
+    uint32_t projective_invalid_x;
+    uint32_t projective_invalid_y;
+    uint32_t projective_invalid_z;
+    uint32_t projective_invalid_near;
+    uint32_t emitted_projective_vertices;
+    uint32_t shared_duplicate_vertices;
+    uint32_t shared_raster_conflicts;
+    uint32_t projection_rejects;
+    uint32_t screen_rejects;
+    uint32_t backface_rejects;
+    uint32_t depth_rejects;
+    uint32_t emitted_triangles;
+    uint32_t packet_limit_stops;
+} XgWorldTerrainWaterBuildDiagnostics;
+
 XgWorldTerrainWaterResult xg_world_terrain_water_build(
     const XgWorldTerrainWaterSource *source,
     XgWorldTerrainWaterRecord *records,
     uint32_t record_capacity,
     uint32_t *out_record_count);
+void xg_world_terrain_water_build_diagnostics(
+    XgWorldTerrainWaterBuildDiagnostics *out_diagnostics);
+void xg_world_terrain_water_set_temporal_coverage(bool enabled);
+bool xg_world_terrain_water_temporal_coverage(void);
 
 #ifdef __cplusplus
 }

@@ -19,6 +19,9 @@ set(XG_RENDER_OVERLAYS
 set(XG_RENDER_RUNTIME_VARIANTS
     "${CMAKE_CURRENT_SOURCE_DIR}/native_renderer/xg_render_runtime_variants.toml"
     CACHE FILEPATH "Identity-bound Field 5 runtime variant manifest")
+set(XG_RENDER_OVERLAY_RANGES
+    "${CMAKE_CURRENT_SOURCE_DIR}/native_renderer/xg_render_overlay_ranges.toml"
+    CACHE FILEPATH "Identity-bound overlay cutover and source-observation manifest")
 set(XG_RENDER_FIELD5_RUNTIME_ARTIFACT
     "${CMAKE_CURRENT_SOURCE_DIR}/overlays/field5_runtime.bin"
     CACHE FILEPATH "Private Field 5 runtime variant artifact")
@@ -33,6 +36,24 @@ set(XG_RENDER_MANIFEST_TOOL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_runtime_variant_verify.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_runtime_variants.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_overlay_codegen.py")
+set(XG_OVERLAY_CODEGEN_INPUTS
+    "${XG_RENDER_RUNTIME_VARIANTS}"
+    "${XG_RENDER_OVERLAY_RANGES}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/compile_overlays_fixed.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest_model.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_overlay_codegen.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_overlay_ranges.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_runtime_variant_model.py")
+set(XG_OVERLAY_PLAN_HASH_INPUT "")
+foreach(XG_OVERLAY_CODEGEN_INPUT IN LISTS XG_OVERLAY_CODEGEN_INPUTS)
+    file(SHA256 "${XG_OVERLAY_CODEGEN_INPUT}" XG_OVERLAY_CODEGEN_INPUT_SHA256)
+    file(RELATIVE_PATH XG_OVERLAY_CODEGEN_INPUT_RELATIVE
+        "${CMAKE_CURRENT_SOURCE_DIR}" "${XG_OVERLAY_CODEGEN_INPUT}")
+    string(APPEND XG_OVERLAY_PLAN_HASH_INPUT
+        "${XG_OVERLAY_CODEGEN_INPUT_RELATIVE}=${XG_OVERLAY_CODEGEN_INPUT_SHA256}\n")
+endforeach()
+string(SHA256 XG_OVERLAY_PLAN_HASH_SHA256 "${XG_OVERLAY_PLAN_HASH_INPUT}")
+string(SUBSTRING "${XG_OVERLAY_PLAN_HASH_SHA256}" 0 8 XG_OVERLAY_PLAN_HASH)
 option(XG_RENDER_NATIVE
     "Enable authenticated native-render manifest validation and cutovers"
     ON)
@@ -42,9 +63,11 @@ option(XG_RENDER_VALIDATE_OVERLAYS
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${XG_RENDER_MANIFEST}"
     "${XG_RENDER_RUNTIME_VARIANTS}"
+    "${XG_RENDER_OVERLAY_RANGES}"
     "${XG_RENDER_GAME_EXE}"
     "${XG_RENDER_FIELD5_RUNTIME_ARTIFACT}"
-    ${XG_RENDER_MANIFEST_TOOL_SOURCES})
+    ${XG_RENDER_MANIFEST_TOOL_SOURCES}
+    ${XG_OVERLAY_CODEGEN_INPUTS})
 
 if(XG_RENDER_NATIVE)
 if(XG_RENDER_VALIDATE_OVERLAYS)
@@ -161,6 +184,7 @@ psxrecomp_add_runtime_target(psx-runtime
     DEFAULT_GAME_CONFIG_PATH   "game.toml"
     GAME_EXTRA_IDENTITY_SHA256 "${XG_RENDER_GAME_IDENTITY_SHA256}"
     GAME_MANIFEST_DIGEST_SHA256 "${XG_RENDER_MANIFEST_IDENTITY_SHA256}"
+    OVERLAY_PLAN_HASH          "${XG_OVERLAY_PLAN_HASH}"
 )
 
 target_link_libraries(psx-runtime PRIVATE
@@ -358,6 +382,13 @@ if(BUILD_TESTING)
     target_link_libraries(xg_input_parity PRIVATE ${SDL2_LIBRARIES})
     add_test(NAME xg_input_parity COMMAND xg_input_parity)
 
+    add_executable(gpu_semantic_workload_test
+        psxrecomp/runtime/tests/test_gpu_semantic_workload.c
+        ${PSXRECOMP_ROOT}/runtime/src/gpu_semantic_workload.c)
+    target_include_directories(gpu_semantic_workload_test PRIVATE
+        ${PSXRECOMP_ROOT}/runtime/include)
+    add_test(NAME gpu_semantic_workload COMMAND gpu_semantic_workload_test)
+
     add_executable(gpu_gl_mask_order_test
         psxrecomp/runtime/tests/test_gpu_gl_mask_order.c
         psxrecomp/runtime/tests/native_render_baseline_gpu_test_double.c
@@ -368,6 +399,7 @@ if(BUILD_TESTING)
         ${PSXRECOMP_ROOT}/runtime/src/guest_render_transaction.c
         ${PSXRECOMP_ROOT}/runtime/src/gpu_sw_renderer.c
         ${PSXRECOMP_ROOT}/runtime/src/gpu_render.c
+        ${PSXRECOMP_ROOT}/runtime/src/gpu_semantic_workload.c
         ${PSXRECOMP_ROOT}/runtime/src/gpu_gl_renderer.c)
     target_include_directories(gpu_gl_mask_order_test PRIVATE
         ${PSXRECOMP_ROOT}/runtime/include ${SDL2_INCLUDE_DIRS})

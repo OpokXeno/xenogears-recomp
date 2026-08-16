@@ -548,6 +548,7 @@ static XgWorldActorSpritesResult build_shadow_record(
         };
         xg_render_quad_set_projected_position(
             &quad.vertices[vertex], &record->sprite.vertices[vertex]);
+        quad.vertices[vertex].projective_position = false;
     }
     if (xg_render_quad_build_primitive(&quad, &record->sprite.primitive) !=
         XG_RENDER_QUAD_BUILDER_OK)

@@ -34,8 +34,10 @@ typedef struct PsxXgRenderAuthCandidate {
     uint32_t artifact_base;
     uint32_t artifact_size;
     uint32_t artifact_crc32;
+    uint8_t runtime_variant_identity[PSX_GAME_IDENTITY_SHA256_BYTES];
     bool authority_provenance;
     bool pair_bound;
+    bool runtime_variant_bound;
 } PsxXgRenderAuthCandidate;
 
 typedef struct PsxXgRenderAuthProvenance {
@@ -271,6 +273,22 @@ typedef struct PsxXgRenderProducerFamilySnapshot {
     bool blocked;
 } PsxXgRenderProducerFamilySnapshot;
 
+typedef enum PsxXgRenderCodeWriteClass {
+    PSX_XG_RENDER_CODE_WRITE_DESCRIPTOR = 0,
+    PSX_XG_RENDER_CODE_WRITE_DIRECT,
+    PSX_XG_RENDER_CODE_WRITE_ZOOM,
+    PSX_XG_RENDER_CODE_WRITE_PROJECTED,
+    PSX_XG_RENDER_CODE_WRITE_WORLD_SKY,
+    PSX_XG_RENDER_CODE_WRITE_WORLD_HORIZON,
+    PSX_XG_RENDER_CODE_WRITE_WORLD_EFFECTS,
+    PSX_XG_RENDER_CODE_WRITE_MODEL_FT4,
+    PSX_XG_RENDER_CODE_WRITE_SPRITE_FT4,
+    PSX_XG_RENDER_CODE_WRITE_MODEL_DISPATCH_DATA,
+    PSX_XG_RENDER_CODE_WRITE_SHARED_TRIG_DATA,
+    PSX_XG_RENDER_CODE_WRITE_ARTIFACT,
+    PSX_XG_RENDER_CODE_WRITE_CLASS_COUNT,
+} PsxXgRenderCodeWriteClass;
+
 typedef struct PsxXgRenderProjectedLifecycleSnapshot {
     uint64_t initializer_begin_count;
     uint64_t initializer_registration_count;
@@ -282,7 +300,18 @@ typedef struct PsxXgRenderProjectedLifecycleSnapshot {
     uint64_t pending_reset_count;
     uint64_t disable_reset_count;
     uint64_t code_write_reset_count;
+    uint64_t code_write_class_counts[PSX_XG_RENDER_CODE_WRITE_CLASS_COUNT];
+    uint32_t code_write_class_first_address[
+        PSX_XG_RENDER_CODE_WRITE_CLASS_COUNT];
+    uint32_t code_write_class_last_address[
+        PSX_XG_RENDER_CODE_WRITE_CLASS_COUNT];
     uint64_t loader_reset_count;
+    uint32_t first_code_write_address;
+    uint32_t first_code_write_size;
+    uint32_t first_code_write_mask;
+    uint32_t last_code_write_address;
+    uint32_t last_code_write_size;
+    uint32_t last_code_write_mask;
     uint32_t last_registered_object;
     uint32_t last_source_success_object;
     uint32_t last_source_miss_object;
@@ -321,6 +350,20 @@ typedef struct PsxXgRenderModelFt4ShadowSnapshot {
     uint64_t ot_mismatch_count;
     uint64_t cursor_mismatch_count;
     uint64_t counter_mismatch_count;
+    uint64_t projection_matrix_mismatch_count;
+    uint64_t guest_pass_observation_count;
+    uint64_t guest_pass_projection_disagreement_count;
+    uint64_t replay_attempt_count;
+    uint64_t replay_resolved_count;
+    uint64_t replay_lookup_miss_count;
+    uint64_t replay_record_reject_count;
+    uint64_t replay_container_reject_count;
+    uint64_t replay_lifecycle_reject_count;
+    uint64_t replay_translate_reject_count;
+    uint64_t publish_invocation_count;
+    uint64_t publish_source_count;
+    uint64_t validation_rejected_source_count;
+    uint64_t framing_rejected_invocation_count;
     uint64_t template_capture_count;
     uint64_t template_hit_count;
     uint64_t template_miss_count;
@@ -337,7 +380,11 @@ typedef struct PsxXgRenderModelFt4ShadowSnapshot {
     uint32_t last_dispatch_caller;
     uint32_t last_dispatch_mode;
     uint32_t last_seam_pc;
+    uint32_t last_projection_matrix_mismatch_mask;
+    uint32_t last_expected_counter_delta;
+    uint32_t last_actual_counter_delta;
     uint32_t prepare_failure_detail;
+    uint32_t prepare_precondition_failure_mask;
     PsxXgRenderFt4PayloadMismatch first_payload_mismatch;
     uint32_t blocker;
     bool pending;
@@ -357,14 +404,53 @@ typedef struct PsxXgRenderModelFt3ShadowSnapshot {
     uint64_t ot_mismatch_count;
     uint64_t cursor_mismatch_count;
     uint64_t counter_mismatch_count;
+    uint64_t counter_actual_greater_count;
+    uint64_t counter_actual_less_count;
+    uint64_t handler_projection_mismatch_count;
+    uint64_t guest_pass_observation_count;
+    uint64_t guest_pass_projection_disagreement_count;
     uint64_t template_capture_count;
     uint64_t template_hit_count;
     uint64_t template_miss_count;
     uint64_t raw_color_difference_count;
+    uint64_t replay_attempt_count;
+    uint64_t replay_resolved_count;
+    uint64_t replay_lookup_miss_count;
+    uint64_t replay_lookup_invalid_count;
+    uint64_t replay_lookup_absent_count;
+    uint64_t replay_record_reject_count;
+    uint64_t replay_container_reject_count;
+    uint64_t replay_lifecycle_reject_count;
+    uint64_t replay_translate_reject_count;
+    uint64_t publish_invocation_count;
+    uint64_t publish_source_count;
+    uint64_t validation_rejected_source_count;
+    uint64_t framing_rejected_invocation_count;
+    uint32_t last_expected_counter_delta;
+    uint32_t last_actual_counter_delta;
+    uint32_t last_mismatch_expected_counter_delta;
+    uint32_t last_mismatch_actual_counter_delta;
+    uint32_t last_nclip_positive_count;
+    uint32_t last_guest_screen_accepted_count;
+    uint32_t last_guest_vertical_accepted_count;
+    uint32_t last_guest_horizontal_accepted_count;
+    uint32_t last_projection_flag_negative_count;
+    uint32_t last_handler_projection_mismatch_mask;
+    uint32_t last_mismatch_target_count;
+    uint32_t last_mismatch_nclip_positive_count;
+    uint32_t last_mismatch_guest_screen_accepted_count;
+    uint32_t last_mismatch_guest_vertical_accepted_count;
+    uint32_t last_mismatch_guest_horizontal_accepted_count;
+    uint32_t last_mismatch_projection_flag_negative_count;
+    uint32_t last_mismatch_screen_right;
+    uint32_t last_mismatch_screen_bottom;
     uint32_t first_mismatch_packet;
+    uint32_t last_replay_lookup_miss_source;
+    uint32_t source_count;
     uint32_t last_group_count;
     uint32_t last_target_count;
     uint32_t prepare_failure_detail;
+    uint32_t prepare_precondition_failure_mask;
     PsxXgRenderFt4PayloadMismatch first_payload_mismatch;
     uint32_t blocker;
     bool pending;
@@ -374,6 +460,14 @@ typedef struct PsxXgRenderModelFt3ShadowSnapshot {
 typedef struct PsxXgRenderSpriteFt4ShadowSnapshot {
     uint64_t native_cutover_count;
     uint64_t native_primitive_count;
+    uint64_t resident_publish_source_count;
+    uint64_t resident_replay_attempt_count;
+    uint64_t resident_replay_resolved_count;
+    uint64_t resident_replay_lookup_miss_count;
+    uint64_t resident_replay_record_reject_count;
+    uint64_t resident_replay_container_reject_count;
+    uint64_t resident_replay_lifecycle_reject_count;
+    uint64_t resident_replay_translate_reject_count;
     uint64_t field_builder_begin_count;
     uint64_t field_builder_native_cutover_count;
     uint64_t field_builder_native_primitive_count;
@@ -409,6 +503,7 @@ typedef struct PsxXgRenderSpriteFt4ShadowSnapshot {
     uint16_t field_builder_expected_clut;
     uint16_t field_builder_actual_clut;
     uint32_t field_builder_actual_command;
+    uint32_t field_builder_failure_detail;
     uint32_t field_builder_blocker;
     uint32_t field_builder_min_packet;
     uint32_t field_builder_max_packet;
@@ -586,6 +681,7 @@ bool psx_xg_render_auth_configure(
 bool psx_xg_render_auth_configure_native_view(
     bool enabled, uint16_t aspect_num, uint16_t aspect_den,
     uint16_t canonical_width, uint16_t canonical_height);
+void psx_xg_render_auth_set_terrain_temporal_coverage(bool enabled);
 void psx_xg_render_auth_register_code_watches(
     void (*set_range)(uint32_t physical_address, uint32_t size));
 void psx_xg_render_auth_set_exec_phase_exchange(
@@ -686,8 +782,6 @@ void psx_xg_render_auth_world_sky_native_snapshot(
 void psx_xg_render_auth_world_execution_snapshot(
     PsxXgRenderWorldExecutionSnapshot *out_snapshot);
 void psx_xg_render_auth_capture_model_ft3_link(CPUState *cpu);
-void psx_xg_render_auth_propagate_model_ft3_copy(
-    uint32_t destination_address, uint32_t source_address);
 void psx_xg_render_auth_capture_tile_write(
     CPUState *cpu, uint32_t command_address, uint32_t writer_pc,
     uint8_t color);
@@ -716,6 +810,20 @@ const char *psx_xg_render_auth_hook_name(uint32_t hook);
 
 #ifdef PSX_XG_RENDER_AUTH_RUNTIME_TESTING
 void psx_xg_render_auth_runtime_test_reset(void);
+uint64_t psx_xg_render_auth_runtime_test_interpolation_scene(void);
+uint64_t psx_xg_render_auth_runtime_test_artifact_generation(void);
+bool psx_xg_render_auth_runtime_test_artifact_active(void);
+uint32_t psx_xg_render_auth_runtime_test_pre_scene_count(void);
+bool psx_xg_render_auth_runtime_test_resource_write_may_overlap(
+    uint32_t address, uint32_t size);
+uint64_t psx_xg_render_auth_runtime_test_particle_generation(
+    uint32_t particle_address);
+bool psx_xg_render_auth_runtime_test_model_ft4_packet_template_present(
+    uint32_t packet_address);
+bool psx_xg_render_auth_runtime_test_model_ft4_descriptor_template_present(
+    uint32_t descriptor_address);
+void psx_xg_render_auth_runtime_test_watch_resource(
+    uint32_t address, uint32_t size);
 bool psx_xg_render_auth_runtime_test_materialize_world_models_original(
     CPUState *cpu);
 bool psx_xg_render_auth_runtime_test_materialize_world_actor_original(

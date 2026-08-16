@@ -303,14 +303,35 @@ bool xg_render_runtime_variant_hook_relevant(uint32_t hook, uint32_t pc) {
 }
 
 static const XgRenderRuntimeVariantDescriptor *selected_descriptor(void) {
-    const XgRenderRuntimeVariantDescriptor *descriptor =
-        xg_render_runtime_variant_descriptors;
+    static const XgRenderRuntimeVariantDescriptor *descriptor;
+    static bool initialized;
 
-    return descriptor_is_valid(descriptor) ? descriptor : NULL;
+    if (!initialized) {
+        const XgRenderRuntimeVariantDescriptor *candidate =
+            xg_render_runtime_variant_descriptors;
+
+        descriptor = descriptor_is_valid(candidate) ? candidate : NULL;
+        initialized = true;
+    }
+    return descriptor;
+}
+
+static bool candidate_artifact_matches(
+    const XgRenderRuntimeVariantDescriptor *descriptor,
+    const PsxXgRenderAuthCandidate *candidate) {
+    return descriptor != NULL && candidate != NULL &&
+           physical_address_equals(candidate->artifact_base,
+                                   descriptor->artifact_base) &&
+           candidate->artifact_size == descriptor->artifact_size &&
+           (candidate->artifact_crc32 == descriptor->artifact_crc32 ||
+            (candidate->runtime_variant_bound &&
+             memcmp(candidate->runtime_variant_identity,
+                    descriptor->companion_manifest_identity,
+                    sizeof(candidate->runtime_variant_identity)) == 0));
 }
 
 static bool candidate_matches(const XgRenderRuntimeVariantDescriptor *descriptor,
-                              const PsxXgRenderAuthCandidate *candidate) {
+                               const PsxXgRenderAuthCandidate *candidate) {
     if (xg_render_runtime_variant_no_gates_enabled())
         return candidate != NULL;
     return descriptor != NULL && candidate != NULL &&
@@ -322,10 +343,7 @@ static bool candidate_matches(const XgRenderRuntimeVariantDescriptor *descriptor
            memcmp(candidate->identity.manifest_sha256,
                   descriptor->canonical_manifest_identity,
                   sizeof(candidate->identity.manifest_sha256)) == 0 &&
-           physical_address_equals(candidate->artifact_base,
-                                   descriptor->artifact_base) &&
-           candidate->artifact_size == descriptor->artifact_size &&
-           candidate->artifact_crc32 == descriptor->artifact_crc32 &&
+            candidate_artifact_matches(descriptor, candidate) &&
            physical_address_equals(candidate->producer_entry,
                                    descriptor->physical_producer_entry) &&
            physical_address_equals(candidate->dispatch_pc,
@@ -353,10 +371,7 @@ static bool artifact_candidate_matches(
            memcmp(candidate->identity.manifest_sha256,
                   descriptor->canonical_manifest_identity,
                   sizeof(candidate->identity.manifest_sha256)) == 0 &&
-           physical_address_equals(candidate->artifact_base,
-                                   descriptor->artifact_base) &&
-           candidate->artifact_size == descriptor->artifact_size &&
-           candidate->artifact_crc32 == descriptor->artifact_crc32 &&
+            candidate_artifact_matches(descriptor, candidate) &&
            normalized_range_contains(descriptor->artifact_range_start,
                                      descriptor->artifact_range_size,
                                      candidate->range_start,
@@ -490,7 +505,6 @@ static const XgRenderProtectedCodeRange world_sky_code_ranges[] = {
     { UINT32_C(0x8004a14c), 0x0cu },
     { UINT32_C(0x8004a73c), 0x78u },
     { UINT32_C(0x8004a92c), 0x68u },
-    { UINT32_C(0x800523f0), 0x4000u },
 };
 
 static const XgRenderProtectedCodeRange world_horizon_code_ranges[] = {
@@ -506,7 +520,6 @@ static const XgRenderProtectedCodeRange world_horizon_code_ranges[] = {
     { UINT32_C(0x80049f8c), 0x20u },
     { UINT32_C(0x8004a73c), 0x78u },
     { UINT32_C(0x8004a92c), 0x68u },
-    { UINT32_C(0x800523f0), 0x4000u },
 };
 
 static const XgRenderProtectedCodeRange world_effects_code_ranges[] = {
@@ -517,7 +530,6 @@ static const XgRenderProtectedCodeRange world_effects_code_ranges[] = {
     { UINT32_C(0x80093534), 0xa8u },
     { UINT32_C(0x80049dcc), 0x124u },
     { UINT32_C(0x8004b18c), 0x198u },
-    { UINT32_C(0x800523f0), 0x4000u },
     { UINT32_C(0x8009aff0), 0x50u },
     { UINT32_C(0x8009b040), 0x140u },
 };
@@ -529,7 +541,6 @@ static const XgRenderProtectedCodeRange model_ft4_raw_code_ranges[] = {
     { UINT32_C(0x80043c24), 0x50u },
     { UINT32_C(0x8004a19c), 0x104u },
     { UINT32_C(0x8004a7bc), 0x7cu },
-    { UINT32_C(0x8004fe50), 0x2a8u },
 };
 
 static const XgRenderProtectedCodeRange sprite_ft4_code_ranges[] = {
@@ -548,6 +559,13 @@ static const XgRenderProtectedCodeRange sprite_ft4_code_ranges[] = {
     { UINT32_C(0x80049f8c), 0x020u },
     { UINT32_C(0x8004a73c), 0x078u },
     { UINT32_C(0x8004a7bc), 0x07cu },
+};
+
+static const XgRenderProtectedCodeRange model_ft4_dispatch_data_ranges[] = {
+    { UINT32_C(0x8004fe50), 0x2a8u },
+};
+
+static const XgRenderProtectedCodeRange shared_trig_data_ranges[] = {
     { UINT32_C(0x800523f0), 0x4000u },
 };
 
@@ -631,6 +649,24 @@ static bool sprite_ft4_code_write_overlaps(uint32_t write_address,
         write_address, write_size);
 }
 
+static bool model_ft4_dispatch_data_write_overlaps(uint32_t write_address,
+                                                    uint32_t write_size) {
+    return code_write_overlaps_ranges(
+        model_ft4_dispatch_data_ranges,
+        (uint32_t)(sizeof(model_ft4_dispatch_data_ranges) /
+                   sizeof(model_ft4_dispatch_data_ranges[0])),
+        write_address, write_size);
+}
+
+static bool shared_trig_data_write_overlaps(uint32_t write_address,
+                                            uint32_t write_size) {
+    return code_write_overlaps_ranges(
+        shared_trig_data_ranges,
+        (uint32_t)(sizeof(shared_trig_data_ranges) /
+                   sizeof(shared_trig_data_ranges[0])),
+        write_address, write_size);
+}
+
 bool xg_render_runtime_variant_sprite_ft4_code_write_overlaps(
         uint32_t write_address, uint32_t write_size) {
     return sprite_ft4_code_write_overlaps(write_address, write_size);
@@ -688,50 +724,83 @@ void xg_render_runtime_variant_register_code_watches(
                   model_ft4_raw_code_ranges[index].size);
     for (index = 0u;
          index < sizeof(sprite_ft4_code_ranges) /
-                     sizeof(sprite_ft4_code_ranges[0]); ++index)
+                      sizeof(sprite_ft4_code_ranges[0]); ++index)
         set_range(sprite_ft4_code_ranges[index].start &
-                      UINT32_C(0x1fffffff),
+                       UINT32_C(0x1fffffff),
                   sprite_ft4_code_ranges[index].size);
+    for (index = 0u;
+         index < sizeof(model_ft4_dispatch_data_ranges) /
+                     sizeof(model_ft4_dispatch_data_ranges[0]); ++index)
+        set_range(model_ft4_dispatch_data_ranges[index].start &
+                      UINT32_C(0x1fffffff),
+                  model_ft4_dispatch_data_ranges[index].size);
+    for (index = 0u;
+         index < sizeof(shared_trig_data_ranges) /
+                     sizeof(shared_trig_data_ranges[0]); ++index)
+        set_range(shared_trig_data_ranges[index].start &
+                      UINT32_C(0x1fffffff),
+                  shared_trig_data_ranges[index].size);
+}
+
+uint32_t xg_render_runtime_variant_code_write_overlap_mask(
+    uint32_t write_address, uint32_t write_size) {
+    const XgRenderRuntimeVariantDescriptor *descriptor =
+        state.descriptor != NULL ? state.descriptor : selected_descriptor();
+    uint32_t mask = 0u;
+
+    if (descriptor == NULL) return 0u;
+    if (normalized_ranges_overlap(descriptor->activation_window_start,
+                                  descriptor->activation_window_size,
+                                  write_address, write_size) ||
+        normalized_ranges_overlap(descriptor->physical_producer_entry, 4u,
+                                  write_address, write_size) ||
+        normalized_ranges_overlap(descriptor->capture_window_start,
+                                  descriptor->capture_window_size,
+                                  write_address, write_size) ||
+        normalized_ranges_overlap(descriptor->physical_return_site, 4u,
+                                  write_address, write_size))
+        mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_DESCRIPTOR;
+    if (normalized_ranges_overlap(UINT32_C(0x800765dc), 4u,
+                                  write_address, write_size) ||
+        normalized_ranges_overlap(UINT32_C(0x8007ab6c), 4u,
+                                  write_address, write_size) ||
+        normalized_ranges_overlap(UINT32_C(0x8007ac58), 4u,
+                                  write_address, write_size) ||
+        normalized_ranges_overlap(UINT32_C(0x800a8eac), 0x208u,
+                                  write_address, write_size) ||
+        normalized_ranges_overlap(UINT32_C(0x800a9b54), 0x3c4u,
+                                  write_address, write_size))
+        mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_DIRECT;
+    if (zoom_code_write_overlaps(write_address, write_size))
+        mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_ZOOM;
+    if (projected_effect_code_write_overlaps(write_address, write_size))
+        mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_PROJECTED;
+    if (world_sky_code_write_overlaps(write_address, write_size))
+        mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_WORLD_SKY;
+    if (world_horizon_code_write_overlaps(write_address, write_size))
+        mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_WORLD_HORIZON;
+    if (world_effects_code_write_overlaps(write_address, write_size))
+        mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_WORLD_EFFECTS;
+    if (model_ft4_raw_code_write_overlaps(write_address, write_size))
+        mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_MODEL_FT4;
+    if (sprite_ft4_code_write_overlaps(write_address, write_size))
+        mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_SPRITE_FT4;
+    if (model_ft4_dispatch_data_write_overlaps(write_address, write_size))
+        mask |= UINT32_C(1) <<
+            PSX_XG_RENDER_CODE_WRITE_MODEL_DISPATCH_DATA;
+    if (shared_trig_data_write_overlaps(write_address, write_size))
+        mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_SHARED_TRIG_DATA;
+    return mask;
 }
 
 bool xg_render_runtime_variant_active_code_write_overlaps(
     uint32_t write_address, uint32_t write_size) {
-    const XgRenderRuntimeVariantDescriptor *descriptor =
-        state.descriptor != NULL ? state.descriptor : selected_descriptor();
+    const uint32_t data_mask =
+        (UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_MODEL_DISPATCH_DATA) |
+        (UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_SHARED_TRIG_DATA);
 
-    return descriptor != NULL &&
-           (normalized_ranges_overlap(descriptor->activation_window_start,
-                                      descriptor->activation_window_size,
-                                      write_address, write_size) ||
-            normalized_ranges_overlap(descriptor->physical_producer_entry,
-                                      4u, write_address, write_size) ||
-            normalized_ranges_overlap(descriptor->capture_window_start,
-                                      descriptor->capture_window_size,
-                                      write_address, write_size) ||
-             normalized_ranges_overlap(descriptor->physical_return_site,
-                                       4u, write_address, write_size) ||
-             normalized_ranges_overlap(UINT32_C(0x800765dc), 4u,
-                                       write_address, write_size) ||
-              normalized_ranges_overlap(UINT32_C(0x8007ab6c), 4u,
-                                        write_address, write_size) ||
-               normalized_ranges_overlap(UINT32_C(0x8007ac58), 4u,
-                                         write_address, write_size) ||
-                zoom_code_write_overlaps(write_address, write_size) ||
-                 projected_effect_code_write_overlaps(write_address,
-                                                      write_size) ||
-                  world_sky_code_write_overlaps(write_address, write_size) ||
-                   world_horizon_code_write_overlaps(write_address,
-                                                       write_size) ||
-                    world_effects_code_write_overlaps(write_address,
-                                                      write_size) ||
-                    model_ft4_raw_code_write_overlaps(write_address,
-                                                     write_size) ||
-                    sprite_ft4_code_write_overlaps(write_address,
-                                                   write_size) ||
-               normalized_ranges_overlap(UINT32_C(0x800a8eac), 0x208u,
-                                        write_address, write_size) ||
-              normalized_ranges_overlap(UINT32_C(0x800a9b54), 0x3c4u,
-                                        write_address, write_size));
+    return (xg_render_runtime_variant_code_write_overlap_mask(
+                write_address, write_size) & ~data_mask) != 0u;
 }
 
 XgRenderRuntimeVariantEvent xg_render_runtime_variant_observe(

@@ -1,3 +1,5 @@
+get_filename_component(XG_REPOSITORY_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+
 add_library(xg_visual_state STATIC src/xg_visual_state.c)
 target_include_directories(xg_visual_state PUBLIC include)
 target_compile_features(xg_visual_state PUBLIC c_std_11)
@@ -14,7 +16,7 @@ target_link_libraries(xg_native_view PUBLIC xg_host_3d)
 add_library(xg_render_ir STATIC src/xg_render_ir.c)
 target_include_directories(xg_render_ir PUBLIC
     include
-    "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/include")
+    "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
 target_compile_features(xg_render_ir PUBLIC c_std_11)
 
 add_library(xg_render_quad_builder STATIC src/xg_render_quad_builder.c)
@@ -49,7 +51,7 @@ add_library(xg_world_terrain_water STATIC
     src/xg_world_terrain_water_shadow.c)
 target_include_directories(xg_world_terrain_water PUBLIC
     include
-    "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/include")
+    "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
 target_compile_features(xg_world_terrain_water PUBLIC c_std_11)
 target_link_libraries(xg_world_terrain_water PUBLIC
     xg_host_3d xg_render_quad_builder)
@@ -60,7 +62,7 @@ add_library(xg_world_entity_shadows STATIC
     src/xg_world_entity_shadows_shadow.c)
 target_include_directories(xg_world_entity_shadows PUBLIC
     include
-    "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/include")
+    "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
 target_compile_features(xg_world_entity_shadows PUBLIC c_std_11)
 target_link_libraries(xg_world_entity_shadows PUBLIC
     xg_host_3d xg_render_quad_builder)
@@ -71,7 +73,7 @@ add_library(xg_world_decorations STATIC
     src/xg_world_decorations_shadow.c)
 target_include_directories(xg_world_decorations PUBLIC
     include
-    "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/include")
+    "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
 target_compile_features(xg_world_decorations PUBLIC c_std_11)
 target_link_libraries(xg_world_decorations PUBLIC
     xg_host_3d xg_render_quad_builder)
@@ -82,7 +84,7 @@ add_library(xg_world_clouds STATIC
     src/xg_world_clouds_shadow.c)
 target_include_directories(xg_world_clouds PUBLIC
     include
-    "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/include")
+    "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
 target_compile_features(xg_world_clouds PUBLIC c_std_11)
 target_link_libraries(xg_world_clouds PUBLIC
     xg_host_3d xg_render_quad_builder)
@@ -93,7 +95,7 @@ add_library(xg_world_minimap STATIC
     src/xg_world_minimap_shadow.c)
 target_include_directories(xg_world_minimap PUBLIC
     include
-    "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/include")
+    "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
 target_compile_features(xg_world_minimap PUBLIC c_std_11)
 target_link_libraries(xg_world_minimap PUBLIC xg_host_3d xg_render_ir)
 
@@ -125,15 +127,15 @@ target_link_libraries(xg_world_actor_sprites PUBLIC
 add_library(xg_render_backend STATIC src/xg_render_backend.c)
 target_include_directories(xg_render_backend PUBLIC
     include
-    "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/include")
+    "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
 target_compile_features(xg_render_backend PUBLIC c_std_11)
 target_link_libraries(xg_render_backend PUBLIC xg_render_ir)
 
 add_library(xg_guest_render_transaction STATIC
-    "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/src/guest_render_transaction.c"
-    "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/src/guest_render_native_stream.c")
+    "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/src/guest_render_transaction.c"
+    "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/src/guest_render_native_stream.c")
 target_include_directories(xg_guest_render_transaction PUBLIC
-    "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/include")
+    "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
 target_compile_features(xg_guest_render_transaction PUBLIC c_std_11)
 
 add_library(xg_field_character_shadow STATIC
@@ -141,7 +143,7 @@ add_library(xg_field_character_shadow STATIC
     src/field_character_shadow_observe.c)
 target_include_directories(xg_field_character_shadow PUBLIC
     include
-    "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/include")
+    "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
 target_compile_features(xg_field_character_shadow PUBLIC c_std_11)
 
 add_library(xg_field_character_adapter STATIC
@@ -177,7 +179,7 @@ add_library(xg_field_character_runtime STATIC
     src/xg_field_character_runtime.c)
 target_include_directories(xg_field_character_runtime PUBLIC
     include
-    "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/include"
+    "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include"
     PRIVATE src)
 target_compile_features(xg_field_character_runtime PUBLIC c_std_11)
 target_link_libraries(xg_field_character_runtime PUBLIC
@@ -192,12 +194,12 @@ set(XG_RENDER_OVERLAY_CUTOVERS_INC
 add_custom_command(
     OUTPUT "${XG_RENDER_OVERLAY_CUTOVERS_INC}"
     COMMAND "${Python3_EXECUTABLE}"
-        "${CMAKE_SOURCE_DIR}/tools/native_render_overlay_ranges.py"
+        "${XG_REPOSITORY_ROOT}/tools/native_render_overlay_ranges.py"
         emit-cold-cutover-table
         --manifest "${CMAKE_CURRENT_SOURCE_DIR}/xg_render_overlay_ranges.toml"
         --output "${XG_RENDER_OVERLAY_CUTOVERS_INC}"
     DEPENDS
-        "${CMAKE_SOURCE_DIR}/tools/native_render_overlay_ranges.py"
+        "${XG_REPOSITORY_ROOT}/tools/native_render_overlay_ranges.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/xg_render_overlay_ranges.toml"
     VERBATIM)
 set_source_files_properties("${XG_RENDER_OVERLAY_CUTOVERS_INC}"
@@ -218,7 +220,7 @@ add_library(xg_render_auth STATIC
 add_dependencies(xg_render_auth xg_render_overlay_cutovers_generated)
 target_include_directories(xg_render_auth PUBLIC
     include
-    "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/include"
+    "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include"
     PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_compile_features(xg_render_auth PUBLIC c_std_11)
 target_link_libraries(xg_render_auth PUBLIC
@@ -246,7 +248,7 @@ add_library(xg_render_static_auth STATIC
     src/xg_render_static_auth.c)
 target_include_directories(xg_render_static_auth PUBLIC
     include
-    "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/include")
+    "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
 target_compile_features(xg_render_static_auth PUBLIC c_std_11)
 target_link_libraries(xg_render_static_auth PUBLIC xg_render_auth)
 
@@ -262,7 +264,7 @@ if(BUILD_TESTING)
     add_library(xg_render_ir_test_impl STATIC src/xg_render_ir.c)
     target_include_directories(xg_render_ir_test_impl PUBLIC
         include
-        "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/include")
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
     target_compile_features(xg_render_ir_test_impl PUBLIC c_std_11)
     target_compile_definitions(xg_render_ir_test_impl PUBLIC
         XG_RENDER_IR_ITEM_CAPACITY=4
@@ -289,7 +291,7 @@ if(BUILD_TESTING)
         tests/test_xg_render_backend.c)
     target_include_directories(test_xg_render_backend PRIVATE
         include
-        "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/include")
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
     target_link_libraries(test_xg_render_backend PRIVATE xg_render_backend)
     add_test(NAME xg_render_backend COMMAND test_xg_render_backend)
 
@@ -393,15 +395,15 @@ if(BUILD_TESTING)
         src/xg_render_auth.c
         src/xg_render_ir.c
         tests/xg_render_runtime_variant_test_table.c
-        "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/src/gte_attribution.cpp"
-        "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/src/guest_render_transaction.c"
-        "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/src/guest_render_native_stream.c"
-        "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/src/guest_render_bridge.c")
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/src/gte_attribution.cpp"
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/src/guest_render_transaction.c"
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/src/guest_render_native_stream.c"
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/src/guest_render_bridge.c")
     target_include_directories(test_xg_render_static_auth PRIVATE
         include
         src
         "${CMAKE_CURRENT_BINARY_DIR}/generated"
-        "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/include"
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include"
         ${SDL2_INCLUDE_DIRS})
     add_dependencies(test_xg_render_static_auth
         xg_render_overlay_cutovers_generated)
@@ -428,7 +430,7 @@ if(BUILD_TESTING)
         src/field_character_shadow_observe.c)
     target_include_directories(test_field_character_shadow PRIVATE
         include
-        "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/include")
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
     target_compile_definitions(test_field_character_shadow PRIVATE
         FIELD_CHARACTER_SHADOW_TESTING=1)
     add_test(NAME field_character_shadow COMMAND test_field_character_shadow)
@@ -476,10 +478,10 @@ if(BUILD_TESTING)
         tests/test_xg_render_auth.c
         src/xg_render_auth.c
         src/xg_render_ir.c
-        "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/src/guest_render_bridge.c")
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/src/guest_render_bridge.c")
     target_include_directories(test_xg_render_auth PRIVATE
         include
-        "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/include"
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include"
         ${SDL2_INCLUDE_DIRS})
     target_compile_definitions(test_xg_render_auth PRIVATE
         GUEST_RENDER_BRIDGE_TESTING=1)
@@ -491,7 +493,7 @@ if(BUILD_TESTING)
         src/xg_native_render_baseline.c)
     target_include_directories(test_xg_native_render_baseline_adapter PRIVATE
         include
-        "${CMAKE_SOURCE_DIR}/psxrecomp/runtime/include")
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
     add_test(NAME xg_native_render_baseline_adapter
         COMMAND test_xg_native_render_baseline_adapter)
     add_test(NAME xg_render_manifest
@@ -506,7 +508,7 @@ if(BUILD_TESTING)
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_warm_overlay_source_observation.py")
     add_test(NAME xg_render_overlay_ranges
         COMMAND "${Python3_EXECUTABLE}" -m pytest
-            "${CMAKE_SOURCE_DIR}/tools/test_native_render_overlay_ranges.py")
+            "${XG_REPOSITORY_ROOT}/tools/test_native_render_overlay_ranges.py")
     add_test(NAME xg_native_render_replay
-        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/test_native_render_replay.py")
+        COMMAND "${Python3_EXECUTABLE}" "${XG_REPOSITORY_ROOT}/tools/test_native_render_replay.py")
 endif()

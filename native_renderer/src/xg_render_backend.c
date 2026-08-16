@@ -183,6 +183,46 @@ static bool copy_material(GpuRenderMaterial *out_material,
     return true;
 }
 
+static bool copy_vertex(GpuRenderSemanticVertex *target_vertex,
+                        const XgRenderIrVertex *source_vertex) {
+    memset(target_vertex, 0, sizeof(*target_vertex));
+    if (!fixed_to_gpu(source_vertex->x, &target_vertex->x) ||
+        !fixed_to_gpu(source_vertex->y, &target_vertex->y) ||
+        !fixed_to_gpu(source_vertex->u, &target_vertex->u) ||
+        !fixed_to_gpu(source_vertex->v, &target_vertex->v))
+        return false;
+    target_vertex->r = source_vertex->r;
+    target_vertex->g = source_vertex->g;
+    target_vertex->b = source_vertex->b;
+    if (source_vertex->native_view_position) {
+        if (!fixed_to_gpu(source_vertex->native_view_x,
+                          &target_vertex->native_view_x) ||
+            !fixed_to_gpu(source_vertex->native_view_y,
+                          &target_vertex->native_view_y))
+            return false;
+        target_vertex->native_view_position = 1u;
+    }
+    target_vertex->interpolation_group_id =
+        source_vertex->interpolation_group_id;
+    target_vertex->interpolation_vertex_id =
+        source_vertex->interpolation_vertex_id;
+    target_vertex->interpolation_vertex_identity_valid =
+        source_vertex->interpolation_vertex_identity_valid ? 1u : 0u;
+    target_vertex->projective_view_x = source_vertex->projective_view_x;
+    target_vertex->projective_view_y = source_vertex->projective_view_y;
+    target_vertex->projective_view_z = source_vertex->projective_view_z;
+    target_vertex->projective_offset_x = source_vertex->projective_offset_x;
+    target_vertex->projective_offset_y = source_vertex->projective_offset_y;
+    target_vertex->projective_native_offset_x =
+        source_vertex->projective_native_offset_x;
+    target_vertex->projective_native_offset_y =
+        source_vertex->projective_native_offset_y;
+    target_vertex->projective_distance = source_vertex->projective_distance;
+    target_vertex->projective_position =
+        source_vertex->projective_position ? 1u : 0u;
+    return true;
+}
+
 static XgRenderBackendStatus validate_native_primitive(
         const XgRenderIrNativePrimitive *primitive) {
     MaterialValidation material_validation;
@@ -261,22 +301,8 @@ static XgRenderBackendStatus translate_native_primitive(
             GpuRenderSemanticVertex *target_vertex =
                 &target_triangle->vertices[vertex_index];
 
-            if (!fixed_to_gpu(source_vertex->x, &target_vertex->x) ||
-                !fixed_to_gpu(source_vertex->y, &target_vertex->y) ||
-                !fixed_to_gpu(source_vertex->u, &target_vertex->u) ||
-                !fixed_to_gpu(source_vertex->v, &target_vertex->v))
+            if (!copy_vertex(target_vertex, source_vertex))
                 return XG_RENDER_BACKEND_FIXED_POINT_CONVERSION_FAILED;
-            target_vertex->r = source_vertex->r;
-            target_vertex->g = source_vertex->g;
-            target_vertex->b = source_vertex->b;
-            if (source_vertex->native_view_position) {
-                if (!fixed_to_gpu(source_vertex->native_view_x,
-                                  &target_vertex->native_view_x) ||
-                    !fixed_to_gpu(source_vertex->native_view_y,
-                                  &target_vertex->native_view_y))
-                    return XG_RENDER_BACKEND_FIXED_POINT_CONVERSION_FAILED;
-                target_vertex->native_view_position = 1u;
-            }
         }
     }
     return XG_RENDER_BACKEND_OK;
@@ -293,6 +319,33 @@ XgRenderBackendStatus xg_render_backend_translate_primitive(
     status = validate_native_primitive(primitive);
     if (status != XG_RENDER_BACKEND_OK) return status;
     return translate_native_primitive(primitive, out_semantic);
+}
+
+XgRenderBackendStatus xg_render_backend_translate_anchor(
+        const XgRenderIrMaterialState *material,
+        const XgRenderIrVertex *vertex,
+        uint64_t scene_id,
+        uint32_t producer_id,
+        GpuRenderInterpolationVertexAnchor *out_anchor) {
+    MaterialValidation material_validation;
+
+    if (material == NULL || vertex == NULL || out_anchor == NULL ||
+        scene_id == 0u || producer_id == 0u ||
+        !vertex->interpolation_vertex_identity_valid)
+        return XG_RENDER_BACKEND_INVALID_ARGUMENT;
+    material_validation = validate_material(material);
+    if (material_validation == MATERIAL_INVALID)
+        return XG_RENDER_BACKEND_INVALID_MATERIAL;
+    if (material_validation == MATERIAL_UNSUPPORTED)
+        return XG_RENDER_BACKEND_UNSUPPORTED_MATERIAL;
+    memset(out_anchor, 0, sizeof(*out_anchor));
+    out_anchor->scene_id = scene_id;
+    out_anchor->producer_id = producer_id;
+    if (!copy_material(&out_anchor->material, material))
+        return XG_RENDER_BACKEND_UNSUPPORTED_MATERIAL;
+    if (!copy_vertex(&out_anchor->vertex, vertex))
+        return XG_RENDER_BACKEND_FIXED_POINT_CONVERSION_FAILED;
+    return XG_RENDER_BACKEND_OK;
 }
 
 static XgRenderBackendFallbackReason fallback_for_status(

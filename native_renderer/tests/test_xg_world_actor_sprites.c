@@ -98,6 +98,8 @@ static int test_adapts_world_values_and_builds_body_and_shadow(void) {
     CHECK(records[0].sprite.vertices[3].y == 144);
     CHECK(records[0].sprite.primitive.triangles[0].vertices[0].r == 0x40u);
     CHECK(records[0].sprite.primitive.triangles[0].vertices[0].g == 0x60u);
+    CHECK(!records[0].sprite.primitive.triangles[0].vertices[0]
+               .projective_position);
     CHECK(records[0].sprite.primitive.triangles[0].vertices[0].u ==
           8 * INT32_C(65536));
     CHECK(records[0].sprite.primitive.triangles[0].vertices[1].u ==

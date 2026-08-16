@@ -38,6 +38,19 @@ void xg_render_quad_set_projected_position(
     out_vertex->native_view_x_16_16 = projected->native_view_x_16_16;
     out_vertex->native_view_y_16_16 = projected->native_view_y_16_16;
     out_vertex->native_view_position = projected->native_view_position != 0u;
+    out_vertex->projective_view_x = projected->projective_view_x;
+    out_vertex->projective_view_y = projected->projective_view_y;
+    out_vertex->projective_view_z = projected->projective_view_z;
+    out_vertex->projective_offset_x_16_16 =
+        projected->projective_offset_x_16_16;
+    out_vertex->projective_offset_y_16_16 =
+        projected->projective_offset_y_16_16;
+    out_vertex->projective_native_offset_x_16_16 =
+        projected->projective_native_offset_x_16_16;
+    out_vertex->projective_native_offset_y_16_16 =
+        projected->projective_native_offset_y_16_16;
+    out_vertex->projective_distance = projected->projective_distance;
+    out_vertex->projective_position = projected->projective_position != 0u;
 }
 
 XgRenderQuadBuilderResult xg_render_quad_build_primitive(
@@ -83,6 +96,21 @@ XgRenderQuadBuilderResult xg_render_quad_build_primitive(
                     .native_view_y = source_vertex->native_view_y_16_16,
                     .native_view_position =
                         source_vertex->native_view_position,
+                    .projective_view_x = source_vertex->projective_view_x,
+                    .projective_view_y = source_vertex->projective_view_y,
+                    .projective_view_z = source_vertex->projective_view_z,
+                    .projective_offset_x =
+                        source_vertex->projective_offset_x_16_16,
+                    .projective_offset_y =
+                        source_vertex->projective_offset_y_16_16,
+                    .projective_native_offset_x =
+                        source_vertex->projective_native_offset_x_16_16,
+                    .projective_native_offset_y =
+                        source_vertex->projective_native_offset_y_16_16,
+                    .projective_distance =
+                        source_vertex->projective_distance,
+                    .projective_position =
+                        source_vertex->projective_position,
                 };
         }
     }

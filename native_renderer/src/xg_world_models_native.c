@@ -1166,6 +1166,7 @@ static XgWorldModelsNativeResult decode_primitive(
 }
 
 static void build_semantic_primitive(
+    const XgWorldModelsNativePrimitiveSource *source,
     XgWorldModelsNativePrimitiveOutput *output, uint8_t vertex_count,
     const uint8_t colors[XG_HOST_3D_VERTEX_COUNT][3],
     const uint8_t uv[XG_HOST_3D_VERTEX_COUNT][2]) {
@@ -1197,6 +1198,30 @@ static void build_semantic_primitive(
                     output->vertices[source_vertex].native_view_y_16_16,
                 .native_view_position =
                     output->vertices[source_vertex].native_view_position != 0u,
+                .projective_view_x =
+                    output->vertices[source_vertex].projective_view_x,
+                .projective_view_y =
+                    output->vertices[source_vertex].projective_view_y,
+                .projective_view_z =
+                    output->vertices[source_vertex].projective_view_z,
+                .projective_offset_x = output->vertices[source_vertex]
+                    .projective_offset_x_16_16,
+                .projective_offset_y = output->vertices[source_vertex]
+                    .projective_offset_y_16_16,
+                .projective_native_offset_x = output->vertices[source_vertex]
+                    .projective_native_offset_x_16_16,
+                .projective_native_offset_y = output->vertices[source_vertex]
+                    .projective_native_offset_y_16_16,
+                .projective_distance =
+                    output->vertices[source_vertex].projective_distance,
+                .projective_position =
+                    output->vertices[source_vertex].projective_position != 0u,
+                .interpolation_group_id = UINT32_C(0x64000000) |
+                    (source->model_header_address & UINT32_C(0x001fffff)),
+                .interpolation_vertex_id =
+                    (source->source_index << 16u) |
+                    source->topology[source_vertex],
+                .interpolation_vertex_identity_valid = true,
             };
         }
     }
@@ -1310,7 +1335,8 @@ XgWorldModelsNativeResult xg_world_models_native_build_primitive(
     memcpy(output.vertices, projected.vertices, sizeof(output.vertices));
     output.projection_flags = projected.projection_flags;
     output.nclip = normal_clip(output.vertices);
-    build_semantic_primitive(&output, source->vertex_count, colors, uv);
+    build_semantic_primitive(
+        source, &output, source->vertex_count, colors, uv);
     mode = source->dispatch_mode;
     if ((mode == 4u || mode == 5u) &&
         !family_is_flat_textured(source->primitive_family))
@@ -1418,7 +1444,7 @@ XgWorldModelsNativeResult xg_world_models_native_build_primitive(
                 u | ((uint32_t)v << 8u);
             output.packet_word_write_mask |= UINT32_C(1) << word;
         }
-        build_semantic_primitive(&output, 3u, colors, uv);
+        build_semantic_primitive(source, &output, 3u, colors, uv);
         output.accepted = output.passed_screen_cull;
         output.ordering_table_written = output.accepted;
         output.guest_ordering_table_written = guest_passed_screen_cull;
@@ -1501,7 +1527,8 @@ XgWorldModelsNativeResult xg_world_models_native_build_primitive(
             colors[vertex][1] = green;
             colors[vertex][2] = blue;
         }
-        build_semantic_primitive(&output, source->vertex_count, colors, uv);
+        build_semantic_primitive(
+            source, &output, source->vertex_count, colors, uv);
     }
     if (output.ordering_bucket >= XG_WORLD_MODELS_OT_BUCKET_COUNT)
         return XG_WORLD_MODELS_NATIVE_BUILD_FAILED;

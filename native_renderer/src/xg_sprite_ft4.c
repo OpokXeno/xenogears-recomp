@@ -89,6 +89,7 @@ XgSpriteFt4Result xg_sprite_ft4_build(
         };
         xg_render_quad_set_projected_position(
             &quad.vertices[vertex], &record->vertices[vertex]);
+        quad.vertices[vertex].projective_position = false;
     }
     if (xg_render_quad_build_primitive(&quad, &record->primitive) !=
         XG_RENDER_QUAD_BUILDER_OK)

@@ -169,10 +169,47 @@ int main() {
     assert(input_replay::latch_vblank());
     assert(SDL_GameControllerGetButton(players[0], SDL_CONTROLLER_BUTTON_A) == 1);
     input_replay::detach(players);
+
+    const std::string close_path = "input_replay_close_test.toml";
+    const std::string close_evidence_path = "input_replay_close_evidence.json";
+    {
+        std::ofstream close_trace(close_path);
+        close_trace << "schema = \"xenogears.native-render-replay/v3\"\n"
+                    << "complete = true\nvblank_budget = 2\nrecord_on_close = true\n";
+        for (int index = 0; index < 2; ++index) {
+            close_trace << "[[vblank]]\nrepeat = 1\n"
+                        << "p1_connected = true\np1_mode = \"digital\"\np1_buttons = []\n"
+                        << "p1_left_x = 0\np1_left_y = 0\np1_right_x = 0\np1_right_y = 0\n"
+                        << "p1_trigger_left = 0\np1_trigger_right = 0\n"
+                        << "p2_connected = false\np2_mode = \"digital\"\np2_buttons = []\n"
+                        << "p2_left_x = 0\np2_left_y = 0\np2_right_x = 0\np2_right_y = 0\n"
+                        << "p2_trigger_left = 0\np2_trigger_right = 0\n";
+        }
+    }
+    assert(input_replay::load(close_path.c_str(), &error));
+    uint32_t checkpoint_address = 0;
+    uint16_t checkpoint_expected = 0;
+    assert(!input_replay::checkpoint(&checkpoint_address, &checkpoint_expected));
+    assert(input_replay::attach(players, &error));
+    assert(input_replay::latch_vblank());
+    assert(input_replay::latch_vblank());
+    assert(!input_replay::latch_vblank());
+    assert(input_replay::stop_reason() == input_replay::StopReason::TraceComplete);
+    assert(input_replay::write_evidence(close_evidence_path.c_str(), 0u, "opengl"));
+    std::ifstream close_evidence_file(close_evidence_path);
+    const std::string close_evidence(
+        (std::istreambuf_iterator<char>(close_evidence_file)), {});
+    assert(close_evidence.find("\"status\":\"PASS\"") != std::string::npos);
+    assert(close_evidence.find("\"completion\":\"trace_complete\"") !=
+        std::string::npos);
+    assert(close_evidence.find("\"checkpoint\":null") != std::string::npos);
+    input_replay::detach(players);
     SDL_Quit();
     std::remove(trace_path.c_str());
     std::remove(policy_path.c_str());
     std::remove(lifecycle_path.c_str());
+    std::remove(close_path.c_str());
+    std::remove(close_evidence_path.c_str());
     std::remove("input_replay_evidence.json");
     return 0;
 }

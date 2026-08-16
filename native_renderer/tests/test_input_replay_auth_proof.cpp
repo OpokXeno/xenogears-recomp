@@ -266,7 +266,7 @@ int main() {
     std::remove(record_path.c_str());
     std::remove(record_evidence_path.c_str());
     assert(input_replay::record_begin_until_close(
-        record_path.c_str(), 5u, 2u, &error));
+        record_path.c_str(), 2u, &error));
     input_replay::record_note_guest_vblank();
     assert(input_replay::record_snapshot(
         input_replay::HostInputSnapshot{}, &error));
@@ -277,6 +277,9 @@ int main() {
     assert(record_evidence.find(
         "\"schema\":\"xenogears.native-render-session-evidence/v2\"") !=
         std::string::npos);
+    assert(record_evidence.find("\"completion\":\"record_on_close\"") !=
+        std::string::npos);
+    assert(record_evidence.find("checkpoint_field") == std::string::npos);
     assert(record_evidence.find("\"model_ft4\"") != std::string::npos);
     assert(record_evidence.find("\"sprite_ft4\"") != std::string::npos);
     std::remove(record_path.c_str());
@@ -557,7 +560,7 @@ int main() {
            std::string::npos);
     assert(fallback_scene.find("\"requested_render_mode\":\"native\"") !=
            std::string::npos);
-    assert(fallback_scene.find("\"effective_render_mode\":\"original\"") !=
+    assert(fallback_scene.find("\"effective_render_mode\":\"native\"") !=
            std::string::npos);
     assert(fallback_scene.find("\"cumulative_fallback_count\":1") !=
            std::string::npos);
@@ -604,8 +607,18 @@ int main() {
         "\"native_cutovers\":0,"
         "\"native_primitives\":0") != std::string::npos);
     assert(next_clean_scene.find(
+        "\"replay_attempts\":0,\"replay_resolved\":0,"
+        "\"replay_lookup_misses\":0,\"replay_record_rejects\":0,"
+        "\"replay_container_rejects\":0,\"replay_lifecycle_rejects\":0,"
+        "\"replay_translate_rejects\":0,\"publish_invocations\":0,"
+        "\"publish_sources\":0") != std::string::npos);
+    assert(next_clean_scene.find(
         "\"sprite_ft4\":{\"callers\":0,\"native_cutovers\":0,"
         "\"native_primitives\":0") != std::string::npos);
+    assert(next_clean_scene.find(
+        "\"resident_publish_sources\":0,\"resident_replay_attempts\":0,"
+        "\"resident_replay_resolved\":0,"
+        "\"resident_replay_lookup_misses\":0") != std::string::npos);
     assert(next_clean_scene.find(
         "\"world_terrain_water\":{\"native_cutovers\":0,"
         "\"native_primitives\":0") != std::string::npos);

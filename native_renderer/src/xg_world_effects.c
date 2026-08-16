@@ -187,6 +187,7 @@ XgWorldEffectsResult xg_world_effects_build(
             };
             xg_render_quad_set_projected_position(
                 &quad.vertices[vertex], &projected.vertices[vertex]);
+            quad.vertices[vertex].projective_position = false;
             candidate.uv[vertex] = uv;
         }
         if (xg_render_quad_build_primitive(&quad, &candidate.primitive) !=

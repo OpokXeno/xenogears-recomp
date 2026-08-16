@@ -47,6 +47,7 @@ static int test_projects_without_culling(void) {
     CHECK(record.fourth_depth == 128u);
     CHECK(record.primitive.triangles[0].vertices[1].u == 31 * 65536);
     CHECK(record.primitive.triangles[1].vertices[0].v == 47 * 65536);
+    CHECK(!record.primitive.triangles[0].vertices[0].projective_position);
     return 1;
 }
 

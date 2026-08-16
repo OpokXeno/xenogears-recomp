@@ -10,6 +10,7 @@ static XgRenderParticleSourceState particle_sources = {
     .next_generation = 1u,
 };
 static uint32_t particle_source_count;
+static uint64_t next_particle_generation = 1u;
 
 static uint8_t clamp_uv(int32_t value) {
     if (value < 0) return 0u;
@@ -18,9 +19,8 @@ static uint8_t clamp_uv(int32_t value) {
 }
 
 void xg_field_particles_reset(void) {
-    if (particle_source_count == 0u && !particle_sources.blocked) return;
     particle_sources = (XgRenderParticleSourceState){
-        .next_generation = 1u,
+        .next_generation = next_particle_generation,
     };
     particle_source_count = 0u;
 }
@@ -126,6 +126,7 @@ bool xg_field_particles_observe_initializer(
         .semi_transparent = true,
         .valid = true,
     };
+    next_particle_generation = particle_sources.next_generation;
     ++particle_source_count;
     return true;
 }

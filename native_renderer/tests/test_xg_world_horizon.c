@@ -169,13 +169,13 @@ static int test_native_view_uses_shared_source_projection(void) {
     XgWorldHorizonCapture capture;
     XgWorldHorizonRecord records[2];
     XgNativeView view;
-    const int32_t expected_offset = (int32_t)(
-        ((((uint64_t)240u * 16u) << 16u) / 9u -
-         ((uint64_t)320u << 16u)) / 2u);
+    const int32_t expected_offset = 53 * INT32_C(65536);
 
     CHECK(capture_source(&reader, &capture) == XG_WORLD_HORIZON_CAPTURE_OK);
     CHECK(xg_native_view_configure(&view, true, 16u, 9u, 320u, 240u));
+    CHECK(view.surface_width_16_16 == 427u * UINT32_C(65536));
     CHECK(view.center_offset_x_16_16 == expected_offset);
+    CHECK(xg_host_3d_native_view_margin() == 54);
     CHECK(xg_world_horizon_build_for_view(&capture.source, &view, records) ==
           XG_WORLD_HORIZON_OK);
     for (uint32_t quad = 0u; quad < 2u; ++quad) {

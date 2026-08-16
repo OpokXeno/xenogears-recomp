@@ -83,13 +83,10 @@ static bool has_exact_trace_proof(void) {
 }
 
 static void select_scene_boundary(void) {
-    const GuestRenderSceneConfig original = {
-        GUEST_RENDER_TIMING_ORIGINAL, GUEST_RENDER_RENDER_ORIGINAL,
-    };
     const GuestRenderSceneConfig native = {
         GUEST_RENDER_TIMING_NATIVE_59_94, GUEST_RENDER_RENDER_NATIVE,
     };
-    const GuestRenderSceneConfig *config = &original;
+    bool trace_proven = false;
     XgRenderAuth *auth = NULL;
     GuestRenderVisualStateId state_id = { 0 };
     XgRenderAuthProfile profile;
@@ -103,14 +100,14 @@ static void select_scene_boundary(void) {
     else if (!has_exact_trace_proof())
         state.status = XG_RENDER_STATIC_AUTH_TRACE_UNPROVEN;
     else
-        config = &native;
+        trace_proven = true;
     (void)xg_render_auth_process_owner(&auth);
     if (auth != NULL) (void)xg_render_auth_scene_reset(auth);
-    if (guest_render_bridge_begin_scene(config) != GUEST_RENDER_OK) {
+    if (!trace_proven) return;
+    if (guest_render_bridge_begin_scene(&native) != GUEST_RENDER_OK) {
         state.status = XG_RENDER_STATIC_AUTH_AUTH_REJECTED;
         return;
     }
-    if (config == &original) return;
     profile = xg_render_static_auth_profile_from_metadata();
     if (guest_render_bridge_begin_state(&state_id) != GUEST_RENDER_OK ||
         xg_render_auth_scene_begin(auth, state_id, &profile) != XG_RENDER_AUTH_OK) {

@@ -331,7 +331,13 @@ static int test_depth_cued_quad_right_cull_writes_first_xy(void) {
     source.attribute_words[0] = UINT32_C(0x2d000000);
     source.template_words[0] = UINT32_C(0x09000000);
     source.template_words[1] = UINT32_C(0x2d808080);
+    source.model_header_address = UINT32_C(0x800a1000);
     source.packet_address = UINT32_C(0x800d7344);
+    source.source_index = 0u;
+    source.topology[0] = 0u;
+    source.topology[1] = 1u;
+    source.topology[2] = 2u;
+    source.topology[3] = 3u;
     source.primitive_family = 13u;
     source.dispatch_mode = 4u;
     source.vertex_count = 4u;
@@ -379,6 +385,35 @@ static int test_depth_cued_quad_right_cull_writes_first_xy(void) {
     CHECK(output.passed_screen_cull);
     CHECK(output.accepted);
     CHECK(!output.counter_incremented);
+    CHECK(output.primitive.triangles[0].vertices[0].projective_position);
+    CHECK(output.primitive.triangles[0].vertices[0].projective_view_z ==
+          output.vertices[0].projective_view_z);
+    CHECK(output.primitive.triangles[0].vertices[0].projective_distance ==
+          source.projection.projection_distance);
+    CHECK(output.primitive.triangles[0].vertices[0]
+              .interpolation_vertex_identity_valid);
+    CHECK(output.primitive.triangles[0].vertices[0]
+              .interpolation_group_id == UINT32_C(0x640a1000));
+    CHECK(output.primitive.triangles[0].vertices[1]
+              .interpolation_vertex_id == 1u);
+    CHECK(output.primitive.triangles[0].vertices[1]
+              .interpolation_vertex_id ==
+          output.primitive.triangles[1].vertices[1]
+              .interpolation_vertex_id);
+    {
+        const uint32_t first_group = output.primitive.triangles[0].vertices[0]
+            .interpolation_group_id;
+
+        source.model_header_address = UINT32_C(0x800a2000);
+        preparation.primitive_digest = byte_digest(&source, sizeof(source));
+        CHECK(xg_world_models_native_build_primitive(
+                  &preparation, 1u, &source, &output) ==
+              XG_WORLD_MODELS_NATIVE_OK);
+        CHECK(output.primitive.triangles[0].vertices[0]
+                  .interpolation_group_id != first_group);
+        source.model_header_address = UINT32_C(0x800a1000);
+        preparation.primitive_digest = byte_digest(&source, sizeof(source));
+    }
     CHECK((output.packet_word_write_mask & (UINT32_C(1) << 2u)) != 0u);
     CHECK(output.guest_packet_word_write_mask == (UINT32_C(1) << 2u));
 

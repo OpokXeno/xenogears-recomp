@@ -44,6 +44,7 @@ static uint8_t division_table[0x101];
 static int division_table_ready;
 static int native_view_enabled;
 static int32_t native_view_center_offset_x_16_16;
+static uint32_t native_view_cull_margin;
 static uint32_t native_view_aspect_num = 4u;
 static uint32_t native_view_aspect_den = 3u;
 
@@ -53,10 +54,17 @@ void xg_host_3d_configure_native_view_aspect(
     native_view_enabled = enabled != 0;
     native_view_center_offset_x_16_16 =
         native_view_enabled ? center_offset_x_16_16 : 0;
+    native_view_cull_margin = native_view_enabled && center_offset_x_16_16 > 0
+        ? (uint32_t)(((int64_t)center_offset_x_16_16 + INT64_C(0xffff)) >> 16u)
+        : 0u;
     native_view_aspect_num = native_view_enabled && aspect_num != 0u
         ? aspect_num : 4u;
     native_view_aspect_den = native_view_enabled && aspect_den != 0u
         ? aspect_den : 3u;
+}
+
+void xg_host_3d_configure_native_view_margin(uint32_t margin) {
+    native_view_cull_margin = native_view_enabled ? margin : 0u;
 }
 
 void xg_host_3d_configure_native_view(int enabled,
@@ -66,9 +74,8 @@ void xg_host_3d_configure_native_view(int enabled,
 }
 
 int32_t xg_host_3d_native_view_margin(void) {
-    if (!native_view_enabled || native_view_center_offset_x_16_16 <= 0)
-        return 0;
-    return (native_view_center_offset_x_16_16 + INT32_C(0xffff)) >> 16u;
+    return native_view_enabled && native_view_cull_margin <= INT32_MAX
+        ? (int32_t)native_view_cull_margin : 0;
 }
 
 uint32_t xg_host_3d_native_view_depth_limit(uint32_t canonical_limit) {
@@ -566,6 +573,17 @@ static void project_vertex(XgHost3dMathState *state,
     y_16_16 = (int64_t)projection->screen_offset_y + (int64_t)ir[1] * scale;
     output->x_16_16 = wrap_i32(x_16_16);
     output->y_16_16 = wrap_i32(y_16_16);
+    output->projective_view_x = mac[0];
+    output->projective_view_y = mac[1];
+    output->projective_view_z = mac[2];
+    output->projective_offset_x_16_16 = projection->screen_offset_x;
+    output->projective_offset_y_16_16 = projection->screen_offset_y;
+    output->projective_distance = projection->projection_distance;
+    output->projective_position =
+        mac[0] >= -0x8000 && mac[0] <= 0x7fff &&
+        mac[1] >= -0x8000 && mac[1] <= 0x7fff &&
+        mac[2] > 0 && mac[2] <= 0xffff &&
+        (uint32_t)mac[2] * 2u > projection->projection_distance;
     if (native_view_enabled &&
         x_16_16 + native_view_center_offset_x_16_16 >= INT32_MIN &&
         x_16_16 + native_view_center_offset_x_16_16 <= INT32_MAX &&
@@ -574,6 +592,8 @@ static void project_vertex(XgHost3dMathState *state,
             x_16_16 + native_view_center_offset_x_16_16);
         output->native_view_y_16_16 = (int32_t)y_16_16;
         output->native_view_position = 1u;
+        output->projective_native_offset_x_16_16 =
+            native_view_center_offset_x_16_16;
     }
     output->x = saturate_screen(shift_right_floor(x_16_16, 16u),
                                 FLAG_SX2_SAT, &state->flags);

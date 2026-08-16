@@ -279,6 +279,7 @@ XgWorldTerrainWaterCaptureResult xg_world_terrain_water_source_capture(
         uint32_t quadrant;
 
         READ_U16(TERRAIN_ACTIVE_TILES + index * 2u, &active);
+        capture.source.tiles[index].grid_index = (uint8_t)grid_index;
         capture.source.tiles[index].active = active != UINT16_MAX;
         for (quadrant = 0u; quadrant < 4u; ++quadrant) {
             READ_U16(TERRAIN_QUADRANT_VISIBILITY + index * 8u + quadrant * 2u,
@@ -315,7 +316,8 @@ XgWorldTerrainWaterCaptureResult xg_world_terrain_water_source_capture(
             for (other = 0u; other < 4u; ++other)
                 combined_visibility |=
                     capture.source.quadrant_visibility[index][other];
-            if (combined_visibility == UINT16_MAX &&
+            if (!xg_world_terrain_water_temporal_coverage() &&
+                combined_visibility == UINT16_MAX &&
                 capture.source.quadrant_visibility[index][quadrant] ==
                     UINT16_MAX)
                 continue;

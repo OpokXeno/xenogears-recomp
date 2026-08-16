@@ -3,6 +3,7 @@
 
 #include "cpu_state.h"
 #include "gpu.h"
+#include "xg_world_terrain_water.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -156,6 +157,12 @@ typedef struct XgWorldTerrainWaterShadowSnapshot {
     uint32_t blocker_address;
     uint32_t blocker_expected;
     uint32_t blocker_actual;
+    uint32_t mesh_duplicate_vertices;
+    uint32_t mesh_cross_tile_duplicate_vertices;
+    uint32_t mesh_canonical_raster_conflicts;
+    uint32_t mesh_native_raster_conflicts;
+    uint32_t mesh_cross_tile_native_raster_conflicts;
+    XgWorldTerrainWaterBuildDiagnostics build_diagnostics;
     XgWorldTerrainWaterShadowBlocker blocker;
     XgWorldTerrainWaterShadowMismatch first_mismatch;
     bool pending;

@@ -122,7 +122,7 @@ producer_callers = [
 
 [[variants]]
 id = "field-target-polylines-v1"
-base_address = "0x801cf000"
+base_address = "0x801cd000"
 required_ranges = [
   { start = "0x801cfb48", size = 1052, sha256 = "4a437e0b9997a056107bc06a49e5f978562829128c8eb67be707dac0052dc66a" },
 ]
@@ -161,6 +161,18 @@ cutovers = [
   { pc = "0x800983a0", instruction = "0x27bdff90", transfer = "observe", continuation = "0x00000000" },
   { pc = "0x8009932c", instruction = "0x27bdffc8", transfer = "return", continuation = "0x00000000" },
   { pc = "0x800996d4", instruction = "0x8fbf0034", transfer = "observe", continuation = "0x00000000" },
+]
+
+[[variants]]
+id = "world-partial-terrain-water-v1"
+base_address = "0x80090000"
+artifact_size = 40964
+artifact_sha256 = "6d4d865dea73b55b4decaa9027701ca65f15f2375c4f08890a92e0c3f449f45d"
+required_ranges = [
+  { start = "0x80090000", size = 40964, sha256 = "6d4d865dea73b55b4decaa9027701ca65f15f2375c4f08890a92e0c3f449f45d" },
+]
+cutovers = [
+  { pc = "0x8009932c", instruction = "0x27bdffc8", transfer = "return", continuation = "0x00000000" },
 ]
 
 [[variants]]

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 import shutil
 import subprocess
@@ -161,6 +162,17 @@ class NativeRenderRuntimeVariantsTests(unittest.TestCase):
             "validate", str(COMPANION), "--artifact",
             str(ARTIFACT.with_name("missing-field5-runtime.bin")), expect=1)
         self.assertIn("artifact filename mismatch", result.stderr.lower())
+
+    def test_declared_descriptor_binds_companion_manifest_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "runtime_variants.c"
+
+            self.run_tool(
+                "emit-declared", str(COMPANION), "--out", str(output))
+
+            identity = hashlib.sha256(COMPANION.read_bytes()).digest()
+            initializer = ",".join(f"0x{byte:02x}" for byte in identity)
+            self.assertIn(f"{{{initializer}}}", output.read_text(encoding="ascii"))
 
     def test_codegen_contract_rotates_cache_without_abi_bump(self) -> None:
         overlay_api = (

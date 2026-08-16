@@ -1,10 +1,25 @@
 #include "native_render_baseline.h"
 #include "gpu.h"
+#include "gpu_gl_renderer.h"
 #include "gpu_render.h"
 
 #include <string.h>
 
 uint64_t s_frame_count = 0;
+
+void gl_renderer_native_midpoint_diag(
+        GlRendererNativeMidpointDiagnostics *out_diagnostics) {
+    if (out_diagnostics != NULL)
+        memset(out_diagnostics, 0, sizeof(*out_diagnostics));
+}
+
+uint64_t gl_renderer_pres_total(void) { return 0u; }
+
+int gl_renderer_pres_get(uint64_t sequence, GlPresEvent *out_event) {
+    (void)sequence;
+    (void)out_event;
+    return 0;
+}
 
 void native_render_baseline_runtime_reset(void) {}
 void native_render_baseline_runtime_arm(void) {}
@@ -48,6 +63,10 @@ void gpu_native_environment_get(GpuNativeDrawEnvironment *out) {
     if (out != NULL) memset(out, 0, sizeof(*out));
 }
 
+void gpu_native_interpolation_scene_boundary(uint64_t scene_id) {
+    (void)scene_id;
+}
+
 int psx_ws_x_margin(void) { return 0; }
 uint32_t psx_ws_xclip_bound(uint32_t vanilla) { return vanilla; }
 
@@ -70,6 +89,13 @@ GpuRenderTransactionStatus gr_draw_semantic(
     const GpuRenderSemantic *semantic) {
     (void)transaction_id;
     (void)semantic;
+    return GPU_RENDER_TRANSACTION_OK;
+}
+
+GpuRenderTransactionStatus gr_record_interpolation_anchors(
+        const GpuRenderInterpolationVertexAnchor *anchors, size_t count) {
+    (void)anchors;
+    (void)count;
     return GPU_RENDER_TRANSACTION_OK;
 }
 

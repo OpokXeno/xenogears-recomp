@@ -156,7 +156,7 @@ void test_close_record_publishes_only_on_clean_close() {
     std::remove(trace_path.c_str());
     std::remove((trace_path + ".incomplete").c_str());
     assert(input_replay::record_begin_until_close(
-        trace_path.c_str(), 5u, 16u, &error));
+        trace_path.c_str(), 16u, &error));
     for (int index = 0; index < 5; ++index) {
         input_replay::record_note_scene(stable_field_five(), cold_loader());
         input_replay::record_note_guest_vblank();
@@ -172,7 +172,9 @@ void test_close_record_publishes_only_on_clean_close() {
     std::ifstream trace(trace_path);
     const std::string text((std::istreambuf_iterator<char>(trace)), {});
     assert(text.find("complete = true") != std::string::npos);
-    assert(text.find("record_stop_field = 5") != std::string::npos);
+    assert(text.find("record_on_close = true") != std::string::npos);
+    assert(text.find("record_stop_field") == std::string::npos);
+    assert(text.find("[checkpoint]") == std::string::npos);
     std::remove(trace_path.c_str());
 }
 

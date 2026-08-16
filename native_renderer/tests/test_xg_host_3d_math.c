@@ -267,6 +267,13 @@ static int test_native_view_projection_metadata(void) {
     CHECK(projected.x_16_16 == 176 << 16);
     CHECK(projected.y_16_16 == 104 << 16);
     CHECK(!projected.native_view_position);
+    CHECK(projected.projective_position);
+    CHECK(projected.projective_view_x == 64);
+    CHECK(projected.projective_view_y == -32);
+    CHECK(projected.projective_view_z == 1024);
+    CHECK(projected.projective_offset_x_16_16 == 160 << 16);
+    CHECK(projected.projective_offset_y_16_16 == 112 << 16);
+    CHECK(projected.projective_distance == 256u);
 
     xg_host_3d_configure_native_view(1, 53 << 16);
     CHECK(xg_host_3d_native_view_margin() == 53);
@@ -277,6 +284,8 @@ static int test_native_view_projection_metadata(void) {
     CHECK(projected.native_view_x_16_16 == 229 << 16);
     CHECK(projected.native_view_y_16_16 == 104 << 16);
     CHECK(projected.native_view_position);
+    CHECK(projected.projective_native_offset_x_16_16 == 53 << 16);
+    CHECK(projected.projective_native_offset_y_16_16 == 0);
     xg_host_3d_configure_native_view(0, 0);
     return 1;
 }

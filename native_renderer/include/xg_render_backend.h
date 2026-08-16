@@ -76,6 +76,12 @@ typedef struct XgRenderBackendResult {
 XgRenderBackendStatus xg_render_backend_translate_primitive(
     const XgRenderIrNativePrimitive *primitive,
     GpuRenderSemantic *out_semantic);
+XgRenderBackendStatus xg_render_backend_translate_anchor(
+    const XgRenderIrMaterialState *material,
+    const XgRenderIrVertex *vertex,
+    uint64_t scene_id,
+    uint32_t producer_id,
+    GpuRenderInterpolationVertexAnchor *out_anchor);
 XgRenderBackendResult xg_render_backend_submit(
     const XgRenderIr *ir,
     const XgRenderBackendSubmitInfo *submit_info);

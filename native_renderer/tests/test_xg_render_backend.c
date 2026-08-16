@@ -336,6 +336,28 @@ static int test_public_primitive_translation_uses_submit_validation(void) {
     for (uint8_t triangle = 0u; triangle < item.native.triangle_count;
          ++triangle) {
         for (uint8_t vertex = 0u; vertex < 3u; ++vertex) {
+            XgRenderIrVertex *position =
+                &item.native.triangles[triangle].vertices[vertex];
+
+            position->projective_view_x = 32;
+            position->projective_view_y = -16;
+            position->projective_view_z = 512;
+            position->projective_offset_x = 160 * INT32_C(65536);
+            position->projective_offset_y = 120 * INT32_C(65536);
+            position->projective_distance = 256u;
+            position->projective_position = true;
+        }
+    }
+    CHECK(xg_render_backend_translate_primitive(&item.native, &semantic) ==
+          XG_RENDER_BACKEND_OK);
+    CHECK(semantic.triangles[0].vertices[0].projective_position == 1u);
+    CHECK(semantic.triangles[0].vertices[0].projective_view_x == 32);
+    CHECK(semantic.triangles[0].vertices[0].projective_view_y == -16);
+    CHECK(semantic.triangles[0].vertices[0].projective_view_z == 512);
+    CHECK(semantic.triangles[0].vertices[0].projective_distance == 256u);
+    for (uint8_t triangle = 0u; triangle < item.native.triangle_count;
+         ++triangle) {
+        for (uint8_t vertex = 0u; vertex < 3u; ++vertex) {
             item.native.triangles[triangle].vertices[vertex].native_view_position = true;
         }
     }

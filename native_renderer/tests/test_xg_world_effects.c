@@ -155,6 +155,8 @@ static int test_capture_and_build_single_effect(void) {
     CHECK(records[0].vertices[0].y == 104);
     CHECK(records[0].vertices[3].x == 176);
     CHECK(records[0].vertices[3].y == 136);
+    CHECK(!records[0].primitive.triangles[0].vertices[0]
+               .projective_position);
     CHECK(records[0].material_word == UINT32_C(0x2e302010));
     CHECK(records[0].tpage == 0x0123u);
     CHECK(records[0].clut == 0x7fd0u);

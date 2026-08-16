@@ -249,10 +249,17 @@ static XgRenderAuthReason execution_reason(
 }
 
 static void abort_transaction(XgRenderAuth *auth, XgRenderAuthReason reason) {
+    GuestRenderBridgeSnapshot bridge_snapshot = { 0 };
+    const bool native_requested =
+        guest_render_bridge_snapshot(&bridge_snapshot) == GUEST_RENDER_OK &&
+        bridge_snapshot.modes.requested_render_mode ==
+            GUEST_RENDER_RENDER_NATIVE;
+
     if (auth->reject_reason == XG_RENDER_AUTH_REJECT_NONE)
         auth->reject_reason = reason;
     auth->phase = XG_RENDER_AUTH_PHASE_REJECTED;
-    auth->effective_render_mode = GUEST_RENDER_RENDER_ORIGINAL;
+    auth->effective_render_mode = native_requested
+        ? GUEST_RENDER_RENDER_NATIVE : GUEST_RENDER_RENDER_ORIGINAL;
     auth->native_item_count = 0u;
     auth->producer_open = false;
     auth->scene_aborted = true;

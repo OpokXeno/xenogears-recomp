@@ -57,6 +57,15 @@ typedef struct XgHost3dProjectedVertex {
     int32_t native_view_x_16_16;
     int32_t native_view_y_16_16;
     uint8_t native_view_position;
+    int32_t projective_view_x;
+    int32_t projective_view_y;
+    int32_t projective_view_z;
+    int32_t projective_offset_x_16_16;
+    int32_t projective_offset_y_16_16;
+    int32_t projective_native_offset_x_16_16;
+    int32_t projective_native_offset_y_16_16;
+    uint16_t projective_distance;
+    uint8_t projective_position;
 } XgHost3dProjectedVertex;
 
 typedef struct XgHost3dRotAverage4Output {
@@ -88,6 +97,7 @@ void xg_host_3d_configure_native_view(int enabled,
 void xg_host_3d_configure_native_view_aspect(
     int enabled, int32_t center_offset_x_16_16,
     uint16_t aspect_num, uint16_t aspect_den);
+void xg_host_3d_configure_native_view_margin(uint32_t margin);
 int32_t xg_host_3d_native_view_margin(void);
 uint32_t xg_host_3d_native_view_depth_limit(uint32_t canonical_limit);
 

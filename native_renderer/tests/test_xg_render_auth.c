@@ -198,7 +198,7 @@ static int assert_scene_abort(XgRenderAuth *auth,
     GuestRenderBridgeSnapshot bridge_snapshot = { 0 };
 
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
-    CHECK(snapshot.effective_render_mode == GUEST_RENDER_RENDER_ORIGINAL);
+    CHECK(snapshot.effective_render_mode == GUEST_RENDER_RENDER_NATIVE);
     CHECK(snapshot.reject_reason == reason);
     CHECK(snapshot.scene_aborted);
     CHECK(snapshot.producer_begin_count == expected_producer_begins);
@@ -210,7 +210,7 @@ static int assert_scene_abort(XgRenderAuth *auth,
     CHECK(!bridge_snapshot.producer_open);
     CHECK(bridge_snapshot.slot_count == 0u);
     CHECK(bridge_snapshot.binding_count == 0u);
-    CHECK(bridge_snapshot.modes.effective_render_mode == GUEST_RENDER_RENDER_ORIGINAL);
+    CHECK(bridge_snapshot.modes.effective_render_mode == GUEST_RENDER_RENDER_NATIVE);
     CHECK(assert_ir_phase(XG_RENDER_IR_EMPTY, 0));
     return 1;
 }
@@ -453,7 +453,7 @@ static int test_validation_rejects_after_entry_producer_begin(void) {
         mutate_execution(&execution, mutation);
         CHECK(xg_render_auth_observe_hook(auth, &execution, &decision) ==
               XG_RENDER_AUTH_REJECTED);
-        CHECK(decision.effective_render_mode == GUEST_RENDER_RENDER_ORIGINAL);
+        CHECK(decision.effective_render_mode == GUEST_RENDER_RENDER_NATIVE);
         CHECK(decision.reject_reason == reason_for_mutation(mutation));
         CHECK(assert_scene_abort(auth, reason_for_mutation(mutation), 1u));
     }

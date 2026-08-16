@@ -313,9 +313,9 @@ static uint32_t ordering_depth(
 static QuadResult build_quad(BuildContext *context,
                              const XgHost3dProjection *projection,
                              const XgHost3dVector vertices[4],
-                             uint16_t uv_base, uint8_t uv_mask,
-                             uint32_t source_index, XgWorldCloudLod lod,
-                             uint32_t lod_quad_index) {
+                              uint16_t uv_base, uint8_t uv_mask,
+                              uint32_t source_index, XgWorldCloudLod lod,
+                              uint32_t lod_quad_index) {
     XgHost3dProject4Input input = { 0 };
     XgHost3dRotTransPers4Output projected;
     XgRenderQuadSource quad = { 0 };

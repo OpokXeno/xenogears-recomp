@@ -122,6 +122,7 @@ typedef struct XgWorldTerrainWaterNativePreparation {
     uint32_t packet_base;
     uint32_t position_address;
     uint32_t record_count;
+    uint32_t anchor_count;
     uint32_t final_count;
     uint32_t continuation_pc;
     uint32_t authenticated_read_count;
@@ -162,6 +163,7 @@ XgWorldTerrainWaterNativeResult xg_world_terrain_water_native_prepare(
     const XgWorldTerrainWaterNativeRequest *request,
     const XgWorldTerrainWaterAuthenticatedReader *reader,
     XgWorldTerrainWaterRecord *records, uint32_t record_capacity,
+    XgWorldTerrainWaterAnchor *anchors, uint32_t anchor_capacity,
     XgWorldTerrainWaterNativePreparation *out_preparation);
 
 #ifdef __cplusplus

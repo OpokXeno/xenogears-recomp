@@ -37,6 +37,8 @@ bool xg_render_authoritative_overlay_artifact_candidate_authorizes_pc(
 bool xg_render_runtime_variant_artifact_contains_pc(uint32_t pc);
 bool xg_render_runtime_variant_active_code_write_overlaps(
     uint32_t write_address, uint32_t write_size);
+uint32_t xg_render_runtime_variant_code_write_overlap_mask(
+    uint32_t write_address, uint32_t write_size);
 bool xg_render_runtime_variant_model_ft4_code_write_overlaps(
     uint32_t write_address, uint32_t write_size);
 bool xg_render_runtime_variant_sprite_ft4_code_write_overlaps(

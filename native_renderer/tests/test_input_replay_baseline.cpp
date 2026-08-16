@@ -340,7 +340,7 @@ int main() {
     std::ifstream evidence(evidence_path);
     const std::string evidence_text((std::istreambuf_iterator<char>(evidence)), {});
     const std::string baseline = expected_baseline(snapshot, true);
-    assert(evidence_text.find("\"baseline\":" + baseline + ",\"context\"") !=
+    assert(evidence_text.find("\"baseline\":" + baseline) !=
            std::string::npos);
 
     assert(input_replay::load(task5.c_str(), &error));

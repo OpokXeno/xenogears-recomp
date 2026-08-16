@@ -294,6 +294,8 @@ static int test_builds_conditional_2d_markers(void) {
     CHECK(output.markers[24].packet_address == UINT32_C(0x8009cc18));
     CHECK(output.markers[24].screen_xy_address == UINT32_C(0x8009cc20));
     CHECK(output.markers[24].primitive.triangle_count == 2u);
+    CHECK(!output.markers[24].primitive.triangles[0].vertices[0]
+               .projective_position);
     CHECK(output.markers[24].primitive.triangles[0].vertices[0].r == 0x80u);
     CHECK(output.markers[24].primitive.triangles[0].vertices[0].b == 0x10u);
     CHECK(output.markers[24].primitive.triangles[0].vertices[1].x ==
