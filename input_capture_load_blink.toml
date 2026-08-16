@@ -1,0 +1,325 @@
+schema = "xenogears.native-render-replay/v3"
+complete = true
+vblank_budget = 1855
+record_stop_field = 5
+record_stable_vblanks = 4
+
+[checkpoint]
+kind = "u16"
+address = "0x8006F94E"
+equals = 5
+
+[[vblank]]
+repeat = 603
+p1_connected = true
+p1_mode = "digital"
+p1_buttons = []
+p1_left_x = 0
+p1_left_y = 0
+p1_right_x = 0
+p1_right_y = 0
+p1_trigger_left = 0
+p1_trigger_right = 0
+p2_connected = false
+p2_mode = "digital"
+p2_buttons = []
+p2_left_x = 0
+p2_left_y = 0
+p2_right_x = 0
+p2_right_y = 0
+p2_trigger_left = 0
+p2_trigger_right = 0
+
+[[vblank]]
+repeat = 8
+p1_connected = true
+p1_mode = "digital"
+p1_buttons = ["a"]
+p1_left_x = 0
+p1_left_y = 0
+p1_right_x = 0
+p1_right_y = 0
+p1_trigger_left = 0
+p1_trigger_right = 0
+p2_connected = false
+p2_mode = "digital"
+p2_buttons = []
+p2_left_x = 0
+p2_left_y = 0
+p2_right_x = 0
+p2_right_y = 0
+p2_trigger_left = 0
+p2_trigger_right = 0
+
+[[vblank]]
+repeat = 248
+p1_connected = true
+p1_mode = "digital"
+p1_buttons = []
+p1_left_x = 0
+p1_left_y = 0
+p1_right_x = 0
+p1_right_y = 0
+p1_trigger_left = 0
+p1_trigger_right = 0
+p2_connected = false
+p2_mode = "digital"
+p2_buttons = []
+p2_left_x = 0
+p2_left_y = 0
+p2_right_x = 0
+p2_right_y = 0
+p2_trigger_left = 0
+p2_trigger_right = 0
+
+[[vblank]]
+repeat = 10
+p1_connected = true
+p1_mode = "digital"
+p1_buttons = ["a"]
+p1_left_x = 0
+p1_left_y = 0
+p1_right_x = 0
+p1_right_y = 0
+p1_trigger_left = 0
+p1_trigger_right = 0
+p2_connected = false
+p2_mode = "digital"
+p2_buttons = []
+p2_left_x = 0
+p2_left_y = 0
+p2_right_x = 0
+p2_right_y = 0
+p2_trigger_left = 0
+p2_trigger_right = 0
+
+[[vblank]]
+repeat = 96
+p1_connected = true
+p1_mode = "digital"
+p1_buttons = []
+p1_left_x = 0
+p1_left_y = 0
+p1_right_x = 0
+p1_right_y = 0
+p1_trigger_left = 0
+p1_trigger_right = 0
+p2_connected = false
+p2_mode = "digital"
+p2_buttons = []
+p2_left_x = 0
+p2_left_y = 0
+p2_right_x = 0
+p2_right_y = 0
+p2_trigger_left = 0
+p2_trigger_right = 0
+
+[[vblank]]
+repeat = 9
+p1_connected = true
+p1_mode = "digital"
+p1_buttons = ["a"]
+p1_left_x = 0
+p1_left_y = 0
+p1_right_x = 0
+p1_right_y = 0
+p1_trigger_left = 0
+p1_trigger_right = 0
+p2_connected = false
+p2_mode = "digital"
+p2_buttons = []
+p2_left_x = 0
+p2_left_y = 0
+p2_right_x = 0
+p2_right_y = 0
+p2_trigger_left = 0
+p2_trigger_right = 0
+
+[[vblank]]
+repeat = 597
+p1_connected = true
+p1_mode = "digital"
+p1_buttons = []
+p1_left_x = 0
+p1_left_y = 0
+p1_right_x = 0
+p1_right_y = 0
+p1_trigger_left = 0
+p1_trigger_right = 0
+p2_connected = false
+p2_mode = "digital"
+p2_buttons = []
+p2_left_x = 0
+p2_left_y = 0
+p2_right_x = 0
+p2_right_y = 0
+p2_trigger_left = 0
+p2_trigger_right = 0
+
+[[vblank]]
+repeat = 7
+p1_connected = true
+p1_mode = "digital"
+p1_buttons = ["a"]
+p1_left_x = 0
+p1_left_y = 0
+p1_right_x = 0
+p1_right_y = 0
+p1_trigger_left = 0
+p1_trigger_right = 0
+p2_connected = false
+p2_mode = "digital"
+p2_buttons = []
+p2_left_x = 0
+p2_left_y = 0
+p2_right_x = 0
+p2_right_y = 0
+p2_trigger_left = 0
+p2_trigger_right = 0
+
+[[vblank]]
+repeat = 15
+p1_connected = true
+p1_mode = "digital"
+p1_buttons = []
+p1_left_x = 0
+p1_left_y = 0
+p1_right_x = 0
+p1_right_y = 0
+p1_trigger_left = 0
+p1_trigger_right = 0
+p2_connected = false
+p2_mode = "digital"
+p2_buttons = []
+p2_left_x = 0
+p2_left_y = 0
+p2_right_x = 0
+p2_right_y = 0
+p2_trigger_left = 0
+p2_trigger_right = 0
+
+[[vblank]]
+repeat = 7
+p1_connected = true
+p1_mode = "digital"
+p1_buttons = ["a"]
+p1_left_x = 0
+p1_left_y = 0
+p1_right_x = 0
+p1_right_y = 0
+p1_trigger_left = 0
+p1_trigger_right = 0
+p2_connected = false
+p2_mode = "digital"
+p2_buttons = []
+p2_left_x = 0
+p2_left_y = 0
+p2_right_x = 0
+p2_right_y = 0
+p2_trigger_left = 0
+p2_trigger_right = 0
+
+[[vblank]]
+repeat = 16
+p1_connected = true
+p1_mode = "digital"
+p1_buttons = []
+p1_left_x = 0
+p1_left_y = 0
+p1_right_x = 0
+p1_right_y = 0
+p1_trigger_left = 0
+p1_trigger_right = 0
+p2_connected = false
+p2_mode = "digital"
+p2_buttons = []
+p2_left_x = 0
+p2_left_y = 0
+p2_right_x = 0
+p2_right_y = 0
+p2_trigger_left = 0
+p2_trigger_right = 0
+
+[[vblank]]
+repeat = 9
+p1_connected = true
+p1_mode = "digital"
+p1_buttons = ["dpleft"]
+p1_left_x = 0
+p1_left_y = 0
+p1_right_x = 0
+p1_right_y = 0
+p1_trigger_left = 0
+p1_trigger_right = 0
+p2_connected = false
+p2_mode = "digital"
+p2_buttons = []
+p2_left_x = 0
+p2_left_y = 0
+p2_right_x = 0
+p2_right_y = 0
+p2_trigger_left = 0
+p2_trigger_right = 0
+
+[[vblank]]
+repeat = 22
+p1_connected = true
+p1_mode = "digital"
+p1_buttons = []
+p1_left_x = 0
+p1_left_y = 0
+p1_right_x = 0
+p1_right_y = 0
+p1_trigger_left = 0
+p1_trigger_right = 0
+p2_connected = false
+p2_mode = "digital"
+p2_buttons = []
+p2_left_x = 0
+p2_left_y = 0
+p2_right_x = 0
+p2_right_y = 0
+p2_trigger_left = 0
+p2_trigger_right = 0
+
+[[vblank]]
+repeat = 6
+p1_connected = true
+p1_mode = "digital"
+p1_buttons = ["a"]
+p1_left_x = 0
+p1_left_y = 0
+p1_right_x = 0
+p1_right_y = 0
+p1_trigger_left = 0
+p1_trigger_right = 0
+p2_connected = false
+p2_mode = "digital"
+p2_buttons = []
+p2_left_x = 0
+p2_left_y = 0
+p2_right_x = 0
+p2_right_y = 0
+p2_trigger_left = 0
+p2_trigger_right = 0
+
+[[vblank]]
+repeat = 202
+p1_connected = true
+p1_mode = "digital"
+p1_buttons = []
+p1_left_x = 0
+p1_left_y = 0
+p1_right_x = 0
+p1_right_y = 0
+p1_trigger_left = 0
+p1_trigger_right = 0
+p2_connected = false
+p2_mode = "digital"
+p2_buttons = []
+p2_left_x = 0
+p2_left_y = 0
+p2_right_x = 0
+p2_right_y = 0
+p2_trigger_left = 0
+p2_trigger_right = 0

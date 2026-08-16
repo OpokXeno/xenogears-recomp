@@ -1,0 +1,31 @@
+schema = "xenogears.native-render-replay/v3"
+complete = true
+vblank_budget = 21930
+record_stop_field = 5
+record_stable_vblanks = 4
+
+[checkpoint]
+kind = "u16"
+address = "0x8006F94E"
+equals = 5
+
+[[vblank]]
+repeat = 21930
+p1_connected = true
+p1_mode = "digital"
+p1_buttons = []
+p1_left_x = 0
+p1_left_y = 0
+p1_right_x = 0
+p1_right_y = 0
+p1_trigger_left = 0
+p1_trigger_right = 0
+p2_connected = false
+p2_mode = "digital"
+p2_buttons = []
+p2_left_x = 0
+p2_left_y = 0
+p2_right_x = 0
+p2_right_y = 0
+p2_trigger_left = 0
+p2_trigger_right = 0
