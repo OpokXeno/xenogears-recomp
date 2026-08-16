@@ -55,7 +55,6 @@ fi
 MANIFEST_TOOL="$ROOT/tools/native_render_manifest.py"
 RENDER_MANIFEST="$ROOT/native_renderer/xg_render_manifest.toml"
 GAME_EXE="$ROOT/game/slus_006.64"
-OVERLAYS_DIR="$ROOT/overlays"
 PYTHON="${PYTHON:-python3}"
 NATIVE_RENDER="${XG_RENDER_NATIVE:-ON}"
 

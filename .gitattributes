@@ -1,0 +1,3 @@
+# Native-render manifests pin SHA-256 hashes of tracked files. Keep checkout
+# bytes stable when core.autocrlf is enabled on Windows.
+* text=auto eol=lf

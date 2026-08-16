@@ -126,7 +126,7 @@ class NativeRenderManifestBuildTests(unittest.TestCase):
             self.assertIn(dependency, cmake)
         self.assertGreaterEqual(cmake.count("${XG_RENDER_MANIFEST_TOOL_SOURCES}"), 2)
 
-    def test_build_wrappers_forward_both_validated_identities(self) -> None:
+    def test_build_wrappers_use_declared_manifest_metadata(self) -> None:
         # Given
         wrappers = {
             "shell": SHELL_WRAPPER.read_text(encoding="utf-8"),
@@ -137,7 +137,11 @@ class NativeRenderManifestBuildTests(unittest.TestCase):
         for name, wrapper in wrappers.items():
             with self.subTest(wrapper=name):
                 self.assertIn("native_render_manifest.py", wrapper)
-                self.assertIn("metadata", wrapper)
+                self.assertRegex(
+                    wrapper,
+                    re.compile(r"MANIFEST_TOOL.{0,50}metadata-declared", re.DOTALL),
+                )
+                self.assertNotIn("OVERLAYS_DIR", wrapper)
                 self.assertRegex(
                     wrapper,
                     re.compile(r"PSX_GAME_EXTRA_IDENTITY_SHA256.{0,120}GAME.*IDENTITY", re.DOTALL | re.IGNORECASE),
@@ -146,6 +150,12 @@ class NativeRenderManifestBuildTests(unittest.TestCase):
                     wrapper,
                     re.compile(r"PSX_GAME_MANIFEST_DIGEST_SHA256.{0,120}MANIFEST.*IDENTITY", re.DOTALL | re.IGNORECASE),
                 )
+
+    def test_repository_forces_lf_for_hashed_tracked_files(self) -> None:
+        # The manifest's pinned identities are byte hashes, not text hashes.
+        attributes = (REPOSITORY / ".gitattributes").read_text(encoding="utf-8")
+
+        self.assertIn("* text=auto eol=lf", attributes)
 
     @unittest.skipUnless(shutil.which("cmake"), "cmake is required")
     def test_manifest_edit_regenerates_cmake_table_target(self) -> None:

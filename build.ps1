@@ -51,7 +51,6 @@ $RECOMPILER_BUILD = Join-Path $RECOMPILER_DIR "build"
 $MANIFEST_TOOL = Join-Path $ROOT "tools/native_render_manifest.py"
 $RENDER_MANIFEST = Join-Path $ROOT "native_renderer/xg_render_manifest.toml"
 $GAME_EXE = Join-Path $ROOT "game/slus_006.64"
-$OVERLAYS_DIR = Join-Path $ROOT "overlays"
 $PYTHON = Get-Command python3 -ErrorAction SilentlyContinue
 if (-not $PYTHON) {
     $PYTHON = Get-Command python -ErrorAction SilentlyContinue
@@ -78,7 +77,7 @@ if (-not $Generator) {
 }
 Write-Host "==> Using CMake generator: $Generator"
 
-$MANIFEST_METADATA_JSON = & $PYTHON.Source $MANIFEST_TOOL "metadata" $RENDER_MANIFEST "--exe" $GAME_EXE "--overlays" $OVERLAYS_DIR
+$MANIFEST_METADATA_JSON = & $PYTHON.Source $MANIFEST_TOOL "metadata-declared" $RENDER_MANIFEST
 if ($LASTEXITCODE -ne 0) { throw "Native renderer manifest metadata validation failed" }
 $MANIFEST_METADATA = ($MANIFEST_METADATA_JSON -join [Environment]::NewLine) | ConvertFrom-Json
 $GAME_IDENTITY_SHA256 = $MANIFEST_METADATA.game_identity
