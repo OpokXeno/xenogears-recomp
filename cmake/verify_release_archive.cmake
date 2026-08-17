@@ -264,6 +264,12 @@ endif()
 
 set(_required_toolchain_files
     compile_overlays.py
+    native_render_manifest_model.py
+    native_render_overlay_codegen.py
+    native_render_overlay_ranges.py
+    native_render_runtime_variant_model.py
+    native_renderer/xg_render_overlay_ranges.toml
+    native_renderer/xg_render_runtime_variants.toml
     include/overlay_api.h
     include/overlay_codegen_hash.h
     licenses/PYTHON-LICENSE.txt

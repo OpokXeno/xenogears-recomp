@@ -87,6 +87,12 @@ function(create_package_root platform case_name output_variable)
     copy_fixture_file("${OPENBIOS_IMAGE}" "${_package_root}/bios/openbios.bin")
     copy_fixture_file("${OPENBIOS_LICENSE}" "${_package_root}/bios/OpenBIOS.LICENSE")
     add_placeholder("${_package_root}" "overlay_toolchain/compile_overlays.py")
+    add_placeholder("${_package_root}" "overlay_toolchain/native_render_manifest_model.py")
+    add_placeholder("${_package_root}" "overlay_toolchain/native_render_overlay_codegen.py")
+    add_placeholder("${_package_root}" "overlay_toolchain/native_render_overlay_ranges.py")
+    add_placeholder("${_package_root}" "overlay_toolchain/native_render_runtime_variant_model.py")
+    add_placeholder("${_package_root}" "overlay_toolchain/native_renderer/xg_render_overlay_ranges.toml")
+    add_placeholder("${_package_root}" "overlay_toolchain/native_renderer/xg_render_runtime_variants.toml")
     add_placeholder("${_package_root}" "overlay_toolchain/include/overlay_api.h")
     add_placeholder("${_package_root}" "overlay_toolchain/include/overlay_codegen_hash.h")
     add_placeholder("${_package_root}" "overlay_toolchain/licenses/PYTHON-LICENSE.txt")
@@ -275,6 +281,12 @@ function(assert_fixture_tree archive platform case_name)
         "game.toml")
     list(APPEND _expected_files
         "overlay_toolchain/compile_overlays.py"
+        "overlay_toolchain/native_render_manifest_model.py"
+        "overlay_toolchain/native_render_overlay_codegen.py"
+        "overlay_toolchain/native_render_overlay_ranges.py"
+        "overlay_toolchain/native_render_runtime_variant_model.py"
+        "overlay_toolchain/native_renderer/xg_render_overlay_ranges.toml"
+        "overlay_toolchain/native_renderer/xg_render_runtime_variants.toml"
         "overlay_toolchain/include/overlay_api.h"
         "overlay_toolchain/include/overlay_codegen_hash.h"
         "overlay_toolchain/licenses/PYTHON-LICENSE.txt"

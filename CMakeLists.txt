@@ -39,7 +39,7 @@ set(XG_RENDER_MANIFEST_TOOL_SOURCES
 set(XG_OVERLAY_CODEGEN_INPUTS
     "${XG_RENDER_RUNTIME_VARIANTS}"
     "${XG_RENDER_OVERLAY_RANGES}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tools/compile_overlays_fixed.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp/tools/compile_overlays.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest_model.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_overlay_codegen.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_overlay_ranges.py"

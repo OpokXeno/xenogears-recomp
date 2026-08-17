@@ -40,9 +40,20 @@ done
 }
 
 rm -rf "$DEST"
-mkdir -p "$DEST/include" "$DEST/licenses" "$DEST/tcc"
+mkdir -p "$DEST/include" "$DEST/licenses" "$DEST/native_renderer" "$DEST/tcc"
 cp -rL --preserve=mode,timestamps "$PYTHON_ROOT" "$DEST/python"
 cp "$ROOT/psxrecomp/tools/compile_overlays.py" "$DEST/compile_overlays.py"
+for helper in \
+    native_render_manifest_model.py \
+    native_render_overlay_codegen.py \
+    native_render_overlay_ranges.py \
+    native_render_runtime_variant_model.py; do
+    cp "$ROOT/tools/$helper" "$DEST/$helper"
+done
+cp "$ROOT/native_renderer/xg_render_runtime_variants.toml" \
+    "$DEST/native_renderer/xg_render_runtime_variants.toml"
+cp "$ROOT/native_renderer/xg_render_overlay_ranges.toml" \
+    "$DEST/native_renderer/xg_render_overlay_ranges.toml"
 cp -a "$ROOT/psxrecomp/runtime/include/." "$DEST/include/"
 # Runtime capture state is not part of the generated shard header closure and
 # its name is deliberately prohibited by the public archive policy.

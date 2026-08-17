@@ -19,8 +19,9 @@ import zlib
 REPOSITORY = Path(__file__).resolve().parents[2]
 TOOLS = REPOSITORY / "tools"
 sys.path.insert(0, str(TOOLS))
+sys.path.insert(0, str(REPOSITORY / "psxrecomp" / "tools"))
 
-import compile_overlays_fixed as overlay_compiler  # noqa: E402
+import compile_overlays as overlay_compiler  # noqa: E402
 from native_render_manifest_model import Digest32, FileIdentity  # noqa: E402
 from native_render_runtime_variant_model import (  # noqa: E402
     ArtifactSpec,
@@ -144,10 +145,7 @@ def generate_source(data: bytes, plan: str | None) -> subprocess.CompletedProces
             "--manifest-digest-sha256",
             MANIFEST_IDENTITY,
         ]
-        if plan is not None:
-            plan_path = root / "source-observation.plan"
-            plan_path.write_text(plan, encoding="ascii", newline="\n")
-            command.extend(("--source-observation-plan", str(plan_path)))
+        overlay_compiler.add_source_observation_plan(command, plan, str(root))
         result = subprocess.run(
             command,
             cwd=REPOSITORY,
@@ -288,6 +286,68 @@ class WarmOverlaySourceObservationTests(unittest.TestCase):
             "cpu->gpr[4] = psx_cyc_load_word(cpu, cpu->gpr[4], 4, 0x10u);",
             result.stdout,
         )
+
+    def test_plan_pcs_become_exact_fragment_demands_without_execution(self) -> None:
+        plan = (
+            "psxrecomp-source-observation-plan-v5\n"
+            f"cutover {BASE:08X} {SITE_INSTRUCTION:08X} observe 00000000\n"
+            f"site {BASE + 4:08X} {RETURN_INSTRUCTION:08X} write 2 effective-address\n"
+        )
+        audit = {
+            "included_reasons": {},
+            "executed_pcs": set(),
+            "static_exact_fragment_demands": set(),
+            "static_interval_fragment_demands": set(),
+            "producer_ranges": [(BASE, BASE + 0x40)],
+            "accepted_cross_producer_calls": set(),
+        }
+
+        job = overlay_compiler.make_interior_fragment_job(
+            BASE & 0x1FFFFFFF,
+            BASE,
+            0x40,
+            bytes(0x40),
+            audit,
+            set(),
+            source_plan=plan,
+        )
+
+        self.assertIsNotNone(job)
+        self.assertEqual(job["candidates"], {BASE, BASE + 4})
+        self.assertEqual(job["forced"], {BASE, BASE + 4})
+        self.assertEqual(job["executed"], set())
+
+    def test_plan_repair_recovers_current_byte_canonical_ordinary_roots(self) -> None:
+        artifact = image(0x24840001)
+        code_crc = zlib.crc32(artifact) & 0xFFFFFFFF
+        unrelated_crc = zlib.crc32(artifact[8:12]) & 0xFFFFFFFF
+        plan = (
+            "psxrecomp-source-observation-plan-v5\n"
+            f"cutover {BASE:08X} {SITE_INSTRUCTION:08X} observe 00000000\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ordinary = root / "cg18_12345678"
+            repair = root / "cg18_12345678_p89abcdef"
+            ordinary.mkdir()
+            repair.mkdir()
+            (ordinary / "bundle.so").write_bytes(b"complete")
+            (ordinary / "bundle.ranges").write_text(
+                "# psxrecomp overlay code-range manifest v2\n"
+                f"I {GAME_IDENTITY.upper()} {MANIFEST_IDENTITY.upper()}\n"
+                f"F {BASE:08X} {code_crc:08X}\n"
+                f"R {BASE:08X} {len(artifact):X}\n"
+                f"F {BASE + 4:08X} {code_crc:08X}\n"
+                f"R {BASE:08X} {len(artifact):X}\n"
+                f"F {BASE + 8:08X} {unrelated_crc:08X}\n"
+                f"R {BASE + 8:08X} 4\n",
+                encoding="ascii",
+            )
+
+            roots = overlay_compiler.source_plan_repair_roots(
+                str(repair), 0x89ABCDEF, plan, artifact, BASE, len(artifact))
+
+        self.assertEqual(roots, {BASE})
 
 if __name__ == "__main__":
     unittest.main()
