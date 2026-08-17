@@ -414,8 +414,22 @@ XgRenderIrResult xg_render_ir_process_owner(XgRenderIr **out_ir) {
 }
 
 XgRenderIrResult xg_render_ir_reset(XgRenderIr *ir) {
+    size_t old_item_count;
+
     if (!is_process_owner(ir)) return XG_RENDER_IR_INVALID_ARGUMENT;
-    memset(ir, 0, sizeof(*ir));
+    old_item_count = ir->item_count;
+    if (old_item_count > XG_RENDER_IR_ITEM_CAPACITY)
+        old_item_count = XG_RENDER_IR_ITEM_CAPACITY;
+    if (old_item_count != 0u)
+        memset(ir->insertion_ordered, 0,
+               old_item_count * sizeof(*ir->insertion_ordered));
+    ir->state_id = (GuestRenderVisualStateId){ 0 };
+    ir->vram_mutation_serial = 0u;
+    ir->item_count = 0u;
+    ir->compatibility_count = 0u;
+    ir->native_count = 0u;
+    ir->phase = XG_RENDER_IR_EMPTY;
+    ir->reject_reason = XG_RENDER_IR_REJECT_NONE;
     return XG_RENDER_IR_OK;
 }
 

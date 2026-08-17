@@ -1738,7 +1738,12 @@ static void clear_ft4_geometry_pending(void) {
 }
 
 static void clear_pre_scene(void) {
-    pre_scene = (XgRenderPreSceneState){ 0 };
+    /* count bounds every record access, so stale primitive storage is
+     * unreachable after a lifecycle reset. Avoid clearing 4096 large native
+     * primitives on every rejected producer cutover. */
+    pre_scene.count = 0u;
+    pre_scene.blocker = 0u;
+    pre_scene.blocked = false;
 }
 
 static bool stage_pre_scene_primitive(
