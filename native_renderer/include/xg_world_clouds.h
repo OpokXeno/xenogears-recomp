@@ -21,6 +21,8 @@ enum {
     XG_WORLD_CLOUD_PACKET_CAPACITY = 288,
     XG_WORLD_CLOUD_PACKET_WORD_COUNT = 10,
     XG_WORLD_CLOUD_OT_BUCKET_COUNT = 1024,
+    XG_WORLD_CLOUD_TEMPORAL_CAPACITY =
+        XG_WORLD_CLOUD_COUNT * XG_WORLD_CLOUD_NEAR_QUAD_COUNT,
 };
 
 typedef enum XgWorldCloudLod {
@@ -36,6 +38,13 @@ typedef enum XgWorldCloudsResult {
     XG_WORLD_CLOUDS_CAPACITY_EXCEEDED,
     XG_WORLD_CLOUDS_BUILD_FAILED,
 } XgWorldCloudsResult;
+
+typedef enum XgWorldCloudCull {
+    XG_WORLD_CLOUD_CULL_NONE = 0,
+    XG_WORLD_CLOUD_CULL_PROJECTIVE,
+    XG_WORLD_CLOUD_CULL_SCREEN,
+    XG_WORLD_CLOUD_CULL_DEPTH,
+} XgWorldCloudCull;
 
 typedef struct XgWorldCloudPosition {
     int32_t x;
@@ -97,6 +106,8 @@ typedef struct XgWorldCloudRecord {
     uint16_t tpage;
     uint16_t clut;
     XgWorldCloudLod lod;
+    XgWorldCloudCull cull;
+    bool accepted;
 } XgWorldCloudRecord;
 
 typedef struct XgWorldCloudsBuildStats {
@@ -130,6 +141,16 @@ XgWorldCloudsResult xg_world_clouds_build(
     uint32_t record_capacity,
     uint32_t *out_record_count,
     XgWorldCloudsBuildStats *out_stats);
+
+XgWorldCloudsResult xg_world_clouds_build_with_temporal(
+    const XgWorldCloudsSource *source,
+    XgWorldCloudRecord *records,
+    uint32_t record_capacity,
+    uint32_t *out_record_count,
+    XgWorldCloudsBuildStats *out_stats,
+    XgWorldCloudRecord *rejected_records,
+    uint32_t rejected_capacity,
+    uint32_t *out_rejected_count);
 
 #ifdef __cplusplus
 }

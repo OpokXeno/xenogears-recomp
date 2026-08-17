@@ -164,6 +164,7 @@ XgWorldTerrainWaterNativeResult xg_world_terrain_water_native_prepare(
     const XgWorldTerrainWaterAuthenticatedReader *reader,
     XgWorldTerrainWaterRecord *records, uint32_t record_capacity,
     XgWorldTerrainWaterAnchor *anchors, uint32_t anchor_capacity,
+    XgWorldTerrainWaterSource *out_source,
     XgWorldTerrainWaterNativePreparation *out_preparation);
 
 #ifdef __cplusplus

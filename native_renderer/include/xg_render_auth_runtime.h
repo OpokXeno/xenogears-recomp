@@ -629,9 +629,38 @@ typedef struct PsxXgRenderWorldExecutionSnapshot {
     bool overflowed;
 } PsxXgRenderWorldExecutionSnapshot;
 
+typedef enum PsxXgRenderWorldNativeFailureStage {
+    PSX_XG_RENDER_WORLD_NATIVE_FAILURE_NONE = 0,
+    PSX_XG_RENDER_WORLD_NATIVE_FAILURE_PREPARE,
+    PSX_XG_RENDER_WORLD_NATIVE_FAILURE_COMMIT_PRECONDITION,
+    PSX_XG_RENDER_WORLD_NATIVE_FAILURE_ANCHOR_COLLECTION,
+    PSX_XG_RENDER_WORLD_NATIVE_FAILURE_FINALIZE,
+    PSX_XG_RENDER_WORLD_NATIVE_FAILURE_ANCHOR_RECORD,
+} PsxXgRenderWorldNativeFailureStage;
+
 typedef struct PsxXgRenderWorldNativeSnapshot {
     uint64_t native_cutover_count;
     uint64_t native_primitive_count;
+    uint64_t native_failure_count;
+    uint32_t first_failure_stage;
+    uint32_t first_failure_detail;
+    uint32_t first_anchor_count;
+    uint32_t last_failure_stage;
+    uint32_t last_failure_detail;
+    uint32_t last_anchor_count;
+    uint64_t packet_copy_begin_count;
+    uint64_t packet_copy_finish_count;
+    uint64_t packet_copy_template_count;
+    uint32_t packet_copy_failure_detail;
+    uint32_t packet_copy_last_destination;
+    uint32_t packet_copy_last_source;
+    uint32_t packet_copy_last_size;
+    uint32_t packet_copy_range_count;
+    uint32_t first_missing_model_address;
+    uint32_t first_missing_packet_base;
+    uint32_t first_missing_packet_address;
+    uint32_t first_missing_copy_range_kind;
+    uint32_t first_missing_copy_range_index;
 } PsxXgRenderWorldNativeSnapshot;
 
 typedef bool (*PsxXgRenderPresentationGate)(

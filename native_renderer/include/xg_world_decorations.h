@@ -4,6 +4,7 @@
 #include "xg_host_3d.h"
 #include "xg_render_ir.h"
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -16,7 +17,16 @@ enum {
     XG_WORLD_DECORATIONS_DEPTH_CLUT_COUNT = 16,
     XG_WORLD_DECORATIONS_FT4_VERTEX_COUNT = 4,
     XG_WORLD_DECORATIONS_FT4_PAYLOAD_WORD_COUNT = 9,
+    XG_WORLD_DECORATIONS_TEMPORAL_CAPACITY =
+        25 * XG_WORLD_DECORATIONS_POSITION_CAPACITY,
 };
+
+typedef enum XgWorldDecorationsCull {
+    XG_WORLD_DECORATIONS_CULL_NONE = 0,
+    XG_WORLD_DECORATIONS_CULL_PROJECTIVE,
+    XG_WORLD_DECORATIONS_CULL_SCREEN,
+    XG_WORLD_DECORATIONS_CULL_DEPTH,
+} XgWorldDecorationsCull;
 
 typedef enum XgWorldDecorationsResult {
     XG_WORLD_DECORATIONS_OK = 0,
@@ -65,11 +75,14 @@ typedef struct XgWorldDecorationsRecord {
     uint32_t rtps_flags;
     uint32_t ordering_bucket;
     uint32_t source_index;
+    uint32_t semantic_id;
     uint32_t packet_index;
     int16_t depth_cue;
     uint16_t third_depth;
     uint16_t clut;
     uint8_t tag_payload_word_count;
+    XgWorldDecorationsCull cull;
+    bool accepted;
 } XgWorldDecorationsRecord;
 
 /* Appends records at *in_out_packet_count, matching the producer's shared
@@ -77,6 +90,12 @@ typedef struct XgWorldDecorationsRecord {
 XgWorldDecorationsResult xg_world_decorations_build(
     const XgWorldDecorationsSource *source, XgWorldDecorationsRecord *records,
     uint32_t record_capacity, uint32_t *in_out_packet_count);
+
+XgWorldDecorationsResult xg_world_decorations_build_with_temporal(
+    const XgWorldDecorationsSource *source, XgWorldDecorationsRecord *records,
+    uint32_t record_capacity, uint32_t *in_out_packet_count,
+    XgWorldDecorationsRecord *rejected_records, uint32_t rejected_capacity,
+    uint32_t *in_out_rejected_count);
 
 #ifdef __cplusplus
 }

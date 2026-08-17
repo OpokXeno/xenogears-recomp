@@ -310,8 +310,13 @@ static int test_culls_capacity_and_capture_gate(void) {
                                       &effects) == XG_WORLD_ENTITY_SHADOWS_OK);
   CHECK(records[0].cull == XG_WORLD_ENTITY_SHADOW_CULL_RTPT_FLAGS);
   CHECK((int32_t)records[0].rtpt_flags < 0);
-  CHECK(records[0].rtps_flags == 0u);
-  CHECK(records[0].vertices[3].x == 0);
+  CHECK(!records[0].accepted);
+  CHECK(records[0].source_index == 0u);
+  CHECK(records[0].primitive.triangle_count == 2u);
+  CHECK(records[0].primitive.material.clut_x == 288u);
+  CHECK(!records[0].primitive.triangles[0].vertices[0].projective_position);
+  CHECK(records[0].primitive.triangles[0].vertices[0].x ==
+        (int32_t)records[0].vertices[0].x * 65536);
   CHECK(records[0].packet_offset == 0u);
   CHECK(records[0].packet_word_write_mask == 0u);
   CHECK(!records[0].ordering_table_written);

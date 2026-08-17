@@ -133,6 +133,7 @@ typedef struct XgWorldDecorationsNativePreparation {
     uint32_t ot_base;
     uint32_t helper_count;
     uint32_t record_count;
+    uint32_t temporal_record_count;
     uint32_t final_shared_count;
     uint32_t shared_count_write_mask;
     uint32_t continuation;
@@ -175,6 +176,13 @@ XgWorldDecorationsNativeResult xg_world_decorations_native_prepare(
     const XgWorldDecorationsNativeRequest *request,
     const XgWorldDecorationsAuthenticatedReader *reader,
     XgWorldDecorationsRecord *records, uint32_t record_capacity,
+    XgWorldDecorationsNativePreparation *out_preparation);
+
+XgWorldDecorationsNativeResult xg_world_decorations_native_prepare_temporal(
+    const XgWorldDecorationsNativeRequest *request,
+    const XgWorldDecorationsAuthenticatedReader *reader,
+    XgWorldDecorationsRecord *records, uint32_t record_capacity,
+    XgWorldDecorationsRecord *temporal_records, uint32_t temporal_capacity,
     XgWorldDecorationsNativePreparation *out_preparation);
 
 #ifdef __cplusplus

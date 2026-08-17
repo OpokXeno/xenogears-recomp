@@ -275,30 +275,8 @@ XgWorldEntityShadowsResult xg_world_entity_shadows_build(
     candidate.rtpt_flags = projected.rtpt_flags;
     memcpy(candidate.uv, shadow_uv, sizeof(candidate.uv));
     memcpy(candidate.vertices, projected.vertices,
-           sizeof(candidate.vertices[0]) * 3u);
-    if ((int32_t)projected.rtpt_flags < 0) {
-      candidate.cull = XG_WORLD_ENTITY_SHADOW_CULL_RTPT_FLAGS;
-      records[index] = candidate;
-      continue;
-    }
-
+           sizeof(candidate.vertices));
     candidate.rtps_flags = projected.rtps_flags;
-    candidate.vertices[3] = projected.vertices[3];
-    candidate.packet_word_write_mask =
-        XG_WORLD_ENTITY_SHADOW_PACKET_GEOMETRY_WRITE_MASK;
-    minimum_depth = projected.vertices[0].z;
-    for (vertex = 1u; vertex < XG_HOST_3D_VERTEX_COUNT; ++vertex) {
-      if (projected.vertices[vertex].z < minimum_depth)
-        minimum_depth = projected.vertices[vertex].z;
-    }
-    candidate.minimum_depth = minimum_depth;
-    if (minimum_depth >= 0x1000u) {
-      candidate.cull = XG_WORLD_ENTITY_SHADOW_CULL_MINIMUM_DEPTH;
-      records[index] = candidate;
-      continue;
-    }
-    candidate.ordering_bucket = minimum_depth >> 4u;
-
     quad.material = source->material;
     for (vertex = 0u; vertex < XG_HOST_3D_VERTEX_COUNT; ++vertex) {
       quad.vertices[vertex] = (XgRenderQuadSourceVertex){
@@ -314,6 +292,27 @@ XgWorldEntityShadowsResult xg_world_entity_shadows_build(
     if (xg_render_quad_build_primitive(&quad, &candidate.primitive) !=
         XG_RENDER_QUAD_BUILDER_OK)
       return XG_WORLD_ENTITY_SHADOWS_BUILD_FAILED;
+    if ((int32_t)projected.rtpt_flags < 0) {
+      candidate.cull = XG_WORLD_ENTITY_SHADOW_CULL_RTPT_FLAGS;
+      records[index] = candidate;
+      continue;
+    }
+
+    candidate.packet_word_write_mask =
+        XG_WORLD_ENTITY_SHADOW_PACKET_GEOMETRY_WRITE_MASK;
+    minimum_depth = projected.vertices[0].z;
+    for (vertex = 1u; vertex < XG_HOST_3D_VERTEX_COUNT; ++vertex) {
+      if (projected.vertices[vertex].z < minimum_depth)
+        minimum_depth = projected.vertices[vertex].z;
+    }
+    candidate.minimum_depth = minimum_depth;
+    if (minimum_depth >= 0x1000u) {
+      candidate.cull = XG_WORLD_ENTITY_SHADOW_CULL_MINIMUM_DEPTH;
+      records[index] = candidate;
+      continue;
+    }
+    candidate.ordering_bucket = minimum_depth >> 4u;
+
     candidate.accepted = true;
     candidate.ordering_table_written = true;
     candidate.packet_word_write_mask =

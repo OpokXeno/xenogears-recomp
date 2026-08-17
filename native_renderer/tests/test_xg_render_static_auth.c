@@ -172,6 +172,12 @@ static uint32_t producer_family_xy(int16_t x, int16_t y);
 #define PRODUCER_FAMILY_OT_BASE UINT32_C(0x80018000)
 static bool presentation_gate_succeeds = true;
 static bool presentation_gate_saw_closed_state;
+static GpuRenderInterpolationVertexAnchor recorded_anchors[8];
+static size_t recorded_anchor_count;
+static size_t recorded_anchor_calls;
+static GpuRenderSemantic temporal_candidates[64];
+static GpuRenderTemporalCullPolicy temporal_policies[64];
+static size_t temporal_candidate_count;
 
 static bool test_presentation_gate(
     GuestRenderRenderMode requested_mode,
@@ -222,8 +228,22 @@ GpuRenderTransactionStatus gr_draw_semantic(
 
 GpuRenderTransactionStatus gr_record_interpolation_anchors(
         const GpuRenderInterpolationVertexAnchor *anchors, size_t count) {
-    (void)anchors;
-    (void)count;
+    size_t index;
+
+    ++recorded_anchor_calls;
+    for (index = 0u; index < count && recorded_anchor_count < 8u; ++index)
+        recorded_anchors[recorded_anchor_count++] = anchors[index];
+    return GPU_RENDER_TRANSACTION_OK;
+}
+
+GpuRenderTransactionStatus gr_draw_semantic_temporal_candidate(
+        const GpuRenderSemantic *semantic,
+        const GpuRenderTemporalCullPolicy *policy) {
+    if (temporal_candidate_count < 64u) {
+        temporal_candidates[temporal_candidate_count] = *semantic;
+        temporal_policies[temporal_candidate_count] = *policy;
+    }
+    ++temporal_candidate_count;
     return GPU_RENDER_TRANSACTION_OK;
 }
 
@@ -3852,6 +3872,7 @@ static int reset_source_mode(GuestRenderRenderMode mode) {
     psx_xg_render_auth_runtime_test_reset();
     presentation_gate_succeeds = true;
     presentation_gate_saw_closed_state = false;
+    temporal_candidate_count = 0u;
     return psx_xg_render_auth_configure(GUEST_RENDER_TIMING_NATIVE_59_94, mode,
                                         test_presentation_gate, NULL);
 }
@@ -4123,6 +4144,32 @@ static int test_native_particle_sidecar_and_cutover(void) {
     CHECK(particle_ot_word == UINT32_C(0xaa016078));
     CHECK(psx_xg_render_auth_particle_test_primitive(&particle_primitive));
     CHECK(particle_primitive.triangles[0].vertices[0].x == 189 * 65536);
+
+    particle_store_u32(&particle_memory[0x10], 0u);
+    particle_buffer_index = 0u;
+    particle_composition_selector = 0u;
+    cpu.gpr[7] = 1u;
+    CHECK(psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x800a9b54), UINT32_C(0x27bdff38)));
+    CHECK(temporal_candidate_count == 1u);
+    CHECK(temporal_policies[0].flags == GPU_RENDER_TEMPORAL_CULL_DEPTH);
+    CHECK(temporal_policies[0].depth_min_inclusive == 1);
+    CHECK(temporal_policies[0].depth_max_exclusive == 4096);
+    CHECK(temporal_policies[0].depth_mode ==
+          GPU_RENDER_TEMPORAL_DEPTH_MAXIMUM);
+    CHECK(temporal_policies[0].ordering_depth_shift == 0u);
+    CHECK(temporal_candidates[0].interpolation_identity.producer_id ==
+          PARTICLE_BASE);
+    CHECK(temporal_candidates[0].interpolation_identity.primitive_id == 0u);
+    CHECK(!temporal_candidates[0].triangles[0].vertices[0]
+               .projective_position);
+    CHECK(temporal_candidates[0].triangles[0].vertices[0]
+              .projective_view_z == -16);
+    CHECK(temporal_candidates[0].triangles[0].vertices[0]
+              .interpolation_vertex_id == 0u);
+    CHECK(temporal_candidates[0].triangles[1].vertices[2]
+              .interpolation_vertex_id == 3u);
+    CHECK(particle_load_u32(&particle_memory[0x50]) == UINT32_C(0x09123456));
     psx_xg_render_auth_scene_boundary();
     return 1;
 }
@@ -5556,6 +5603,37 @@ static int test_native_projected_effect_is_resident_and_packet_free(void) {
     return 1;
 }
 
+static int test_native_projected_screen_reject_submits_temporal_strips(void) {
+    CPUState cpu;
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    CHECK(psx_xg_render_auth_configure_native_view(false, 4u, 3u, 320u, 240u));
+    configure_projected_memory();
+    CHECK(materialize_projected_source(&cpu, PROJECTED_OBJECT));
+    projected_store_half(PROJECTED_OBJECT + 0x33eu, 2000u);
+    configure_projected_cpu_at_cutover(&cpu);
+
+    CHECK(psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x800273c4), UINT32_C(0x27bdff80)));
+    CHECK(temporal_candidate_count > 0u);
+    CHECK(temporal_policies[0].flags == GPU_RENDER_TEMPORAL_CULL_SCREEN);
+    CHECK(temporal_policies[0].screen_left == 0);
+    CHECK(temporal_policies[0].screen_right_exclusive == 320 * 65536);
+    CHECK(temporal_policies[0].screen_bottom_exclusive == 240 * 65536);
+    CHECK(temporal_candidates[0].interpolation_identity.producer_id ==
+          KUSEG_ADDRESS(PROJECTED_OBJECT));
+    CHECK(temporal_candidates[0].interpolation_identity.primitive_id == 0u);
+    CHECK(!temporal_candidates[0].triangles[0].vertices[0]
+               .projective_position);
+    CHECK(temporal_candidates[0].triangles[0].vertices[0]
+              .interpolation_vertex_id == 0u);
+    CHECK(temporal_candidates[0].triangles[1].vertices[2]
+              .interpolation_vertex_id == 3u);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
 static int test_native_view_preserves_guest_projected_background_path(void) {
     CPUState cpu;
     XgRenderIrNativePrimitive primitives[11];
@@ -5661,6 +5739,25 @@ static int test_native_projected_effect_resolves_field_ot_bucket(void) {
     CHECK(guest_render_transaction_pending_snapshot(&pending) ==
           GUEST_RENDER_TRANSACTION_OK);
     CHECK(pending.binding_count == 0u);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_native_projected_field_reject_queues_temporal_strips(void) {
+    CPUState cpu;
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    configure_projected_memory();
+    CHECK(materialize_projected_source(&cpu, PROJECTED_OBJECT));
+    projected_store_half(PROJECTED_OBJECT + 0x33eu, 2000u);
+    projected_use_field_ot = true;
+    configure_projected_cpu_at_cutover(&cpu);
+
+    CHECK(psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x800273c4), UINT32_C(0x27bdff80)));
+    CHECK(temporal_candidate_count == 0u);
+    CHECK(psx_xg_render_auth_runtime_test_pre_scene_count() > 1u);
     psx_xg_render_auth_scene_boundary();
     return 1;
 }
@@ -5859,6 +5956,46 @@ static int test_native_world_effects_fails_before_staging_or_writes(void) {
     CHECK(guest_render_transaction_pending_snapshot(&pending) ==
           GUEST_RENDER_TRANSACTION_OK);
     CHECK(pending.binding_count == 0u);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_native_world_effects_screen_reject_is_temporal_only(void) {
+    const uint32_t particles = UINT32_C(0x80060000);
+    CPUState cpu;
+    GuestRenderTransactionPendingSnapshot pending = { 0 };
+    PsxXgRenderWorldEffectsShadowSnapshot effects = { 0 };
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    configure_world_effects_cpu(&cpu);
+    world_store_word(particles + 8u, 400u << 12u);
+
+    CHECK(psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80089c78), UINT32_C(0x27bdffb0)));
+    CHECK(cpu.pc == UINT32_C(0x80071aa8));
+    CHECK(world_effects_packet_write_count == 0u);
+    CHECK(world_ot_write_count == 0u);
+    CHECK(temporal_candidate_count == 1u);
+    CHECK(temporal_policies[0].flags ==
+          (GPU_RENDER_TEMPORAL_CULL_SCREEN |
+           GPU_RENDER_TEMPORAL_CULL_DEPTH));
+    CHECK(temporal_policies[0].depth_max_exclusive == 0xc00);
+    CHECK(temporal_policies[0].depth_mode ==
+          GPU_RENDER_TEMPORAL_DEPTH_MAXIMUM);
+    CHECK(temporal_candidates[0].interpolation_identity.producer_id ==
+          UINT32_C(0x80089c78));
+    CHECK(temporal_candidates[0].interpolation_identity.primitive_id == 0u);
+    CHECK(!temporal_candidates[0].triangles[0].vertices[0]
+               .projective_position);
+    CHECK(temporal_candidates[0].triangles[0].vertices[0]
+              .projective_view_z == 512);
+    CHECK(guest_render_transaction_pending_snapshot(&pending) ==
+          GUEST_RENDER_TRANSACTION_OK);
+    CHECK(pending.binding_count == 0u);
+    psx_xg_render_auth_world_effects_shadow_snapshot(&effects);
+    CHECK(effects.native_cutover_count == 1u);
+    CHECK(effects.native_primitive_count == 0u);
     psx_xg_render_auth_scene_boundary();
     return 1;
 }
@@ -6793,6 +6930,12 @@ static uint32_t configure_all_family_world_models_native_cpu(CPUState *cpu) {
     CHECK(!psx_xg_render_auth_native_ft4_bypass(
         cpu, UINT32_C(0x8002cb4c), UINT32_C(0x03e00008)));
 
+    cpu->gpr[4] = REINITIALIZED_PACKETS;
+    cpu->gpr[5] = PACKETS;
+    cpu->gpr[6] = packet_capacity;
+    cpu->gpr[31] = UINT32_C(0x80084778);
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        cpu, UINT32_C(0x8003f968), UINT32_C(0x1080000a)));
     for (offset = 0u; offset < packet_capacity; offset += 4u)
         world_native_put_u32(
             REINITIALIZED_PACKETS + offset,
@@ -6806,7 +6949,7 @@ static uint32_t configure_all_family_world_models_native_cpu(CPUState *cpu) {
     cpu->gpr[5] = PACKETS + packet_capacity;
     cpu->gpr[6] = 0u;
     CHECK(!psx_xg_render_auth_native_ft4_bypass(
-        cpu, UINT32_C(0x80084778), UINT32_C(0x26100010)));
+        cpu, UINT32_C(0x8003f994), UINT32_C(0x03e00008)));
     packet = REINITIALIZED_PACKETS + packet_capacity;
     cpu->gpr[31] = XG_WORLD_MODELS_PRODUCER_CONTINUATION_0;
     cpu->gte_ctrl[24] = 160u << 16u;
@@ -6827,6 +6970,8 @@ static int test_world_models_all_family_sidecar_cutover(void) {
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
+    recorded_anchor_count = 0u;
+    recorded_anchor_calls = 0u;
     final_packet = configure_all_family_world_models_native_cpu(&cpu);
     CHECK(final_packet > UINT32_C(0x80014240));
     CHECK(!psx_xg_render_auth_native_ft4_bypass(
@@ -6838,6 +6983,16 @@ static int test_world_models_all_family_sidecar_cutover(void) {
     CHECK(!psx_xg_render_auth_native_ft4_bypass(
         &cpu, UINT32_C(0x80084cd0), UINT32_C(0x8fbf0038)));
     CHECK(world_native_write_count != 0u);
+    CHECK(recorded_anchor_calls == 1u);
+    CHECK(recorded_anchor_count == XG_HOST_3D_VERTEX_COUNT);
+    for (uint32_t vertex = 0u; vertex < XG_HOST_3D_VERTEX_COUNT; ++vertex) {
+        CHECK(recorded_anchors[vertex].producer_id ==
+              (MODEL & UINT32_C(0x1fffffff)));
+        CHECK(recorded_anchors[vertex].vertex.interpolation_group_id ==
+              UINT32_C(0x64012100));
+        CHECK(recorded_anchors[vertex].vertex.interpolation_vertex_id ==
+              vertex);
+    }
     CHECK(world_native_read_word(
               XG_WORLD_MODELS_RESIDENT_VERTEX_TOTAL_GLOBAL) ==
           XG_HOST_3D_VERTEX_COUNT);
@@ -6849,6 +7004,10 @@ static int test_world_models_all_family_sidecar_cutover(void) {
     CHECK(models.native_cutover_count == 1u);
     CHECK(models.native_primitive_count ==
           XG_WORLD_MODELS_PRIMITIVE_FAMILY_COUNT);
+    CHECK(models.native_failure_count == 0u);
+    CHECK(models.first_failure_stage == PSX_XG_RENDER_WORLD_NATIVE_FAILURE_NONE);
+    CHECK(models.last_failure_stage == PSX_XG_RENDER_WORLD_NATIVE_FAILURE_NONE);
+    CHECK(models.last_anchor_count == XG_HOST_3D_VERTEX_COUNT);
     psx_xg_render_auth_before_gpu_submission();
     CHECK(guest_render_bridge_present(&completed) == GUEST_RENDER_OK);
     CHECK(completed.binding_count == pending.binding_count);
@@ -9288,14 +9447,17 @@ int main(void) {
     ok &= test_native_zoom_projects_without_packet_sources();
     ok &= test_native_zoom_requires_authenticated_initializer();
     ok &= test_native_projected_effect_is_resident_and_packet_free();
+    ok &= test_native_projected_screen_reject_submits_temporal_strips();
     ok &= test_native_view_preserves_guest_projected_background_path();
     ok &= test_native_projected_effect_fails_closed_without_source_or_tag();
     ok &= test_native_projected_effect_resolves_field_ot_bucket();
+    ok &= test_native_projected_field_reject_queues_temporal_strips();
     ok &= test_projected_source_map_evicts_oldest_without_blocking();
     ok &= test_native_world_sky_cutover_is_packet_free();
     ok &= test_native_world_sky_fails_closed_and_aborts_on_mutation();
     ok &= test_native_world_effects_cutover_is_atomic_and_value_only();
     ok &= test_native_world_effects_fails_before_staging_or_writes();
+    ok &= test_native_world_effects_screen_reject_is_temporal_only();
     ok &= test_native_world_effects_stages_full_capacity();
     ok &= test_native_world_horizon_cutover_is_atomic();
     ok &= test_resident_line_f2_stages_producer_semantics();

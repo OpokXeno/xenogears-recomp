@@ -563,6 +563,9 @@ XgWorldActorSpritesNativeResult xg_world_actor_sprites_native_prepare(
     actor_result = xg_world_actor_sprites_adapt_actor(&source, 0u, &adapted);
     if (actor_result != XG_WORLD_ACTOR_SPRITES_OK)
         return build_result(actor_result);
+    /* This authenticated seam is after the resident actor-level depth gate.
+     * An actor rejected there never reaches this preparation boundary, so it
+     * cannot supply a primitive-level temporal candidate here. */
     if (!adapted.accepted ||
         memcmp(adapted.body_projection.rotation,
                actor.resolved_sprite_matrix.rotation,

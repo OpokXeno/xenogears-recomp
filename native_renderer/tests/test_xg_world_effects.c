@@ -115,7 +115,9 @@ static int test_capture_and_build_single_effect(void) {
     TestReader reader;
     XgWorldEffectsCapture capture;
     XgWorldEffectsRecord records[XG_WORLD_EFFECTS_SOURCE_CAPACITY];
+    XgWorldEffectsRecord rejected[1];
     uint32_t count = 0u;
+    uint32_t rejected_count = 0u;
     const XgWorldEffectsCaptureRequest request = {
         .authentication_generation = 7u,
         .caller_return = UINT32_C(0x80071aa8),
@@ -164,10 +166,17 @@ static int test_capture_and_build_single_effect(void) {
 
     capture.source.particles[0].position[0] = 400 << 12;
     capture.source.screen_x_cull_margin = 0;
-    CHECK(xg_world_effects_build(
+    CHECK(xg_world_effects_build_with_temporal(
               &capture.source, records, XG_WORLD_EFFECTS_SOURCE_CAPACITY,
-              &count) == XG_WORLD_EFFECTS_OK);
+              &count, rejected, 1u, &rejected_count) == XG_WORLD_EFFECTS_OK);
     CHECK(count == 0u);
+    CHECK(rejected_count == 1u);
+    CHECK(!rejected[0].accepted);
+    CHECK(rejected[0].cull == XG_WORLD_EFFECTS_CULL_SCREEN);
+    CHECK(rejected[0].source_index == 0u);
+    CHECK(rejected[0].primitive.triangle_count == 2u);
+    CHECK(!rejected[0].primitive.triangles[0].vertices[0]
+               .projective_position);
     capture.source.screen_x_cull_margin = 53;
     CHECK(xg_world_effects_build(
               &capture.source, records, XG_WORLD_EFFECTS_SOURCE_CAPACITY,

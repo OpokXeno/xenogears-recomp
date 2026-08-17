@@ -208,8 +208,10 @@ static int test_capture_build_ft4_and_culls(void) {
     XgWorldDecorationsCapture capture;
     XgWorldDecorationsRecord records[XG_WORLD_DECORATIONS_PACKET_CAPACITY] = {
         0};
+    XgWorldDecorationsRecord rejected[5] = {0};
     XgWorldDecorationsRecord *record;
     uint32_t count = 7u;
+    uint32_t rejected_count = 0u;
 
     configure_reader(&reader, 5u);
     store_position(&reader, 1u, 2000, 0, -2048);
@@ -245,10 +247,19 @@ static int test_capture_build_ft4_and_culls(void) {
     CHECK(capture.source.material.texture_page_y == 1u);
     CHECK(!capture.source.material.semi_transparent);
 
-    CHECK(xg_world_decorations_build(&capture.source, records,
-                                     XG_WORLD_DECORATIONS_PACKET_CAPACITY,
-                                     &count) == XG_WORLD_DECORATIONS_OK);
+    CHECK(xg_world_decorations_build_with_temporal(
+              &capture.source, records,
+              XG_WORLD_DECORATIONS_PACKET_CAPACITY, &count,
+              rejected, 5u, &rejected_count) == XG_WORLD_DECORATIONS_OK);
     CHECK(count == 8u);
+    CHECK(rejected_count == 4u);
+    CHECK(rejected[0].source_index == 1u);
+    CHECK(rejected[0].semantic_id == 1u);
+    CHECK(rejected[0].cull == XG_WORLD_DECORATIONS_CULL_SCREEN);
+    CHECK(rejected[0].primitive.triangle_count == 2u);
+    CHECK(!rejected[0].accepted);
+    CHECK(rejected[2].source_index == 3u);
+    CHECK(rejected[2].cull == XG_WORLD_DECORATIONS_CULL_DEPTH);
     record = &records[7];
     CHECK(record->source_index == 0u);
     CHECK(record->packet_index == 7u);
@@ -429,6 +440,22 @@ static int test_native_outer_preparation_contract(void) {
     CHECK(preparation.shared_count_write_mask == UINT32_C(0x0000ffff));
     CHECK(preparation.authenticated_read_count == 62u);
     CHECK(preparation.authenticated_read_bytes == 160u);
+
+    configure_reader(&context, 1u);
+    configure_native_outer(&context, false);
+    store_u16(&context, UINT32_C(0x8009d618) + 2u, 0u);
+    store_u16(&context, UINT32_C(0x8009d570) + 2u, 3u);
+    store_u32(&context, TEST_SOURCE_DESCRIPTORS + 3u * 8u,
+              TEST_POSITIONS);
+    store_u32(&context, TEST_SOURCE_DESCRIPTORS + 3u * 8u + 4u, 1u);
+    CHECK(xg_world_decorations_native_prepare(
+              &request, &reader, records,
+              XG_WORLD_DECORATIONS_PACKET_CAPACITY, &preparation) ==
+          XG_WORLD_DECORATIONS_NATIVE_OK);
+    CHECK(preparation.helper_count == 1u);
+    CHECK(preparation.record_count == 1u);
+    CHECK(records[0].semantic_id ==
+          XG_WORLD_DECORATIONS_POSITION_CAPACITY);
     return 1;
 }
 

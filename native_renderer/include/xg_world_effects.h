@@ -24,6 +24,13 @@ typedef enum XgWorldEffectsResult {
     XG_WORLD_EFFECTS_BUILD_FAILED,
 } XgWorldEffectsResult;
 
+typedef enum XgWorldEffectsCull {
+    XG_WORLD_EFFECTS_CULL_NONE = 0,
+    XG_WORLD_EFFECTS_CULL_PROJECTIVE,
+    XG_WORLD_EFFECTS_CULL_SCREEN,
+    XG_WORLD_EFFECTS_CULL_DEPTH,
+} XgWorldEffectsCull;
+
 typedef struct XgWorldEffectsParticleSource {
     int32_t position[3];
     int16_t angle;
@@ -69,6 +76,8 @@ typedef struct XgWorldEffectsRecord {
     uint16_t clut;
     uint32_t material_word;
     uint32_t source_index;
+    XgWorldEffectsCull cull;
+    bool accepted;
 } XgWorldEffectsRecord;
 
 XgWorldEffectsResult xg_world_effects_build(
@@ -76,6 +85,15 @@ XgWorldEffectsResult xg_world_effects_build(
     XgWorldEffectsRecord *records,
     uint32_t record_capacity,
     uint32_t *out_record_count);
+
+XgWorldEffectsResult xg_world_effects_build_with_temporal(
+    const XgWorldEffectsSource *source,
+    XgWorldEffectsRecord *records,
+    uint32_t record_capacity,
+    uint32_t *out_record_count,
+    XgWorldEffectsRecord *rejected_records,
+    uint32_t rejected_capacity,
+    uint32_t *out_rejected_count);
 
 #ifdef __cplusplus
 }

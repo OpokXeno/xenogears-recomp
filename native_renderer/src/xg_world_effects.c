@@ -63,18 +63,27 @@ static bool material_template_is_valid(
            material->semi_transparent;
 }
 
-XgWorldEffectsResult xg_world_effects_build(
+XgWorldEffectsResult xg_world_effects_build_with_temporal(
     const XgWorldEffectsSource *source,
     XgWorldEffectsRecord *records,
     uint32_t record_capacity,
-    uint32_t *out_record_count) {
+    uint32_t *out_record_count,
+    XgWorldEffectsRecord *rejected_records,
+    uint32_t rejected_capacity,
+    uint32_t *out_rejected_count) {
     uint32_t source_index;
     uint32_t record_count = 0u;
+    uint32_t rejected_count = 0u;
 
-    if (source == NULL || records == NULL || out_record_count == NULL)
+    if (source == NULL || records == NULL || out_record_count == NULL ||
+        (rejected_records == NULL) != (out_rejected_count == NULL))
         return XG_WORLD_EFFECTS_INVALID_ARGUMENT;
     *out_record_count = 0u;
+    if (out_rejected_count != NULL) *out_rejected_count = 0u;
     memset(records, 0, sizeof(*records) * record_capacity);
+    if (rejected_records != NULL)
+        memset(rejected_records, 0,
+               sizeof(*rejected_records) * rejected_capacity);
     if (record_capacity < XG_WORLD_EFFECTS_SOURCE_CAPACITY ||
         source->screen_x_cull_margin < 0 ||
         source->screen_x_cull_margin > INT32_MAX - 320 ||
@@ -161,12 +170,6 @@ XgWorldEffectsResult xg_world_effects_build(
                 x_visible = true;
             if (projected.vertices[vertex].y < 216) y_visible = true;
         }
-        if ((int32_t)projected.projection_flags < 0 || !x_visible ||
-            !y_visible || projected.vertices[3].z >= 0xc00u)
-            continue;
-        if (record_count >= record_capacity)
-            return XG_WORLD_EFFECTS_CAPACITY_EXCEEDED;
-
         quad.material = source->material;
         quad.material.tpage = particle->tpage;
         quad.material.texture_page_x = particle->tpage & 0x0fu;
@@ -193,6 +196,16 @@ XgWorldEffectsResult xg_world_effects_build(
         if (xg_render_quad_build_primitive(&quad, &candidate.primitive) !=
             XG_RENDER_QUAD_BUILDER_OK)
             return XG_WORLD_EFFECTS_BUILD_FAILED;
+        for (uint32_t triangle = 0u;
+             triangle < candidate.primitive.triangle_count; ++triangle) {
+            for (uint32_t corner = 0u; corner < 3u; ++corner) {
+                XgRenderIrVertex *target =
+                    &candidate.primitive.triangles[triangle].vertices[corner];
+
+                target->temporal_depth = projected.vertices[3].z;
+                target->temporal_depth_valid = true;
+            }
+        }
         memcpy(candidate.vertices, projected.vertices,
                sizeof(candidate.vertices));
         candidate.projection_flags = projected.projection_flags;
@@ -204,9 +217,35 @@ XgWorldEffectsResult xg_world_effects_build(
             ((uint32_t)particle->green << 8u) |
             ((uint32_t)particle->blue << 16u) | UINT32_C(0x2e000000);
         candidate.source_index = source_index;
-        records[record_count++] = candidate;
+        if ((int32_t)projected.projection_flags < 0)
+            candidate.cull = XG_WORLD_EFFECTS_CULL_PROJECTIVE;
+        else if (!x_visible || !y_visible)
+            candidate.cull = XG_WORLD_EFFECTS_CULL_SCREEN;
+        else if (projected.vertices[3].z >= 0xc00u)
+            candidate.cull = XG_WORLD_EFFECTS_CULL_DEPTH;
+        else
+            candidate.accepted = true;
+        if (candidate.accepted) {
+            if (record_count >= record_capacity)
+                return XG_WORLD_EFFECTS_CAPACITY_EXCEEDED;
+            records[record_count++] = candidate;
+        } else if (rejected_records != NULL) {
+            if (rejected_count >= rejected_capacity)
+                return XG_WORLD_EFFECTS_CAPACITY_EXCEEDED;
+            rejected_records[rejected_count++] = candidate;
+        }
     }
 
     *out_record_count = record_count;
+    if (out_rejected_count != NULL) *out_rejected_count = rejected_count;
     return XG_WORLD_EFFECTS_OK;
+}
+
+XgWorldEffectsResult xg_world_effects_build(
+    const XgWorldEffectsSource *source,
+    XgWorldEffectsRecord *records,
+    uint32_t record_capacity,
+    uint32_t *out_record_count) {
+    return xg_world_effects_build_with_temporal(
+        source, records, record_capacity, out_record_count, NULL, 0u, NULL);
 }

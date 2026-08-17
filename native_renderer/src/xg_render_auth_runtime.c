@@ -166,6 +166,8 @@ enum {
     XG_RENDER_WORLD_MODEL_NODE_CAPACITY = 1024u,
     XG_RENDER_WORLD_MODEL_DISPATCH_CAPACITY = 256u,
     XG_RENDER_WORLD_MODEL_PRIMITIVE_CAPACITY = 4096u,
+    XG_RENDER_WORLD_MODEL_ANCHOR_CAPACITY =
+        XG_RENDER_WORLD_MODEL_PRIMITIVE_CAPACITY * 4u,
     XG_RENDER_WORLD_MODEL_TEMPLATE_CAPACITY = 16384u,
     XG_RENDER_WORLD_MODEL_COLOR_WRITE_CAPACITY = 16384u,
     XG_RENDER_CANONICAL_ENTRY_INSTRUCTION = UINT32_C(0x27bdff18),
@@ -184,6 +186,55 @@ enum {
     XG_RENDER_MODEL_PRECONDITION_OT_BASE = 1u << 7,
 };
 
+enum {
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_PRECONDITION = 1u,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_CALLER_RETURN,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_CONTRACT,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_GLOBAL_RANGE,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_NODE_RANGE,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_CULLED_DISPATCH,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_DISPATCH_RANGE,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_SOURCE_IDENTITY,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_MISSING,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_INACTIVE,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_OWNER,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_EPOCH,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_MODEL,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_PACKET_BASE,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_ORDINAL,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_ATTRIBUTE,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_FAMILY,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_WORD_COUNT,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_OUTPUT_PACKET,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_OUTPUT_WORD_COUNT,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_OUTPUT_COUNTER,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_PACKET_RANGE,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_OUTPUT_MASK,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_OUTPUT_ACCEPTED,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_OUTPUT_TAG,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_PACKET_WORD,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_OT_RANGE,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_PRIMITIVE_TOTAL,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_COMMIT_OVERFLOW,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_COMMIT_TOTAL,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_NATIVE_RESULT_BASE = 0x100u,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_BUILD_RESULT_BASE = 0x200u,
+    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_READ_BASE = 0x300u,
+};
+
+enum {
+    XG_RENDER_WORLD_MODEL_TEMPLATE_READ_INVALID_ARGUMENT = 1u,
+    XG_RENDER_WORLD_MODEL_TEMPLATE_READ_MISSING,
+    XG_RENDER_WORLD_MODEL_TEMPLATE_READ_INACTIVE,
+    XG_RENDER_WORLD_MODEL_TEMPLATE_READ_EPOCH,
+    XG_RENDER_WORLD_MODEL_TEMPLATE_READ_OWNER,
+    XG_RENDER_WORLD_MODEL_TEMPLATE_READ_MODEL,
+    XG_RENDER_WORLD_MODEL_TEMPLATE_READ_PACKET_BASE,
+    XG_RENDER_WORLD_MODEL_TEMPLATE_READ_FAMILY,
+    XG_RENDER_WORLD_MODEL_TEMPLATE_READ_WORD_COUNT,
+    XG_RENDER_WORLD_MODEL_TEMPLATE_READ_ATTRIBUTE,
+};
+
 typedef struct XgRenderPreScenePrimitive {
     XgRenderIrNativePrimitive primitive;
     uint32_t packet_address;
@@ -193,6 +244,8 @@ typedef struct XgRenderPreScenePrimitive {
     uint32_t interpolation_primitive_id;
     uint8_t payload_word_count;
     bool interpolation_identity_valid;
+    bool temporal_only;
+    GpuRenderTemporalCullPolicy temporal_cull;
 } XgRenderPreScenePrimitive;
 
 typedef struct XgRenderPreSceneState {
@@ -523,6 +576,20 @@ typedef struct XgRenderWorldModelInitializerContext {
     bool active;
 } XgRenderWorldModelInitializerContext;
 
+typedef struct XgRenderWorldModelPacketCopyContext {
+    CPUState *owner_cpu;
+    uint32_t destination;
+    uint32_t source;
+    uint32_t size;
+    bool active;
+} XgRenderWorldModelPacketCopyContext;
+
+typedef struct XgRenderWorldModelPacketCopyRange {
+    uint32_t destination;
+    uint32_t source;
+    uint32_t size;
+} XgRenderWorldModelPacketCopyRange;
+
 typedef struct XgRenderWorldModelsNativeState {
     XgWorldModelsRecordSource
         record_sources[XG_RENDER_WORLD_MODEL_RECORD_CAPACITY];
@@ -539,6 +606,9 @@ typedef struct XgRenderWorldModelsNativeState {
         primitives[XG_RENDER_WORLD_MODEL_PRIMITIVE_CAPACITY];
     XgWorldModelsNativePrimitiveOutput
         outputs[XG_RENDER_WORLD_MODEL_PRIMITIVE_CAPACITY];
+    GpuRenderInterpolationVertexAnchor
+        anchors[XG_RENDER_WORLD_MODEL_ANCHOR_CAPACITY];
+    uint32_t anchor_seen[UINT16_MAX / 32u + 1u];
     XgRenderWorldModelTemplate
         *templates[XG_RENDER_WORLD_MODEL_PRIMITIVE_CAPACITY];
     XgWorldModelsNativePreparation preparation;
@@ -561,7 +631,10 @@ typedef struct XgRenderWorldTerrainWaterNativeState {
         int32_t native_y;
         bool seen;
     } mesh_vertices[145u * 145u];
+    XgWorldTerrainWaterSource source;
     XgWorldTerrainWaterRecord records[XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY];
+    XgWorldTerrainWaterRecord
+        unculled_records[XG_WORLD_TERRAIN_WATER_UNCULLED_CAPACITY];
     XgWorldTerrainWaterAnchor anchors[XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY];
     uint32_t packet_uv2_high[XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY];
     uint32_t scratch_words[XG_WORLD_TERRAIN_WATER_NATIVE_SCRATCH_WORD_COUNT];
@@ -579,6 +652,8 @@ typedef struct XgRenderWorldEntityShadowsNativeState {
 
 typedef struct XgRenderWorldDecorationsNativeState {
     XgWorldDecorationsRecord records[XG_WORLD_DECORATIONS_PACKET_CAPACITY];
+    XgWorldDecorationsRecord
+        temporal_records[XG_WORLD_DECORATIONS_TEMPORAL_CAPACITY];
     uint32_t ot_heads[XG_WORLD_DECORATIONS_NATIVE_OT_BUCKET_COUNT];
     uint32_t simulated_ot_heads[XG_WORLD_DECORATIONS_NATIVE_OT_BUCKET_COUNT];
     bool ot_touched[XG_WORLD_DECORATIONS_NATIVE_OT_BUCKET_COUNT];
@@ -586,6 +661,7 @@ typedef struct XgRenderWorldDecorationsNativeState {
 
 typedef struct XgRenderWorldCloudsNativePending {
     XgWorldCloudRecord records[XG_WORLD_CLOUD_PACKET_CAPACITY];
+    XgWorldCloudRecord temporal_records[XG_WORLD_CLOUD_TEMPORAL_CAPACITY];
     XgWorldCloudPosition stepped_positions[XG_WORLD_CLOUD_COUNT];
     uint32_t expected_packets[XG_WORLD_CLOUD_PACKET_CAPACITY]
                              [XG_WORLD_CLOUDS_SHADOW_PACKET_WORD_COUNT];
@@ -596,6 +672,7 @@ typedef struct XgRenderWorldCloudsNativePending {
     uint32_t packet_base;
     uint32_t ot_base;
     uint32_t record_count;
+    uint32_t temporal_record_count;
     uint32_t expected_attempts;
     CPUState *owner_cpu;
     uint32_t depth;
@@ -855,11 +932,17 @@ static XgRenderWorldModelColorWrite world_model_color_writes[
 static XgRenderWorldModelInitializerReceipt world_model_initializer_receipts[
     XG_RENDER_WORLD_MODEL_TEMPLATE_CAPACITY];
 static XgRenderWorldModelInitializerContext world_model_initializer;
+static XgRenderWorldModelPacketCopyContext world_model_packet_copy;
+static XgRenderWorldModelPacketCopyRange world_model_packet_copy_ranges[64];
+static uint32_t world_model_packet_copy_range_count;
 static bool world_model_templates_populated;
 static bool world_model_initializer_populated;
+static uint32_t world_model_template_read_failure;
 static uint64_t world_model_resource_epoch;
 static XgRenderWorldModelsNativeState world_models_native_state;
 static XgRenderWorldTerrainWaterNativeState world_terrain_water_native_state;
+static XgWorldTerrainWaterTileSource world_terrain_water_temporal_tiles[81];
+static uint64_t world_terrain_water_temporal_scene;
 static uint32_t world_terrain_water_native_last_caller;
 static uint32_t world_terrain_water_native_blocker_detail;
 static uint32_t world_terrain_mesh_duplicate_vertices;
@@ -1668,8 +1751,15 @@ static bool stage_pre_scene_primitive(
 
     if (record == NULL || pre_scene.blocked) return false;
     for (index = 0u; index < pre_scene.count; ++index) {
-        if ((pre_scene.records[index].packet_address &
-             UINT32_C(0x001ffffc)) == packet_address) {
+        if ((record->temporal_only && pre_scene.records[index].temporal_only &&
+             pre_scene.records[index].interpolation_producer_id ==
+                 record->interpolation_producer_id &&
+             pre_scene.records[index].interpolation_primitive_id ==
+                 record->interpolation_primitive_id) ||
+            (!record->temporal_only &&
+             !pre_scene.records[index].temporal_only &&
+             (pre_scene.records[index].packet_address &
+              UINT32_C(0x001ffffc)) == packet_address)) {
             pre_scene.records[index] = *record;
             return true;
         }
@@ -1922,6 +2012,9 @@ static void apply_projected_quad_positions(
             target->native_view_x = source_vertex.native_view_x_16_16;
             target->native_view_y = source_vertex.native_view_y_16_16;
             target->native_view_position = source_vertex.native_view_position;
+            target->projective_view_z = source_vertex.projective_view_z;
+            target->temporal_depth = source_vertex.projective_view_z;
+            target->temporal_depth_valid = true;
         }
     }
 }
@@ -2491,6 +2584,16 @@ static bool flush_pre_scene_primitives(void) {
                 &semantic, interpolation_scene_generation(),
                 record->interpolation_producer_id,
                 record->interpolation_primitive_id);
+        if (record->temporal_only) {
+            if (!record->interpolation_identity_valid ||
+                gr_draw_semantic_temporal_candidate(
+                    &semantic, &record->temporal_cull) !=
+                    GPU_RENDER_TRANSACTION_OK) {
+                pre_scene.blocker = 10u;
+                return false;
+            }
+            continue;
+        }
         XgRenderAuthResult append_result =
             xg_render_auth_append_native_insertion(
                 state.auth, record->packet_address & UINT32_C(0x001ffffc),
@@ -4310,6 +4413,31 @@ static bool stage_standalone_native_semantic_identified(
         &identified, packet_address, source_primitive_index);
 }
 
+static void set_semantic_corner_identities(
+        GpuRenderSemantic *semantic, uint32_t producer_id,
+        uint32_t primitive_id) {
+    static const uint8_t quad_corners[2][3] = {{0u, 1u, 2u}, {2u, 1u, 3u}};
+
+    if (semantic == NULL || semantic->topology != GPU_RENDER_SEMANTIC_TRIANGLES ||
+        semantic->triangle_count == 0u || primitive_id > UINT32_MAX / 4u)
+        return;
+    for (uint32_t triangle = 0u; triangle < semantic->triangle_count;
+         ++triangle) {
+        for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
+            GpuRenderSemanticVertex *target =
+                &semantic->triangles[triangle].vertices[vertex];
+            const uint32_t corner = semantic->triangle_count == 2u &&
+                    triangle < 2u
+                ? quad_corners[triangle][vertex] : vertex;
+
+            if (target->interpolation_vertex_identity_valid) continue;
+            target->interpolation_group_id = producer_id;
+            target->interpolation_vertex_id = primitive_id * 4u + corner;
+            target->interpolation_vertex_identity_valid = 1u;
+        }
+    }
+}
+
 static bool stage_standalone_native_primitive_identified(
     const XgRenderIrNativePrimitive *primitive, uint32_t packet_address,
     uint32_t source_primitive_index, uint32_t interpolation_producer_id,
@@ -4328,6 +4456,8 @@ static bool stage_standalone_native_primitive_identified(
             (uint32_t)translate_status;
         return false;
     }
+    set_semantic_corner_identities(
+        &semantic, interpolation_producer_id, interpolation_primitive_id);
     return stage_standalone_native_semantic_identified(
         &semantic, packet_address, source_primitive_index,
         interpolation_producer_id, interpolation_primitive_id);
@@ -4338,6 +4468,38 @@ static bool stage_standalone_native_primitive(
     uint32_t source_primitive_index) {
     return stage_standalone_native_primitive_identified(
         primitive, packet_address, source_primitive_index, 0u, 0u);
+}
+
+static bool stage_temporal_native_primitive_identified(
+        const XgRenderIrNativePrimitive *primitive,
+        uint32_t interpolation_producer_id,
+        uint32_t interpolation_primitive_id,
+        const GpuRenderTemporalCullPolicy *policy) {
+    GpuRenderSemantic semantic;
+
+    if (primitive == NULL || policy == NULL ||
+        xg_render_backend_translate_primitive(primitive, &semantic) !=
+            XG_RENDER_BACKEND_OK)
+        return false;
+    set_semantic_interpolation_identity(
+        &semantic, interpolation_scene_generation(), interpolation_producer_id,
+        interpolation_primitive_id);
+    set_semantic_corner_identities(
+        &semantic, interpolation_producer_id, interpolation_primitive_id);
+    return gr_draw_semantic_temporal_candidate(&semantic, policy) ==
+        GPU_RENDER_TRANSACTION_OK;
+}
+
+static bool native_primitive_all_projective(
+        const XgRenderIrNativePrimitive *primitive) {
+    if (primitive == NULL || primitive->triangle_count == 0u) return false;
+    for (uint32_t triangle = 0u; triangle < primitive->triangle_count;
+         ++triangle)
+        for (uint32_t vertex = 0u; vertex < 3u; ++vertex)
+            if (!primitive->triangles[triangle].vertices[vertex]
+                    .projective_position)
+                return false;
+    return true;
 }
 
 static bool stage_active_particle(
@@ -4375,12 +4537,14 @@ static bool native_particle_cutover(CPUState *cpu, uint32_t pc) {
     uint32_t packet_address;
     uint32_t packet_tag;
     uint32_t shifted_depth;
+    uint32_t ordering_shift;
     uint32_t bucket;
     uint32_t ot_base;
     uint32_t ot_address;
     uint32_t previous_head;
     uint32_t new_ot_word;
     uint32_t index;
+    int64_t temporal_depth;
 
     if (state.requested_render_mode != GUEST_RENDER_RENDER_NATIVE) return false;
     if (guest_render_bridge_snapshot(&bridge) != GUEST_RENDER_OK)
@@ -4463,14 +4627,30 @@ static bool native_particle_cutover(CPUState *cpu, uint32_t pc) {
         goto fail_material;
     apply_projected_quad_positions(&primitive, output.vertices);
 
-    shifted_depth = (uint32_t)output.ordering_depth >>
-        (cpu->read_word(UINT32_C(0x80050100)) & 31u);
+    ordering_shift = cpu->read_word(UINT32_C(0x80050100)) & 31u;
+    shifted_depth = (uint32_t)output.ordering_depth >> ordering_shift;
     switch (cpu->gpr[7]) {
     case 0u: bucket = 1u; break;
     case 1u: bucket = shifted_depth - 16u; break;
     case 2u: bucket = shifted_depth; break;
     case 3u: bucket = shifted_depth + 16u; break;
     default: goto fail_source;
+    }
+    temporal_depth = (int64_t)output.ordering_depth +
+        (cpu->gpr[7] == 1u ? -((int64_t)16 << ordering_shift) :
+         (cpu->gpr[7] == 3u ? ((int64_t)16 << ordering_shift) : 0));
+    for (uint32_t triangle = 0u; triangle < primitive.triangle_count;
+         ++triangle) {
+        for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
+            XgRenderIrVertex *target =
+                &primitive.triangles[triangle].vertices[vertex];
+
+            target->temporal_depth = temporal_depth < INT32_MIN
+                ? INT32_MIN
+                : (temporal_depth > INT32_MAX ? INT32_MAX
+                                              : (int32_t)temporal_depth);
+            target->temporal_depth_valid = true;
+        }
     }
     if (bucket >= 1u && bucket <= 0xfffu) {
         ot_base = cpu->read_word(UINT32_C(0x800c426c));
@@ -4484,6 +4664,21 @@ static bool native_particle_cutover(CPUState *cpu, uint32_t pc) {
             goto fail_stage;
         previous_head = cpu->read_word(ot_address);
     } else {
+        const int64_t minimum = INT64_C(1) << ordering_shift;
+        const int64_t maximum = INT64_C(4096) << ordering_shift;
+        const GpuRenderTemporalCullPolicy policy = {
+            .flags = GPU_RENDER_TEMPORAL_CULL_DEPTH,
+            .depth_min_inclusive = minimum > INT32_MAX
+                ? INT32_MAX : (int32_t)minimum,
+            .depth_max_exclusive = maximum > INT32_MAX
+                ? INT32_MAX : (int32_t)maximum,
+            .depth_mode = GPU_RENDER_TEMPORAL_DEPTH_MAXIMUM,
+            .ordering_depth_shift = (uint8_t)ordering_shift,
+        };
+
+        if (!stage_temporal_native_primitive_identified(
+                &primitive, particle_address, 0u, &policy))
+            goto fail_stage;
         ot_address = 0u;
         previous_head = 0u;
     }
@@ -5113,6 +5308,9 @@ static void clear_world_models_native_pending(void) {
 }
 
 static void invalidate_world_model_templates(void) {
+    world_model_packet_copy = (XgRenderWorldModelPacketCopyContext){0};
+    world_model_packet_copy_range_count = 0u;
+    world_models_native_snapshot.packet_copy_range_count = 0u;
     if (world_model_templates_populated) {
         memset(world_model_templates, 0, sizeof(world_model_templates));
         world_model_templates_populated = false;
@@ -5555,7 +5753,49 @@ static void world_model_initializer_finish(CPUState *cpu) {
     world_model_initializer_populated = false;
 }
 
-static void world_model_observe_packet_buffer_copy(CPUState *cpu) {
+static void world_model_begin_packet_buffer_copy(CPUState *cpu) {
+    uint32_t destination;
+    uint32_t source;
+    uint32_t size;
+
+    if (state.requested_render_mode == GUEST_RENDER_RENDER_ORIGINAL) return;
+    if (cpu != NULL && !physical_address_equals(
+            cpu->gpr[31], UINT32_C(0x80084778)))
+        return;
+    if (world_models_native_snapshot.packet_copy_begin_count != UINT64_MAX)
+        ++world_models_native_snapshot.packet_copy_begin_count;
+    world_models_native_snapshot.packet_copy_failure_detail = 1u;
+    if (cpu == NULL || cpu->read_word == NULL ||
+        world_model_initializer.active || world_model_packet_copy.active)
+        goto fail;
+    destination = cpu->gpr[4];
+    source = cpu->gpr[5];
+    size = cpu->gpr[6];
+    world_models_native_snapshot.packet_copy_last_destination = destination;
+    world_models_native_snapshot.packet_copy_last_source = source;
+    world_models_native_snapshot.packet_copy_last_size = size;
+    world_models_native_snapshot.packet_copy_failure_detail = 2u;
+    if (size == 0u || destination > UINT32_MAX - size ||
+        source > UINT32_MAX - size ||
+        !guest_data_range_is_valid(source, size, 4u, false) ||
+        !guest_data_range_is_valid(destination, size, 4u, false))
+        goto fail;
+    world_model_packet_copy = (XgRenderWorldModelPacketCopyContext){
+        .owner_cpu = cpu,
+        .destination = destination,
+        .source = source,
+        .size = size,
+        .active = true,
+    };
+    world_models_native_snapshot.packet_copy_failure_detail = 0u;
+    return;
+
+fail:
+    invalidate_world_model_templates();
+}
+
+static void world_model_finish_packet_buffer_copy(CPUState *cpu) {
+    XgRenderWorldModelPacketCopyContext copy;
     uint32_t destination;
     uint32_t destination_end;
     uint32_t source;
@@ -5564,19 +5804,27 @@ static void world_model_observe_packet_buffer_copy(CPUState *cpu) {
     uint32_t cursor;
     uint32_t primitive_ordinal = 0u;
 
+    if (!world_model_packet_copy.active) return;
+    copy = world_model_packet_copy;
+    world_model_packet_copy = (XgRenderWorldModelPacketCopyContext){0};
     if (state.requested_render_mode == GUEST_RENDER_RENDER_ORIGINAL) return;
-    if (cpu == NULL || cpu->read_word == NULL ||
+    if (world_models_native_snapshot.packet_copy_finish_count != UINT64_MAX)
+        ++world_models_native_snapshot.packet_copy_finish_count;
+    world_models_native_snapshot.packet_copy_failure_detail = 3u;
+    if (cpu == NULL || cpu != copy.owner_cpu || cpu->read_word == NULL ||
         world_model_initializer.active || cpu->gpr[6] != 0u)
         goto fail;
 
-    destination = cpu->gpr[2];
-    destination_end = cpu->gpr[4];
-    source_end = cpu->gpr[5];
-    if (destination_end < destination) goto fail;
-    size = destination_end - destination;
-    if (size == 0u) return;
-    if ((size & 3u) != 0u || source_end < size) goto fail;
-    source = source_end - size;
+    destination = copy.destination;
+    source = copy.source;
+    size = copy.size;
+    destination_end = destination + size;
+    source_end = source + size;
+    world_models_native_snapshot.packet_copy_failure_detail = 4u;
+    if (cpu->gpr[2] != destination || cpu->gpr[4] != destination_end ||
+        cpu->gpr[5] != source_end)
+        goto fail;
+    world_models_native_snapshot.packet_copy_failure_detail = 5u;
     if (destination != source_end ||
         !guest_data_range_is_valid(source, size, 4u, false) ||
         !guest_data_range_is_valid(destination, size, 4u, false))
@@ -5590,6 +5838,8 @@ static void world_model_observe_packet_buffer_copy(CPUState *cpu) {
             ? (uint32_t)entry->word_count * 4u : 0u;
         uint32_t word;
 
+        world_models_native_snapshot.packet_copy_failure_detail =
+            entry == NULL ? 6u : 7u;
         if (entry == NULL || !entry->active || entry->resource_epoch == 0u ||
             entry->owner_cpu != cpu ||
             entry->packet_base != model_ft4_template_key(source) ||
@@ -5597,6 +5847,7 @@ static void world_model_observe_packet_buffer_copy(CPUState *cpu) {
             entry->primitive_ordinal != primitive_ordinal ||
             packet_size == 0u || packet_size > source_end - cursor)
             goto fail;
+        world_models_native_snapshot.packet_copy_failure_detail = 8u;
         for (word = 0u; word < entry->word_count; ++word) {
             const uint32_t source_word = cpu->read_word(cursor + word * 4u);
 
@@ -5610,6 +5861,7 @@ static void world_model_observe_packet_buffer_copy(CPUState *cpu) {
     }
 
     cursor = source;
+    world_models_native_snapshot.packet_copy_failure_detail = 9u;
     while (cursor < source_end) {
         const XgRenderWorldModelTemplate *source_entry =
             world_model_template_find(cursor, false);
@@ -5624,8 +5876,22 @@ static void world_model_observe_packet_buffer_copy(CPUState *cpu) {
         cloned.packet_address = model_ft4_template_key(
             destination + (cursor - source));
         *destination_entry = cloned;
+        if (world_models_native_snapshot.packet_copy_template_count !=
+                UINT64_MAX)
+            ++world_models_native_snapshot.packet_copy_template_count;
         cursor += (uint32_t)cloned.word_count * 4u;
     }
+    if (world_model_packet_copy_range_count < 64u) {
+        world_model_packet_copy_ranges[world_model_packet_copy_range_count++] =
+            (XgRenderWorldModelPacketCopyRange){
+                .destination = destination,
+                .source = source,
+                .size = size,
+            };
+        world_models_native_snapshot.packet_copy_range_count =
+            world_model_packet_copy_range_count;
+    }
+    world_models_native_snapshot.packet_copy_failure_detail = 0u;
     return;
 
 fail:
@@ -5642,21 +5908,90 @@ static bool read_world_model_packet_template(
     if (out_words == NULL || out_resource_epoch == NULL ||
         primitive_family >= XG_WORLD_MODELS_PRIMITIVE_FAMILY_COUNT ||
         word_count == 0u ||
-        word_count > XG_WORLD_MODELS_MAX_PACKET_WORD_COUNT)
+        word_count > XG_WORLD_MODELS_MAX_PACKET_WORD_COUNT) {
+        world_model_template_read_failure =
+            XG_RENDER_WORLD_MODEL_TEMPLATE_READ_INVALID_ARGUMENT;
         return false;
+    }
     entry = world_model_template_find(packet_address, false);
-    if (entry == NULL || !entry->active || entry->resource_epoch == 0u ||
-        entry->owner_cpu != context)
+    if (entry == NULL) {
+        if (world_models_native_snapshot.first_missing_packet_address == 0u) {
+            uint32_t range_index;
+
+            world_models_native_snapshot.first_missing_model_address =
+                model_header_address;
+            world_models_native_snapshot.first_missing_packet_base =
+                packet_base_address;
+            world_models_native_snapshot.first_missing_packet_address =
+                packet_address;
+            for (range_index = 0u;
+                 range_index < world_model_packet_copy_range_count;
+                 ++range_index) {
+                const XgRenderWorldModelPacketCopyRange *range =
+                    &world_model_packet_copy_ranges[range_index];
+
+                if (packet_address >= range->source &&
+                    packet_address - range->source < range->size) {
+                    world_models_native_snapshot.first_missing_copy_range_kind =
+                        1u;
+                    world_models_native_snapshot.first_missing_copy_range_index =
+                        range_index;
+                    break;
+                }
+                if (packet_address >= range->destination &&
+                    packet_address - range->destination < range->size) {
+                    world_models_native_snapshot.first_missing_copy_range_kind =
+                        2u;
+                    world_models_native_snapshot.first_missing_copy_range_index =
+                        range_index;
+                    break;
+                }
+            }
+        }
+        world_model_template_read_failure =
+            XG_RENDER_WORLD_MODEL_TEMPLATE_READ_MISSING;
         return false;
-    if (entry->model_address != model_ft4_template_key(model_header_address))
+    }
+    if (!entry->active) {
+        world_model_template_read_failure =
+            XG_RENDER_WORLD_MODEL_TEMPLATE_READ_INACTIVE;
         return false;
-    if (entry->packet_base != model_ft4_template_key(packet_base_address))
+    }
+    if (entry->resource_epoch == 0u) {
+        world_model_template_read_failure =
+            XG_RENDER_WORLD_MODEL_TEMPLATE_READ_EPOCH;
         return false;
-    if (entry->primitive_family != primitive_family ||
-        entry->word_count != word_count)
+    }
+    if (entry->owner_cpu != context) {
+        world_model_template_read_failure =
+            XG_RENDER_WORLD_MODEL_TEMPLATE_READ_OWNER;
         return false;
-    if (entry->attribute_address != model_ft4_template_key(attribute_address))
+    }
+    if (entry->model_address != model_ft4_template_key(model_header_address)) {
+        world_model_template_read_failure =
+            XG_RENDER_WORLD_MODEL_TEMPLATE_READ_MODEL;
         return false;
+    }
+    if (entry->packet_base != model_ft4_template_key(packet_base_address)) {
+        world_model_template_read_failure =
+            XG_RENDER_WORLD_MODEL_TEMPLATE_READ_PACKET_BASE;
+        return false;
+    }
+    if (entry->primitive_family != primitive_family) {
+        world_model_template_read_failure =
+            XG_RENDER_WORLD_MODEL_TEMPLATE_READ_FAMILY;
+        return false;
+    }
+    if (entry->word_count != word_count) {
+        world_model_template_read_failure =
+            XG_RENDER_WORLD_MODEL_TEMPLATE_READ_WORD_COUNT;
+        return false;
+    }
+    if (entry->attribute_address != model_ft4_template_key(attribute_address)) {
+        world_model_template_read_failure =
+            XG_RENDER_WORLD_MODEL_TEMPLATE_READ_ATTRIBUTE;
+        return false;
+    }
     memcpy(out_words, entry->words, word_count * sizeof(out_words[0]));
     *out_resource_epoch = entry->resource_epoch;
     return true;
@@ -6115,6 +6450,7 @@ static bool model_ft4_shadow_prepare(CPUState *cpu) {
 
 static bool native_model_ft4_raw_stage(CPUState *cpu) {
     uint32_t accepted_count = 0u;
+    uint32_t staged_count = 0u;
     uint32_t index;
     XgRenderProducerLifecycle lifecycle;
 
@@ -6124,11 +6460,16 @@ static bool native_model_ft4_raw_stage(CPUState *cpu) {
         !model_ft4_shadow_prepare(cpu) ||
         !producer_lifecycle_begin(UINT32_C(0x8002c700), &lifecycle))
         return false;
-    for (index = 0u; index < model_ft4_shadow.count; ++index)
+    for (index = 0u; index < model_ft4_shadow.count; ++index) {
         accepted_count += model_ft4_shadow.records[index].native.accepted;
+        staged_count += model_ft4_shadow.records[index].native.accepted ||
+            native_primitive_all_projective(
+                &model_ft4_shadow.records[index].native.primitive);
+    }
     if (pre_scene.blocked ||
-        pre_scene.count > XG_RENDER_PRE_SCENE_PRIMITIVE_CAPACITY -
-            accepted_count ||
+        staged_count > XG_RENDER_PRE_SCENE_PRIMITIVE_CAPACITY ||
+        pre_scene.count >
+            XG_RENDER_PRE_SCENE_PRIMITIVE_CAPACITY - staged_count ||
         model_ft4_shadow.snapshot.native_cutover_count == UINT64_MAX ||
         model_ft4_shadow.snapshot.native_primitive_count >
             UINT64_MAX - accepted_count) {
@@ -6146,12 +6487,62 @@ static bool native_model_ft4_raw_stage(CPUState *cpu) {
             ((uint32_t)(model_ft4_shadow.context.dispatch_mode & 7u) << 29u);
         const bool interpolation_identity_valid =
             interpolation_producer_id != 0u;
+        const int32_t native_margin = xg_host_3d_native_view_margin();
+        const uint32_t ordering_shift =
+            cpu->read_word(UINT32_C(0x80050100));
+        const bool average_depth =
+            model_ft4_shadow.context.dispatch_mode ==
+                XG_MODEL_FT4_RAW_DISPATCH_AVERAGE ||
+            model_ft4_shadow.context.dispatch_mode ==
+                XG_MODEL_FT4_RAW_DISPATCH_AVERAGE_DEPTH_CUE;
+        const GpuRenderTemporalCullPolicy temporal_cull = {
+            .flags = GPU_RENDER_TEMPORAL_CULL_PROJECTIVE |
+                GPU_RENDER_TEMPORAL_CULL_SCREEN |
+                GPU_RENDER_TEMPORAL_CULL_FRONT_FACE |
+                GPU_RENDER_TEMPORAL_CULL_DEPTH,
+            .screen_left = native_margin > 0
+                ? -native_margin * INT32_C(65536) : INT32_MIN,
+            .screen_top = INT32_MIN,
+            .screen_right_exclusive =
+                ((int32_t)(uint16_t)cpu->read_word(UINT32_C(0x800500f8)) +
+                 native_margin) * INT32_C(65536),
+            .screen_bottom_exclusive =
+                (int32_t)(uint16_t)(cpu->read_word(UINT32_C(0x800500fc)) >> 16u) *
+                    INT32_C(65536),
+            .depth_min_inclusive = 1,
+            .depth_max_exclusive = 0x10000,
+            .depth_mode = average_depth
+                ? GPU_RENDER_TEMPORAL_DEPTH_AVERAGE
+                : (model_ft4_shadow.context.dispatch_mode ==
+                       XG_MODEL_FT4_RAW_DISPATCH_NEAREST
+                    ? GPU_RENDER_TEMPORAL_DEPTH_MINIMUM
+                    : GPU_RENDER_TEMPORAL_DEPTH_MAXIMUM),
+            .front_face = GPU_RENDER_TEMPORAL_FRONT_POSITIVE,
+            .ordering_depth_shift = (uint8_t)(average_depth
+                ? ordering_shift : ((ordering_shift + 2u) & 31u)),
+        };
 
         record->lifecycle = lifecycle;
         record->interpolation_producer_id = interpolation_producer_id;
         record->interpolation_primitive_id = interpolation_primitive_id;
         record->interpolation_identity_valid = interpolation_identity_valid;
-        if (!record->native.accepted) continue;
+        if (!record->native.accepted) {
+            if (!interpolation_identity_valid ||
+                !native_primitive_all_projective(&record->native.primitive))
+                continue;
+            if (!stage_pre_scene_primitive(&(XgRenderPreScenePrimitive){
+                    .primitive = record->native.primitive,
+                    .interpolation_producer_id = interpolation_producer_id,
+                    .interpolation_primitive_id = interpolation_primitive_id,
+                    .interpolation_identity_valid = true,
+                    .temporal_only = true,
+                    .temporal_cull = temporal_cull,
+                })) {
+                block_model_ft4_shadow(78u);
+                return false;
+            }
+            continue;
+        }
         if (!stage_pre_scene_primitive(&(XgRenderPreScenePrimitive){
                 .primitive = record->native.primitive,
                 .packet_address = record->packet_address,
@@ -6818,6 +7209,7 @@ static bool model_ft3_shadow_prepare(CPUState *cpu) {
 
 static bool native_model_ft3_raw_stage(CPUState *cpu) {
     uint32_t accepted_count = 0u;
+    uint32_t staged_count = 0u;
     XgRenderProducerLifecycle lifecycle;
 
     if (state.requested_render_mode != GUEST_RENDER_RENDER_NATIVE ||
@@ -6825,10 +7217,15 @@ static bool native_model_ft3_raw_stage(CPUState *cpu) {
           !model_ft3_shadow_prepare(cpu) ||
         !producer_lifecycle_begin(UINT32_C(0x8002c700), &lifecycle))
         return false;
-    for (uint32_t index = 0u; index < model_ft3_shadow.count; ++index)
+    for (uint32_t index = 0u; index < model_ft3_shadow.count; ++index) {
         accepted_count += model_ft3_shadow.records[index].accepted;
+        staged_count += model_ft3_shadow.records[index].accepted ||
+            native_primitive_all_projective(
+                &model_ft3_shadow.records[index].primitive);
+    }
     if (pre_scene.blocked ||
-        pre_scene.count > XG_RENDER_PRE_SCENE_PRIMITIVE_CAPACITY - accepted_count)
+        staged_count > XG_RENDER_PRE_SCENE_PRIMITIVE_CAPACITY ||
+        pre_scene.count > XG_RENDER_PRE_SCENE_PRIMITIVE_CAPACITY - staged_count)
         return false;
     for (uint32_t index = 0u; index < model_ft3_shadow.count; ++index) {
         XgRenderModelFt3ShadowRecord *record =
@@ -6842,12 +7239,48 @@ static bool native_model_ft3_raw_stage(CPUState *cpu) {
         const bool interpolation_identity_valid =
             (model_ft4_shadow.context.instance_address &
              UINT32_C(0x1fffffff)) != 0u;
+        const int32_t native_margin = xg_host_3d_native_view_margin();
+        const GpuRenderTemporalCullPolicy temporal_cull = {
+            .flags = GPU_RENDER_TEMPORAL_CULL_PROJECTIVE |
+                GPU_RENDER_TEMPORAL_CULL_SCREEN |
+                GPU_RENDER_TEMPORAL_CULL_FRONT_FACE |
+                GPU_RENDER_TEMPORAL_CULL_DEPTH,
+            .screen_left = native_margin > 0
+                ? -native_margin * INT32_C(65536) : INT32_MIN,
+            .screen_top = INT32_MIN,
+            .screen_right_exclusive =
+                ((int32_t)(uint16_t)cpu->read_word(UINT32_C(0x800500f8)) +
+                 native_margin) * INT32_C(65536),
+            .screen_bottom_exclusive =
+                (int32_t)(uint16_t)(cpu->read_word(UINT32_C(0x800500fc)) >> 16u) *
+                    INT32_C(65536),
+            .depth_min_inclusive = 1,
+            .depth_max_exclusive = 0x10000,
+            .depth_mode = GPU_RENDER_TEMPORAL_DEPTH_LAST_VERTEX,
+            .front_face = GPU_RENDER_TEMPORAL_FRONT_POSITIVE,
+            .ordering_depth_shift = (uint8_t)((
+                cpu->read_word(UINT32_C(0x80050100)) + 2u) & 31u),
+        };
 
         record->lifecycle = lifecycle;
         record->interpolation_producer_id = interpolation_producer_id;
         record->interpolation_primitive_id = interpolation_primitive_id;
         record->interpolation_identity_valid = interpolation_identity_valid;
-        if (!record->accepted) continue;
+        if (!record->accepted) {
+            if (!interpolation_identity_valid ||
+                !native_primitive_all_projective(&record->primitive))
+                continue;
+            if (!stage_pre_scene_primitive(&(XgRenderPreScenePrimitive){
+                    .primitive = record->primitive,
+                    .interpolation_producer_id = interpolation_producer_id,
+                    .interpolation_primitive_id = interpolation_primitive_id,
+                    .interpolation_identity_valid = true,
+                    .temporal_only = true,
+                    .temporal_cull = temporal_cull,
+                }))
+                return false;
+            continue;
+        }
         if (!stage_pre_scene_primitive(&(XgRenderPreScenePrimitive){
                 .primitive = record->primitive,
                 .packet_address = record->packet_address,
@@ -8630,7 +9063,8 @@ static uint32_t world_horizon_capture_build(
 static uint32_t world_effects_capture_build(
     CPUState *cpu, XgWorldEffectsCapture *capture,
     XgWorldEffectsRecord records[XG_WORLD_EFFECTS_SOURCE_CAPACITY],
-    uint32_t *out_count) {
+    uint32_t *out_count, XgWorldEffectsRecord *temporal_records,
+    uint32_t *out_temporal_count) {
     XgWorldEffectsCaptureRequest request = { 0 };
     XgWorldEffectsAuthenticatedReader reader = { 0 };
     GpuDrawState draw = { 0 };
@@ -8671,9 +9105,10 @@ static uint32_t world_effects_capture_build(
     if (xg_world_effects_source_capture(&request, &reader, capture) !=
         XG_WORLD_EFFECTS_CAPTURE_OK)
         return 1u;
-    if (xg_world_effects_build(
+    if (xg_world_effects_build_with_temporal(
             &capture->source, records, XG_WORLD_EFFECTS_SOURCE_CAPACITY,
-            out_count) != XG_WORLD_EFFECTS_OK)
+            out_count, temporal_records, XG_WORLD_EFFECTS_SOURCE_CAPACITY,
+            out_temporal_count) != XG_WORLD_EFFECTS_OK)
         return 2u;
     return 0u;
 }
@@ -8682,7 +9117,8 @@ static uint32_t world_clouds_capture_build(
     CPUState *cpu, XgWorldCloudsCapture *capture,
     XgWorldCloudRecord records[XG_WORLD_CLOUD_PACKET_CAPACITY],
     uint32_t *out_count, XgWorldCloudPosition stepped_positions[XG_WORLD_CLOUD_COUNT],
-    XgWorldCloudsBuildStats *out_stats) {
+    XgWorldCloudsBuildStats *out_stats,
+    XgWorldCloudRecord *temporal_records, uint32_t *out_temporal_count) {
     XgWorldCloudsCaptureRequest request = { 0 };
     XgWorldCloudsAuthenticatedReader reader = { 0 };
     GpuDrawState draw = { 0 };
@@ -8728,9 +9164,11 @@ static uint32_t world_clouds_capture_build(
     if (xg_world_clouds_source_capture(&request, &reader, capture) !=
         XG_WORLD_CLOUDS_CAPTURE_OK)
         return 1u;
-    if (xg_world_clouds_build(
+    if (xg_world_clouds_build_with_temporal(
             &capture->source, records, XG_WORLD_CLOUD_PACKET_CAPACITY,
-            out_count, out_stats) != XG_WORLD_CLOUDS_OK)
+            out_count, out_stats, temporal_records,
+            XG_WORLD_CLOUD_TEMPORAL_CAPACITY,
+            out_temporal_count) != XG_WORLD_CLOUDS_OK)
         return 2u;
     memcpy(stepped_positions, capture->source.positions,
            sizeof(capture->source.positions));
@@ -8858,7 +9296,7 @@ static void world_effects_shadow_begin(CPUState *cpu) {
     ++world_effects_shadow.snapshot.begin_count;
     capture_result = world_effects_capture_build(
         cpu, &world_effects_shadow.capture, world_effects_shadow.records,
-        &world_effects_shadow.count);
+        &world_effects_shadow.count, NULL, NULL);
     if (capture_result == 1u) {
         ++world_effects_shadow.snapshot.source_capture_failure_count;
         block_world_effects_shadow(106u);
@@ -9512,7 +9950,8 @@ static bool projected_build_strips(
     CPUState *cpu, const XgRenderProjectedSource *source,
     const XgRenderProjectedConfig *config, const GpuDrawState *draw,
     uint32_t buffer_index, int32_t phase, int16_t projected_y, int16_t fade,
-    XgRenderProjectedNativeRecord records[], uint32_t *count) {
+    XgRenderProjectedNativeRecord records[], uint32_t *count,
+    bool temporal) {
     int32_t denominator = (int32_t)fade + 0x100;
     int32_t centered_width;
     int32_t fade_adjustment;
@@ -9534,8 +9973,8 @@ static bool projected_build_strips(
     phase_cursor %= config->strip_width;
     if (phase_cursor < 0)
         phase_cursor = (uint16_t)config->strip_width + phase_cursor;
-    if (projected_y >= 0 &&
-        projected_y <= projected_wrap_add(config->strip_height, 0xf0)) {
+    if (temporal || (projected_y >= 0 &&
+        projected_y <= projected_wrap_add(config->strip_height, 0xf0))) {
         if (!projected_divide(
                 (int32_t)((uint32_t)config->strip_height << 8u), denominator,
                 &strip_screen_height))
@@ -9657,7 +10096,8 @@ static bool projected_resolve_ot_bucket(CPUState *cpu, uint32_t ot_address,
 
 static bool projected_stage_records(
     const XgRenderProjectedNativeRecord records[], uint32_t count,
-    uint32_t ot_bucket, XgRenderOrderingDomain domain) {
+    uint32_t ot_bucket, XgRenderOrderingDomain domain,
+    uint32_t interpolation_producer_id) {
     uint32_t index;
 
     if (state.active && !state.completed) {
@@ -9666,7 +10106,8 @@ static bool projected_stage_records(
                     &records[index].primitive, records[index].packet_address,
                     UINT32_C(0x40000000) |
                          (records[index].packet_address & UINT32_C(0x001ffffc)),
-                    ot_bucket, records[index].payload_word_count, 0u, 0u,
+                    ot_bucket, records[index].payload_word_count,
+                    interpolation_producer_id, index,
                     NULL))
                 return false;
         }
@@ -9674,11 +10115,12 @@ static bool projected_stage_records(
     }
     if (domain == XG_RENDER_ORDERING_DOMAIN_BATTLE) {
         for (index = 0u; index < count; ++index) {
-            if (!stage_standalone_native_primitive(
+            if (!stage_standalone_native_primitive_identified(
                     &records[index].primitive, records[index].packet_address,
                     UINT32_C(0x40000000) |
                         (records[index].packet_address &
-                         UINT32_C(0x001ffffc))))
+                         UINT32_C(0x001ffffc)),
+                    interpolation_producer_id, index))
                 return false;
         }
         return true;
@@ -9694,8 +10136,60 @@ static bool projected_stage_records(
             .source_primitive_index = UINT32_C(0x40000000) |
                 (records[index].packet_address & UINT32_C(0x001ffffc)),
             .ot_bucket = ot_bucket,
+            .interpolation_producer_id = interpolation_producer_id,
+            .interpolation_primitive_id = index,
             .payload_word_count = records[index].payload_word_count,
+            .interpolation_identity_valid =
+                interpolation_producer_id != 0u,
         }))
+            return false;
+    }
+    return true;
+}
+
+static bool projected_stage_temporal_strips(
+    const XgRenderProjectedNativeRecord records[], uint32_t count,
+    XgRenderOrderingDomain domain, uint32_t interpolation_producer_id) {
+    const GpuRenderTemporalCullPolicy policy = {
+        .flags = GPU_RENDER_TEMPORAL_CULL_SCREEN,
+        .screen_left = 0,
+        .screen_top = 0,
+        .screen_right_exclusive = 320 * INT32_C(65536),
+        .screen_bottom_exclusive = 240 * INT32_C(65536),
+    };
+    uint32_t index;
+
+    if (count == 0u) return true;
+    if (state.active && !state.completed) {
+        for (index = 0u; index < count; ++index) {
+            if (!stage_temporal_native_primitive_identified(
+                    &records[index].primitive, interpolation_producer_id,
+                    index, &policy))
+                return false;
+        }
+        return true;
+    }
+    if (domain == XG_RENDER_ORDERING_DOMAIN_BATTLE) {
+        for (index = 0u; index < count; ++index) {
+            if (!stage_temporal_native_primitive_identified(
+                    &records[index].primitive, interpolation_producer_id,
+                    index, &policy))
+                return false;
+        }
+        return true;
+    }
+    if (domain != XG_RENDER_ORDERING_DOMAIN_FIELD || pre_scene.blocked ||
+        pre_scene.count > XG_RENDER_PRE_SCENE_PRIMITIVE_CAPACITY - count)
+        return false;
+    for (index = 0u; index < count; ++index) {
+        if (!stage_pre_scene_primitive(&(XgRenderPreScenePrimitive){
+                .primitive = records[index].primitive,
+                .interpolation_producer_id = interpolation_producer_id,
+                .interpolation_primitive_id = index,
+                .interpolation_identity_valid = true,
+                .temporal_only = true,
+                .temporal_cull = policy,
+            }))
             return false;
     }
     return true;
@@ -9767,6 +10261,8 @@ static bool native_projected_effect_cutover(CPUState *cpu, uint32_t pc) {
     XgRenderProjectedConfig config;
     XgRenderProjectedSource *source;
     XgRenderProjectedNativeRecord records[XG_RENDER_PROJECTED_MAX_RECORDS];
+    XgRenderProjectedNativeRecord
+        temporal_strips[XG_RENDER_PROJECTED_MAX_STRIPS];
     XgHost3dLongVector direction;
     XgHost3dLongVector normalized;
     XgHost3dMatrix matrix;
@@ -9787,6 +10283,8 @@ static bool native_projected_effect_cutover(CPUState *cpu, uint32_t pc) {
     uint32_t ot_bucket;
     XgRenderOrderingDomain ordering_domain;
     uint32_t record_count = 0u;
+    uint32_t strip_record_count;
+    uint32_t temporal_strip_count = 0u;
     uint32_t index;
     int16_t eye[3];
     int16_t at[3];
@@ -9891,7 +10389,14 @@ static bool native_projected_effect_cutover(CPUState *cpu, uint32_t pc) {
     memset(records, 0, sizeof(records));
     if (!projected_build_strips(
             cpu, source, &config, &draw, buffer_index, phase,
-            first_projection.y, fade, records, &record_count))
+            first_projection.y, fade, records, &record_count, false))
+        return reject_projected(65u);
+    strip_record_count = record_count;
+    if (strip_record_count == 0u &&
+        !projected_build_strips(
+            cpu, source, &config, &draw, buffer_index, phase,
+            first_projection.y, fade, temporal_strips,
+            &temporal_strip_count, true))
         return reject_projected(65u);
 
     if (config.fixed_groups > 0) {
@@ -9959,7 +10464,12 @@ static bool native_projected_effect_cutover(CPUState *cpu, uint32_t pc) {
         }
     }
     if (!projected_stage_records(
-            records, record_count, ot_bucket, ordering_domain))
+            records, record_count, ot_bucket, ordering_domain,
+            object_address & UINT32_C(0x1fffffff)))
+        return reject_projected(67u);
+    if (!projected_stage_temporal_strips(
+            temporal_strips, temporal_strip_count, ordering_domain,
+            object_address & UINT32_C(0x1fffffff)))
         return reject_projected(67u);
 #ifdef PSX_XG_RENDER_AUTH_RUNTIME_TESTING
     for (index = 0u; index < record_count; ++index)
@@ -10097,6 +10607,23 @@ static void native_snapshot_record(PsxXgRenderWorldNativeSnapshot *snapshot,
     snapshot->native_primitive_count += primitive_count;
 }
 
+static void native_snapshot_record_failure(
+    PsxXgRenderWorldNativeSnapshot *snapshot,
+    PsxXgRenderWorldNativeFailureStage stage, uint32_t detail,
+    uint32_t anchor_count) {
+    if (snapshot == NULL) return;
+    if (snapshot->native_failure_count == 0u) {
+        snapshot->first_failure_stage = (uint32_t)stage;
+        snapshot->first_failure_detail = detail;
+        snapshot->first_anchor_count = anchor_count;
+    }
+    if (snapshot->native_failure_count != UINT64_MAX)
+        ++snapshot->native_failure_count;
+    snapshot->last_failure_stage = (uint32_t)stage;
+    snapshot->last_failure_detail = detail;
+    snapshot->last_anchor_count = anchor_count;
+}
+
 static uint32_t fixed_ir_uv(const XgRenderIrVertex *vertex) {
     return (uint32_t)vertex->u >> 16u |
         (((uint32_t)vertex->v >> 16u) << 8u);
@@ -10180,8 +10707,10 @@ static bool native_world_terrain_water_cutover(CPUState *cpu) {
     XgWorldTerrainWaterShadowSnapshot shadow_snapshot;
     GpuDrawState draw = {0};
     uint64_t generation;
+    uint64_t scene_id;
     uint32_t context;
     uint32_t index;
+    uint32_t unculled_record_count = 0u;
 
     world_terrain_water_native_last_caller = cpu != NULL ? cpu->gpr[31] : 0u;
     world_terrain_water_native_blocker_detail = 1u;
@@ -10252,10 +10781,12 @@ static bool native_world_terrain_water_cutover(CPUState *cpu) {
     };
     memset(workspace, 0, sizeof(*workspace));
     world_terrain_water_native_blocker_detail = 3u;
+    scene_id = interpolation_scene_generation();
     if (xg_world_terrain_water_native_prepare(
             &request, &reader, workspace->records,
             XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY, workspace->anchors,
-            XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY, &preparation) !=
+            XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY, &workspace->source,
+            &preparation) !=
             XG_WORLD_TERRAIN_WATER_NATIVE_OK ||
         !preparation.authenticated || !preparation.sealed ||
         preparation.authentication_generation != generation ||
@@ -10268,6 +10799,26 @@ static bool native_world_terrain_water_cutover(CPUState *cpu) {
         !guest_data_range_is_valid(
             XG_WORLD_TERRAIN_WATER_NATIVE_FINAL_COUNT_ADDRESS, 4u, 4u,
             false))
+        return false;
+
+    if (world_terrain_water_temporal_scene != scene_id) {
+        memset(world_terrain_water_temporal_tiles, 0,
+               sizeof(world_terrain_water_temporal_tiles));
+        world_terrain_water_temporal_scene = scene_id;
+    }
+    if (xg_world_terrain_water_append_temporal_tile_anchors(
+            world_terrain_water_temporal_tiles,
+            (uint32_t)(sizeof(world_terrain_water_temporal_tiles) /
+                       sizeof(world_terrain_water_temporal_tiles[0])),
+            &workspace->source,
+            workspace->anchors, XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY,
+            &preparation.anchor_count) != XG_WORLD_TERRAIN_WATER_OK)
+        return false;
+
+    if (xg_world_terrain_water_build_unculled(
+            &workspace->source, workspace->unculled_records,
+            XG_WORLD_TERRAIN_WATER_UNCULLED_CAPACITY,
+            &unculled_record_count) != XG_WORLD_TERRAIN_WATER_OK)
         return false;
 
     diagnose_world_terrain_mesh(workspace, preparation.record_count);
@@ -10366,6 +10917,32 @@ static bool native_world_terrain_water_cutover(CPUState *cpu) {
             return false;
         }
     }
+    for (index = 0u; index < unculled_record_count; ++index) {
+        const XgWorldTerrainWaterRecord *record =
+            &workspace->unculled_records[index];
+        const GpuRenderTemporalCullPolicy policy = {
+            .flags = GPU_RENDER_TEMPORAL_CULL_PROJECTIVE |
+                GPU_RENDER_TEMPORAL_CULL_DEPTH |
+                GPU_RENDER_TEMPORAL_FORCE_PHASES,
+            .depth_min_inclusive = 0,
+            .depth_max_exclusive = 0x0f00,
+            .depth_mode = GPU_RENDER_TEMPORAL_DEPTH_MAXIMUM,
+            .ordering_depth_shift = 4u,
+        };
+
+        if (!record->temporal_only ||
+            record->temporal_cull_reasons !=
+                XG_WORLD_TERRAIN_WATER_CULL_DEPTH ||
+            record->max_depth >= UINT16_C(0x0f80))
+            continue;
+        if (!stage_temporal_native_primitive_identified(
+                &record->primitive,
+                XG_WORLD_TERRAIN_WATER_NATIVE_ENTRY_PC,
+                record->interpolation_primitive_id, &policy)) {
+            abort_standalone_submission();
+            return false;
+        }
+    }
     if (!xg_world_terrain_water_shadow_record_native_cutover(
             preparation.record_count)) {
         abort_standalone_submission();
@@ -10425,6 +11002,13 @@ static bool native_world_terrain_water_cutover(CPUState *cpu) {
     psx_store_cycle_barrier();
     cpu->write_word(XG_WORLD_TERRAIN_WATER_NATIVE_FINAL_COUNT_ADDRESS,
                     preparation.final_count);
+    for (index = 0u; index < XG_WORLD_TERRAIN_WATER_TILE_COUNT; ++index) {
+        const XgWorldTerrainWaterTileSource *tile =
+            &workspace->source.tiles[index];
+
+        if (tile->active && tile->has_data && tile->grid_index < 81u)
+            world_terrain_water_temporal_tiles[tile->grid_index] = *tile;
+    }
     cpu->pc = preparation.continuation_pc;
     return true;
 }
@@ -10560,12 +11144,30 @@ static bool native_world_entity_shadows_cutover(CPUState *cpu) {
         const XgWorldEntityShadowRecord *record = &workspace->records[index];
         const uint32_t packet = packet_base + record->packet_offset;
 
-        if (record->accepted && !stage_standalone_native_primitive(
+        if (record->accepted && !stage_standalone_native_primitive_identified(
                 &record->primitive, packet,
                 UINT32_C(0x64000000) |
-                    ((packet & UINT32_C(0x001ffffc)) >> 2u))) {
+                    ((packet & UINT32_C(0x001ffffc)) >> 2u),
+                XG_WORLD_ENTITY_SHADOWS_ENTRY_PC, record->source_index)) {
             abort_standalone_submission();
             return false;
+        }
+        if (!record->accepted && record->primitive.triangle_count != 0u) {
+            const GpuRenderTemporalCullPolicy policy = {
+                .flags = GPU_RENDER_TEMPORAL_CULL_PROJECTIVE |
+                    GPU_RENDER_TEMPORAL_CULL_DEPTH,
+                .depth_min_inclusive = 1,
+                .depth_max_exclusive = 0x1000,
+                .depth_mode = GPU_RENDER_TEMPORAL_DEPTH_MINIMUM,
+                .ordering_depth_shift = 4u,
+            };
+
+            if (!stage_temporal_native_primitive_identified(
+                    &record->primitive, XG_WORLD_ENTITY_SHADOWS_ENTRY_PC,
+                    record->source_index, &policy)) {
+                abort_standalone_submission();
+                return false;
+            }
         }
     }
     if (!xg_world_entity_shadows_shadow_record_native_cutover(
@@ -10662,9 +11264,11 @@ static bool native_world_decorations_cutover(CPUState *cpu) {
     memset(workspace, 0, sizeof(*workspace));
     shared_count_before = cpu->read_word(
         XG_WORLD_DECORATIONS_NATIVE_SHARED_COUNT_ADDRESS);
-    if (xg_world_decorations_native_prepare(
+    if (xg_world_decorations_native_prepare_temporal(
             &request, &reader, workspace->records,
-            XG_WORLD_DECORATIONS_PACKET_CAPACITY, &preparation) !=
+            XG_WORLD_DECORATIONS_PACKET_CAPACITY,
+            workspace->temporal_records,
+            XG_WORLD_DECORATIONS_TEMPORAL_CAPACITY, &preparation) !=
             XG_WORLD_DECORATIONS_NATIVE_OK ||
         !preparation.authenticated || !preparation.sealed ||
         preparation.record_count > XG_WORLD_DECORATIONS_PACKET_CAPACITY ||
@@ -10739,10 +11343,37 @@ static bool native_world_decorations_cutover(CPUState *cpu) {
         const uint32_t packet = preparation.packet_base +
             record->packet_index * XG_WORLD_DECORATIONS_NATIVE_PACKET_STRIDE;
 
-        if (!stage_standalone_native_primitive(
+        if (!stage_standalone_native_primitive_identified(
                 &record->primitive, packet,
                 UINT32_C(0x65000000) |
-                    ((packet & UINT32_C(0x001ffffc)) >> 2u))) {
+                    ((packet & UINT32_C(0x001ffffc)) >> 2u),
+                XG_WORLD_DECORATIONS_NATIVE_ENTRY_PC,
+                record->semantic_id)) {
+            abort_standalone_submission();
+            return false;
+        }
+    }
+    for (index = 0u; index < preparation.temporal_record_count; ++index) {
+        const XgWorldDecorationsRecord *record =
+            &workspace->temporal_records[index];
+        const GpuRenderTemporalCullPolicy policy = {
+            .flags = GPU_RENDER_TEMPORAL_CULL_PROJECTIVE |
+                GPU_RENDER_TEMPORAL_CULL_SCREEN |
+                GPU_RENDER_TEMPORAL_CULL_DEPTH,
+            .screen_left = -request.screen_x_cull_margin * INT32_C(65536),
+            .screen_top = 0,
+            .screen_right_exclusive =
+                (320 + request.screen_x_cull_margin) * INT32_C(65536),
+            .screen_bottom_exclusive = 216 * INT32_C(65536),
+            .depth_min_inclusive = 1,
+            .depth_max_exclusive = 0x0e00,
+            .depth_mode = GPU_RENDER_TEMPORAL_DEPTH_MAXIMUM,
+            .ordering_depth_shift = 4u,
+        };
+
+        if (!stage_temporal_native_primitive_identified(
+                &record->primitive, XG_WORLD_DECORATIONS_NATIVE_ENTRY_PC,
+                record->semantic_id, &policy)) {
             abort_standalone_submission();
             return false;
         }
@@ -11179,6 +11810,100 @@ static bool world_models_stage_primitive(
         interpolation_primitive_id);
 }
 
+static const XgRenderIrVertex *world_model_source_vertex(
+    const XgWorldModelsNativePrimitiveOutput *output, uint32_t source_vertex) {
+    if (output == NULL || source_vertex >= XG_HOST_3D_VERTEX_COUNT ||
+        output->primitive.triangle_count == 0u)
+        return NULL;
+    if (source_vertex < 3u)
+        return &output->primitive.triangles[0].vertices[source_vertex];
+    if (output->primitive.triangle_count < 2u)
+        return NULL;
+    return &output->primitive.triangles[1].vertices[2];
+}
+
+static bool world_models_collect_interpolation_anchors(
+    XgRenderWorldModelsNativeState *workspace, uint64_t scene_id,
+    uint32_t *out_anchor_count, uint32_t *out_failure_detail) {
+    uint32_t anchor_count = 0u;
+    uint32_t dispatch_index;
+
+    if (out_failure_detail != NULL) *out_failure_detail = 0u;
+    if (workspace == NULL || scene_id == 0u || out_anchor_count == NULL ||
+        out_failure_detail == NULL)
+        return false;
+    *out_anchor_count = 0u;
+    for (dispatch_index = 0u;
+         dispatch_index < workspace->preparation.dispatch_count;
+         ++dispatch_index) {
+        const XgWorldModelsNativeDispatch *dispatch =
+            &workspace->dispatches[dispatch_index];
+        uint32_t primitive_offset;
+
+        if (dispatch->primitive_start > workspace->preparation.primitive_count ||
+            dispatch->primitive_count >
+                workspace->preparation.primitive_count -
+                    dispatch->primitive_start) {
+            *out_failure_detail = 1u;
+            return false;
+        }
+        memset(workspace->anchor_seen, 0, sizeof(workspace->anchor_seen));
+        for (primitive_offset = 0u;
+             primitive_offset < dispatch->primitive_count;
+             ++primitive_offset) {
+            const uint32_t primitive_index =
+                dispatch->primitive_start + primitive_offset;
+            const XgWorldModelsNativePrimitiveSource *source =
+                &workspace->primitives[primitive_index];
+            const XgWorldModelsNativePrimitiveOutput *output =
+                &workspace->outputs[primitive_index];
+            uint32_t source_vertex;
+
+            if (source->dispatch_index != dispatch_index) {
+                *out_failure_detail = 2u;
+                return false;
+            }
+            for (source_vertex = 0u;
+                 source_vertex < source->vertex_count; ++source_vertex) {
+                const uint32_t topology_vertex = source->topology[source_vertex];
+                const uint32_t word = topology_vertex / 32u;
+                const uint32_t mask = UINT32_C(1) << (topology_vertex % 32u);
+                const XgRenderIrVertex *vertex;
+
+                if ((workspace->anchor_seen[word] & mask) != 0u) continue;
+                if (anchor_count == XG_RENDER_WORLD_MODEL_ANCHOR_CAPACITY) {
+                    *out_anchor_count = anchor_count;
+                    *out_failure_detail = 3u;
+                    return false;
+                }
+                vertex = world_model_source_vertex(output, source_vertex);
+                if (vertex == NULL) {
+                    *out_anchor_count = anchor_count;
+                    *out_failure_detail = 4u;
+                    return false;
+                }
+                {
+                    const XgRenderBackendStatus status =
+                        xg_render_backend_translate_anchor(
+                            &output->primitive.material, vertex, scene_id,
+                            source->model_header_address & UINT32_C(0x1fffffff),
+                            &workspace->anchors[anchor_count]);
+
+                    if (status != XG_RENDER_BACKEND_OK) {
+                        *out_anchor_count = anchor_count;
+                        *out_failure_detail = UINT32_C(0x100) + (uint32_t)status;
+                        return false;
+                    }
+                }
+                workspace->anchor_seen[word] |= mask;
+                ++anchor_count;
+            }
+        }
+    }
+    *out_anchor_count = anchor_count;
+    return true;
+}
+
 static bool native_world_models_prepare(CPUState *cpu) {
     XgRenderWorldModelsNativeState *workspace = &world_models_native_state;
     XgWorldModelsNativePreparation preparation;
@@ -11190,6 +11915,8 @@ static bool native_world_models_prepare(CPUState *cpu) {
     GpuDrawState draw = {0};
     uint64_t generation;
     uint32_t accepted_count = 0u;
+    uint32_t failure_detail =
+        XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_PRECONDITION;
     uint32_t dispatch_index;
     uint32_t primitive_index;
     uint32_t index;
@@ -11199,8 +11926,13 @@ static bool native_world_models_prepare(CPUState *cpu) {
         cpu->read_byte == NULL || !stack_address_is_valid(cpu->gpr[29]) ||
         cpu->gpr[29] < 0x40u ||
         !guest_data_range_is_valid(cpu->gpr[29] - 0x40u, 0x40u, 4u, false) ||
-        !world_authentication_generation(&generation))
+        !world_authentication_generation(&generation)) {
+        native_snapshot_record_failure(
+            &world_models_native_snapshot,
+            PSX_XG_RENDER_WORLD_NATIVE_FAILURE_PREPARE, failure_detail, 0u);
         return false;
+    }
+    failure_detail = XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_CALLER_RETURN;
     if (!physical_address_equals(
             cpu->gpr[31], XG_WORLD_MODELS_PRODUCER_CONTINUATION_0) &&
         !physical_address_equals(
@@ -11252,14 +11984,22 @@ static bool native_world_models_prepare(CPUState *cpu) {
         .transform_node_capacity = XG_RENDER_WORLD_MODEL_NODE_CAPACITY,
     };
     memset(workspace, 0, sizeof(*workspace));
+    world_model_template_read_failure = 0u;
     native_result = xg_world_models_native_prepare(
         &request, &reader, &native_workspace, workspace->records,
         XG_RENDER_WORLD_MODEL_RECORD_CAPACITY, workspace->node_side_effects,
         XG_RENDER_WORLD_MODEL_NODE_CAPACITY, workspace->dispatches,
         XG_RENDER_WORLD_MODEL_DISPATCH_CAPACITY, workspace->primitives,
         XG_RENDER_WORLD_MODEL_PRIMITIVE_CAPACITY, &preparation);
-    if (native_result != XG_WORLD_MODELS_NATIVE_OK)
+    if (native_result != XG_WORLD_MODELS_NATIVE_OK) {
+        failure_detail = world_model_template_read_failure != 0u
+            ? XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_READ_BASE +
+                  world_model_template_read_failure
+            : XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_NATIVE_RESULT_BASE +
+                  (uint32_t)native_result;
         goto fail;
+    }
+    failure_detail = XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_CONTRACT;
     if (!preparation.authenticated || !preparation.sealed ||
         preparation.authentication_generation != generation ||
         preparation.record_count > XG_RENDER_WORLD_MODEL_RECORD_CAPACITY ||
@@ -11269,6 +12009,7 @@ static bool native_world_models_prepare(CPUState *cpu) {
         !physical_address_equals(preparation.continuation_pc, cpu->gpr[31]))
         goto fail;
 
+    failure_detail = XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_GLOBAL_RANGE;
     if (!guest_data_range_is_valid(XG_WORLD_MODELS_SCALE_X_SCRATCH, 12u, 4u,
                                    true) ||
         !guest_data_range_is_valid(XG_WORLD_MODELS_COARSE_ORIGIN_SCRATCH, 6u,
@@ -11281,6 +12022,7 @@ static bool native_world_models_prepare(CPUState *cpu) {
             XG_WORLD_MODELS_RESIDENT_EMITTED_COUNT_GLOBAL, 4u, 4u, false))
         goto fail;
     for (index = 0u; index < preparation.transform_node_count; ++index) {
+        failure_detail = XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_NODE_RANGE;
         if (!guest_data_range_is_valid(
                 workspace->node_side_effects[index].guest_address +
                     XG_WORLD_MODELS_NODE_WRITEBACK_X_OFFSET,
@@ -11302,9 +12044,13 @@ static bool native_world_models_prepare(CPUState *cpu) {
         dispatch_output->guest_bounds_accepted =
             dispatch->guest_bounds_accepted;
         if (!dispatch->bounds_accepted && !dispatch->guest_bounds_accepted) {
+            failure_detail =
+                XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_CULLED_DISPATCH;
             if (dispatch->primitive_count != 0u) goto fail;
             continue;
         }
+        failure_detail =
+            XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_DISPATCH_RANGE;
         if (dispatch->primitive_start != primitive_index ||
             dispatch->primitive_count >
                 preparation.primitive_count - primitive_index)
@@ -11320,13 +12066,19 @@ static bool native_world_models_prepare(CPUState *cpu) {
             uint32_t allowed_mask;
             uint32_t word;
 
+            failure_detail =
+                XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_SOURCE_IDENTITY;
             if (source->dispatch_index != dispatch_index ||
                 source->primitive_index != dispatch_primitive)
                 goto fail;
             native_result = xg_world_models_native_build_primitive(
                 &preparation, generation, source, output);
-            if (native_result != XG_WORLD_MODELS_NATIVE_OK)
+            if (native_result != XG_WORLD_MODELS_NATIVE_OK) {
+                failure_detail =
+                    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_BUILD_RESULT_BASE +
+                    (uint32_t)native_result;
                 goto fail;
+            }
             if (!dispatch->bounds_accepted) {
                 output->passed_screen_cull = false;
                 output->accepted = false;
@@ -11339,37 +12091,80 @@ static bool native_world_models_prepare(CPUState *cpu) {
             }
             template_entry = world_model_template_find(
                 source->packet_address, false);
-            if (template_entry == NULL ||
-                !template_entry->active ||
-                template_entry->owner_cpu != cpu ||
-                template_entry->resource_epoch != source->resource_epoch ||
-                template_entry->model_address !=
-                    model_ft4_template_key(source->model_header_address) ||
-                template_entry->packet_base !=
-                    model_ft4_template_key(source->packet_base_address) ||
-                template_entry->primitive_ordinal != source->primitive_index ||
-                template_entry->attribute_address !=
-                    model_ft4_template_key(source->attribute_address) ||
-                template_entry->primitive_family != source->primitive_family ||
-                template_entry->word_count != source->packet_word_count ||
-                output->packet_address != source->packet_address ||
-                output->packet_word_count != source->packet_word_count ||
-                (output->guest_ordering_table_written &&
-                 !output->counter_incremented) ||
-                !guest_data_range_is_valid(
+            failure_detail =
+                XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_MISSING;
+            if (template_entry == NULL) goto fail;
+            failure_detail =
+                XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_INACTIVE;
+            if (!template_entry->active) goto fail;
+            failure_detail =
+                XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_OWNER;
+            if (template_entry->owner_cpu != cpu) goto fail;
+            failure_detail =
+                XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_EPOCH;
+            if (template_entry->resource_epoch != source->resource_epoch)
+                goto fail;
+            failure_detail =
+                XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_MODEL;
+            if (template_entry->model_address !=
+                    model_ft4_template_key(source->model_header_address))
+                goto fail;
+            failure_detail =
+                XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_PACKET_BASE;
+            if (template_entry->packet_base !=
+                    model_ft4_template_key(source->packet_base_address))
+                goto fail;
+            failure_detail =
+                XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_ORDINAL;
+            if (template_entry->primitive_ordinal != source->primitive_index)
+                goto fail;
+            failure_detail =
+                XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_ATTRIBUTE;
+            if (template_entry->attribute_address !=
+                    model_ft4_template_key(source->attribute_address))
+                goto fail;
+            failure_detail =
+                XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_FAMILY;
+            if (template_entry->primitive_family != source->primitive_family)
+                goto fail;
+            failure_detail =
+                XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_TEMPLATE_WORD_COUNT;
+            if (template_entry->word_count != source->packet_word_count)
+                goto fail;
+            failure_detail =
+                XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_OUTPUT_PACKET;
+            if (output->packet_address != source->packet_address) goto fail;
+            failure_detail =
+                XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_OUTPUT_WORD_COUNT;
+            if (output->packet_word_count != source->packet_word_count)
+                goto fail;
+            failure_detail =
+                XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_OUTPUT_COUNTER;
+            if (output->guest_ordering_table_written &&
+                !output->counter_incremented)
+                goto fail;
+            failure_detail =
+                XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_PACKET_RANGE;
+            if (!guest_data_range_is_valid(
                     source->packet_address,
                     (uint32_t)source->packet_word_count * 4u, 4u, false))
                 goto fail;
             workspace->templates[primitive_index] = template_entry;
             allowed_mask =
                 (UINT32_C(1) << source->packet_word_count) - 1u;
-            if ((output->packet_word_write_mask & ~allowed_mask) != 0u ||
-                output->accepted != output->ordering_table_written ||
-                ((output->accepted ||
-                  output->guest_ordering_table_written) &&
-                  (output->packet_word_write_mask & 1u) == 0u))
+            failure_detail = XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_OUTPUT_MASK;
+            if ((output->packet_word_write_mask & ~allowed_mask) != 0u)
+                goto fail;
+            failure_detail =
+                XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_OUTPUT_ACCEPTED;
+            if (output->accepted != output->ordering_table_written) goto fail;
+            failure_detail = XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_OUTPUT_TAG;
+            if ((output->accepted || output->guest_ordering_table_written) &&
+                (output->packet_word_write_mask & 1u) == 0u)
                 goto fail;
             for (word = 0u; word < source->packet_word_count; ++word) {
+                failure_detail =
+                    XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_PACKET_WORD;
                 if (cpu->read_word(source->packet_address + word * 4u) !=
                     template_entry->words[word])
                     goto fail;
@@ -11392,6 +12187,7 @@ static bool native_world_models_prepare(CPUState *cpu) {
                 const uint32_t ot_address =
                     dispatch->call.ordering_table_address + bucket * 4u;
 
+                failure_detail = XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_OT_RANGE;
                 if (bucket >= XG_WORLD_MODELS_OT_BUCKET_COUNT ||
                     !guest_data_range_is_valid(ot_address, 4u, 4u, false))
                     goto fail;
@@ -11406,6 +12202,7 @@ static bool native_world_models_prepare(CPUState *cpu) {
             dispatch_output->packet_cursor_after &= UINT32_C(0x00ffffff);
         dispatch_output->group_cursor_after = dispatch->group_cursor_after;
     }
+    failure_detail = XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_PRIMITIVE_TOTAL;
     if (primitive_index != preparation.primitive_count ||
         !native_snapshot_can_record(&world_models_native_snapshot,
                                     accepted_count))
@@ -11422,6 +12219,7 @@ static bool native_world_models_prepare(CPUState *cpu) {
 
         if (!dispatch->bounds_accepted && !dispatch->guest_bounds_accepted)
             continue;
+        failure_detail = XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_COMMIT_OVERFLOW;
         if ((dispatch->guest_bounds_accepted &&
              commit.resident_vertex_total > UINT32_MAX -
                  dispatch->model.vertex_count) ||
@@ -11448,6 +12246,7 @@ static bool native_world_models_prepare(CPUState *cpu) {
             commit.resident_dispatch_globals_written = true;
         }
     }
+    failure_detail = XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_COMMIT_TOTAL;
     if (commit.processed_primitive_count != preparation.primitive_count ||
         commit.accepted_primitive_count != accepted_count)
         goto fail;
@@ -11496,6 +12295,9 @@ static bool native_world_models_prepare(CPUState *cpu) {
     return true;
 
 fail:
+    native_snapshot_record_failure(
+        &world_models_native_snapshot,
+        PSX_XG_RENDER_WORLD_NATIVE_FAILURE_PREPARE, failure_detail, 0u);
     invalidate_world_model_templates();
     return false;
 }
@@ -11505,35 +12307,49 @@ static bool native_world_models_commit(CPUState *cpu) {
     XgWorldModelsNativePreparation *preparation = &workspace->preparation;
     XgWorldModelsNativeCommit commit;
     const XgWorldModelsNativeCommit *expected = &workspace->expected_commit;
+    XgWorldModelsNativeResult native_result;
+    GpuRenderTransactionStatus transaction_status;
     uint64_t generation;
+    uint32_t anchor_count = 0u;
+    uint32_t failure_detail = 1u;
+    PsxXgRenderWorldNativeFailureStage failure_stage =
+        PSX_XG_RENDER_WORLD_NATIVE_FAILURE_COMMIT_PRECONDITION;
     uint32_t primitive_index;
     uint32_t index;
 
     if (!workspace->valid || workspace->owner_cpu != cpu) {
         goto fail_commit;
     }
+    failure_detail = 2u;
     if (!native_world_cutover_ready()) {
         goto fail_commit;
     }
+    failure_detail = 3u;
     if (!world_authentication_generation(&generation)) {
         goto fail_commit;
     }
+    failure_detail = 4u;
     if (generation != workspace->authentication_generation) {
         goto fail_commit;
     }
+    failure_detail = 5u;
     if (cpu == NULL || cpu->read_word == NULL || cpu->read_half == NULL) {
         goto fail_commit;
     }
+    failure_detail = 6u;
     if (workspace->entry_stack_pointer < 0x40u) {
         goto fail_commit;
     }
+    failure_detail = 7u;
     if (cpu->gpr[29] != workspace->entry_stack_pointer - 0x40u) {
         goto fail_commit;
     }
+    failure_detail = 8u;
     if (!physical_address_equals(cpu->read_word(cpu->gpr[29] + 0x38u),
                                  expected->continuation_pc)) {
         goto fail_commit;
     }
+    failure_detail = 9u;
     if (cpu->read_word(XG_WORLD_MODELS_SCALE_X_SCRATCH) !=
         expected->entry_side_effects.scratch_scale[0]) {
         goto fail_commit;
@@ -11632,19 +12448,86 @@ static bool native_world_models_commit(CPUState *cpu) {
               expected->resident_model_18))
         goto fail_commit;
 
-    if (xg_world_models_native_finalize(
+    if (!world_models_collect_interpolation_anchors(
+            workspace, interpolation_scene_generation(), &anchor_count,
+            &failure_detail)) {
+        failure_stage = PSX_XG_RENDER_WORLD_NATIVE_FAILURE_ANCHOR_COLLECTION;
+        goto fail_commit;
+    }
+    native_result = xg_world_models_native_finalize(
             preparation, generation, workspace->dispatches,
             workspace->dispatch_outputs, preparation->dispatch_count,
             workspace->primitives, workspace->outputs,
             preparation->primitive_count, workspace,
             world_models_begin_submission, world_models_stage_primitive,
-            &commit) != XG_WORLD_MODELS_NATIVE_OK ||
+            &commit);
+    if (native_result != XG_WORLD_MODELS_NATIVE_OK ||
         !commit.authenticated || !commit.sealed ||
         commit.authentication_generation != generation ||
          commit.accepted_primitive_count != workspace->accepted_count ||
          commit.resident_vertex_total != expected->resident_vertex_total ||
-         commit.resident_emitted_count != expected->resident_emitted_count)
+         commit.resident_emitted_count != expected->resident_emitted_count) {
+        failure_stage = PSX_XG_RENDER_WORLD_NATIVE_FAILURE_FINALIZE;
+        failure_detail = (uint32_t)native_result;
         goto fail_commit;
+    }
+    for (primitive_index = 0u;
+         primitive_index < preparation->primitive_count; ++primitive_index) {
+        const XgWorldModelsNativePrimitiveSource *source =
+            &workspace->primitives[primitive_index];
+        const XgWorldModelsNativePrimitiveOutput *output =
+            &workspace->outputs[primitive_index];
+        const uint8_t mode = source->dispatch_mode;
+        const int32_t margin = xg_host_3d_native_view_margin();
+        const uint32_t interpolation_primitive_id =
+            source->source_index * 4096u + source->primitive_index;
+        const bool average = source->primitive_family == 16u ||
+            mode == 0u || mode == 4u;
+        const GpuRenderTemporalCullPolicy policy = {
+            .flags = GPU_RENDER_TEMPORAL_CULL_PROJECTIVE |
+                GPU_RENDER_TEMPORAL_CULL_SCREEN |
+                GPU_RENDER_TEMPORAL_CULL_FRONT_FACE |
+                GPU_RENDER_TEMPORAL_CULL_DEPTH,
+            .screen_left = margin > 0
+                ? -margin * INT32_C(65536) : INT32_MIN,
+            .screen_top = 0,
+            .screen_right_exclusive =
+                ((int32_t)preparation->screen_right + margin) *
+                    INT32_C(65536),
+            .screen_bottom_exclusive =
+                (int32_t)(preparation->packed_screen_bottom >> 16u) *
+                    INT32_C(65536),
+            .depth_min_inclusive = 1,
+            .depth_max_exclusive = 0x10000,
+            .depth_mode = average ? GPU_RENDER_TEMPORAL_DEPTH_AVERAGE :
+                ((mode == 2u || mode == 5u)
+                    ? GPU_RENDER_TEMPORAL_DEPTH_MAXIMUM
+                    : GPU_RENDER_TEMPORAL_DEPTH_MINIMUM),
+            .front_face = GPU_RENDER_TEMPORAL_FRONT_POSITIVE,
+            .ordering_depth_shift = (uint8_t)(average
+                ? preparation->ordering_shift
+                : ((preparation->ordering_shift + 2u) & 31u)),
+        };
+
+        if (output->accepted || output->primitive.triangle_count == 0u)
+            continue;
+        if (!stage_temporal_native_primitive_identified(
+                &output->primitive,
+                source->model_header_address & UINT32_C(0x1fffffff),
+                interpolation_primitive_id, &policy)) {
+            failure_stage = PSX_XG_RENDER_WORLD_NATIVE_FAILURE_FINALIZE;
+            failure_detail = UINT32_C(0x1000) + primitive_index;
+            goto fail_commit;
+        }
+    }
+    transaction_status = anchor_count != 0u
+        ? gr_record_interpolation_anchors(workspace->anchors, anchor_count)
+        : GPU_RENDER_TRANSACTION_OK;
+    if (transaction_status != GPU_RENDER_TRANSACTION_OK) {
+        failure_stage = PSX_XG_RENDER_WORLD_NATIVE_FAILURE_ANCHOR_RECORD;
+        failure_detail = (uint32_t)transaction_status;
+        goto fail_commit;
+    }
 
     for (primitive_index = 0u;
          primitive_index < preparation->primitive_count; ++primitive_index) {
@@ -11663,10 +12546,14 @@ static bool native_world_models_commit(CPUState *cpu) {
     }
     native_snapshot_record(
         &world_models_native_snapshot, workspace->accepted_count);
+    world_models_native_snapshot.last_anchor_count = anchor_count;
     clear_world_models_native_pending();
     return true;
 
 fail_commit:
+    native_snapshot_record_failure(
+        &world_models_native_snapshot, failure_stage, failure_detail,
+        anchor_count);
     abort_standalone_submission();
     clear_world_models_native_pending();
     invalidate_world_model_templates();
@@ -11783,14 +12670,26 @@ static bool native_world_sky_cutover(CPUState *cpu) {
             &world_sky_native_snapshot, accepted_count))
         return false;
     for (quad = 0u; quad < XG_WORLD_SKY_QUAD_COUNT; ++quad) {
-        if (records[quad].accepted &&
-            !stage_standalone_native_primitive_identified(
+        if (records[quad].accepted) {
+            if (!stage_standalone_native_primitive_identified(
                 &records[quad].primitive, records[quad].packet_address,
                 UINT32_C(0x50000000) |
                     (records[quad].packet_address & UINT32_C(0x001ffffc)),
                 UINT32_C(0x800737ec), quad)) {
-            abort_standalone_submission();
-            return false;
+                abort_standalone_submission();
+                return false;
+            }
+        } else {
+            const GpuRenderTemporalCullPolicy policy = {
+                .flags = GPU_RENDER_TEMPORAL_CULL_PROJECTIVE,
+            };
+
+            if (!stage_temporal_native_primitive_identified(
+                    &records[quad].primitive, UINT32_C(0x800737ec), quad,
+                    &policy)) {
+                abort_standalone_submission();
+                return false;
+            }
         }
     }
     native_snapshot_record(&world_sky_native_snapshot, accepted_count);
@@ -11875,6 +12774,18 @@ static bool native_world_horizon_cutover(CPUState *cpu) {
              UINT64_MAX - XG_WORLD_HORIZON_QUAD_COUNT))
         return false;
     if (!records[0].accepted) {
+        const GpuRenderTemporalCullPolicy policy = {
+            .flags = GPU_RENDER_TEMPORAL_CULL_PROJECTIVE,
+        };
+
+        for (quad = 0u; quad < XG_WORLD_HORIZON_QUAD_COUNT; ++quad) {
+            if (!stage_temporal_native_primitive_identified(
+                    &records[quad].primitive, UINT32_C(0x80073b04), quad,
+                    &policy)) {
+                abort_standalone_submission();
+                return false;
+            }
+        }
         ++world_horizon_shadow.snapshot.native_cutover_count;
         cpu->pc = cpu->gpr[31];
         return true;
@@ -11992,6 +12903,7 @@ static bool native_world_effects_cutover(CPUState *cpu) {
     GuestRenderBridgeSnapshot bridge = { 0 };
     XgWorldEffectsCapture capture;
     XgWorldEffectsRecord records[XG_WORLD_EFFECTS_SOURCE_CAPACITY];
+    XgWorldEffectsRecord temporal_records[XG_WORLD_EFFECTS_SOURCE_CAPACITY];
     uint32_t packet_addresses[XG_WORLD_EFFECTS_SOURCE_CAPACITY];
     uint32_t packet_tags[XG_WORLD_EFFECTS_SOURCE_CAPACITY];
     uint32_t ot_addresses[XG_WORLD_EFFECTS_SOURCE_CAPACITY];
@@ -12000,6 +12912,7 @@ static bool native_world_effects_cutover(CPUState *cpu) {
     uint32_t context;
     uint32_t ot_base;
     uint32_t count;
+    uint32_t temporal_count;
     uint32_t index;
     uint32_t vertex;
 
@@ -12012,7 +12925,9 @@ static bool native_world_effects_cutover(CPUState *cpu) {
     if (cpu == NULL || cpu->read_word == NULL || cpu->read_half == NULL ||
         cpu->write_word == NULL ||
         !physical_address_equals(cpu->gpr[31], UINT32_C(0x80071aa8)) ||
-        world_effects_capture_build(cpu, &capture, records, &count) != 0u)
+        world_effects_capture_build(
+            cpu, &capture, records, &count, temporal_records,
+            &temporal_count) != 0u)
         return false;
 
     buffer_index = cpu->read_word(EFFECTS_BUFFER_INDEX);
@@ -12056,6 +12971,32 @@ static bool native_world_effects_cutover(CPUState *cpu) {
                 &records[index].primitive, packet_addresses[index],
                 UINT32_C(0x60000000) | records[index].source_index,
                 UINT32_C(0x80089c78), records[index].source_index)) {
+            abort_standalone_submission();
+            return false;
+        }
+    }
+    for (index = 0u; index < temporal_count; ++index) {
+        const XgWorldEffectsRecord *record = &temporal_records[index];
+        /* The guest projects these billboards before authoring their screen
+         * quad. Keep screen-space interpolation instead of inventing a host
+         * projective position merely to reproduce the GTE flag test. */
+        const GpuRenderTemporalCullPolicy policy = {
+            .flags = GPU_RENDER_TEMPORAL_CULL_SCREEN |
+                GPU_RENDER_TEMPORAL_CULL_DEPTH,
+            .screen_left = INT32_MIN,
+            .screen_top = INT32_MIN,
+            .screen_right_exclusive =
+                (320 + capture.source.screen_x_cull_margin) * INT32_C(65536),
+            .screen_bottom_exclusive = 216 * INT32_C(65536),
+            .depth_min_inclusive = 0,
+            .depth_max_exclusive = 0xc00,
+            .depth_mode = GPU_RENDER_TEMPORAL_DEPTH_MAXIMUM,
+            .ordering_depth_shift = 4u,
+        };
+
+        if (!stage_temporal_native_primitive_identified(
+                &record->primitive, UINT32_C(0x80089c78),
+                record->source_index, &policy)) {
             abort_standalone_submission();
             return false;
         }
@@ -12176,7 +13117,8 @@ static void native_world_clouds_prepare(CPUState *cpu) {
             cpu->read_word(CLOUD_CALLBACK_POINTER), CLOUD_CALLBACK_PHYSICAL) ||
         world_clouds_capture_build(
             cpu, &capture, pending->records, &pending->record_count,
-            pending->stepped_positions, &stats) != 0u) {
+            pending->stepped_positions, &stats, pending->temporal_records,
+            &pending->temporal_record_count) != 0u) {
         poison_world_clouds_native_pending();
         return;
     }
@@ -12404,6 +13346,37 @@ static void native_world_clouds_commit(CPUState *cpu) {
             return;
         }
         if (world_native_cutover_failed) {
+            world_native_cutover_in_progress = false;
+            poison_world_clouds_native_pending();
+            clear_world_clouds_native_pending();
+            return;
+        }
+    }
+    for (index = 0u; index < pending->temporal_record_count; ++index) {
+        const XgWorldCloudRecord *record = &pending->temporal_records[index];
+        const uint32_t interpolation_primitive_id =
+            ((record->source_index * 3u + (uint32_t)record->lod) * 48u) +
+            record->lod_quad_index;
+        const int32_t margin = render_screen_x_cull_margin();
+        const GpuRenderTemporalCullPolicy policy = {
+            .flags = GPU_RENDER_TEMPORAL_CULL_PROJECTIVE |
+                GPU_RENDER_TEMPORAL_CULL_SCREEN |
+                GPU_RENDER_TEMPORAL_CULL_DEPTH,
+            .screen_left = -margin * INT32_C(65536),
+            .screen_top = 0,
+            .screen_right_exclusive =
+                (320 + margin) * INT32_C(65536),
+            .screen_bottom_exclusive = 216 * INT32_C(65536),
+            .depth_min_inclusive = 1,
+            .depth_max_exclusive = 0x0d01,
+            .depth_mode = GPU_RENDER_TEMPORAL_DEPTH_MAXIMUM,
+            .ordering_depth_shift = 4u,
+        };
+
+        if (!stage_temporal_native_primitive_identified(
+                &record->primitive, UINT32_C(0x80086798),
+                interpolation_primitive_id, &policy)) {
+            abort_standalone_submission();
             world_native_cutover_in_progress = false;
             poison_world_clouds_native_pending();
             clear_world_clouds_native_pending();
@@ -14382,9 +15355,14 @@ bool psx_xg_render_auth_native_ft4_bypass(
         world_model_initializer_finish(cpu);
         return false;
     }
-    if (physical_address_equals(pc, UINT32_C(0x80084778)) &&
-        instruction_word == UINT32_C(0x26100010)) {
-        world_model_observe_packet_buffer_copy(cpu);
+    if (physical_address_equals(pc, UINT32_C(0x8003f968)) &&
+        instruction_word == UINT32_C(0x1080000a)) {
+        world_model_begin_packet_buffer_copy(cpu);
+        return false;
+    }
+    if (physical_address_equals(pc, UINT32_C(0x8003f994)) &&
+        instruction_word == UINT32_C(0x03e00008)) {
+        world_model_finish_packet_buffer_copy(cpu);
         return false;
     }
     if (physical_address_equals(pc, UINT32_C(0x8002caa4)) &&
@@ -16141,8 +17119,9 @@ void psx_xg_render_auth_loader_mismatch(uint32_t pc) {
         clear_model_ft3_sources();
         clear_world_horizon_shadow_pending();
         clear_world_effects_shadow_pending();
-        invalidate_world_semantic_shadows();
-        invalidate_world_model_templates();
+        /* A rehash miss demotes compiled host code to authoritative guest
+         * execution. It aborts the active proof, not resources observed from
+         * that guest execution; code writes own their invalidation separately. */
         abort_active(XG_RENDER_AUTH_REJECT_VALIDATION_MISMATCH,
                      PSX_XG_RENDER_AUTH_REJECTION_SOURCE_LOADER_MISMATCH,
                      false, PSX_XG_RENDER_AUTH_HOOK_ENTRY, pc);
@@ -16534,6 +17513,9 @@ void psx_xg_render_auth_runtime_test_reset(void) {
     clear_world_models_native_pending();
     world_terrain_water_native_state =
         (XgRenderWorldTerrainWaterNativeState){0};
+    memset(world_terrain_water_temporal_tiles, 0,
+           sizeof(world_terrain_water_temporal_tiles));
+    world_terrain_water_temporal_scene = 0u;
     world_terrain_water_native_last_caller = 0u;
     world_terrain_water_native_blocker_detail = 0u;
     world_entity_shadows_native_state =

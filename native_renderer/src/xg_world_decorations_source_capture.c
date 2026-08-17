@@ -490,10 +490,11 @@ static XgWorldDecorationsNativeResult native_capture_result(
     }
 }
 
-XgWorldDecorationsNativeResult xg_world_decorations_native_prepare(
+XgWorldDecorationsNativeResult xg_world_decorations_native_prepare_temporal(
     const XgWorldDecorationsNativeRequest *request,
     const XgWorldDecorationsAuthenticatedReader *reader,
     XgWorldDecorationsRecord *records, uint32_t record_capacity,
+    XgWorldDecorationsRecord *temporal_records, uint32_t temporal_capacity,
     XgWorldDecorationsNativePreparation *out_preparation) {
     XgWorldDecorationsNativePreparation preparation = {0};
     XgWorldDecorationsCaptureRequest source_request = {0};
@@ -501,6 +502,7 @@ XgWorldDecorationsNativeResult xg_world_decorations_native_prepare(
     DecorationsCaptureAccess access = {0};
     uint32_t helper_positions[XG_WORLD_DECORATIONS_NATIVE_GRID_CELL_COUNT];
     uint32_t helper_counts[XG_WORLD_DECORATIONS_NATIVE_GRID_CELL_COUNT];
+    uint32_t helper_ids[XG_WORLD_DECORATIONS_NATIVE_GRID_CELL_COUNT];
     uint32_t source_descriptors;
     uint32_t context;
     uint32_t buffer_index;
@@ -519,6 +521,7 @@ XgWorldDecorationsNativeResult xg_world_decorations_native_prepare(
     if (request == NULL || reader == NULL || records == NULL ||
         reader->read_u16 == NULL || reader->read_u32 == NULL ||
         record_capacity < XG_WORLD_DECORATIONS_PACKET_CAPACITY ||
+        (temporal_records == NULL && temporal_capacity != 0u) ||
         request->authentication_generation == 0u ||
         request->entry_pc != XG_WORLD_DECORATIONS_NATIVE_ENTRY_PC ||
         request->caller_return != XG_WORLD_DECORATIONS_NATIVE_CALLER_RETURN ||
@@ -616,6 +619,7 @@ XgWorldDecorationsNativeResult xg_world_decorations_native_prepare(
                 return result;
             helper_positions[preparation.helper_count] = positions;
             helper_counts[preparation.helper_count] = count;
+            helper_ids[preparation.helper_count] = cell;
             ++preparation.helper_count;
         }
     }
@@ -668,6 +672,8 @@ XgWorldDecorationsNativeResult xg_world_decorations_native_prepare(
 
         for (helper = 0u; helper < preparation.helper_count; ++helper) {
             XgWorldDecorationsResult build_result;
+            const uint32_t accepted_start = preparation.record_count;
+            const uint32_t temporal_start = preparation.temporal_record_count;
 
             if (preparation.record_count >=
                 XG_WORLD_DECORATIONS_PACKET_CAPACITY)
@@ -682,11 +688,23 @@ XgWorldDecorationsNativeResult xg_world_decorations_native_prepare(
                 &capture.source);
             if (capture_result != XG_WORLD_DECORATIONS_CAPTURE_OK)
                 return native_capture_result(capture_result);
-            build_result = xg_world_decorations_build(
+            build_result = xg_world_decorations_build_with_temporal(
                 &capture.source, records, record_capacity,
-                &preparation.record_count);
+                &preparation.record_count, temporal_records,
+                temporal_capacity, temporal_records != NULL
+                    ? &preparation.temporal_record_count : NULL);
             if (build_result != XG_WORLD_DECORATIONS_OK)
                 return XG_WORLD_DECORATIONS_NATIVE_BUILD_FAILED;
+            for (uint32_t record = accepted_start;
+                 record < preparation.record_count; ++record)
+                records[record].semantic_id =
+                    helper_ids[helper] * XG_WORLD_DECORATIONS_POSITION_CAPACITY +
+                    records[record].source_index;
+            for (uint32_t record = temporal_start;
+                 record < preparation.temporal_record_count; ++record)
+                temporal_records[record].semantic_id =
+                    helper_ids[helper] * XG_WORLD_DECORATIONS_POSITION_CAPACITY +
+                    temporal_records[record].source_index;
         }
     } else {
         preparation.shared_count_write_mask = UINT32_C(0x0000ffff);
@@ -712,4 +730,14 @@ XgWorldDecorationsNativeResult xg_world_decorations_native_prepare(
     preparation.sealed = true;
     *out_preparation = preparation;
     return XG_WORLD_DECORATIONS_NATIVE_OK;
+}
+
+XgWorldDecorationsNativeResult xg_world_decorations_native_prepare(
+    const XgWorldDecorationsNativeRequest *request,
+    const XgWorldDecorationsAuthenticatedReader *reader,
+    XgWorldDecorationsRecord *records, uint32_t record_capacity,
+    XgWorldDecorationsNativePreparation *out_preparation) {
+    return xg_world_decorations_native_prepare_temporal(
+        request, reader, records, record_capacity, NULL, 0u,
+        out_preparation);
 }

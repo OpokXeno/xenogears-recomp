@@ -36,6 +36,7 @@ typedef struct TestReader {
 } TestReader;
 
 static XgWorldCloudRecord records[XG_WORLD_CLOUD_PACKET_CAPACITY];
+static XgWorldCloudRecord temporal_records[XG_WORLD_CLOUD_TEMPORAL_CAPACITY];
 
 static uint32_t pack_s16(int16_t low, int16_t high) {
     return (uint16_t)low | ((uint32_t)(uint16_t)high << 16u);
@@ -445,6 +446,7 @@ static int test_culls_and_far_stops(void) {
     XgWorldCloudsCapture capture;
     XgWorldCloudsBuildStats stats;
     uint32_t count;
+    uint32_t temporal_count = 0u;
     TestReader reader = {
         .camera_translation_z = 900,
         .visible_count = 0u,
@@ -468,9 +470,21 @@ static int test_culls_and_far_stops(void) {
     memset(&reader, 0, sizeof(reader));
     reader.camera_translation_z = 900;
     reader.visible_count = 1u;
-    CHECK(build_capture(&reader, 300, &capture, &stats, &count));
+    CHECK(capture_source(&reader, 300, &capture) ==
+          XG_WORLD_CLOUDS_CAPTURE_OK);
+    CHECK(xg_world_clouds_build_with_temporal(
+              &capture.source, records, XG_WORLD_CLOUD_PACKET_CAPACITY,
+              &count, &stats, temporal_records,
+              XG_WORLD_CLOUD_TEMPORAL_CAPACITY, &temporal_count) ==
+          XG_WORLD_CLOUDS_OK);
     CHECK(count == 0u);
     CHECK(stats.quad_screen_culled == XG_WORLD_CLOUD_NEAR_QUAD_COUNT);
+    CHECK(temporal_count == XG_WORLD_CLOUD_NEAR_QUAD_COUNT);
+    CHECK(temporal_records[0].cull == XG_WORLD_CLOUD_CULL_SCREEN);
+    CHECK(temporal_records[0].source_index == 0u);
+    CHECK(temporal_records[0].lod == XG_WORLD_CLOUD_LOD_NEAR);
+    CHECK(temporal_records[0].lod_quad_index == 0u);
+    CHECK(temporal_records[0].primitive.triangle_count == 2u);
 
     capture.source.camera.translation[2] = 1200;
     capture.source.projection_distance = UINT16_MAX;

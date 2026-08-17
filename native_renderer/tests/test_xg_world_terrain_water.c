@@ -276,7 +276,10 @@ static int test_capture_and_all_ft3_variants(void) {
     CHECK(records[0].ordering_bucket == 128u);
     CHECK(records[0].allocation_ordinal == 0u);
     CHECK(records[0].source_primitive_index == 0u);
-    CHECK(records[0].interpolation_primitive_id == UINT32_C(0x00280000));
+    CHECK(records[0].interpolation_primitive_id ==
+          xg_world_terrain_water_interpolation_primitive_id(
+              capture.source.tiles[0].grid_index,
+              capture.source.tiles[0].terrain_id, 0u));
     CHECK(records[0].ordering_predecessor_is_external);
     CHECK(records[0].primitive.triangle_count == 1u);
     CHECK(records[0].primitive.triangles[0].split_index == 0u);
@@ -427,6 +430,11 @@ static int test_interpolation_identity_survives_tile_slot_movement(void) {
     CHECK(moved[0].primitive.triangles[0].vertices[0]
               .interpolation_vertex_id == original_vertex);
     CHECK(moved[0].interpolation_primitive_id != original_primitive);
+
+    CHECK(xg_world_terrain_water_interpolation_primitive_id(1u, 0u, 0u) !=
+          xg_world_terrain_water_interpolation_primitive_id(0u, 0u, 0u));
+    CHECK(xg_world_terrain_water_interpolation_primitive_id(0u, 1u, 0u) !=
+          xg_world_terrain_water_interpolation_primitive_id(0u, 0u, 0u));
     return 1;
 }
 
@@ -568,11 +576,43 @@ static int test_temporal_coverage_captures_culled_quadrants(void) {
     return 1;
 }
 
+static int test_temporal_anchors_cover_retired_tile(void) {
+    static XgWorldTerrainWaterAnchor anchors[
+        XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY];
+    TestReader reader = {0};
+    XgWorldTerrainWaterCapture capture;
+    XgWorldTerrainWaterSource current;
+    uint32_t anchor_count = 0u;
+
+    xg_world_terrain_water_set_temporal_coverage(true);
+    CHECK(capture_source(&reader, &capture) ==
+          XG_WORLD_TERRAIN_WATER_CAPTURE_OK);
+    current = capture.source;
+    current.tiles[0].active = false;
+    current.tiles[0].has_data = false;
+    current.screen_offset_x = 2000 << 16;
+    CHECK(xg_world_terrain_water_append_temporal_anchors(
+              &capture.source, &current, anchors,
+              XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY, &anchor_count) ==
+          XG_WORLD_TERRAIN_WATER_OK);
+    CHECK(anchor_count == 289u);
+    CHECK(anchors[0].vertex.interpolation_group_id == UINT32_C(0x63000000));
+    CHECK(anchors[0].vertex.interpolation_vertex_identity_valid);
+    CHECK(xg_world_terrain_water_append_temporal_anchors(
+              &capture.source, &current, anchors,
+              XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY, &anchor_count) ==
+          XG_WORLD_TERRAIN_WATER_OK);
+    CHECK(anchor_count == 289u);
+    xg_world_terrain_water_set_temporal_coverage(false);
+    return 1;
+}
+
 static int test_native_preparation_and_scratch_ledger(void) {
     static XgWorldTerrainWaterRecord records[
         XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY];
     static XgWorldTerrainWaterAnchor anchors[
         XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY];
+    static XgWorldTerrainWaterSource prepared_source;
     TestReader context = { 0 };
     XgWorldTerrainWaterNativePreparation preparation;
     XgWorldTerrainWaterNativeRequest request = {
@@ -611,7 +651,8 @@ static int test_native_preparation_and_scratch_ledger(void) {
     CHECK(xg_world_terrain_water_native_prepare(
               &request, &reader, records,
               XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY, anchors,
-              XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY, &preparation) ==
+              XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY, &prepared_source,
+              &preparation) ==
           XG_WORLD_TERRAIN_WATER_NATIVE_OK);
     CHECK(preparation.authenticated && preparation.sealed);
     CHECK(preparation.authentication_generation == 9u);
@@ -669,7 +710,8 @@ static int test_native_preparation_and_scratch_ledger(void) {
     CHECK(xg_world_terrain_water_native_prepare(
               &request, &reader, records,
               XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY, anchors,
-              XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY, &preparation) ==
+              XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY, &prepared_source,
+              &preparation) ==
           XG_WORLD_TERRAIN_WATER_NATIVE_INVALID_OUTPUT);
     CHECK(!preparation.authenticated && !preparation.sealed);
     CHECK(preparation.record_count == 0u);
@@ -688,6 +730,7 @@ int main(void) {
     ok &= test_quadrant_cull_and_scratch_page_seven();
     ok &= test_capture_and_source_fail_closed();
     ok &= test_temporal_coverage_captures_culled_quadrants();
+    ok &= test_temporal_anchors_cover_retired_tile();
     ok &= test_native_preparation_and_scratch_ledger();
     return ok ? 0 : 1;
 }

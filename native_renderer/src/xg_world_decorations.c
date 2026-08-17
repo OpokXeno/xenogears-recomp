@@ -119,16 +119,23 @@ static void build_ft4_payload(const XgWorldDecorationsSource *source,
         packed_uv(source->uv[3][0], source->uv[3][1], 0u);
 }
 
-XgWorldDecorationsResult xg_world_decorations_build(
+XgWorldDecorationsResult xg_world_decorations_build_with_temporal(
     const XgWorldDecorationsSource *source, XgWorldDecorationsRecord *records,
-    uint32_t record_capacity, uint32_t *in_out_packet_count) {
+    uint32_t record_capacity, uint32_t *in_out_packet_count,
+    XgWorldDecorationsRecord *rejected_records, uint32_t rejected_capacity,
+    uint32_t *in_out_rejected_count) {
     uint32_t source_index;
     uint32_t packet_count;
+    uint32_t rejected_count = in_out_rejected_count != NULL
+        ? *in_out_rejected_count : 0u;
 
-    if (source == NULL || records == NULL || in_out_packet_count == NULL)
+    if (source == NULL || records == NULL || in_out_packet_count == NULL ||
+        (rejected_records == NULL) != (in_out_rejected_count == NULL))
         return XG_WORLD_DECORATIONS_INVALID_ARGUMENT;
     packet_count = *in_out_packet_count;
     if (record_capacity < XG_WORLD_DECORATIONS_PACKET_CAPACITY)
+        return XG_WORLD_DECORATIONS_CAPACITY_EXCEEDED;
+    if (rejected_count > rejected_capacity)
         return XG_WORLD_DECORATIONS_CAPACITY_EXCEEDED;
     if (packet_count > XG_WORLD_DECORATIONS_PACKET_CAPACITY ||
         source->position_count > XG_WORLD_DECORATIONS_POSITION_CAPACITY ||
@@ -215,16 +222,13 @@ XgWorldDecorationsResult xg_world_decorations_build(
                 320u + 2u * (uint32_t)source->screen_x_cull_margin;
             y_visible |= (uint32_t)(int32_t)output.vertices[vertex].y < 216u;
         }
-        if ((int32_t)output.rtpt_flags < 0 || !x_visible || !y_visible ||
-            output.vertices[2].z >= 0x0e00u)
-            continue;
-
         candidate.rtpt_flags = output.rtpt_flags;
         candidate.rtps_flags = output.rtps_flags;
         candidate.depth_cue = output.depth_cue;
         candidate.third_depth = output.vertices[2].z;
         candidate.ordering_bucket = output.vertices[2].z >> 4u;
         candidate.source_index = source_index;
+        candidate.semantic_id = source_index;
         candidate.packet_index = packet_count;
         candidate.tag_payload_word_count =
             XG_WORLD_DECORATIONS_FT4_PAYLOAD_WORD_COUNT;
@@ -253,10 +257,35 @@ XgWorldDecorationsResult xg_world_decorations_build(
         if (xg_render_quad_build_primitive(&quad, &candidate.primitive) !=
             XG_RENDER_QUAD_BUILDER_OK)
             return XG_WORLD_DECORATIONS_BUILD_FAILED;
+        if ((int32_t)output.rtpt_flags < 0)
+            candidate.cull = XG_WORLD_DECORATIONS_CULL_PROJECTIVE;
+        else if (!x_visible || !y_visible)
+            candidate.cull = XG_WORLD_DECORATIONS_CULL_SCREEN;
+        else if (output.vertices[2].z >= 0x0e00u)
+            candidate.cull = XG_WORLD_DECORATIONS_CULL_DEPTH;
+        else
+            candidate.accepted = true;
+        if (!candidate.accepted) {
+            if (rejected_records != NULL) {
+                if (rejected_count >= rejected_capacity)
+                    return XG_WORLD_DECORATIONS_CAPACITY_EXCEEDED;
+                rejected_records[rejected_count++] = candidate;
+                *in_out_rejected_count = rejected_count;
+            }
+            continue;
+        }
         build_ft4_payload(source, &candidate);
         records[packet_count] = candidate;
         ++packet_count;
         *in_out_packet_count = packet_count;
     }
     return XG_WORLD_DECORATIONS_OK;
+}
+
+XgWorldDecorationsResult xg_world_decorations_build(
+    const XgWorldDecorationsSource *source, XgWorldDecorationsRecord *records,
+    uint32_t record_capacity, uint32_t *in_out_packet_count) {
+    return xg_world_decorations_build_with_temporal(
+        source, records, record_capacity, in_out_packet_count,
+        NULL, 0u, NULL);
 }

@@ -99,6 +99,14 @@ GpuRenderTransactionStatus gr_record_interpolation_anchors(
     return GPU_RENDER_TRANSACTION_OK;
 }
 
+GpuRenderTransactionStatus gr_draw_semantic_temporal_candidate(
+        const GpuRenderSemantic *semantic,
+        const GpuRenderTemporalCullPolicy *policy) {
+    (void)semantic;
+    (void)policy;
+    return GPU_RENDER_TRANSACTION_OK;
+}
+
 GpuRenderTransactionStatus gr_commit_validate(
     GpuRenderTransactionId transaction_id,
     uint64_t current_vram_mutation_serial,

@@ -152,6 +152,8 @@ typedef struct XgRenderIrVertex {
     XgRenderIrFixed16_16 projective_native_offset_y;
     uint16_t projective_distance;
     bool projective_position;
+    int32_t temporal_depth;
+    bool temporal_depth_valid;
     uint32_t interpolation_group_id;
     uint32_t interpolation_vertex_id;
     bool interpolation_vertex_identity_valid;

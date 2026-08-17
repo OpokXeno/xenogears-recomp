@@ -20,6 +20,11 @@ enum {
     XG_WORLD_TERRAIN_WATER_PAGE_COUNT = 8,
     XG_WORLD_TERRAIN_WATER_CLUT_COUNT = 64,
     XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY = 2047,
+    XG_WORLD_TERRAIN_WATER_UNCULLED_CAPACITY =
+        XG_WORLD_TERRAIN_WATER_TILE_COUNT *
+        XG_WORLD_TERRAIN_WATER_QUADRANT_COUNT *
+        XG_WORLD_TERRAIN_WATER_CELL_SIDE *
+        XG_WORLD_TERRAIN_WATER_CELL_SIDE * 2,
     XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY = 145 * 145,
 };
 
@@ -30,6 +35,12 @@ typedef enum XgWorldTerrainWaterResult {
     XG_WORLD_TERRAIN_WATER_CAPACITY_EXCEEDED,
     XG_WORLD_TERRAIN_WATER_BUILD_FAILED,
 } XgWorldTerrainWaterResult;
+
+enum {
+    XG_WORLD_TERRAIN_WATER_CULL_SCREEN = 1u << 0,
+    XG_WORLD_TERRAIN_WATER_CULL_BACKFACE = 1u << 1,
+    XG_WORLD_TERRAIN_WATER_CULL_DEPTH = 1u << 2,
+};
 
 typedef struct XgWorldTerrainWaterTileSource {
     uint32_t samples[XG_WORLD_TERRAIN_WATER_QUADRANT_COUNT]
@@ -76,6 +87,7 @@ typedef struct XgWorldTerrainWaterRecord {
     int16_t depth_cue;
     uint16_t encoded_clut;
     uint16_t encoded_tpage;
+    uint16_t max_depth;
     uint8_t tile_index;
     uint8_t quadrant_index;
     uint8_t cell_x;
@@ -87,6 +99,8 @@ typedef struct XgWorldTerrainWaterRecord {
     bool alternate_diagonal;
     bool alternate_clut_bank;
     bool ordering_predecessor_is_external;
+    bool temporal_only;
+    uint8_t temporal_cull_reasons;
 } XgWorldTerrainWaterRecord;
 
 typedef struct XgWorldTerrainWaterAnchor {
@@ -120,6 +134,23 @@ XgWorldTerrainWaterResult xg_world_terrain_water_build(
     XgWorldTerrainWaterRecord *records,
     uint32_t record_capacity,
     uint32_t *out_record_count);
+XgWorldTerrainWaterResult xg_world_terrain_water_build_unculled(
+    const XgWorldTerrainWaterSource *source,
+    XgWorldTerrainWaterRecord *records,
+    uint32_t record_capacity,
+    uint32_t *out_record_count);
+uint32_t xg_world_terrain_water_interpolation_primitive_id(
+    uint8_t grid_index, uint8_t terrain_id, uint16_t local_primitive);
+XgWorldTerrainWaterResult xg_world_terrain_water_append_temporal_anchors(
+    const XgWorldTerrainWaterSource *previous,
+    const XgWorldTerrainWaterSource *current,
+    XgWorldTerrainWaterAnchor *anchors, uint32_t anchor_capacity,
+    uint32_t *in_out_anchor_count);
+XgWorldTerrainWaterResult xg_world_terrain_water_append_temporal_tile_anchors(
+    const XgWorldTerrainWaterTileSource *tiles, uint32_t tile_count,
+    const XgWorldTerrainWaterSource *current,
+    XgWorldTerrainWaterAnchor *anchors, uint32_t anchor_capacity,
+    uint32_t *in_out_anchor_count);
 void xg_world_terrain_water_build_diagnostics(
     XgWorldTerrainWaterBuildDiagnostics *out_diagnostics);
 void xg_world_terrain_water_set_temporal_coverage(bool enabled);

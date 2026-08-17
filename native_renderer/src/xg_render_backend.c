@@ -220,6 +220,9 @@ static bool copy_vertex(GpuRenderSemanticVertex *target_vertex,
     target_vertex->projective_distance = source_vertex->projective_distance;
     target_vertex->projective_position =
         source_vertex->projective_position ? 1u : 0u;
+    target_vertex->temporal_depth = source_vertex->temporal_depth;
+    target_vertex->temporal_depth_valid =
+        source_vertex->temporal_depth_valid ? 1u : 0u;
     return true;
 }
 

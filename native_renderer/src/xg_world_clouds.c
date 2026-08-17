@@ -24,9 +24,12 @@ typedef enum QuadResult {
 typedef struct BuildContext {
     const XgWorldCloudsSource *source;
     XgWorldCloudRecord *records;
+    XgWorldCloudRecord *rejected_records;
     XgWorldCloudsBuildStats *stats;
     uint32_t bucket_head[XG_WORLD_CLOUD_OT_BUCKET_COUNT];
     uint32_t record_count;
+    uint32_t rejected_count;
+    uint32_t rejected_capacity;
 } BuildContext;
 
 static int64_t shift_right_floor(int64_t value, unsigned bits) {
@@ -331,25 +334,8 @@ static QuadResult build_quad(BuildContext *context,
     input.projection = *projection;
     if (!xg_host_3d_rot_trans_pers4(&input, &projected))
         return QUAD_RESULT_FAILED;
-    if ((projected.projection_flags & flag_mask) != 0u) {
-        ++context->stats->quad_projection_culled;
-        return QUAD_RESULT_CULLED;
-    }
-    if (!screen_accepts(projected.vertices,
-                        context->source->screen_x_cull_margin)) {
-        ++context->stats->quad_screen_culled;
-        return QUAD_RESULT_CULLED;
-    }
-
     depth = ordering_depth(projected.vertices);
-    if (lod == XG_WORLD_CLOUD_LOD_FAR &&
-        depth > CLOUD_FAR_PREINSERT_LIMIT) {
-        ++context->stats->far_preinsert_depth_stops;
-        return QUAD_RESULT_FAR_PREINSERT_STOP;
-    }
     bucket = depth >> 4u;
-    if (bucket >= XG_WORLD_CLOUD_OT_BUCKET_COUNT)
-        return QUAD_RESULT_FAILED;
 
     candidate.uv[0] = uv_base;
     candidate.uv[1] = (uint16_t)(uv_base | uv_mask);
@@ -378,13 +364,40 @@ static QuadResult build_quad(BuildContext *context,
     candidate.ordering_depth = depth;
     candidate.ordering_bucket = bucket;
     candidate.emission_index = context->record_count;
-    candidate.prior_emission_in_bucket = context->bucket_head[bucket];
+    candidate.prior_emission_in_bucket =
+        bucket < XG_WORLD_CLOUD_OT_BUCKET_COUNT
+            ? context->bucket_head[bucket] : UINT32_MAX;
     candidate.source_index = source_index;
     candidate.lod_quad_index = lod_quad_index;
     candidate.material_word = UINT32_C(0x2e262626);
     candidate.tpage = 0x003fu;
     candidate.clut = 0x7f93u;
     candidate.lod = lod;
+    if ((projected.projection_flags & flag_mask) != 0u) {
+        ++context->stats->quad_projection_culled;
+        candidate.cull = XG_WORLD_CLOUD_CULL_PROJECTIVE;
+    } else if (!screen_accepts(projected.vertices,
+                               context->source->screen_x_cull_margin)) {
+        ++context->stats->quad_screen_culled;
+        candidate.cull = XG_WORLD_CLOUD_CULL_SCREEN;
+    } else if (lod == XG_WORLD_CLOUD_LOD_FAR &&
+               depth > CLOUD_FAR_PREINSERT_LIMIT) {
+        ++context->stats->far_preinsert_depth_stops;
+        candidate.cull = XG_WORLD_CLOUD_CULL_DEPTH;
+    } else {
+        candidate.accepted = true;
+    }
+    if (!candidate.accepted) {
+        if (context->rejected_records != NULL) {
+            if (context->rejected_count >= context->rejected_capacity)
+                return QUAD_RESULT_FAILED;
+            context->rejected_records[context->rejected_count++] = candidate;
+        }
+        return candidate.cull == XG_WORLD_CLOUD_CULL_DEPTH
+            ? QUAD_RESULT_FAR_PREINSERT_STOP : QUAD_RESULT_CULLED;
+    }
+    if (bucket >= XG_WORLD_CLOUD_OT_BUCKET_COUNT)
+        return QUAD_RESULT_FAILED;
     context->records[context->record_count] = candidate;
     context->bucket_head[bucket] = context->record_count;
     ++context->record_count;
@@ -401,12 +414,15 @@ static bool flags_accept(uint32_t flags) {
     return (flags & CLOUD_PROJECTION_FLAG_MASK) == 0u;
 }
 
-XgWorldCloudsResult xg_world_clouds_build(
+XgWorldCloudsResult xg_world_clouds_build_with_temporal(
     const XgWorldCloudsSource *source,
     XgWorldCloudRecord *records,
     uint32_t record_capacity,
     uint32_t *out_record_count,
-    XgWorldCloudsBuildStats *out_stats) {
+    XgWorldCloudsBuildStats *out_stats,
+    XgWorldCloudRecord *rejected_records,
+    uint32_t rejected_capacity,
+    uint32_t *out_rejected_count) {
     XgWorldCloudsBuildStats stats = { 0 };
     XgWorldCloudPosition positions[XG_WORLD_CLOUD_COUNT];
     XgHost3dMatrix cloud_rotation;
@@ -414,14 +430,19 @@ XgWorldCloudsResult xg_world_clouds_build(
     uint32_t source_index;
 
     if (source == NULL || records == NULL || out_record_count == NULL ||
-        out_stats == NULL)
+        out_stats == NULL ||
+        (rejected_records == NULL) != (out_rejected_count == NULL))
         return XG_WORLD_CLOUDS_INVALID_ARGUMENT;
     *out_record_count = 0u;
+    if (out_rejected_count != NULL) *out_rejected_count = 0u;
     memset(out_stats, 0, sizeof(*out_stats));
     if (record_capacity < XG_WORLD_CLOUD_PACKET_CAPACITY)
         return XG_WORLD_CLOUDS_CAPACITY_EXCEEDED;
     memset(records, 0,
            sizeof(*records) * XG_WORLD_CLOUD_PACKET_CAPACITY);
+    if (rejected_records != NULL)
+        memset(rejected_records, 0,
+               sizeof(*rejected_records) * rejected_capacity);
     if (!source_is_valid(source)) return XG_WORLD_CLOUDS_INVALID_SOURCE;
 
     memcpy(positions, source->positions, sizeof(positions));
@@ -432,6 +453,8 @@ XgWorldCloudsResult xg_world_clouds_build(
 
     context.source = source;
     context.records = records;
+    context.rejected_records = rejected_records;
+    context.rejected_capacity = rejected_capacity;
     context.stats = &stats;
     for (source_index = 0u;
          source_index < XG_WORLD_CLOUD_OT_BUCKET_COUNT; ++source_index)
@@ -613,6 +636,19 @@ XgWorldCloudsResult xg_world_clouds_build(
     }
 
     *out_record_count = context.record_count;
+    if (out_rejected_count != NULL)
+        *out_rejected_count = context.rejected_count;
     *out_stats = stats;
     return XG_WORLD_CLOUDS_OK;
+}
+
+XgWorldCloudsResult xg_world_clouds_build(
+    const XgWorldCloudsSource *source,
+    XgWorldCloudRecord *records,
+    uint32_t record_capacity,
+    uint32_t *out_record_count,
+    XgWorldCloudsBuildStats *out_stats) {
+    return xg_world_clouds_build_with_temporal(
+        source, records, record_capacity, out_record_count, out_stats,
+        NULL, 0u, NULL);
 }
