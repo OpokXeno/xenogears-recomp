@@ -4164,7 +4164,9 @@ static int test_native_particle_sidecar_and_cutover(void) {
     CHECK(!temporal_candidates[0].triangles[0].vertices[0]
                .projective_position);
     CHECK(temporal_candidates[0].triangles[0].vertices[0]
-              .projective_view_z == -16);
+              .temporal_depth_valid);
+    CHECK(temporal_candidates[0].triangles[0].vertices[0]
+              .temporal_depth == -16);
     CHECK(temporal_candidates[0].triangles[0].vertices[0]
               .interpolation_vertex_id == 0u);
     CHECK(temporal_candidates[0].triangles[1].vertices[2]

@@ -739,6 +739,7 @@ typedef struct XgRenderSpriteFt4ShadowState {
 #define XG_RENDER_FIELD_SPRITE_BUILDER_CAPACITY 256u
 #define XG_RENDER_FIELD_SPRITE_TEMPLATE_CAPACITY 1024u
 #define XG_RENDER_RESIDUAL_TEMPLATE_CAPACITY 1024u
+#define XG_RENDER_RESIDUAL_MAX_RESOURCE_SIZE 0x24u
 
 typedef struct XgRenderFieldSpriteBuilderRecord {
     XgRenderIrNativePrimitive primitive;
@@ -1649,6 +1650,41 @@ static void invalidate_nonresident_producer_resources(void) {
     clear_f4_sources();
 }
 
+static void invalidate_residual_templates_overlapping(uint32_t address,
+                                                       uint32_t size) {
+    const uint32_t physical = address & UINT32_C(0x1fffffff);
+    uint32_t first_candidate;
+    uint32_t end;
+
+    if (size == 0u || physical >= UINT32_C(0x200000)) return;
+    end = size > UINT32_C(0x200000) - physical
+        ? UINT32_C(0x200000) : physical + size;
+    first_candidate = physical >= XG_RENDER_RESIDUAL_MAX_RESOURCE_SIZE - 1u
+        ? physical - (XG_RENDER_RESIDUAL_MAX_RESOURCE_SIZE - 1u) : 0u;
+    first_candidate &= UINT32_C(0x1ffffc);
+
+    for (uint32_t candidate = first_candidate;
+         candidate <= ((end - 1u) & UINT32_C(0x1ffffc));
+         candidate += 4u) {
+        const uint32_t indexed = xg_render_lookup_find(
+            residual_template_lookup, residual_template_lookup_epoch,
+            candidate, residual_templates.count);
+        XgRenderResidualTemplate *record;
+
+        if (indexed == UINT32_MAX) continue;
+        record = &residual_templates.records[indexed];
+        if (!record->valid || !physical_address_equals(
+                record->command_address, candidate) ||
+            !normalized_ranges_overlap(record->command_address,
+                                       record->resource_size, address, size))
+            continue;
+        record->valid = false;
+        xg_render_lookup_remove(
+            residual_template_lookup, residual_template_lookup_epoch,
+            record->command_address, indexed);
+    }
+}
+
 static void invalidate_producer_resources_overlapping(uint32_t address,
                                                        uint32_t size) {
     if (size == 0u) return;
@@ -1661,17 +1697,7 @@ static void invalidate_producer_resources_overlapping(uint32_t address,
                                       address, size))
             record->lifecycle = (XgRenderProducerLifecycle){0};
     }
-    for (uint32_t index = 0u; index < residual_templates.count; ++index) {
-        XgRenderResidualTemplate *record = &residual_templates.records[index];
-        if (normalized_ranges_overlap(record->command_address,
-                                      record->resource_size,
-                                      address, size)) {
-            record->valid = false;
-            xg_render_lookup_remove(
-                residual_template_lookup, residual_template_lookup_epoch,
-                record->command_address, index);
-        }
-    }
+    invalidate_residual_templates_overlapping(address, size);
     for (uint32_t index = 0u; index < overlay_ft4_state.count; ++index) {
         XgRenderOverlayFt4Template *record =
             &overlay_ft4_state.templates[index];
@@ -13857,6 +13883,7 @@ static bool residual_template_store(
     XgRenderProducerLifecycle lifecycle;
 
     if (source == NULL || resource_size == 0u ||
+        resource_size > XG_RENDER_RESIDUAL_MAX_RESOURCE_SIZE ||
         !producer_lifecycle_begin(producer_seam, &lifecycle)) return false;
     record = residual_template_find(command_address);
     if (record == NULL) {
