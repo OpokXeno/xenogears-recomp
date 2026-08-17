@@ -28,14 +28,14 @@ discovery = "whole-image"
 # Presentation rate: 30 preserves original PSX cadence; 60 enables Native
 # interpolation. User settings may override this value.
 fps = 30
-aspect_ratio = "16:9"
+aspect_ratio = "4:3"
 # FMV auto-skip: feature OFF by default. NO fmv_skip_total_table /
 # fmv_skip_movie_id addresses exist for Xenogears yet. With no table configured the
 # runtime uses the generic START-hold fallback. Verify once by hand.
 auto_skip_fmv = false
 
 [widescreen]
-offer = true
+#offer = true
 # Legacy GP0/GTE widescreen reference data. Native render mode does not activate
 # the mirrored legacy compositor; the backdrop x_sites below are the shared guest
 # coordinate transform used by both the recompiled and Native packet paths.
