@@ -61,7 +61,10 @@ podman run --rm --userns=keep-id \
         install -Dm644 /xgr-assets/slus_006.64 game/slus_006.64
         install -Dm644 /xgr-assets/SCPH1001.BIN psxrecomp/bios/SCPH1001.BIN
         export LDFLAGS="${LDFLAGS:-} -static-libgcc -static-libstdc++"
-        ./build.sh "$XGR_RUNTIME_BUILD_DIR" Release
+        # Bullseye has no libdecor development package. A Wayland SDL build
+        # would therefore create undecorated desktop windows; use XWayland,
+        # which is available on supported desktops and Steam Deck.
+        PSX_SDL_WAYLAND=OFF ./build.sh "$XGR_RUNTIME_BUILD_DIR" Release
         pkg=dist/XenogearsRecomp-linux-x86_64
         rm -rf "$pkg"
         mkdir -p "$pkg"
@@ -74,11 +77,13 @@ podman run --rm --userns=keep-id \
         rm -rf "$toolchain_tmp"
         mkdir -p "$toolchain_tmp"
         python_archive=cpython-3.11.9+20240726-x86_64-unknown-linux-gnu-install_only.tar.gz
-        curl -fL "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-install_only.tar.gz" \
+        curl -fL --retry 5 --retry-all-errors --retry-delay 2 \
+            "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-install_only.tar.gz" \
             -o "$toolchain_tmp/$python_archive"
         echo "f6e955dc9ddfcad74e77abe6f439dac48ebca14b101ed7c85a5bf3206ed2c53d  $toolchain_tmp/$python_archive" | sha256sum -c -
         tar -C "$toolchain_tmp" -xzf "$toolchain_tmp/$python_archive"
-        curl -fL "https://download.savannah.gnu.org/releases/tinycc/tcc-0.9.27.tar.bz2" \
+        curl -fL --retry 5 --retry-all-errors --retry-delay 2 \
+            "https://download.savannah.gnu.org/releases/tinycc/tcc-0.9.27.tar.bz2" \
             -o "$toolchain_tmp/tcc-0.9.27.tar.bz2"
         echo "de23af78fca90ce32dff2dd45b3432b2334740bb9bb7b05bf60fdbfc396ceb9c  $toolchain_tmp/tcc-0.9.27.tar.bz2" | sha256sum -c -
         tar -C "$toolchain_tmp" -xjf "$toolchain_tmp/tcc-0.9.27.tar.bz2"

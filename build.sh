@@ -36,6 +36,7 @@ RUNTIME_BUILD_TYPE="$BUILD_TYPE"
 RUNTIME_CMAKE_ARGS=(
     "-DBUILD_TESTING=OFF"
     "-DPSX_SDL_BACKEND=SDL3"
+    "-DSDL_WAYLAND=${PSX_SDL_WAYLAND:-ON}"
 )
 if [[ "$BUILD_TYPE" == "ReleaseNoOpt" ]]; then
     # Keep release semantics (NDEBUG) while removing compiler optimization.
