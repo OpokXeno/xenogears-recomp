@@ -22,6 +22,10 @@ bool xg_native_view_configure(XgNativeView *view, bool enabled,
         return false;
     surface_width = ((uint64_t)canonical_height * aspect_num +
                      aspect_den / 2u) / aspect_den;
+    /* Native and legacy wide surfaces share one integer raster geometry. Keep
+     * the reveal symmetric so changing producers cannot move the scene by a
+     * fractional host pixel. */
+    if (((surface_width - canonical_width) & 1u) != 0u) --surface_width;
     if (surface_width <= canonical_width ||
         surface_width > (uint64_t)UINT32_MAX >> 16u)
         return false;

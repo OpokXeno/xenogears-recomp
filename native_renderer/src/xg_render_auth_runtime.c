@@ -10113,10 +10113,7 @@ static void projected_set_native_view_position(
         native_view.canonical_height == 0u ||
         native_view.aspect_den == 0u)
         return;
-    surface_width = ((int32_t)native_view.canonical_height *
-                     (int32_t)native_view.aspect_num +
-                     (int32_t)native_view.aspect_den / 2) /
-        (int32_t)native_view.aspect_den;
+    surface_width = (int32_t)(native_view.surface_width_16_16 >> 16u);
     if (surface_width <= (int32_t)native_view.canonical_width)
         return;
     if (vertex->x <= 0) {
