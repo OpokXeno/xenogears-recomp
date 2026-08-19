@@ -32,6 +32,47 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Initialize-MSVCEnvironment {
+    if (Get-Command cl.exe -ErrorAction SilentlyContinue) {
+        return
+    }
+
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} `
+        "Microsoft Visual Studio/Installer/vswhere.exe"
+    if (-not (Test-Path -LiteralPath $vswhere)) {
+        throw "MSVC is not available in PATH and vswhere.exe was not found"
+    }
+
+    $vsInstall = (& $vswhere -latest -products * `
+        -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+        -property installationPath | Select-Object -First 1)
+    if (-not $vsInstall) {
+        throw "No Visual Studio installation with the MSVC x64 build tools was found"
+    }
+
+    $vsDevCmd = Join-Path $vsInstall "Common7/Tools/VsDevCmd.bat"
+    if (-not (Test-Path -LiteralPath $vsDevCmd)) {
+        throw "Visual Studio developer environment script not found: $vsDevCmd"
+    }
+
+    Write-Host "==> Initializing MSVC environment from: $vsInstall"
+    $devCmd = "call `"$vsDevCmd`" -no_logo -arch=x64 -host_arch=x64 >nul && set"
+    $devEnv = & $env:ComSpec /d /s /c $devCmd
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to initialize the Visual Studio developer environment"
+    }
+    foreach ($line in $devEnv) {
+        if ($line -match '^([^=][^=]*)=(.*)$') {
+            [Environment]::SetEnvironmentVariable(
+                $Matches[1], $Matches[2], "Process")
+        }
+    }
+
+    if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) {
+        throw "Visual Studio developer environment did not provide cl.exe"
+    }
+}
+
 $RuntimeBuildType = $BuildType
 $RuntimeCMakeExtraArgs = @(
     "-DBUILD_TESTING=OFF",
@@ -61,10 +102,16 @@ if (-not $PYTHON) {
     throw "Python 3.11 or newer is required"
 }
 
-# --- Auto-detect generator if not specified ---
+# --- Auto-detect generator and initialize an explicit Ninja toolchain ---
 if (-not $Generator) {
     $ninja = Get-Command ninja -ErrorAction SilentlyContinue
-    if ($ninja) {
+    $compilerReady = (
+        $env:CC -or $env:CXX -or
+        (Get-Command cl.exe -ErrorAction SilentlyContinue) -or
+        (Get-Command gcc.exe -ErrorAction SilentlyContinue) -or
+        (Get-Command clang.exe -ErrorAction SilentlyContinue)
+    )
+    if ($ninja -and $compilerReady) {
         $Generator = "Ninja"
     }
     else {
@@ -72,12 +119,26 @@ if (-not $Generator) {
         if ($vsTest) {
             $Generator = "Visual Studio 17 2022"
         }
-        else {
+        elseif ($ninja) {
+            Initialize-MSVCEnvironment
             $Generator = "Ninja"
+        }
+        else {
+            throw "No supported CMake generator was found (Visual Studio 2022 or Ninja)"
         }
     }
 }
+elseif ($Generator -like "Ninja*" -and -not $env:CC -and -not $env:CXX -and
+        -not (Get-Command cl.exe -ErrorAction SilentlyContinue) -and
+        -not (Get-Command gcc.exe -ErrorAction SilentlyContinue) -and
+        -not (Get-Command clang.exe -ErrorAction SilentlyContinue)) {
+    Initialize-MSVCEnvironment
+}
 Write-Host "==> Using CMake generator: $Generator"
+$CMakeGeneratorArgs = @("-G", $Generator)
+if ($Generator -like "Visual Studio*") {
+    $CMakeGeneratorArgs += @("-A", "x64")
+}
 
 $MANIFEST_METADATA_JSON = & $PYTHON.Source $MANIFEST_TOOL "metadata-declared" $RENDER_MANIFEST
 if ($LASTEXITCODE -ne 0) { throw "Native renderer manifest metadata validation failed" }
@@ -87,7 +148,7 @@ $MANIFEST_IDENTITY_SHA256 = $MANIFEST_METADATA.manifest_identity
 
 # --- Step 1: Build the recompiler ---
 Write-Host "==> Building recompiler..."
-& cmake -S $RECOMPILER_DIR -B $RECOMPILER_BUILD -G $Generator `
+& cmake -S $RECOMPILER_DIR -B $RECOMPILER_BUILD @CMakeGeneratorArgs `
     -DCMAKE_BUILD_TYPE=Release `
     -DPSX_GAME_EXTRA_IDENTITY_SHA256=$GAME_IDENTITY_SHA256 `
     -DPSX_GAME_MANIFEST_DIGEST_SHA256=$MANIFEST_IDENTITY_SHA256
@@ -143,11 +204,11 @@ try {
     $RUNTIME_CMAKE_ARGS = @(
         "-S", $ROOT,
         "-B", $BUILD_DIR,
-        "-G", $Generator,
         "-DCMAKE_BUILD_TYPE=$RuntimeBuildType",
         "-DPSX_RECOMP_UI=ON",
         "-DRECOMP_UI_ROOT=$(Join-Path $ROOT 'recomp-ui')"
     )
+    $RUNTIME_CMAKE_ARGS += $CMakeGeneratorArgs
     $RUNTIME_CMAKE_ARGS += $RuntimeCMakeExtraArgs
     & cmake @RUNTIME_CMAKE_ARGS
     if ($LASTEXITCODE -ne 0) { throw "Runtime configuration failed" }
