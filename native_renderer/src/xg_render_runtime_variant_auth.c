@@ -209,7 +209,8 @@ static bool descriptor_cutovers_are_valid(
     return true;
 }
 
-static bool descriptor_is_valid(const XgRenderRuntimeVariantDescriptor *descriptor) {
+static bool descriptor_is_valid_uncached(
+        const XgRenderRuntimeVariantDescriptor *descriptor) {
     const XgRenderManifestValidation *validation = &xg_render_manifest_validation;
     uint32_t range_start;
 
@@ -271,6 +272,17 @@ static bool descriptor_is_valid(const XgRenderRuntimeVariantDescriptor *descript
                            descriptor->model_dispatch_instruction_count * 4u) &&
             descriptor_source_sites_are_valid(descriptor) &&
             descriptor_cutovers_are_valid(descriptor);
+}
+
+static bool descriptor_is_valid(const XgRenderRuntimeVariantDescriptor *descriptor) {
+    static const XgRenderRuntimeVariantDescriptor *cached_descriptor;
+    static bool cached_result;
+
+    if (descriptor == NULL) return false;
+    if (cached_descriptor == descriptor) return cached_result;
+    cached_result = descriptor_is_valid_uncached(descriptor);
+    cached_descriptor = descriptor;
+    return cached_result;
 }
 
 bool xg_render_runtime_variant_source_site_lookup(
@@ -679,24 +691,56 @@ static uint32_t protected_code_page_masks[
     XG_RENDER_PROTECTED_CODE_PAGE_COUNT];
 static bool protected_code_page_masks_ready;
 
+static void protected_code_page_mask_add_range(
+        uint32_t start, uint32_t size, uint32_t class_mask) {
+    const uint64_t begin = (start & UINT32_C(0x1fffffff)) >> 12u;
+    uint64_t end;
+
+    if (size == 0u || begin >= XG_RENDER_PROTECTED_CODE_PAGE_COUNT)
+        return;
+    end = ((uint64_t)(start & UINT32_C(0x1fffffff)) + size - 1u) >> 12u;
+    for (uint64_t page = begin;
+         page <= end && page < XG_RENDER_PROTECTED_CODE_PAGE_COUNT;
+         ++page)
+        protected_code_page_masks[page] |= class_mask;
+}
+
 static void protected_code_page_mask_add(
         const XgRenderProtectedCodeRange ranges[], uint32_t range_count,
         uint32_t class_mask) {
     for (uint32_t index = 0u; index < range_count; ++index) {
-        const uint64_t begin =
-            (ranges[index].start & UINT32_C(0x1fffffff)) >> 12u;
-        const uint64_t end =
-            ((ranges[index].start & UINT32_C(0x1fffffff)) +
-             ranges[index].size - 1u) >> 12u;
-
-        if (ranges[index].size == 0u || begin >=
-                XG_RENDER_PROTECTED_CODE_PAGE_COUNT)
-            continue;
-        for (uint64_t page = begin;
-             page <= end && page < XG_RENDER_PROTECTED_CODE_PAGE_COUNT;
-             ++page)
-            protected_code_page_masks[page] |= class_mask;
+        protected_code_page_mask_add_range(
+            ranges[index].start, ranges[index].size, class_mask);
     }
+}
+
+static void protected_code_page_mask_add_runtime_variant(
+        const XgRenderRuntimeVariantDescriptor *descriptor) {
+    const uint32_t class_mask =
+        UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_DESCRIPTOR;
+
+    protected_code_page_mask_add_range(
+        descriptor->activation_window_start,
+        descriptor->activation_window_size, class_mask);
+    protected_code_page_mask_add_range(
+        descriptor->physical_producer_entry, 4u, class_mask);
+    protected_code_page_mask_add_range(
+        descriptor->capture_window_start,
+        descriptor->capture_window_size, class_mask);
+    protected_code_page_mask_add_range(
+        descriptor->physical_return_site, 4u, class_mask);
+    protected_code_page_mask_add_range(
+        descriptor->model_dispatch_window_start,
+        descriptor->model_dispatch_instruction_count * 4u, class_mask);
+    for (uint32_t site_index = 0u;
+         site_index < descriptor->source_site_count; ++site_index)
+        protected_code_page_mask_add_range(
+            descriptor->source_sites[site_index].pc, 4u, class_mask);
+    for (uint32_t cutover_index = 0u;
+         cutover_index < descriptor->cutover_count; ++cutover_index)
+        protected_code_page_mask_add_range(
+            descriptor->cutovers[cutover_index].code_range_start,
+            descriptor->cutovers[cutover_index].code_range_size, class_mask);
 }
 
 static void protected_code_page_masks_init(void) {
@@ -746,6 +790,14 @@ static void protected_code_page_masks_init(void) {
         (uint32_t)(sizeof(shared_trig_data_ranges) /
                    sizeof(shared_trig_data_ranges[0])),
         UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_SHARED_TRIG_DATA);
+    for (uint32_t descriptor_index = 0u;
+         descriptor_index < xg_render_runtime_variant_descriptor_count;
+         ++descriptor_index) {
+        const XgRenderRuntimeVariantDescriptor *descriptor =
+            &xg_render_runtime_variant_descriptors[descriptor_index];
+        if (descriptor_is_valid(descriptor))
+            protected_code_page_mask_add_runtime_variant(descriptor);
+    }
     protected_code_page_masks_ready = true;
 }
 
@@ -966,56 +1018,60 @@ uint32_t xg_render_runtime_variant_code_write_overlap_mask(
     const uint32_t page_mask =
         protected_code_page_mask_for_write(write_address, write_size);
 
-    for (uint32_t index = 0u;
-         index < xg_render_runtime_variant_descriptor_count; ++index) {
-        const XgRenderRuntimeVariantDescriptor *descriptor =
-            state.descriptor != NULL ? state.descriptor :
-                &xg_render_runtime_variant_descriptors[index];
-        bool descriptor_overlap = descriptor_is_valid(descriptor) &&
-            (normalized_ranges_overlap(descriptor->activation_window_start,
-                                       descriptor->activation_window_size,
-                                       write_address, write_size) ||
-             normalized_ranges_overlap(descriptor->physical_producer_entry, 4u,
-                                       write_address, write_size) ||
-             normalized_ranges_overlap(descriptor->capture_window_start,
-                                       descriptor->capture_window_size,
-                                       write_address, write_size) ||
-             normalized_ranges_overlap(
-                 descriptor->model_dispatch_window_start,
-                 descriptor->model_dispatch_instruction_count * 4u,
-                 write_address, write_size) ||
-             normalized_ranges_overlap(descriptor->physical_return_site, 4u,
-                                       write_address, write_size));
-        if (descriptor_overlap) {
-            mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_DESCRIPTOR;
-            break;
-        }
-        if (descriptor_is_valid(descriptor)) {
-            for (uint32_t site_index = 0u;
-                 site_index < descriptor->source_site_count; ++site_index) {
-                if (normalized_ranges_overlap(
-                        descriptor->source_sites[site_index].pc, 4u,
-                        write_address, write_size)) {
-                    descriptor_overlap = true;
-                    break;
+    if (page_mask & (UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_DESCRIPTOR)) {
+        for (uint32_t index = 0u;
+             index < xg_render_runtime_variant_descriptor_count; ++index) {
+            const XgRenderRuntimeVariantDescriptor *descriptor =
+                state.descriptor != NULL ? state.descriptor :
+                    &xg_render_runtime_variant_descriptors[index];
+            const bool descriptor_valid = descriptor_is_valid(descriptor);
+            bool descriptor_overlap = descriptor_valid &&
+                (normalized_ranges_overlap(descriptor->activation_window_start,
+                                           descriptor->activation_window_size,
+                                           write_address, write_size) ||
+                 normalized_ranges_overlap(
+                     descriptor->physical_producer_entry, 4u,
+                     write_address, write_size) ||
+                 normalized_ranges_overlap(descriptor->capture_window_start,
+                                           descriptor->capture_window_size,
+                                           write_address, write_size) ||
+                 normalized_ranges_overlap(
+                     descriptor->model_dispatch_window_start,
+                     descriptor->model_dispatch_instruction_count * 4u,
+                     write_address, write_size) ||
+                 normalized_ranges_overlap(descriptor->physical_return_site,
+                                           4u, write_address, write_size));
+            if (descriptor_overlap) {
+                mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_DESCRIPTOR;
+                break;
+            }
+            if (descriptor_valid) {
+                for (uint32_t site_index = 0u;
+                     site_index < descriptor->source_site_count; ++site_index) {
+                    if (normalized_ranges_overlap(
+                            descriptor->source_sites[site_index].pc, 4u,
+                            write_address, write_size)) {
+                        descriptor_overlap = true;
+                        break;
+                    }
+                }
+                for (uint32_t cutover_index = 0u;
+                     !descriptor_overlap &&
+                     cutover_index < descriptor->cutover_count; ++cutover_index) {
+                    const XgRenderRuntimeVariantCutover *cutover =
+                        &descriptor->cutovers[cutover_index];
+                    if (normalized_ranges_overlap(
+                            cutover->code_range_start, cutover->code_range_size,
+                            write_address, write_size))
+                        descriptor_overlap = true;
                 }
             }
-            for (uint32_t cutover_index = 0u;
-                 !descriptor_overlap &&
-                 cutover_index < descriptor->cutover_count; ++cutover_index) {
-                const XgRenderRuntimeVariantCutover *cutover =
-                    &descriptor->cutovers[cutover_index];
-                if (normalized_ranges_overlap(
-                        cutover->code_range_start, cutover->code_range_size,
-                        write_address, write_size))
-                    descriptor_overlap = true;
+            if (descriptor_overlap) {
+                mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_DESCRIPTOR;
+                break;
             }
+            if (state.descriptor != NULL) break;
         }
-        if (descriptor_overlap) {
-            mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_DESCRIPTOR;
-            break;
-        }
-        if (state.descriptor != NULL) break;
     }
     if ((page_mask & (UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_ZOOM)) &&
         zoom_code_write_overlaps(write_address, write_size))

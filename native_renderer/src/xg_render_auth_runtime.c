@@ -422,6 +422,8 @@ static uint16_t residual_template_lookup_epoch = 1u;
 static uint16_t f4_source_lookup_epoch = 1u;
 static uint32_t producer_resource_watch_bitmap[
     XG_RENDER_RESOURCE_WATCH_BITMAP_WORDS];
+static uint8_t producer_resource_invalidated_byte_masks[
+    XG_RENDER_LOOKUP_WORD_CAPACITY];
 
 static bool xg_render_lookup_key(uint32_t address, uint32_t *out_key) {
     const uint32_t physical = address & UINT32_C(0x1fffffff);
@@ -1332,17 +1334,20 @@ static bool field_range_is_bound(void) {
 }
 
 static bool protected_code_write_overlaps(uint32_t write_address,
-                                          uint32_t write_size) {
+                                          uint32_t write_size,
+                                          uint32_t variant_code_write_mask) {
     const XgRenderManifestValidation *validation =
         &xg_render_manifest_validation;
+    const uint32_t data_dependency_mask =
+        (UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_MODEL_DISPATCH_DATA) |
+        (UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_SHARED_TRIG_DATA);
 
     return normalized_ranges_overlap(validation->producer_entry, 4u,
                                      write_address, write_size) ||
            normalized_ranges_overlap(validation->instruction_window_start,
                                      validation->instruction_window_size,
                                      write_address, write_size) ||
-           xg_render_runtime_variant_active_code_write_overlaps(
-               write_address, write_size);
+           (variant_code_write_mask & ~data_dependency_mask) != 0u;
 }
 
 static bool candidate_matches_manifest(
@@ -1453,11 +1458,11 @@ static bool current_artifact_code_range_overlaps(uint32_t address,
     return state.authenticated_artifact_candidate_valid &&
         state.authenticated_artifact_generation != 0u &&
         state.authenticated_artifact_scene_generation == state.scene_generation &&
-        xg_render_authoritative_overlay_artifact_candidate_matches(
-            &state.authenticated_artifact_candidate) &&
         normalized_ranges_overlap(
             state.authenticated_artifact_candidate.range_start,
-            state.authenticated_artifact_candidate.range_size, address, size);
+            state.authenticated_artifact_candidate.range_size, address, size) &&
+        xg_render_authoritative_overlay_artifact_candidate_matches(
+            &state.authenticated_artifact_candidate);
 }
 
 static bool current_artifact_range_contains_pc(uint32_t pc) {
@@ -1492,6 +1497,19 @@ static bool artifact_binary_identity_matches(
         memcmp(&left->identity, &right->identity, sizeof(left->identity)) == 0;
 }
 
+static uint8_t producer_resource_byte_mask_for_word(
+        uint32_t begin, uint32_t end, uint32_t word) {
+    const uint32_t word_begin = word << 2u;
+    const uint32_t word_end = word_begin + 4u;
+    const uint32_t first = begin > word_begin ? begin : word_begin;
+    const uint32_t last = end < word_end ? end : word_end;
+
+    if (first >= last) return 0u;
+    const uint32_t low = first - word_begin;
+    const uint32_t width = last - first;
+    return (uint8_t)(((UINT32_C(1) << width) - 1u) << low);
+}
+
 static void watch_producer_resource(uint32_t address, uint32_t size) {
     const uint32_t physical = address & UINT32_C(0x1fffffff);
     uint32_t end;
@@ -1504,9 +1522,14 @@ static void watch_producer_resource(uint32_t address, uint32_t size) {
         end = UINT32_C(0x1fffff);
     first_word = physical >> 2u;
     last_word = end >> 2u;
-    for (uint32_t word = first_word; word <= last_word; ++word)
-        producer_resource_watch_bitmap[word >> 5u] |=
-            UINT32_C(1) << (word & 31u);
+    for (uint32_t word = first_word; word <= last_word; ++word) {
+        const uint32_t bit = UINT32_C(1) << (word & 31u);
+        const uint8_t byte_mask = producer_resource_byte_mask_for_word(
+            physical, end + 1u, word);
+        producer_resource_watch_bitmap[word >> 5u] |= bit;
+        producer_resource_invalidated_byte_masks[word] &=
+            (uint8_t)~byte_mask;
+    }
     if (producer_resource_watch != NULL)
         producer_resource_watch(physical, size);
 }
@@ -1530,6 +1553,53 @@ static bool producer_resource_write_may_overlap(uint32_t address,
             return true;
     }
     return false;
+}
+
+static bool producer_resource_write_needs_invalidation(uint32_t address,
+                                                       uint32_t size) {
+    const uint32_t physical = address & UINT32_C(0x1fffffff);
+    uint32_t end;
+    uint32_t first_word;
+    uint32_t last_word;
+
+    if (size == 0u || physical >= UINT32_C(0x200000)) return false;
+    end = physical + size - 1u;
+    if (end < physical || end >= UINT32_C(0x200000))
+        end = UINT32_C(0x1fffff);
+    first_word = physical >> 2u;
+    last_word = end >> 2u;
+    for (uint32_t word = first_word; word <= last_word; ++word) {
+        const uint32_t bit = UINT32_C(1) << (word & 31u);
+        const uint8_t byte_mask = producer_resource_byte_mask_for_word(
+            physical, end + 1u, word);
+        if ((producer_resource_watch_bitmap[word >> 5u] & bit) != 0u &&
+            (producer_resource_invalidated_byte_masks[word] & byte_mask) !=
+                byte_mask)
+            return true;
+    }
+    return false;
+}
+
+static void producer_resource_mark_invalidated(uint32_t address,
+                                               uint32_t size) {
+    const uint32_t physical = address & UINT32_C(0x1fffffff);
+    uint32_t end;
+    uint32_t first_word;
+    uint32_t last_word;
+
+    if (size == 0u || physical >= UINT32_C(0x200000)) return;
+    end = physical + size - 1u;
+    if (end < physical || end >= UINT32_C(0x200000))
+        end = UINT32_C(0x1fffff);
+    first_word = physical >> 2u;
+    last_word = end >> 2u;
+    for (uint32_t word = first_word; word <= last_word; ++word) {
+        const uint32_t bit = UINT32_C(1) << (word & 31u);
+        const uint8_t byte_mask = producer_resource_byte_mask_for_word(
+            physical, end + 1u, word);
+        if (producer_resource_watch_bitmap[word >> 5u] & bit)
+            producer_resource_invalidated_byte_masks[word] |= byte_mask;
+    }
 }
 
 static bool resident_render_site_is_authorized(uint32_t pc,
@@ -1826,7 +1896,15 @@ static void invalidate_residual_templates_overlapping(uint32_t address,
 
 static void invalidate_producer_resources_overlapping(uint32_t address,
                                                        uint32_t size) {
+    const uint64_t write_begin = address & UINT32_C(0x1fffffff);
+    uint64_t write_end = write_begin + size;
+    uint64_t first;
+    uint64_t last;
+
     if (size == 0u) return;
+    producer_resource_mark_invalidated(address, size);
+    if (write_begin >= UINT32_C(0x200000)) return;
+    if (write_end > UINT32_C(0x200000)) write_end = UINT32_C(0x200000);
     for (uint32_t index = 0u; index < field_sprite_templates.count; ++index) {
         XgRenderFieldSpriteBuilderRecord *record =
             &field_sprite_templates.records[index];
@@ -1855,27 +1933,43 @@ static void invalidate_producer_resources_overlapping(uint32_t address,
                 record->source_id, index);
         }
     }
-    for (uint32_t index = 0u;
-         index < model_ft4_source_count; ++index) {
-        XgRenderModelFt4SourceRecord *record = &model_ft4_sources[index];
-        if (record->source_id >= 4u &&
-            normalized_ranges_overlap(record->source_id - 4u, 0x28u,
-                                      address, size)) {
-            record->valid = false;
-            xg_render_lookup_remove(
-                model_ft4_source_lookup, model_ft4_source_lookup_epoch,
-                record->source_id, index);
+    first = write_begin >= 0x28u ? write_begin - 0x28u + 1u : 0u;
+    first = (first + 3u) & ~UINT64_C(3);
+    last = (write_end - 1u) & ~UINT64_C(3);
+    for (uint64_t candidate = first; candidate <= last; candidate += 4u) {
+        const uint32_t source_id = (uint32_t)candidate + 4u;
+        const uint32_t index = xg_render_lookup_find(
+            model_ft4_source_lookup, model_ft4_source_lookup_epoch,
+            source_id, model_ft4_source_count);
+        if (index != UINT32_MAX) {
+            XgRenderModelFt4SourceRecord *record = &model_ft4_sources[index];
+            if (record->source_id >= 4u &&
+                normalized_ranges_overlap(record->source_id - 4u, 0x28u,
+                                          address, size)) {
+                record->valid = false;
+                xg_render_lookup_remove(
+                    model_ft4_source_lookup, model_ft4_source_lookup_epoch,
+                    record->source_id, index);
+            }
         }
     }
-    for (uint32_t index = 0u; index < model_ft3_source_count; ++index) {
-        XgRenderModelFt3SourceRecord *record = &model_ft3_sources[index];
-        if (record->source_id >= 4u &&
-            normalized_ranges_overlap(record->source_id - 4u, 0x20u,
-                                      address, size)) {
-            record->valid = false;
-            xg_render_lookup_remove(
-                model_ft3_source_lookup, model_ft3_source_lookup_epoch,
-                record->source_id, index);
+    first = write_begin >= 0x20u ? write_begin - 0x20u + 1u : 0u;
+    first = (first + 3u) & ~UINT64_C(3);
+    for (uint64_t candidate = first; candidate <= last; candidate += 4u) {
+        const uint32_t source_id = (uint32_t)candidate + 4u;
+        const uint32_t index = xg_render_lookup_find(
+            model_ft3_source_lookup, model_ft3_source_lookup_epoch,
+            source_id, model_ft3_source_count);
+        if (index != UINT32_MAX) {
+            XgRenderModelFt3SourceRecord *record = &model_ft3_sources[index];
+            if (record->source_id >= 4u &&
+                normalized_ranges_overlap(record->source_id - 4u, 0x20u,
+                                          address, size)) {
+                record->valid = false;
+                xg_render_lookup_remove(
+                    model_ft3_source_lookup, model_ft3_source_lookup_epoch,
+                    record->source_id, index);
+            }
         }
     }
     if (model_ft4_template_count != 0u ||
@@ -1964,7 +2058,8 @@ static void clear_model_ft4_shadow_pending(void) {
     if (!model_ft4_shadow.context.valid &&
         !model_ft4_shadow.snapshot.pending && model_ft4_shadow.count == 0u)
         return;
-    memset(model_ft4_shadow.records, 0, sizeof(model_ft4_shadow.records));
+    memset(model_ft4_shadow.records, 0,
+           model_ft4_shadow.count * sizeof(model_ft4_shadow.records[0]));
     model_ft4_shadow.context = (XgRenderModelFt4ShadowContext){ 0 };
     model_ft4_shadow.initial_packet_cursor = 0u;
     model_ft4_shadow.initial_counter = 0u;
@@ -1984,7 +2079,8 @@ static void block_model_ft4_shadow(uint32_t blocker) {
 static void clear_model_ft3_shadow_pending(void) {
     if (!model_ft3_shadow.snapshot.pending && model_ft3_shadow.count == 0u)
         return;
-    memset(model_ft3_shadow.records, 0, sizeof(model_ft3_shadow.records));
+    memset(model_ft3_shadow.records, 0,
+           model_ft3_shadow.count * sizeof(model_ft3_shadow.records[0]));
     model_ft3_shadow.initial_packet_cursor = 0u;
     model_ft3_shadow.initial_counter = 0u;
     model_ft3_shadow.expected_counter_delta = 0u;
@@ -6571,6 +6667,7 @@ static bool model_ft4_shadow_prepare(CPUState *cpu) {
                 }
                 found = true;
                 record = &model_ft4_shadow.records[primitive];
+                *record = (XgRenderModelFt4ShadowRecord){ 0 };
                 record->attribute_address = attribute_address;
                 model_ft4_shadow.snapshot.last_attribute_address =
                     attribute_address;
@@ -7356,6 +7453,7 @@ static bool model_ft3_shadow_prepare(CPUState *cpu) {
                 }
                 found = true;
                 record = &model_ft3_shadow.records[primitive];
+                *record = (XgRenderModelFt3ShadowRecord){ 0 };
                 record->attribute_address = attribute_address;
                 material_template = model_ft4_template_find_packet(
                     packet_address, false);
@@ -17194,7 +17292,10 @@ void psx_xg_render_auth_note_code_write(uint64_t previous_generation,
         !state.authenticated_artifact_candidate.runtime_variant_bound &&
         current_artifact_code_range_overlaps(guest_pc, write_size);
     const bool protected_auth_code_write =
-        protected_code_write_overlaps(guest_pc, write_size);
+        protected_code_write_overlaps(guest_pc, write_size,
+                                      variant_code_write_mask);
+    const bool producer_resource_write =
+        producer_resource_write_needs_invalidation(guest_pc, write_size);
     const bool authority_code_write = artifact_code_write ||
         (variant_code_write_mask &
          ((UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_DESCRIPTOR) |
@@ -17228,8 +17329,14 @@ void psx_xg_render_auth_note_code_write(uint64_t previous_generation,
         (variant_code_write_mask &
          (UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_SPRITE_FT4)) != 0u;
 
-    if (producer_resource_write_may_overlap(guest_pc, write_size))
+    if (producer_resource_write)
         invalidate_producer_resources_overlapping(guest_pc, write_size);
+
+    if (!variant_watched_write && !artifact_code_write &&
+        !protected_auth_code_write && !producer_resource_write) {
+        if (state.completed) retire_completed_auth_proof();
+        return;
+    }
 
     if (authority_code_write || protected_auth_code_write) {
         if (state.authenticated_artifact_candidate_valid)
@@ -17856,6 +17963,8 @@ void psx_xg_render_auth_runtime_test_reset(void) {
     projected_lifecycle = (PsxXgRenderProjectedLifecycleSnapshot){ 0 };
     memset(producer_resource_watch_bitmap, 0,
            sizeof(producer_resource_watch_bitmap));
+    memset(producer_resource_invalidated_byte_masks, 0,
+           sizeof(producer_resource_invalidated_byte_masks));
     overlay_ft4_2c = (PsxXgRenderOverlayFt4Snapshot){ 0 };
     overlay_projected_2e_descriptor_scope = false;
     overlay_ft4_state = (XgRenderOverlayFt4State){ 0 };
