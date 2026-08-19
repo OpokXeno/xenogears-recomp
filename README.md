@@ -12,7 +12,7 @@ Built on [PSXRecomp](https://github.com/mstan/psxrecomp) — a MIPS R3000A → C
 
 To run a release of XenogearsRecomp, you need your own legally obtained copy of:
 
-- **Xenogears (USA, Disc 1)** — disc image (`.cue`/`.bin`)
+- **Xenogears (USA, Disc 1)** — disc image (`.cue` + `.bin` preferred)
 
 The separate game EXE (`SLUS-006.64`) is required only for source generation; it is not needed to run a release.
 
@@ -28,7 +28,12 @@ No retail BIOS image, game disc image, or game assets are included in or distrib
 | **CMake** ≥ 3.20 | system package | Homebrew / MacPorts | [cmake.org](https://cmake.org) |
 | **Ninja** (recommended) | `apt install ninja-build` | `brew install ninja` | `winget install Ninja-build.Ninja` |
 | **pkg-config** | `apt install pkg-config` | `brew install pkg-config` | (not needed) |
-| **SDL2** | `apt install libsdl2-dev` | `brew install sdl2` | [vcpkg](https://vcpkg.io) / manual |
+| **Python** ≥ 3.11 | system package | Homebrew / python.org | python.org / Windows Store |
+| **SDL3** ≥ 3.4 | system package or automatic source fetch | Homebrew / automatic source fetch | vcpkg, manual, or automatic source fetch |
+
+SDL3 is the default backend; SDL2 remains an explicit compatibility fallback.
+If CMake cannot find a compatible SDL3 system package, the build downloads the
+integrity-pinned SDL3 release and links it into the runtime.
 
 ---
 
@@ -40,7 +45,6 @@ No retail BIOS image, game disc image, or game assets are included in or distrib
 - ✅ **Overlay pipeline** — field/battle/worldmap overlays capture in the interpreter and compile to native code in the background
 - ⚠️ **Not validated end-to-end** — no complete playthrough has been done; treat every area past the opening as unverified
 - 🐛 **Known issues**:
-  - ~~Intermittent black-polygon rendering glitches in some scenes~~ FIXED
   - Most of the enhancements are untested or not yet fully polished, so expect some bugs if you use them.
 - **Scope:** USA Disc 1 (`SLUS-00664`) only — Disc 2 and other regions are untested
 
@@ -50,14 +54,18 @@ No retail BIOS image, game disc image, or game assets are included in or distrib
 
 ### 1. Download a Release (recommended)
 
-Grab the archive for your platform from [Releases](https://github.com/OpokXeno/xenogears-recomp/releases), extract it, and run the executable. A launcher window opens.
+Grab the x86-64 archive for your platform from [Releases](https://github.com/OpokXeno/xenogears-recomp/releases), extract it, and run the executable. A launcher window opens.
 
 1. **Set the game disc** — on first launch, select your legally obtained *Xenogears* (USA, Disc 1) disc image. Click **Change Disc** on the main screen and pick your `.cue` file. The launcher verifies the ISO9660 header, region, and serial.
 2. **Optional: select a retail BIOS** — OpenBIOS runs by default. To use the retail backend, select your legally obtained matching `SCPH1001.BIN` (a 512 KB file dumped from your own console) via Settings → System → Browse.
 3. Optionally adjust renderer, supersampling, screen look, widescreen, and controller settings, then press **Launch**. Your choices are remembered.
 
-**Accepted disc formats:** `.cue` + `.bin` (preferred — pick the `.cue`), direct `.bin`, and `.iso`. If the header or game ID does not match SLUS-00664, the launcher warns and tries to run the image anyway.
+**Accepted disc formats:** `.cue` + `.bin` (preferred — pick the `.cue`), direct
+`.bin`, `.img`, `.iso`, `.car`, and `.chd`. If the header or game ID does not
+match SLUS-00664, the launcher warns and tries to run the image anyway.
 
+Official Linux and Windows releases are 64-bit x86-64 builds with SDL3 linked
+statically; no separate SDL installation is required.
 Selected paths persist next to the executable (`settings.toml`). Delete it to pick different files or reset settings.
 
 ### 2. Build from Source
@@ -106,6 +114,17 @@ You need both the `.cue` and its `.bin` tracks together. The disc and BIOS paths
 .\build.ps1
 ```
 
+`build.ps1` works from a regular PowerShell session. It uses Ninja when a
+compiler is already configured; otherwise it selects Visual Studio 2022. When
+Ninja is explicitly requested without an initialized compiler environment, the
+script locates Visual Studio with `vswhere`, imports the x64 developer
+environment, and verifies that `cl.exe` is available. To force the Visual Studio
+generator:
+
+```powershell
+.\build.ps1 -Generator "Visual Studio 17 2022"
+```
+
 This will:
 1. Build the recompiler (`psxrecomp-game`)
 2. Generate both BIOS backends: OpenBIOS from the tracked redistributable image and retail SCPH1001 from your local `psxrecomp/bios/SCPH1001.BIN`
@@ -114,7 +133,10 @@ This will:
 
 The source build needs the local retail BIOS to generate the compiled SCPH1001 backend, even though runtime use of that backend is optional. The build stages only the redistributable OpenBIOS image and `OpenBIOS.LICENSE`; it does not package `SCPH1001.BIN`.
 
-> **Note:** `build.sh` uses Ninja. Set `CMAKE_GENERATOR` env var to override (e.g. `CMAKE_GENERATOR="Unix Makefiles"`). Ninja and other single-config generators write directly under `build/`; Visual Studio writes under `build/<BuildType>/`.
+> **Note:** `build.sh` uses Ninja. Set `CMAKE_GENERATOR` to override it (for
+> example, `CMAKE_GENERATOR="Unix Makefiles"`). Ninja and other single-config
+> generators write directly under `build/`; Visual Studio writes under
+> `build/<BuildType>/`. Use a fresh build directory when changing generators.
 
 #### 2.3.1 Debug builds
 
@@ -179,6 +201,13 @@ psxrecomp/recompiler/build/psxrecomp-game --config game.toml
 .\regen.ps1
 ```
 
+### 3. Configure mods
+
+Open **Mods** in the launcher to enable included enhancements or install a
+local `.psxmod` package. Packages are validated and applied over your stock disc
+without modifying it. See [`MODS.md`](MODS.md) for the included catalog,
+installation steps, package authoring, compatibility, and safety details.
+
 ---
 
 ## Controls
@@ -186,15 +215,15 @@ psxrecomp/recompiler/build/psxrecomp-game --config game.toml
 | Action             | Keyboard   | Controller (Xbox) |
 |--------------------|------------|---|
 | D-Pad / Move       | Arrow keys | Left stick / D-pad |
-| Cross / Confirm    | Z          | A |
-| Circle / Cancel    | X          | B |
-| Square / Menu      | A          | X |
-| Triangle           | S          | Y |
+| Cross / Confirm    | X          | A |
+| Circle / Cancel    | S          | B |
+| Square / Menu      | Z          | X |
+| Triangle           | A          | Y |
 | Start              | Enter      | Start |
-| Select             | Shift      | Back |
-| L1 / L2            | Q / W      | LB / LT |
-| R1 / R2            | E / R      | RB / RT |
-| Fullscreen toggle  | F11        | — |
+| Select             | Right Shift | Back |
+| L1 / L2            | Q / E      | LB / LT |
+| R1 / R2            | W / R      | RB / RT |
+| Fullscreen toggle  | Alt+Enter / Ctrl+F | — |
 | Debug menu overlay | Ctrl+F3    | — |
 
 Full rebinding is available through in-app settings.
@@ -215,9 +244,20 @@ XenogearsRecomp/
 ├── regen.ps1                 # Windows recompilation script
 ├── CMakeLists.txt            # Game runtime CMake build
 ├── game.toml                 # Game configuration (patches, widescreen, runtime)
+├── MODS.md                   # Player-facing mod guide
+├── MOD_AUTHORING.md          # Detailed .psxmod authoring guide
 ├── game/                     # YOUR game EXE / disc image (not tracked)
 ├── generated/                # Recompiled C source from game EXE (not tracked)
 ├── overlays/                 # Captured overlay binaries (not tracked)
+├── native_renderer/          # Authenticated Xenogears-native 3D renderer
+│   ├── include/              #   public render/authentication contracts
+│   ├── src/                  #   field, world, model and sprite native paths
+│   ├── tests/                #   renderer, capture and parity tests
+│   ├── xg_render_manifest.toml          # resident producer identity
+│   ├── xg_render_runtime_variants.toml  # authenticated runtime variants
+│   ├── xg_render_overlay_ranges.toml    # overlay cutovers/source ranges
+│   ├── xg_render_resident_plan.txt      # recompiler observation plan
+│   └── xg_3d_certification.toml         # native 3D certification record
 ├── seeds/                    # Recompiler seed addresses (tracked)
 │   ├── slus_00664_seeds.txt
 │   └── slus_00664_bios_thunks.txt
@@ -241,7 +281,8 @@ XenogearsRecomp/
 
 1. **Recompilation:** `psxrecomp-game` reads the game EXE (`slus_006.64`) and translates MIPS R3000A instructions into C code, guided by seed addresses and annotations.
 2. **Runtime build:** The generated C is compiled with a PS1 hardware simulation runtime (GPU, SPU, CD-ROM, DMA, timers, interrupt controller, GTE, SIO, memory cards) and linked into a native executable.
-3. **Execution:** Both BIOS backends compile into the executable. OpenBIOS is the default; a selected matching retail `SCPH1001.BIN` backend can be used instead. The active BIOS boots as native code — no emulation, no interpreter on the hot path. Game code that was statically recompiled runs as native functions. Disc-streamed overlays are captured at runtime and compiled to native code on demand.
+3. **Native rendering:** Authenticated game render producers feed the game-specific renderer for field, world, model, sprite, effects, water and shadow paths. Identity-bound manifests and source observations gate every cutover; unsupported work stays on the original PS1 GPU path.
+4. **Execution:** Both BIOS backends compile into the executable. OpenBIOS is the default; a selected matching retail `SCPH1001.BIN` backend can be used instead. The active BIOS boots as native code — no emulation, no interpreter on the hot path. Game code that was statically recompiled runs as native functions. Disc-streamed overlays are captured at runtime and compiled to native code on demand.
 
 ---
 
