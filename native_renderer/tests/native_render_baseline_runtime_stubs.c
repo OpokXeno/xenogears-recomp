@@ -6,6 +6,14 @@
 #include <string.h>
 
 uint64_t s_frame_count = 0;
+uint32_t i_mask = 0;
+uint32_t g_debug_last_store_pc = 0;
+
+uint64_t psx_get_cycle_count(void) { return 0; }
+uint32_t psx_read_word(uint32_t address) {
+    (void)address;
+    return 0;
+}
 
 void gl_renderer_native_midpoint_diag(
         GlRendererNativeMidpointDiagnostics *out_diagnostics) {

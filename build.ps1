@@ -19,7 +19,7 @@
     Prerequisites:
       - CMake 3.20+
       - Visual Studio 2022 (with C++ tools) or MinGW/MSYS2
-      - SDL2 development library (vcpkg, MSYS2, or manually)
+      - SDL3 3.4+ development library (vcpkg, MSYS2, or manually)
       - Python 3.11+
       - For source builds, place your legally obtained PlayStation BIOS dump at .\psxrecomp\bios\SCPH1001.BIN
       - Place your legally owned Xenogears (Disc 1) EXE at .\game\slus_006.64
@@ -33,15 +33,17 @@ param(
 $ErrorActionPreference = "Stop"
 
 $RuntimeBuildType = $BuildType
-$RuntimeCMakeExtraArgs = @()
+$RuntimeCMakeExtraArgs = @(
+    "-DBUILD_TESTING=OFF",
+    "-DPSX_SDL_BACKEND=SDL3"
+)
 if ($BuildType -eq "ReleaseNoOpt") {
     $RuntimeBuildType = "Release"
-    $RuntimeCMakeExtraArgs = @(
+    $RuntimeCMakeExtraArgs += @(
         "-DCMAKE_C_FLAGS_RELEASE=-O0 -DNDEBUG",
         "-DCMAKE_CXX_FLAGS_RELEASE=-O0 -DNDEBUG",
         "-DPSX_DEBUG_TOOLS=OFF",
-        "-DPSX_DEBUG_OVERLAY=OFF",
-        "-DBUILD_TESTING=OFF"
+        "-DPSX_DEBUG_OVERLAY=OFF"
     )
 }
 
@@ -149,7 +151,7 @@ try {
     $RUNTIME_CMAKE_ARGS += $RuntimeCMakeExtraArgs
     & cmake @RUNTIME_CMAKE_ARGS
     if ($LASTEXITCODE -ne 0) { throw "Runtime configuration failed" }
-    & cmake --build $BUILD_DIR --config $RuntimeBuildType
+    & cmake --build $BUILD_DIR --config $RuntimeBuildType --target psx-runtime
     if ($LASTEXITCODE -ne 0) { throw "Runtime build failed" }
 }
 finally {

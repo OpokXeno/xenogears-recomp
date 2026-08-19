@@ -185,3 +185,6 @@ bios_hle = true
 # runtime compiles captured overlays automatically in the background.
 overlay_cache = true
 overlay_backend = "auto"
+
+[controller]
+multitap_analog = true

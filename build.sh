@@ -12,7 +12,7 @@
 #   - C/C++ compiler (Clang, GCC, or Apple Clang)
 #   - Ninja (recommended) or "Unix Makefiles"
 #   - pkg-config
-#   - SDL2 development library
+#   - SDL3 3.4+ development library
 #   - Python 3.11+
 #   - Place your legally owned Xenogears disc 1 EXE at ./game/slus_006.64
 #   - Place your legally owned retail BIOS at ./psxrecomp/bios/SCPH1001.BIN for source generation
@@ -33,18 +33,20 @@ BUILD_TYPE="${2:-Release}"
 GENERATOR="${CMAKE_GENERATOR:-Ninja}"
 
 RUNTIME_BUILD_TYPE="$BUILD_TYPE"
-RUNTIME_CMAKE_ARGS=()
+RUNTIME_CMAKE_ARGS=(
+    "-DBUILD_TESTING=OFF"
+    "-DPSX_SDL_BACKEND=SDL3"
+)
 if [[ "$BUILD_TYPE" == "ReleaseNoOpt" ]]; then
     # Keep release semantics (NDEBUG) while removing compiler optimization.
     # Explicitly disable developer-only targets so this remains a clean
     # production-shaped binary for optimization A/B tests.
     RUNTIME_BUILD_TYPE="Release"
-    RUNTIME_CMAKE_ARGS=(
+    RUNTIME_CMAKE_ARGS+=(
         "-DCMAKE_C_FLAGS_RELEASE=-O0 -DNDEBUG"
         "-DCMAKE_CXX_FLAGS_RELEASE=-O0 -DNDEBUG"
         "-DPSX_DEBUG_TOOLS=OFF"
         "-DPSX_DEBUG_OVERLAY=OFF"
-        "-DBUILD_TESTING=OFF"
     )
 fi
 RECOMPILER_DIR="$ROOT/psxrecomp/recompiler"
@@ -117,7 +119,7 @@ cmake -S "$ROOT" -B "$ROOT/$BUILD_DIR" -G "$GENERATOR" \
     -DRECOMP_UI_ROOT="$ROOT/recomp-ui" \
     -DXG_RENDER_NATIVE="$NATIVE_RENDER" \
     "${RUNTIME_CMAKE_ARGS[@]}"
-cmake --build "$ROOT/$BUILD_DIR" -j "$PARALLEL"
+cmake --build "$ROOT/$BUILD_DIR" --target psx-runtime -j "$PARALLEL"
 
 echo "==> Done. Binary: $ROOT/$BUILD_DIR/XenogearsRecomp"
 echo "    Bundled OpenBIOS is staged under $ROOT/$BUILD_DIR/bios and used by default."

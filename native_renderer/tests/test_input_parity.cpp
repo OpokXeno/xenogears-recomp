@@ -6,6 +6,9 @@
 #include <SDL.h>
 
 #include <array>
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <cassert>
 #include <cstdio>
 #include <fstream>
@@ -118,9 +121,12 @@ void record_and_replay(const std::string& path, const host_input::HostInputSnaps
     }};
     const auto actual = capture(replayed, &routes, dev_p1);
     assert_same(expected, actual);
-    sio_init();
-    for (int slot = 0; slot < 2; ++slot)
-        assert(sio_response(slot, expected[slot]) == sio_response(slot, actual[slot]));
+    for (int slot = 0; slot < 2; ++slot) {
+        sio_init();
+        const auto expected_response = sio_response(slot, expected[slot]);
+        sio_init();
+        assert(expected_response == sio_response(slot, actual[slot]));
+    }
     input_replay::detach(players);
     std::remove(path.c_str());
 }
@@ -139,7 +145,8 @@ void test_trigger_and_dev_merge_parity() {
     std::array<uint8_t, SDL_NUM_SCANCODES> keys{};
     keys[SDL_SCANCODE_Z] = keys[SDL_SCANCODE_W] = SDL_PRESSED;
     const host_input::HostInputSnapshot snapshot{keys, {p1, p2}};
-    std::array<host_input::PlayerRoute, 2> routes{{{0, 0, true, -1}, {2, 1, false, 20}}};
+    std::array<host_input::PlayerRoute, 2> routes{{
+        {0, 0, true, PSX_SDL_INVALID_JOYSTICK_ID}, {2, 1, false, 20}}};
     const auto expected = capture(snapshot, &routes, true);
     assert((expected[0].buttons & (kCross | kL2 | kR2)) == 0u);
     assert(expected[0].analog && expected[0].lx < 0x80u);

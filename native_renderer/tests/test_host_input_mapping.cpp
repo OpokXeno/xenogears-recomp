@@ -4,6 +4,9 @@
 #include <SDL.h>
 
 #include <array>
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <cassert>
 #include <cstdint>
 #include <vector>
@@ -71,7 +74,8 @@ void configure_keyboard() {
 
 void test_keyboard_buttons_include_triggers() {
     configure_keyboard();
-    host_input::PlayerRoute player{1, 2, false, -1};
+    host_input::PlayerRoute player{
+        1, 2, false, PSX_SDL_INVALID_JOYSTICK_ID};
     const PsxNetPad pad = capture(snapshot_with({SDL_SCANCODE_UP, SDL_SCANCODE_Z,
                                                   SDL_SCANCODE_W, SDL_SCANCODE_R}, {}),
                                   0, &player);
@@ -99,7 +103,8 @@ void test_dev_p1_merges_keyboard_and_every_controller() {
     first.buttons[SDL_CONTROLLER_BUTTON_A] = SDL_PRESSED;
     auto second = controller(20);
     second.axes[SDL_CONTROLLER_AXIS_TRIGGERRIGHT] = 32767;
-    host_input::PlayerRoute player{0, 1, true, -1};
+    host_input::PlayerRoute player{
+        0, 1, true, PSX_SDL_INVALID_JOYSTICK_ID};
     const PsxNetPad pad = capture(snapshot_with({SDL_SCANCODE_W}, {first, second}), 0, &player, true);
     assert((pad.buttons & (kCross | kL2 | kR2)) == 0u);
     assert(pad.analog == 1u);

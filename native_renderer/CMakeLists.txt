@@ -253,7 +253,6 @@ target_compile_features(xg_render_static_auth PUBLIC c_std_11)
 target_link_libraries(xg_render_static_auth PUBLIC xg_render_auth)
 
 if(BUILD_TESTING)
-    find_package(SDL2 REQUIRED)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_library(xg_visual_state_test_impl STATIC src/xg_visual_state.c)
     target_include_directories(xg_visual_state_test_impl PUBLIC include)
@@ -404,7 +403,7 @@ if(BUILD_TESTING)
         src
         "${CMAKE_CURRENT_BINARY_DIR}/generated"
         "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include"
-        ${SDL2_INCLUDE_DIRS})
+        ${PSX_SDL_INCLUDE_DIRS})
     add_dependencies(test_xg_render_static_auth
         xg_render_overlay_cutovers_generated)
     target_compile_definitions(test_xg_render_static_auth PRIVATE
@@ -419,7 +418,7 @@ if(BUILD_TESTING)
         xg_model_ft4_raw xg_sprite_ft4 xg_world_clouds xg_world_decorations
         xg_world_effects xg_world_entity_shadows xg_world_horizon
         xg_world_minimap xg_world_models xg_world_actor_sprites xg_world_sky
-        xg_world_terrain_water SDL2::SDL2)
+        xg_world_terrain_water ${PSX_SDL_LIBRARIES})
     add_test(NAME xg_render_static_auth COMMAND test_xg_render_static_auth)
     set_tests_properties(xg_render_static_auth PROPERTIES
         ENVIRONMENT "PSX_OVERLAY_NO_GATES=0")
@@ -482,10 +481,10 @@ if(BUILD_TESTING)
     target_include_directories(test_xg_render_auth PRIVATE
         include
         "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include"
-        ${SDL2_INCLUDE_DIRS})
+        ${PSX_SDL_INCLUDE_DIRS})
     target_compile_definitions(test_xg_render_auth PRIVATE
         GUEST_RENDER_BRIDGE_TESTING=1)
-    target_link_libraries(test_xg_render_auth PRIVATE SDL2::SDL2)
+    target_link_libraries(test_xg_render_auth PRIVATE ${PSX_SDL_LIBRARIES})
     add_test(NAME xg_render_auth COMMAND test_xg_render_auth)
 
     add_executable(test_xg_native_render_baseline_adapter

@@ -128,8 +128,11 @@ endif()
 set(PSXRECOMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp" CACHE PATH
     "psxrecomp framework root (pinned submodule)")
 include(${PSXRECOMP_ROOT}/runtime/runtime.cmake)
-if(SDL2_LIBRARY_DIRS)
-    link_directories(${SDL2_LIBRARY_DIRS})
+if(PSX_SDL3)
+    add_compile_definitions(PSX_SDL3=1)
+endif()
+if(PSX_SDL_LIBRARY_DIRS)
+    link_directories(${PSX_SDL_LIBRARY_DIRS})
 endif()
 if(WIN32 OR MINGW)
     add_compile_definitions(SDL_MAIN_HANDLED=1)
@@ -236,8 +239,8 @@ if(BUILD_TESTING)
         psxrecomp/runtime/tests/test_game_fps_meter.c
         psxrecomp/runtime/src/game_fps_meter.c)
     target_include_directories(game_fps_meter_test PRIVATE
-        psxrecomp/runtime/include ${SDL2_INCLUDE_DIRS})
-    target_link_libraries(game_fps_meter_test PRIVATE ${SDL2_LIBRARIES})
+        psxrecomp/runtime/include ${PSX_SDL_INCLUDE_DIRS})
+    target_link_libraries(game_fps_meter_test PRIVATE ${PSX_SDL_LIBRARIES})
     add_test(NAME game_fps_meter COMMAND game_fps_meter_test)
 
     add_test(NAME xenogears_resident_codegen
@@ -262,8 +265,8 @@ if(BUILD_TESTING)
         ${PSXRECOMP_ROOT}/runtime/src/host_input_snapshot.cpp)
     target_include_directories(xg_input_replay PRIVATE
         ${PSXRECOMP_ROOT}/runtime/include
-        ${SDL2_INCLUDE_DIRS})
-    target_link_libraries(xg_input_replay PRIVATE ${SDL2_LIBRARIES})
+        ${PSX_SDL_INCLUDE_DIRS})
+    target_link_libraries(xg_input_replay PRIVATE ${PSX_SDL_LIBRARIES})
     add_test(NAME xg_input_replay COMMAND xg_input_replay)
 
     add_executable(xg_input_replay_auth_proof
@@ -289,7 +292,7 @@ if(BUILD_TESTING)
         native_renderer/include
         "${CMAKE_BINARY_DIR}/native_renderer/generated"
         ${PSXRECOMP_ROOT}/runtime/include
-        ${SDL2_INCLUDE_DIRS})
+        ${PSX_SDL_INCLUDE_DIRS})
     add_dependencies(xg_input_replay_auth_proof
         xg_render_overlay_cutovers_generated)
     target_compile_definitions(xg_input_replay_auth_proof PRIVATE
@@ -302,7 +305,7 @@ if(BUILD_TESTING)
         xg_world_effects xg_world_entity_shadows xg_world_horizon
         xg_world_minimap xg_world_models xg_world_actor_sprites xg_world_sky
         xg_world_terrain_water
-        ${SDL2_LIBRARIES})
+        ${PSX_SDL_LIBRARIES})
     add_test(NAME xg_input_replay_auth_proof COMMAND xg_input_replay_auth_proof)
     set_tests_properties(xg_input_replay_auth_proof PROPERTIES
         ENVIRONMENT "PSX_OVERLAY_NO_GATES=0")
@@ -319,10 +322,10 @@ if(BUILD_TESTING)
         native_renderer/include
         ${PSXRECOMP_ROOT}/runtime/include
         ${PSXRECOMP_ROOT}/runtime/src
-        ${SDL2_INCLUDE_DIRS})
+        ${PSX_SDL_INCLUDE_DIRS})
     target_compile_definitions(xg_input_replay_baseline PRIVATE
         PSX_INPUT_REPLAY_XG_BASELINE=1)
-    target_link_libraries(xg_input_replay_baseline PRIVATE ${SDL2_LIBRARIES})
+    target_link_libraries(xg_input_replay_baseline PRIVATE ${PSX_SDL_LIBRARIES})
     add_test(NAME xg_input_replay_baseline COMMAND xg_input_replay_baseline)
 
     add_executable(xg_native_render_baseline
@@ -330,7 +333,6 @@ if(BUILD_TESTING)
         native_renderer/tests/native_render_frame_count_stub.c
         ${PSXRECOMP_ROOT}/runtime/src/native_render_baseline.c
         ${PSXRECOMP_ROOT}/runtime/src/native_render_baseline_runtime.c
-        ${PSXRECOMP_ROOT}/runtime/src/guest_render_native_stream.c
         ${PSXRECOMP_ROOT}/runtime/src/gte_attribution.cpp)
     target_include_directories(xg_native_render_baseline PRIVATE
         ${PSXRECOMP_ROOT}/runtime/include)
@@ -349,8 +351,8 @@ if(BUILD_TESTING)
         ${PSXRECOMP_ROOT}/runtime/src/host_input_snapshot.cpp)
     target_include_directories(xg_input_record PRIVATE
         ${PSXRECOMP_ROOT}/runtime/include
-        ${SDL2_INCLUDE_DIRS})
-    target_link_libraries(xg_input_record PRIVATE ${SDL2_LIBRARIES})
+        ${PSX_SDL_INCLUDE_DIRS})
+    target_link_libraries(xg_input_record PRIVATE ${PSX_SDL_LIBRARIES})
     add_test(NAME xg_input_record COMMAND xg_input_record)
 
     add_executable(xg_host_input_mapping
@@ -360,8 +362,8 @@ if(BUILD_TESTING)
         ${PSXRECOMP_ROOT}/runtime/src/psx_keybinds.c)
     target_include_directories(xg_host_input_mapping PRIVATE
         ${PSXRECOMP_ROOT}/runtime/include
-        ${SDL2_INCLUDE_DIRS})
-    target_link_libraries(xg_host_input_mapping PRIVATE ${SDL2_LIBRARIES})
+        ${PSX_SDL_INCLUDE_DIRS})
+    target_link_libraries(xg_host_input_mapping PRIVATE ${PSX_SDL_LIBRARIES})
     add_test(NAME xg_host_input_mapping COMMAND xg_host_input_mapping)
 
     add_executable(xg_input_parity
@@ -378,8 +380,8 @@ if(BUILD_TESTING)
         ${PSXRECOMP_ROOT}/runtime/src/memcard.c)
     target_include_directories(xg_input_parity PRIVATE
         ${PSXRECOMP_ROOT}/runtime/include
-        ${SDL2_INCLUDE_DIRS})
-    target_link_libraries(xg_input_parity PRIVATE ${SDL2_LIBRARIES})
+        ${PSX_SDL_INCLUDE_DIRS})
+    target_link_libraries(xg_input_parity PRIVATE ${PSX_SDL_LIBRARIES})
     add_test(NAME xg_input_parity COMMAND xg_input_parity)
 
     add_executable(gpu_semantic_workload_test
@@ -398,15 +400,19 @@ if(BUILD_TESTING)
         ${PSXRECOMP_ROOT}/runtime/src/guest_render_native_stream.c
         ${PSXRECOMP_ROOT}/runtime/src/guest_render_transaction.c
         ${PSXRECOMP_ROOT}/runtime/src/gpu_sw_renderer.c
+        ${PSXRECOMP_ROOT}/runtime/src/gpu_vram_dirty.c
         ${PSXRECOMP_ROOT}/runtime/src/gpu_render.c
         ${PSXRECOMP_ROOT}/runtime/src/gpu_semantic_workload.c
+        ${PSXRECOMP_ROOT}/runtime/src/pgxp.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/ws_aspect_cone_math.c
+        ${PSXRECOMP_ROOT}/runtime/src/ws_ui_group.c
         ${PSXRECOMP_ROOT}/runtime/src/gpu_gl_renderer.c)
     target_include_directories(gpu_gl_mask_order_test PRIVATE
-        ${PSXRECOMP_ROOT}/runtime/include ${SDL2_INCLUDE_DIRS})
+        ${PSXRECOMP_ROOT}/runtime/include ${PSX_SDL_INCLUDE_DIRS})
     target_compile_definitions(gpu_gl_mask_order_test PRIVATE
         SDL_MAIN_HANDLED=1
         PSX_NO_DEBUG_TOOLS=1)
-    target_link_libraries(gpu_gl_mask_order_test PRIVATE ${SDL2_LIBRARIES})
+    target_link_libraries(gpu_gl_mask_order_test PRIVATE ${PSX_SDL_LIBRARIES})
     if(WIN32 OR MINGW)
         target_link_libraries(gpu_gl_mask_order_test PRIVATE opengl32)
         add_test(NAME gpu_gl_mask_order_test COMMAND gpu_gl_mask_order_test)
