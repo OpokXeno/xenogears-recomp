@@ -5,7 +5,9 @@
 
 #include <stdint.h>
 
-#define XG_RENDER_RUNTIME_VARIANT_SOURCE_SITE_CAP 14u
+#define XG_RENDER_RUNTIME_VARIANT_SOURCE_SITE_CAP 64u
+#define XG_RENDER_RUNTIME_VARIANT_CUTOVER_CAP 64u
+#define XG_RENDER_RUNTIME_VARIANT_MODEL_DISPATCH_CAP 16u
 
 typedef enum XgRenderRuntimeVariantSourceOperation {
     XG_RENDER_RUNTIME_VARIANT_SOURCE_READ = 0,
@@ -28,6 +30,32 @@ typedef struct XgRenderRuntimeVariantSourceSite {
     uint8_t width;
     uint8_t auxiliary_rule;
 } XgRenderRuntimeVariantSourceSite;
+
+typedef enum XgRenderRuntimeVariantCutoverHandler {
+    XG_RENDER_RUNTIME_VARIANT_CUTOVER_ACTOR = 0,
+    XG_RENDER_RUNTIME_VARIANT_CUTOVER_COMPASS_WORLD,
+    XG_RENDER_RUNTIME_VARIANT_CUTOVER_COMPASS_SCREEN,
+    XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_RGB_BEGIN,
+    XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_RGB_COMMIT,
+    XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_ENTRY,
+    XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_NATIVE,
+    XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_INITIALIZER_BEGIN,
+    XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_INITIALIZER_COMMIT,
+    XG_RENDER_RUNTIME_VARIANT_CUTOVER_PARTICLE_INITIALIZER,
+    XG_RENDER_RUNTIME_VARIANT_CUTOVER_PARTICLE_NATIVE,
+    XG_RENDER_RUNTIME_VARIANT_CUTOVER_HANDLER_COUNT,
+} XgRenderRuntimeVariantCutoverHandler;
+
+typedef struct XgRenderRuntimeVariantCutover {
+    uint32_t pc;
+    uint32_t instruction;
+    uint32_t continuation;
+    uint32_t code_range_start;
+    uint32_t code_range_size;
+    uint8_t code_range_identity[32];
+    uint8_t transfer;
+    uint8_t handler;
+} XgRenderRuntimeVariantCutover;
 
 #ifdef __cplusplus
 extern "C" {
@@ -67,9 +95,17 @@ typedef struct XgRenderRuntimeVariantDescriptor {
     uint32_t capture_jal_target;
     uint32_t capture_delay_instruction;
     uint32_t physical_return_site;
+    uint32_t model_dispatch_window_start;
+    uint32_t model_dispatch_matrix_stack_offset;
+    uint32_t model_dispatch_instruction_count;
+    uint32_t model_dispatch_instructions[
+        XG_RENDER_RUNTIME_VARIANT_MODEL_DISPATCH_CAP];
     uint32_t source_site_count;
     XgRenderRuntimeVariantSourceSite
         source_sites[XG_RENDER_RUNTIME_VARIANT_SOURCE_SITE_CAP];
+    uint32_t cutover_count;
+    XgRenderRuntimeVariantCutover
+        cutovers[XG_RENDER_RUNTIME_VARIANT_CUTOVER_CAP];
 } XgRenderRuntimeVariantDescriptor;
 
 extern const XgRenderRuntimeVariantDescriptor

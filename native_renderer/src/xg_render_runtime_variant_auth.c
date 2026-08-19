@@ -135,6 +135,9 @@ static bool source_site_is_valid(
 
 static bool descriptor_source_sites_are_valid(
     const XgRenderRuntimeVariantDescriptor *descriptor) {
+    uint32_t call_count = 0u;
+    uint32_t bucket_count = 0u;
+
     for (uint32_t index = 0u; index < descriptor->source_site_count; ++index) {
         const XgRenderRuntimeVariantSourceSite *site =
             &descriptor->source_sites[index];
@@ -144,8 +147,12 @@ static bool descriptor_source_sites_are_valid(
                             descriptor->artifact_range_size, site->pc, 4u))
             return false;
         if (index != 0u &&
-            descriptor->source_sites[index - 1u].pc >= site->pc)
+            (descriptor->source_sites[index - 1u].pc & 0x1fffffffu) >=
+                (site->pc & 0x1fffffffu))
             return false;
+        call_count += site->operation == XG_RENDER_RUNTIME_VARIANT_SOURCE_CALL;
+        bucket_count +=
+            site->operation == XG_RENDER_RUNTIME_VARIANT_SOURCE_BUCKET;
         for (uint32_t prior = 0u; prior < index; ++prior) {
             const XgRenderRuntimeVariantSourceSite *other =
                 &descriptor->source_sites[prior];
@@ -154,6 +161,51 @@ static bool descriptor_source_sites_are_valid(
                 return false;
         }
     }
+    return call_count == 1u && bucket_count == 1u;
+}
+
+static bool descriptor_cutovers_are_valid(
+        const XgRenderRuntimeVariantDescriptor *descriptor) {
+    if (descriptor->cutover_count == 0u ||
+        descriptor->cutover_count > XG_RENDER_RUNTIME_VARIANT_CUTOVER_CAP)
+        return false;
+    for (uint32_t index = 0u; index < descriptor->cutover_count; ++index) {
+        const XgRenderRuntimeVariantCutover *cutover =
+            &descriptor->cutovers[index];
+        uint8_t expected_transfer;
+
+        switch ((XgRenderRuntimeVariantCutoverHandler)cutover->handler) {
+        case XG_RENDER_RUNTIME_VARIANT_CUTOVER_ACTOR:
+        case XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_NATIVE:
+            expected_transfer = 1u;
+            break;
+        case XG_RENDER_RUNTIME_VARIANT_CUTOVER_COMPASS_WORLD:
+        case XG_RENDER_RUNTIME_VARIANT_CUTOVER_COMPASS_SCREEN:
+        case XG_RENDER_RUNTIME_VARIANT_CUTOVER_PARTICLE_NATIVE:
+            expected_transfer = 2u;
+            break;
+        default:
+            expected_transfer = 0u;
+            break;
+        }
+        if ((cutover->pc & 3u) != 0u || cutover->transfer > 2u ||
+            cutover->handler >=
+                XG_RENDER_RUNTIME_VARIANT_CUTOVER_HANDLER_COUNT ||
+            cutover->transfer != expected_transfer ||
+            !digest_present(cutover->code_range_identity) ||
+            !range_contains(descriptor->artifact_range_start,
+                            descriptor->artifact_range_size,
+                            cutover->code_range_start,
+                            cutover->code_range_size) ||
+            !range_contains(cutover->code_range_start,
+                            cutover->code_range_size, cutover->pc, 4u) ||
+            ((cutover->transfer == 1u) != (cutover->continuation != 0u)) ||
+            (cutover->transfer == 1u &&
+             !range_contains(descriptor->artifact_range_start,
+                             descriptor->artifact_range_size,
+                             cutover->continuation, 4u)))
+            return false;
+    }
     return true;
 }
 
@@ -161,7 +213,7 @@ static bool descriptor_is_valid(const XgRenderRuntimeVariantDescriptor *descript
     const XgRenderManifestValidation *validation = &xg_render_manifest_validation;
     uint32_t range_start;
 
-    if (descriptor == NULL || xg_render_runtime_variant_descriptor_count != 1u ||
+    if (descriptor == NULL ||
         descriptor->producer_record_id != validation->producer_record_id ||
         descriptor->site_record_id != validation->site_record_id ||
         memcmp(descriptor->canonical_game_identity, xg_render_game_identity,
@@ -179,8 +231,9 @@ static bool descriptor_is_valid(const XgRenderRuntimeVariantDescriptor *descript
         descriptor->canonical_static_callee != validation->static_callee ||
         descriptor->canonical_return_site != validation->return_site ||
         descriptor->artifact_size == 0u || descriptor->artifact_range_size == 0u ||
-        descriptor->artifact_range_start != descriptor->artifact_base ||
-        descriptor->artifact_range_size > descriptor->artifact_size ||
+        !range_contains(descriptor->artifact_base, descriptor->artifact_size,
+                        descriptor->artifact_range_start,
+                        descriptor->artifact_range_size) ||
         descriptor->activation_window_size < 8u ||
         descriptor->capture_window_size < 8u ||
         descriptor->activation_required_jal_opcode != 3u ||
@@ -188,7 +241,13 @@ static bool descriptor_is_valid(const XgRenderRuntimeVariantDescriptor *descript
             descriptor->capture_required_jal_opcode != 3u ||
             descriptor->capture_jal_target != validation->static_callee ||
             descriptor->physical_return_site != descriptor->capture_site + 8u ||
-            descriptor->source_site_count != XG_RENDER_RUNTIME_VARIANT_SOURCE_SITE_CAP)
+            descriptor->model_dispatch_instruction_count == 0u ||
+            descriptor->model_dispatch_instruction_count >
+                XG_RENDER_RUNTIME_VARIANT_MODEL_DISPATCH_CAP ||
+            (descriptor->model_dispatch_matrix_stack_offset & 3u) != 0u ||
+            descriptor->source_site_count == 0u ||
+            descriptor->source_site_count >
+                XG_RENDER_RUNTIME_VARIANT_SOURCE_SITE_CAP)
         return false;
     range_start = descriptor->artifact_range_start;
     return range_contains(range_start, descriptor->artifact_range_size,
@@ -207,7 +266,11 @@ static bool descriptor_is_valid(const XgRenderRuntimeVariantDescriptor *descript
            range_contains(descriptor->capture_window_start,
                            descriptor->capture_window_size,
                            descriptor->capture_site, 8u) &&
-           descriptor_source_sites_are_valid(descriptor);
+            range_contains(range_start, descriptor->artifact_range_size,
+                           descriptor->model_dispatch_window_start,
+                           descriptor->model_dispatch_instruction_count * 4u) &&
+            descriptor_source_sites_are_valid(descriptor) &&
+            descriptor_cutovers_are_valid(descriptor);
 }
 
 bool xg_render_runtime_variant_source_site_lookup(
@@ -259,30 +322,58 @@ bool xg_render_runtime_variant_source_pc_relevant(uint32_t pc) {
            pc <= (last->pc & 0x1fffffffu);
 }
 
-bool xg_render_runtime_variant_native_cutover_matches(
-    uint32_t pc, uint32_t instruction_word, uint32_t *out_continuation) {
-    const XgRenderRuntimeVariantDescriptor *descriptor = state.descriptor;
-
-    if (descriptor == NULL || out_continuation == NULL ||
-        (state.phase != XG_RENDER_RUNTIME_VARIANT_EXPECT_CAPTURE &&
-         state.phase != XG_RENDER_RUNTIME_VARIANT_EXPECT_RETURN) ||
-        !physical_address_equals(descriptor->physical_producer_entry,
-                                 UINT32_C(0x800764b4)) ||
-        !physical_address_equals(pc, UINT32_C(0x800765dc)) ||
-        instruction_word != UINT32_C(0xafa00028))
-        return false;
-    *out_continuation = UINT32_C(0x80076a28);
-    return true;
+bool xg_render_runtime_variant_native_cutover_lookup(
+    uint32_t pc, uint32_t instruction_word,
+    XgRenderRuntimeVariantCutoverHandler *out_handler,
+    uint32_t *out_continuation) {
+    if (out_handler == NULL || out_continuation == NULL) return false;
+    for (uint32_t descriptor_index = 0u;
+         descriptor_index < xg_render_runtime_variant_descriptor_count;
+         ++descriptor_index) {
+        const XgRenderRuntimeVariantDescriptor *descriptor =
+            state.descriptor != NULL ? state.descriptor :
+                &xg_render_runtime_variant_descriptors[descriptor_index];
+        if (!descriptor_is_valid(descriptor)) {
+            if (state.descriptor != NULL) return false;
+            continue;
+        }
+        for (uint32_t index = 0u; index < descriptor->cutover_count; ++index) {
+            const XgRenderRuntimeVariantCutover *cutover =
+                &descriptor->cutovers[index];
+            if (physical_address_equals(pc, cutover->pc) &&
+                instruction_word == cutover->instruction) {
+                if (cutover->handler ==
+                        XG_RENDER_RUNTIME_VARIANT_CUTOVER_ACTOR &&
+                    (state.descriptor == NULL ||
+                     (state.phase != XG_RENDER_RUNTIME_VARIANT_EXPECT_CAPTURE &&
+                      state.phase != XG_RENDER_RUNTIME_VARIANT_EXPECT_RETURN)))
+                    return false;
+                *out_handler =
+                    (XgRenderRuntimeVariantCutoverHandler)cutover->handler;
+                *out_continuation = cutover->continuation;
+                return true;
+            }
+        }
+        if (state.descriptor != NULL) break;
+    }
+    return false;
 }
 
 bool xg_render_runtime_variant_hook_relevant(uint32_t hook, uint32_t pc) {
     const XgRenderRuntimeVariantDescriptor *descriptor = state.descriptor;
 
-    if (descriptor == NULL)
-        return hook == PSX_XG_RENDER_AUTH_HOOK_CAPTURE &&
-               xg_render_runtime_variant_descriptor_count == 1u &&
-               physical_address_equals(
-                   pc, xg_render_runtime_variant_descriptors->activation_site);
+    if (descriptor == NULL) {
+        if (hook != PSX_XG_RENDER_AUTH_HOOK_CAPTURE) return false;
+        for (uint32_t index = 0u;
+             index < xg_render_runtime_variant_descriptor_count; ++index) {
+            const XgRenderRuntimeVariantDescriptor *candidate =
+                &xg_render_runtime_variant_descriptors[index];
+            if (descriptor_is_valid(candidate) && physical_address_equals(
+                    pc, candidate->activation_site))
+                return true;
+        }
+        return false;
+    }
     switch (state.phase) {
     case XG_RENDER_RUNTIME_VARIANT_EXPECT_ENTRY:
         return true;
@@ -302,20 +393,6 @@ bool xg_render_runtime_variant_hook_relevant(uint32_t hook, uint32_t pc) {
     return false;
 }
 
-static const XgRenderRuntimeVariantDescriptor *selected_descriptor(void) {
-    static const XgRenderRuntimeVariantDescriptor *descriptor;
-    static bool initialized;
-
-    if (!initialized) {
-        const XgRenderRuntimeVariantDescriptor *candidate =
-            xg_render_runtime_variant_descriptors;
-
-        descriptor = descriptor_is_valid(candidate) ? candidate : NULL;
-        initialized = true;
-    }
-    return descriptor;
-}
-
 static bool candidate_artifact_matches(
     const XgRenderRuntimeVariantDescriptor *descriptor,
     const PsxXgRenderAuthCandidate *candidate) {
@@ -323,11 +400,10 @@ static bool candidate_artifact_matches(
            physical_address_equals(candidate->artifact_base,
                                    descriptor->artifact_base) &&
            candidate->artifact_size == descriptor->artifact_size &&
-           (candidate->artifact_crc32 == descriptor->artifact_crc32 ||
-            (candidate->runtime_variant_bound &&
-             memcmp(candidate->runtime_variant_identity,
-                    descriptor->companion_manifest_identity,
-                    sizeof(candidate->runtime_variant_identity)) == 0));
+           candidate->runtime_variant_bound &&
+           memcmp(candidate->runtime_variant_identity,
+                  descriptor->companion_manifest_identity,
+                  sizeof(candidate->runtime_variant_identity)) == 0;
 }
 
 static bool candidate_matches(const XgRenderRuntimeVariantDescriptor *descriptor,
@@ -354,7 +430,7 @@ static bool candidate_matches(const XgRenderRuntimeVariantDescriptor *descriptor
                                      candidate->range_size) &&
             normalized_range_contains(candidate->range_start,
                                       candidate->range_size,
-                                       descriptor->physical_producer_entry, 4u);
+                                      descriptor->physical_producer_entry, 4u);
 }
 
 static bool artifact_candidate_matches(
@@ -371,7 +447,7 @@ static bool artifact_candidate_matches(
            memcmp(candidate->identity.manifest_sha256,
                   descriptor->canonical_manifest_identity,
                   sizeof(candidate->identity.manifest_sha256)) == 0 &&
-            candidate_artifact_matches(descriptor, candidate) &&
+           candidate_artifact_matches(descriptor, candidate) &&
            normalized_range_contains(descriptor->artifact_range_start,
                                      descriptor->artifact_range_size,
                                      candidate->range_start,
@@ -387,34 +463,76 @@ void xg_render_runtime_variant_reset(void) {
 
 bool xg_render_runtime_variant_candidate_matches(
     const PsxXgRenderAuthCandidate *candidate) {
-    const XgRenderRuntimeVariantDescriptor *descriptor =
-        state.descriptor != NULL ? state.descriptor : selected_descriptor();
-
-    return candidate_matches(descriptor, candidate);
+    if (state.descriptor != NULL)
+        return candidate_matches(state.descriptor, candidate);
+    for (uint32_t index = 0u;
+         index < xg_render_runtime_variant_descriptor_count; ++index) {
+        const XgRenderRuntimeVariantDescriptor *descriptor =
+            &xg_render_runtime_variant_descriptors[index];
+        if (descriptor_is_valid(descriptor) &&
+            candidate_matches(descriptor, candidate))
+            return true;
+    }
+    return false;
 }
 
 bool xg_render_runtime_variant_artifact_candidate_matches(
     const PsxXgRenderAuthCandidate *candidate) {
-    const XgRenderRuntimeVariantDescriptor *descriptor =
-        state.descriptor != NULL ? state.descriptor : selected_descriptor();
+    if (state.descriptor != NULL)
+        return artifact_candidate_matches(state.descriptor, candidate);
+    for (uint32_t index = 0u;
+         index < xg_render_runtime_variant_descriptor_count; ++index) {
+        const XgRenderRuntimeVariantDescriptor *descriptor =
+            &xg_render_runtime_variant_descriptors[index];
+        if (descriptor_is_valid(descriptor) &&
+            artifact_candidate_matches(descriptor, candidate))
+            return true;
+    }
+    return false;
+}
 
-    return artifact_candidate_matches(descriptor, candidate);
+uint32_t xg_render_runtime_variant_model_dispatch_contract_count(void) {
+    return xg_render_runtime_variant_descriptor_count;
+}
+
+bool xg_render_runtime_variant_model_dispatch_contract_at(
+    uint32_t index, XgRenderRuntimeVariantModelDispatchContract *out_contract) {
+    const XgRenderRuntimeVariantDescriptor *descriptor;
+
+    if (out_contract == NULL ||
+        index >= xg_render_runtime_variant_descriptor_count)
+        return false;
+    descriptor = &xg_render_runtime_variant_descriptors[index];
+    if (!descriptor_is_valid(descriptor)) return false;
+    *out_contract = (XgRenderRuntimeVariantModelDispatchContract){
+        descriptor->model_dispatch_instructions,
+        descriptor->model_dispatch_instruction_count,
+        descriptor->model_dispatch_matrix_stack_offset,
+    };
+    return true;
 }
 
 bool xg_render_runtime_variant_artifact_candidate_authorizes_pc(
     const PsxXgRenderAuthCandidate *candidate, uint32_t pc) {
-    const XgRenderRuntimeVariantDescriptor *descriptor =
-        state.descriptor != NULL ? state.descriptor : selected_descriptor();
-
     if (xg_render_runtime_variant_no_gates_enabled())
         return candidate != NULL &&
                normalized_range_contains(candidate->range_start,
-                                         candidate->range_size, pc, 4u);
-
-    return artifact_candidate_matches(descriptor, candidate) &&
-           normalized_range_contains(descriptor->artifact_range_start,
-                                     descriptor->artifact_range_size,
-                                      pc, 4u);
+                                          candidate->range_size, pc, 4u);
+    if (state.descriptor != NULL)
+        return artifact_candidate_matches(state.descriptor, candidate) &&
+            normalized_range_contains(candidate->range_start,
+                                      candidate->range_size, pc, 4u);
+    for (uint32_t index = 0u;
+         index < xg_render_runtime_variant_descriptor_count; ++index) {
+        const XgRenderRuntimeVariantDescriptor *descriptor =
+            &xg_render_runtime_variant_descriptors[index];
+        if (descriptor_is_valid(descriptor) &&
+            artifact_candidate_matches(descriptor, candidate) &&
+            normalized_range_contains(candidate->range_start,
+                                      candidate->range_size, pc, 4u))
+            return true;
+    }
+    return false;
 }
 
 bool xg_render_authoritative_overlay_artifact_candidate_matches(
@@ -433,33 +551,12 @@ bool xg_render_authoritative_overlay_artifact_candidate_authorizes_pc(
     return xg_render_overlay_artifact_candidate_authorizes_pc(candidate, pc);
 }
 
-bool xg_render_runtime_variant_artifact_contains_pc(uint32_t pc) {
-    const XgRenderRuntimeVariantDescriptor *descriptor =
-        state.descriptor != NULL ? state.descriptor : selected_descriptor();
-
-    return descriptor != NULL &&
-           normalized_range_contains(descriptor->artifact_range_start,
-                                     descriptor->artifact_range_size,
-            pc, 4u);
-}
-
 typedef struct XgRenderProtectedCodeRange {
     uint32_t start;
     uint32_t size;
 } XgRenderProtectedCodeRange;
 
-static const XgRenderProtectedCodeRange direct_code_ranges[] = {
-    { UINT32_C(0x800765dc), 4u },
-    { UINT32_C(0x8007ab6c), 4u },
-    { UINT32_C(0x8007ac58), 4u },
-    { UINT32_C(0x800a8eac), 0x208u },
-    { UINT32_C(0x800a9b54), 0x3c4u },
-};
-
 static const XgRenderProtectedCodeRange zoom_code_ranges[] = {
-        { UINT32_C(0x800a5600), 0xa8u },
-        { UINT32_C(0x800a6408), 0x234u },
-        { UINT32_C(0x800a663c), 0x2e8u },
         { UINT32_C(0x8003f738), 0x178u },
         { UINT32_C(0x80043a1c), 0x3cu },
         { UINT32_C(0x80043bfc), 0x28u },
@@ -543,7 +640,7 @@ static const XgRenderProtectedCodeRange world_effects_code_ranges[] = {
 };
 
 static const XgRenderProtectedCodeRange model_ft4_raw_code_ranges[] = {
-    { UINT32_C(0x800257d4), 8u },
+    { UINT32_C(0x800257b0), 0x2cu },
     { UINT32_C(0x8002c700), 0x4ea0u },
     { UINT32_C(0x80043a1c), 0x54u },
     { UINT32_C(0x80043c24), 0x50u },
@@ -605,11 +702,6 @@ static void protected_code_page_mask_add(
 static void protected_code_page_masks_init(void) {
     if (protected_code_page_masks_ready) return;
     memset(protected_code_page_masks, 0, sizeof(protected_code_page_masks));
-    protected_code_page_mask_add(
-        direct_code_ranges,
-        (uint32_t)(sizeof(direct_code_ranges) /
-                   sizeof(direct_code_ranges[0])),
-        UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_DIRECT);
     protected_code_page_mask_add(
         zoom_code_ranges,
         (uint32_t)(sizeof(zoom_code_ranges) / sizeof(zoom_code_ranges[0])),
@@ -790,11 +882,30 @@ void xg_render_runtime_variant_register_code_watches(
 
     if (set_range == NULL) return;
     protected_code_page_masks_init();
-    for (index = 0u;
-         index < sizeof(direct_code_ranges) /
-                     sizeof(direct_code_ranges[0]); ++index)
-        set_range(direct_code_ranges[index].start & UINT32_C(0x1fffffff),
-                  direct_code_ranges[index].size);
+    for (uint32_t descriptor_index = 0u;
+         descriptor_index < xg_render_runtime_variant_descriptor_count;
+         ++descriptor_index) {
+        const XgRenderRuntimeVariantDescriptor *descriptor =
+            &xg_render_runtime_variant_descriptors[descriptor_index];
+        if (!descriptor_is_valid(descriptor)) continue;
+        set_range(descriptor->activation_window_start & UINT32_C(0x1fffffff),
+                  descriptor->activation_window_size);
+        set_range(descriptor->capture_window_start & UINT32_C(0x1fffffff),
+                  descriptor->capture_window_size);
+        set_range(descriptor->model_dispatch_window_start &
+                      UINT32_C(0x1fffffff),
+                  descriptor->model_dispatch_instruction_count * 4u);
+        for (uint32_t site_index = 0u;
+             site_index < descriptor->source_site_count; ++site_index)
+            set_range(descriptor->source_sites[site_index].pc &
+                          UINT32_C(0x1fffffff),
+                      4u);
+        for (uint32_t cutover_index = 0u;
+             cutover_index < descriptor->cutover_count; ++cutover_index)
+            set_range(descriptor->cutovers[cutover_index].code_range_start &
+                          UINT32_C(0x1fffffff),
+                      descriptor->cutovers[cutover_index].code_range_size);
+    }
     for (index = 0u;
          index < sizeof(zoom_code_ranges) / sizeof(zoom_code_ranges[0]); ++index)
         set_range(zoom_code_ranges[index].start & UINT32_C(0x1fffffff),
@@ -851,31 +962,61 @@ void xg_render_runtime_variant_register_code_watches(
 
 uint32_t xg_render_runtime_variant_code_write_overlap_mask(
     uint32_t write_address, uint32_t write_size) {
-    const XgRenderRuntimeVariantDescriptor *descriptor =
-        state.descriptor != NULL ? state.descriptor : selected_descriptor();
     uint32_t mask = 0u;
     const uint32_t page_mask =
         protected_code_page_mask_for_write(write_address, write_size);
 
-    if (descriptor == NULL) return 0u;
-    if (normalized_ranges_overlap(descriptor->activation_window_start,
-                                  descriptor->activation_window_size,
-                                  write_address, write_size) ||
-        normalized_ranges_overlap(descriptor->physical_producer_entry, 4u,
-                                  write_address, write_size) ||
-        normalized_ranges_overlap(descriptor->capture_window_start,
-                                  descriptor->capture_window_size,
-                                  write_address, write_size) ||
-        normalized_ranges_overlap(descriptor->physical_return_site, 4u,
-                                  write_address, write_size))
-        mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_DESCRIPTOR;
-    if ((page_mask & (UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_DIRECT)) &&
-        code_write_overlaps_ranges(
-            direct_code_ranges,
-            (uint32_t)(sizeof(direct_code_ranges) /
-                       sizeof(direct_code_ranges[0])),
-            write_address, write_size))
-        mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_DIRECT;
+    for (uint32_t index = 0u;
+         index < xg_render_runtime_variant_descriptor_count; ++index) {
+        const XgRenderRuntimeVariantDescriptor *descriptor =
+            state.descriptor != NULL ? state.descriptor :
+                &xg_render_runtime_variant_descriptors[index];
+        bool descriptor_overlap = descriptor_is_valid(descriptor) &&
+            (normalized_ranges_overlap(descriptor->activation_window_start,
+                                       descriptor->activation_window_size,
+                                       write_address, write_size) ||
+             normalized_ranges_overlap(descriptor->physical_producer_entry, 4u,
+                                       write_address, write_size) ||
+             normalized_ranges_overlap(descriptor->capture_window_start,
+                                       descriptor->capture_window_size,
+                                       write_address, write_size) ||
+             normalized_ranges_overlap(
+                 descriptor->model_dispatch_window_start,
+                 descriptor->model_dispatch_instruction_count * 4u,
+                 write_address, write_size) ||
+             normalized_ranges_overlap(descriptor->physical_return_site, 4u,
+                                       write_address, write_size));
+        if (descriptor_overlap) {
+            mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_DESCRIPTOR;
+            break;
+        }
+        if (descriptor_is_valid(descriptor)) {
+            for (uint32_t site_index = 0u;
+                 site_index < descriptor->source_site_count; ++site_index) {
+                if (normalized_ranges_overlap(
+                        descriptor->source_sites[site_index].pc, 4u,
+                        write_address, write_size)) {
+                    descriptor_overlap = true;
+                    break;
+                }
+            }
+            for (uint32_t cutover_index = 0u;
+                 !descriptor_overlap &&
+                 cutover_index < descriptor->cutover_count; ++cutover_index) {
+                const XgRenderRuntimeVariantCutover *cutover =
+                    &descriptor->cutovers[cutover_index];
+                if (normalized_ranges_overlap(
+                        cutover->code_range_start, cutover->code_range_size,
+                        write_address, write_size))
+                    descriptor_overlap = true;
+            }
+        }
+        if (descriptor_overlap) {
+            mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_DESCRIPTOR;
+            break;
+        }
+        if (state.descriptor != NULL) break;
+    }
     if ((page_mask & (UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_ZOOM)) &&
         zoom_code_write_overlaps(write_address, write_size))
         mask |= UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_ZOOM;
@@ -928,6 +1069,7 @@ XgRenderRuntimeVariantEvent xg_render_runtime_variant_observe(
     uint32_t delay_slot_word, uint32_t return_address,
     uint64_t scene_generation) {
     const XgRenderRuntimeVariantDescriptor *descriptor = state.descriptor;
+    bool activation_site_seen = false;
 
     if (descriptor != NULL) {
         if (state.scene_generation != scene_generation) {
@@ -991,16 +1133,26 @@ XgRenderRuntimeVariantEvent xg_render_runtime_variant_observe(
         return XG_RENDER_RUNTIME_VARIANT_REJECT;
     }
     if (hook != PSX_XG_RENDER_AUTH_HOOK_CAPTURE) return XG_RENDER_RUNTIME_VARIANT_IGNORE;
-    descriptor = xg_render_runtime_variant_descriptors;
-    if (xg_render_runtime_variant_descriptor_count != 1u ||
-        !physical_address_equals(pc, descriptor->activation_site))
-        return XG_RENDER_RUNTIME_VARIANT_IGNORE;
-    descriptor = selected_descriptor();
-    if (descriptor == NULL)
-        return XG_RENDER_RUNTIME_VARIANT_IGNORE;
-    if (!jal_matches(pc, instruction_word, descriptor->activation_jal_target,
-                     delay_slot_word, descriptor->activation_delay_instruction))
-        return XG_RENDER_RUNTIME_VARIANT_REJECT;
+    descriptor = NULL;
+    for (uint32_t index = 0u;
+         index < xg_render_runtime_variant_descriptor_count; ++index) {
+        const XgRenderRuntimeVariantDescriptor *candidate =
+            &xg_render_runtime_variant_descriptors[index];
+        if (!descriptor_is_valid(candidate) || !physical_address_equals(
+                pc, candidate->activation_site))
+            continue;
+        activation_site_seen = true;
+        if (!jal_matches(pc, instruction_word,
+                         candidate->activation_jal_target,
+                         delay_slot_word,
+                         candidate->activation_delay_instruction))
+            continue;
+        descriptor = candidate;
+        break;
+    }
+    if (descriptor == NULL) return activation_site_seen
+        ? XG_RENDER_RUNTIME_VARIANT_REJECT
+        : XG_RENDER_RUNTIME_VARIANT_IGNORE;
     state = (XgRenderRuntimeVariantState){
         descriptor, scene_generation, XG_RENDER_RUNTIME_VARIANT_EXPECT_ENTRY,
     };

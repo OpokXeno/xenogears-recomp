@@ -54,7 +54,7 @@ void xg_field_particles_invalidate(uint32_t particle_address) {
 
 bool xg_field_particles_observe_initializer(
     CPUState *cpu, GuestRenderRenderMode render_mode,
-    bool artifact_candidate_authorized) {
+    bool artifact_candidate_authorized, uint32_t producer_pc) {
     XgRenderParticleSource *record;
     uint32_t particle_address;
     uint32_t table_address;
@@ -106,6 +106,7 @@ bool xg_field_particles_observe_initializer(
     *record = (XgRenderParticleSource){
         .generation = particle_sources.next_generation++,
         .particle_address = particle_address,
+        .producer_pc = producer_pc,
         .x = { left, right, left, right },
         .y = { top, top, bottom, bottom },
         .u = {

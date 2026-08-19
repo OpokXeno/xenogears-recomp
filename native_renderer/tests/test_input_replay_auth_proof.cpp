@@ -29,19 +29,20 @@ constexpr uint32_t kJalInstruction = 0x0c012d53u;
 constexpr uint32_t kFieldRangeStart = 0x8006f000u;
 constexpr uint32_t kFieldRangeSize = 282624u;
 constexpr uint32_t kCandidateRangeSize = kReturnSite - kProducerEntry;
-constexpr uint32_t kField5ActivationSite = 0x80075414u;
-constexpr uint32_t kField5ProducerEntry = 0x800764b4u;
-constexpr uint32_t kField5CaptureSite = 0x80075694u;
-constexpr uint32_t kField5ActivationJal = 0x0c01d92du;
-constexpr uint32_t kField5ActivationDelay = 0x248400ccu;
-constexpr uint32_t kField5CaptureDelay = 0x34040001u;
+constexpr uint32_t kRuntimeVariantActivationSite = 0x80075414u;
+constexpr uint32_t kRuntimeVariantProducerEntry = 0x800764b4u;
+constexpr uint32_t kRuntimeVariantCaptureSite = 0x80075694u;
+constexpr uint32_t kRuntimeVariantActivationJal = 0x0c01d92du;
+constexpr uint32_t kRuntimeVariantActivationDelay = 0x248400ccu;
+constexpr uint32_t kRuntimeVariantCaptureDelay = 0x34040001u;
 
 PsxGameIdentity runtime_identity{};
 
 uint32_t hook_return_address(uint32_t hook, uint32_t pc) {
     if (hook == PSX_XG_RENDER_AUTH_HOOK_ENTRY &&
-        (pc & 0x1fffffffu) == (kField5ProducerEntry & 0x1fffffffu))
-        return kField5ActivationSite + 8u;
+        (pc & 0x1fffffffu) ==
+            (kRuntimeVariantProducerEntry & 0x1fffffffu))
+        return kRuntimeVariantActivationSite + 8u;
     return hook == PSX_XG_RENDER_AUTH_HOOK_CAPTURE ? pc + 8u : pc;
 }
 
@@ -385,13 +386,14 @@ int main() {
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 kField5ActivationSite, kField5ActivationJal,
-                                 kField5ActivationDelay);
+                                  kRuntimeVariantActivationSite,
+                                  kRuntimeVariantActivationJal,
+                                  kRuntimeVariantActivationDelay);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 kField5ProducerEntry, 0u, 0u);
+                                  kRuntimeVariantProducerEntry, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 kField5CaptureSite, 0u,
-                                 kField5CaptureDelay);
+                                  kRuntimeVariantCaptureSite, 0u,
+                                  kRuntimeVariantCaptureDelay);
     assert(input_replay::write_evidence(evidence_path.c_str(), 5u, "opengl"));
     const std::string rejected_variant = read_file(evidence_path);
     assert(rejected_variant.find("\"status\":\"BLOCKED\"") != std::string::npos);

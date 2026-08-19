@@ -252,10 +252,10 @@ def test_latch_when_ports_and_second_sample_read_same_vblank() -> None:
         assert cursor.counters.port_reads == 3
 
 
-def test_field5_baseline_when_pad_is_digital_has_no_unintended_stick_direction() -> None:
+def test_field_baseline_when_pad_is_digital_has_no_unintended_stick_direction() -> None:
     replay = replay_module()
 
-    trace = replay.parse_trace(ROOT / "tools" / "native_render_replays" / "field5_baseline.toml")
+    trace = replay.parse_trace(ROOT / "tools" / "native_render_replays" / "field_baseline.toml")
 
     assert all(
         pad.left_x == pad.left_y == pad.right_x == pad.right_y == 0
@@ -319,7 +319,7 @@ def test_runtime_command_when_clean_boot_uses_only_normal_input_path() -> None:
     replay = replay_module()
     request = replay.RunRequest(
         build=Path("build-dbg/XenogearsRecomp"),
-        trace=Path("tools/native_render_replays/field5_clean_boot.toml"),
+        trace=Path("tools/native_render_replays/field_clean_boot.toml"),
         runtime_state=Path(".omo/evidence/runtime-state/task-4/run-a"),
         memcard_dir=Path("memcards"),
         evidence=Path(".omo/evidence/task-4.json"),
@@ -341,7 +341,7 @@ def test_runtime_command_when_task15_native_forwards_independent_axes() -> None:
     replay = replay_module()
     request = replay.RunRequest(
         build=Path("build-dbg/XenogearsRecomp"),
-        trace=Path("tools/native_render_replays/field5_clean_boot.toml"),
+        trace=Path("tools/native_render_replays/field_clean_boot.toml"),
         runtime_state=Path(".omo/evidence/runtime-state/task-15/native"),
         memcard_dir=Path("memcards"),
         evidence=Path(".omo/evidence/task-15.json"),
@@ -780,7 +780,7 @@ def test_runtime_command_when_memcard_dir_is_explicit_forwards_that_directory() 
         (memcard_dir / "card1.mcd").write_bytes(b"card1")
         request = replay.RunRequest(
             build=Path("build-dbg/XenogearsRecomp"),
-            trace=Path("tools/native_render_replays/field5_clean_boot.toml"),
+            trace=Path("tools/native_render_replays/field_clean_boot.toml"),
             runtime_state=root / "state",
             memcard_dir=replay.validate_memcard_dir(memcard_dir),
             evidence=root / "evidence.json",
@@ -797,7 +797,7 @@ def test_runtime_command_when_child_changes_cwd_uses_canonical_paths() -> None:
     replay = replay_module()
     request = replay.RunRequest(
         build=Path("build-dbg/XenogearsRecomp"),
-        trace=Path("tools/native_render_replays/field5_clean_boot.toml"),
+        trace=Path("tools/native_render_replays/field_clean_boot.toml"),
         runtime_state=Path(".omo/evidence/runtime-state/task-4/run-relative"),
         memcard_dir=Path("memcards"),
         evidence=Path(".omo/evidence/task-4.json"),
@@ -817,7 +817,7 @@ def test_runtime_command_when_given_private_disc_forwards_only_an_absolute_path(
         disc.write_text("FILE \"disc1.bin\" BINARY\n", encoding="utf-8")
         request = replay.RunRequest(
             build=Path("build-dbg/XenogearsRecomp"),
-            trace=Path("tools/native_render_replays/field5_clean_boot.toml"),
+            trace=Path("tools/native_render_replays/field_clean_boot.toml"),
             runtime_state=Path(".omo/evidence/runtime-state/task-4/run-disc"),
             memcard_dir=Path("memcards"),
             evidence=Path(".omo/evidence/task-4.json"),
@@ -843,6 +843,7 @@ def test_record_command_when_private_disc_is_supplied_is_isolated_and_normal_inp
             build=Path("build-dbg/XenogearsRecomp"), trace=root / "route.toml",
             runtime_state=root / "state", memcard_dir=replay.validate_memcard_dir(memcards), renderer="opengl",
             disc=replay.validate_disc(disc), max_vblanks=60000,
+            checkpoint_field=5,
         )
         command = replay.runtime_record_command(request)
         assert "--input-record" in command
@@ -866,7 +867,8 @@ def test_manual_record_command_uses_close_completion_without_field_checkpoint() 
             build=Path("build-dbg/XenogearsRecomp"), trace=root / "route.toml",
             runtime_state=root / "state",
             memcard_dir=replay.validate_memcard_dir(memcards), renderer="opengl",
-            disc=replay.validate_disc(disc), max_vblanks=60000, on_close=True,
+            disc=replay.validate_disc(disc), max_vblanks=60000,
+            checkpoint_field=None, on_close=True,
         )
         command = replay.runtime_record_command(request)
         assert "--record-on-close" in command
@@ -890,6 +892,7 @@ def test_record_command_when_memcard_dir_is_explicit_uses_that_directory() -> No
             renderer="opengl",
             disc=replay.validate_disc(disc),
             max_vblanks=60000,
+            checkpoint_field=5,
         )
         command = replay.runtime_record_command(request)
 
@@ -916,7 +919,7 @@ def test_record_trace_when_incomplete_is_rejected() -> None:
             raise AssertionError("incomplete trace was accepted")
 
 
-def test_evidence_when_cross_does_not_follow_checkpoint_is_rejected() -> None:
+def test_evidence_without_post_checkpoint_runtime_activity_is_rejected() -> None:
     replay = replay_module()
     with TemporaryDirectory() as temporary:
         trace_path = Path(temporary) / "trace.toml"
@@ -928,7 +931,7 @@ def test_evidence_when_cross_does_not_follow_checkpoint_is_rejected() -> None:
             "render_mode": "original",
             "checkpoint": {"field_id": 5},
             "backend": "opengl",
-            "replay": {"checkpoint_seen_vblank": 1},
+            "replay": {"checkpoint_seen_vblank": 3},
             "sio": {"cross_count": 1, "cross_first": 1, "cross_last": 1},
             "counters": {
                 "vblank_latches": 3,
@@ -945,12 +948,12 @@ def test_evidence_when_cross_does_not_follow_checkpoint_is_rejected() -> None:
         try:
             replay.assert_run_evidence(run, trace)
         except ValueError as error:
-            assert "Cross" in str(error)
+            assert "runtime activity" in str(error)
         else:
-            raise AssertionError("evidence accepted without post-checkpoint Cross activity")
+            raise AssertionError("evidence accepted without post-checkpoint runtime activity")
 
 
-def test_evidence_when_cross_spans_checkpoint_is_accepted() -> None:
+def test_evidence_with_post_checkpoint_runtime_activity_is_accepted() -> None:
     replay = replay_module()
     with TemporaryDirectory() as temporary:
         trace_path = Path(temporary) / "trace.toml"
@@ -979,7 +982,7 @@ def test_evidence_when_cross_spans_checkpoint_is_accepted() -> None:
         replay.assert_run_evidence(run, trace)
 
 
-def test_evidence_when_checkpoint_is_not_field_five_is_rejected() -> None:
+def test_evidence_when_checkpoint_value_differs_is_rejected() -> None:
     replay = replay_module()
     with TemporaryDirectory() as temporary:
         trace_path = Path(temporary) / "trace.toml"
@@ -1008,6 +1011,6 @@ def test_evidence_when_checkpoint_is_not_field_five_is_rejected() -> None:
         try:
             replay.assert_run_evidence(run, trace)
         except ValueError as error:
-            assert str(error) == "Field ID 5 was not reached"
+            assert str(error) == "configured checkpoint was not reached"
         else:
-            raise AssertionError("evidence accepted without the Field 5 checkpoint")
+            raise AssertionError("evidence accepted without the configured checkpoint")

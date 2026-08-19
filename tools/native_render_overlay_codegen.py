@@ -3,9 +3,8 @@ from __future__ import annotations
 import hashlib
 import struct
 from typing import Final
-import zlib
 
-from native_render_manifest_model import Digest32, FileIdentity, fail
+from native_render_manifest_model import fail
 from native_render_runtime_variant_model import (
     ArtifactSpec,
     RuntimeVariantContract,
@@ -18,48 +17,48 @@ OPERATIONS: Final = frozenset({"read", "write", "swc2", "call", "bucket"})
 AUXILIARIES: Final = frozenset({"effective-address", "none", "result-register"})
 
 
-def artifact_matches(spec: ArtifactSpec, data: bytes, load_address: int) -> bool:
-    identity = FileIdentity(
-        Digest32(hashlib.sha256(data).digest()),
-        zlib.crc32(data) & 0xFFFFFFFF,
-        len(data),
-    )
-    if load_address != spec.base_address or identity != spec.identity:
-        return False
-    range_end = spec.range_offset + spec.range_size
-    if range_end > len(data):
-        return False
-    range_data = data[spec.range_offset:range_end]
-    return (
-        Digest32(hashlib.sha256(range_data).digest()) == spec.range_identity
-        and zlib.crc32(range_data) & 0xFFFFFFFF == spec.range_crc32
-    )
-
-
-def artifact_code_contract_matches(
+def code_contract_matches(
     contract: RuntimeVariantContract, data: bytes, load_address: int
 ) -> bool:
     spec = contract.artifact
     if load_address != spec.base_address or len(data) != spec.identity.size:
         return False
-    signature_count = sum(
-        len(variant.native_cutovers) + len(variant.source_sites)
-        for variant in contract.variants
-    )
-    if signature_count < 8:
-        return False
     for variant in contract.variants:
+        for hook in (variant.activation, variant.capture):
+            offset = hook.window_start - spec.base_address
+            if (offset < 0 or offset + hook.window_size > len(data) or
+                    hashlib.sha256(data[
+                        offset:offset + hook.window_size
+                    ]).digest() != hook.window_identity):
+                return False
         for cutover in variant.native_cutovers:
             offset = cutover.pc - spec.base_address
             if offset < 0 or offset + 4 > len(data) or struct.unpack_from(
                 "<I", data, offset
             )[0] != cutover.instruction:
                 return False
+            range_offset = cutover.code_range_start - spec.base_address
+            if (range_offset < 0 or
+                    range_offset + cutover.code_range_size > len(data) or
+                    hashlib.sha256(data[
+                        range_offset:range_offset + cutover.code_range_size
+                    ]).digest() != cutover.code_range_identity):
+                return False
         for site in variant.source_sites:
             offset = site.pc - spec.base_address
             if offset < 0 or offset + 4 > len(data) or struct.unpack_from(
                 "<I", data, offset
             )[0] != site.instruction:
+                return False
+        dispatch_offset = (
+            variant.model_dispatch_window_start - spec.base_address)
+        dispatch_size = len(variant.model_dispatch_instructions) * 4
+        if dispatch_offset < 0 or dispatch_offset + dispatch_size > len(data):
+            return False
+        for index, instruction in enumerate(
+                variant.model_dispatch_instructions):
+            if struct.unpack_from(
+                    "<I", data, dispatch_offset + index * 4)[0] != instruction:
                 return False
     return True
 
@@ -97,9 +96,7 @@ def source_observation_plan_for_artifact(
     data: bytes,
     load_address: int,
 ) -> str | None:
-    if not artifact_matches(contract.artifact, data, load_address) and not (
-        artifact_code_contract_matches(contract, data, load_address)
-    ):
+    if not code_contract_matches(contract, data, load_address):
         return None
     lines = [PLAN_SCHEMA]
     for variant in contract.variants:

@@ -54,7 +54,8 @@ typedef struct XgRenderAuthRuntimeState {
     uint64_t pending_scene_generation;
     uint64_t authenticated_artifact_scene_generation;
     uint64_t authenticated_artifact_generation;
-    uint64_t observed_variant_scene_generation;
+    uint64_t authenticated_producer_scene_generation;
+    uint32_t authenticated_producer_entry;
     uint32_t pending_variant_entry;
     uint32_t pending_variant_instruction;
     uint32_t pending_variant_delay_slot;
@@ -64,8 +65,6 @@ typedef struct XgRenderAuthRuntimeState {
     bool completed;
     bool pending_candidate_valid;
     bool authenticated_artifact_candidate_valid;
-    bool artifact_candidate_seen;
-    bool authenticated_variant_artifact_observed;
     bool pending_variant_sequence;
     bool pending_variant_capture_ready;
     bool candidate_matched;
@@ -129,6 +128,7 @@ typedef enum XgRenderFt4GeometryPhase {
 
 typedef struct XgRenderFt4GeometryPending {
     uint64_t scene_generation;
+    uint32_t source_return_address;
     uint32_t destinations[4];
     XgHost3dRotAverage4Input pre_transform;
     XgHost3dRotAverage4Output host_output;
@@ -278,7 +278,9 @@ typedef struct XgRenderModelFt4ShadowContext {
     uint32_t ot_base;
     uint16_t tpage;
     uint16_t clut;
+    uint32_t caller_window_start;
     uint8_t dispatch_mode;
+    uint8_t caller_contract;
     bool resident_dispatch;
     bool valid;
 } XgRenderModelFt4ShadowContext;
@@ -891,8 +893,9 @@ static XgNativeView native_view;
 
 static int32_t render_screen_x_cull_margin(void) {
     const int32_t native_margin = xg_host_3d_native_view_margin();
+    const int32_t temporal_margin = psx_ws_x_margin();
 
-    return native_margin > 0 ? native_margin : psx_ws_x_margin();
+    return native_margin > temporal_margin ? native_margin : temporal_margin;
 }
 
 void psx_xg_render_auth_set_terrain_temporal_coverage(bool enabled) {
@@ -977,6 +980,7 @@ static PsxXgRenderProjectedLifecycleSnapshot projected_lifecycle;
 static PsxXgRenderOverlayFt4Snapshot overlay_ft4_2c;
 static bool overlay_projected_2e_descriptor_scope;
 static PsxXgRenderAuthCompletedProofReceipt completed_proof;
+static uint64_t completed_proof_scene_generation;
 static atomic_flag completed_proof_guard = ATOMIC_FLAG_INIT;
 static PsxXgRenderAuthInstrumentation instrumentation = { .revision = 1u };
 static atomic_flag instrumentation_guard = ATOMIC_FLAG_INIT;
@@ -1068,13 +1072,17 @@ static void block_field_sprite_builder(uint32_t blocker);
 static void clear_field_polyline_pending(void);
 static void block_field_polyline(uint32_t blocker);
 static void clear_resident_line_f2_source(void);
-static bool overlay_ft4_capture_direct_templates(CPUState *cpu);
-static bool overlay_ft4_capture_rectangle_template(CPUState *cpu);
-static bool overlay_ft4_capture_projected_material(CPUState *cpu);
-static bool overlay_ft4_capture_glyph_material(CPUState *cpu);
+static bool overlay_ft4_capture_direct_templates(CPUState *cpu,
+                                                  uint32_t producer_pc);
+static bool overlay_ft4_capture_rectangle_template(CPUState *cpu,
+                                                    uint32_t producer_pc);
+static bool overlay_ft4_capture_projected_material(CPUState *cpu,
+                                                    uint32_t producer_pc);
+static bool overlay_ft4_capture_glyph_material(CPUState *cpu,
+                                                uint32_t producer_pc);
 static bool overlay_ft4_capture_projected_geometry(CPUState *cpu);
 static bool overlay_ft4_capture_projected_2e_material(
-    CPUState *cpu, uint32_t template_family);
+    CPUState *cpu, uint32_t template_family, uint32_t producer_pc);
 static bool overlay_ft4_capture_projected_2e_geometry(CPUState *cpu);
 static void residual_capture_fullscreen_tile(CPUState *cpu);
 static void residual_capture_fade_tiles(CPUState *cpu);
@@ -1098,7 +1106,7 @@ static bool native_shared_packet_resolve(
 static XgRenderOverlayFt4Template *overlay_ft4_find_template(
     uint32_t packet_address);
 static XgRenderOverlayFt4Template *overlay_ft4_upsert_template(
-    uint32_t packet_address);
+    uint32_t packet_address, uint32_t producer_pc);
 static void overlay_ft4_observe_add_prim(CPUState *cpu);
 static bool native_zoom_stream_resolve(
     const GuestRenderNativeStreamMissContext *context,
@@ -1185,6 +1193,7 @@ static bool completed_proof_matches_tier(XgRenderAuthTier tier) {
 
     lock_completed_proof();
     matches = completed_proof.available && !completed_proof.blocked &&
+              completed_proof_scene_generation == state.scene_generation &&
               completed_proof.tier == tier;
     unlock_completed_proof();
     return matches;
@@ -1379,7 +1388,6 @@ static void clear_authenticated_artifact_candidate(void) {
            sizeof(state.authenticated_artifact_candidate));
     state.authenticated_artifact_candidate_valid = false;
     state.authenticated_artifact_scene_generation = 0u;
-    state.artifact_candidate_seen = false;
 }
 
 static void clear_candidate_outcome(void) {
@@ -1426,10 +1434,7 @@ static bool pending_variant_artifact_candidate_matches(uint32_t pc) {
 }
 
 static bool authenticated_variant_hook_matches(uint32_t pc) {
-    return pending_variant_artifact_candidate_matches(pc) ||
-        (state.authenticated_variant_artifact_observed &&
-         state.observed_variant_scene_generation == state.scene_generation &&
-         xg_render_runtime_variant_artifact_contains_pc(pc));
+    return pending_variant_artifact_candidate_matches(pc);
 }
 
 static bool current_artifact_is_authorized(void) {
@@ -1527,11 +1532,21 @@ static bool producer_resource_write_may_overlap(uint32_t address,
     return false;
 }
 
-static bool overlay_pc_is_authorized(uint32_t pc) {
-    const uint32_t physical = pc & UINT32_C(0x1fffffff);
+static bool resident_render_site_is_authorized(uint32_t pc,
+                                                uint32_t instruction_word);
 
-    return physical < UINT32_C(0x001c0000) ||
-        physical >= UINT32_C(0x00200000) ||
+static bool overlay_pc_is_authorized(uint32_t pc, uint32_t instruction_word) {
+    const uint32_t physical = pc & UINT32_C(0x1fffffff);
+    const uint32_t code_mask =
+        xg_render_runtime_variant_code_write_overlap_mask(pc, 4u);
+    const uint32_t resident_world_mask =
+        (UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_WORLD_SKY) |
+        (UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_WORLD_HORIZON) |
+        (UINT32_C(1) << PSX_XG_RENDER_CODE_WRITE_WORLD_EFFECTS);
+
+    return physical < UINT32_C(0x0005a000) ||
+        (code_mask & resident_world_mask) != 0u ||
+        resident_render_site_is_authorized(pc, instruction_word) ||
         pending_variant_artifact_candidate_matches(pc);
 }
 
@@ -1546,17 +1561,141 @@ static bool resident_producer_lifecycle_pc(uint32_t pc) {
            physical_address_equals(pc, UINT32_C(0x8002c700)) ||
            physical_address_equals(pc, UINT32_C(0x8002d100)) ||
            physical_address_equals(pc, UINT32_C(0x8002da00)) ||
-           physical_address_equals(pc, UINT32_C(0x80045ed0)) ||
-           physical_address_equals(pc, UINT32_C(0x80079784)) ||
-           physical_address_equals(pc, UINT32_C(0x8007da44)) ||
-           physical_address_equals(pc, UINT32_C(0x800b3878));
+           physical_address_equals(pc, UINT32_C(0x80045ed0));
 }
 
-static bool native_model_auth_available(void) {
-    return xg_render_runtime_variant_no_gates_enabled() ||
-        state.authenticated_artifact_candidate_valid ||
-        state.authenticated_variant_artifact_observed ||
+enum {
+    XG_MODEL_DISPATCH_CALLER_NONE = 0u,
+    XG_MODEL_DISPATCH_CALLER_RESIDENT,
+    XG_MODEL_DISPATCH_CALLER_OVERLAY,
+};
+
+static const uint32_t model_dispatch_resident_caller_instructions[] = {
+    UINT32_C(0x3c068006), UINT32_C(0x8cc6956c),
+    UINT32_C(0x8e020020), UINT32_C(0x8f830188),
+    UINT32_C(0x96070042), UINT32_C(0x00031880),
+    UINT32_C(0x00621821), UINT32_C(0x8c440034),
+    UINT32_C(0x8c65002c), UINT32_C(0x0c00b1c0),
+    UINT32_C(0x30e70004),
+};
+
+static bool model_dispatch_instruction_window_matches(
+        CPUState *cpu, uint32_t start, const uint32_t *instructions,
+        uint32_t instruction_count) {
+    uint32_t index;
+
+    if (cpu == NULL || cpu->read_word == NULL || instructions == NULL ||
+        instruction_count == 0u)
+        return false;
+    for (index = 0u; index < instruction_count; ++index) {
+        if (cpu->read_word(start + index * 4u) != instructions[index])
+            return false;
+    }
+    return true;
+}
+
+static bool model_dispatch_overlay_window_matches(
+        CPUState *cpu, uint32_t return_address,
+        uint32_t *out_window_start, uint32_t *out_matrix_stack_offset) {
+    const uint32_t contract_count =
+        xg_render_runtime_variant_model_dispatch_contract_count();
+
+    for (uint32_t index = 0u; index < contract_count; ++index) {
+        XgRenderRuntimeVariantModelDispatchContract contract = { 0 };
+        uint32_t window_start;
+
+        if (!xg_render_runtime_variant_model_dispatch_contract_at(
+                index, &contract) ||
+            return_address < contract.instruction_count * 4u)
+            continue;
+        window_start = return_address - contract.instruction_count * 4u;
+        if (!model_dispatch_instruction_window_matches(
+                cpu, window_start, contract.instructions,
+                contract.instruction_count))
+            continue;
+        if (out_window_start != NULL) *out_window_start = window_start;
+        if (out_matrix_stack_offset != NULL)
+            *out_matrix_stack_offset = contract.matrix_stack_offset;
+        return true;
+    }
+    return false;
+}
+
+static bool model_dispatch_resident_context_is_authenticated(void) {
+    return state.requested_render_mode != GUEST_RENDER_RENDER_NATIVE ||
+        xg_render_runtime_variant_no_gates_enabled() ||
+        (state.authenticated_artifact_candidate_valid &&
+         state.authenticated_artifact_scene_generation ==
+             state.scene_generation) ||
         completed_proof_matches_tier(XG_RENDER_AUTH_TIER_WARM_NATIVE);
+}
+
+static bool model_dispatch_caller_contract_matches(
+        CPUState *cpu, uint32_t return_address, uint8_t *out_contract,
+        uint32_t *out_window_start, uint32_t *out_matrix_stack_offset) {
+    const uint32_t resident_count = (uint32_t)(
+        sizeof(model_dispatch_resident_caller_instructions) /
+        sizeof(model_dispatch_resident_caller_instructions[0]));
+    uint32_t window_start;
+
+    if (return_address >= resident_count * 4u) {
+        window_start = return_address - resident_count * 4u;
+        if (model_dispatch_instruction_window_matches(
+                cpu, window_start,
+                model_dispatch_resident_caller_instructions,
+                resident_count) && physical_address_equals(
+                    window_start, UINT32_C(0x800257b0)) &&
+            model_dispatch_resident_context_is_authenticated()) {
+            if (out_contract != NULL)
+                *out_contract = XG_MODEL_DISPATCH_CALLER_RESIDENT;
+            if (out_window_start != NULL) *out_window_start = window_start;
+            if (out_matrix_stack_offset != NULL)
+                *out_matrix_stack_offset = 0x10u;
+            return true;
+        }
+    }
+    if (!model_dispatch_overlay_window_matches(
+            cpu, return_address, &window_start, out_matrix_stack_offset))
+        return false;
+    if (out_contract != NULL) *out_contract = XG_MODEL_DISPATCH_CALLER_OVERLAY;
+    if (out_window_start != NULL) *out_window_start = window_start;
+    return true;
+}
+
+static bool model_dispatch_context_contract_matches(
+        CPUState *cpu, const XgRenderModelFt4ShadowContext *context) {
+    const uint32_t *instructions;
+    uint32_t instruction_count;
+    XgRenderRuntimeVariantModelDispatchContract overlay_contract = { 0 };
+
+    if (context == NULL || !context->valid) return false;
+    if (context->caller_contract == XG_MODEL_DISPATCH_CALLER_RESIDENT) {
+        instructions = model_dispatch_resident_caller_instructions;
+        instruction_count = (uint32_t)(
+            sizeof(model_dispatch_resident_caller_instructions) /
+            sizeof(model_dispatch_resident_caller_instructions[0]));
+    } else if (context->caller_contract == XG_MODEL_DISPATCH_CALLER_OVERLAY) {
+        const uint32_t contract_count =
+            xg_render_runtime_variant_model_dispatch_contract_count();
+
+        for (uint32_t index = 0u; index < contract_count; ++index) {
+            if (xg_render_runtime_variant_model_dispatch_contract_at(
+                    index, &overlay_contract) &&
+                model_dispatch_instruction_window_matches(
+                    cpu, context->caller_window_start,
+                    overlay_contract.instructions,
+                    overlay_contract.instruction_count))
+                return true;
+        }
+        return false;
+    } else {
+        return false;
+    }
+    if (!model_dispatch_instruction_window_matches(
+            cpu, context->caller_window_start, instructions,
+            instruction_count))
+        return false;
+    return true;
 }
 
 static bool producer_lifecycle_begin(uint32_t producer_pc,
@@ -2352,6 +2491,7 @@ static bool capture_source_values(CPUState *cpu,
     request.vram_mutation_serial = gpu_render_vram_mutation_serial();
     request.producer_record_id =
         auth_snapshot.logical_identity.producer_record_id;
+    request.producer_entry = state.pending_variant_entry;
     request.actor_index = cpu->gpr[21];
     request.actor_record_address = cpu->gpr[18];
     request.model_address = model_address;
@@ -2392,9 +2532,7 @@ static void arm_ft4_geometry(CPUState *cpu,
     GuestRenderBridgeSnapshot bridge_snapshot = { 0 };
 
     if (!ft4_geometry.enabled || ft4_geometry.blocked ||
-        pending->metadata.operation != PSX_XG_RENDER_SOURCE_OPERATION_CALL ||
-        !physical_address_equals(pending->pc, UINT32_C(0x800769c8)) ||
-        pending->instruction != UINT32_C(0x0c0129ef))
+        pending->metadata.operation != PSX_XG_RENDER_SOURCE_OPERATION_CALL)
         return;
     if (ft4_geometry.pending.valid) {
         block_ft4_geometry(false);
@@ -2402,6 +2540,7 @@ static void arm_ft4_geometry(CPUState *cpu,
     }
     ft4_geometry.pending = (XgRenderFt4GeometryPending){
         .scene_generation = state.scene_generation,
+        .source_return_address = pending->pc + 8u,
         .tier = pending->tier,
         .phase = XG_RENDER_FT4_EXPECT_FIRST_PRE,
         .valid = true,
@@ -2615,6 +2754,44 @@ static bool flush_pre_scene_primitives(void) {
                 &semantic, interpolation_scene_generation(),
                 record->interpolation_producer_id,
                 record->interpolation_primitive_id);
+        if (record->interpolation_identity_valid) {
+            GpuRenderInterpolationVertexAnchor anchors[
+                GPU_RENDER_SEMANTIC_TRIANGLE_CAPACITY * 3u];
+            size_t anchor_count = 0u;
+
+            for (uint32_t triangle = 0u;
+                 triangle < semantic.triangle_count; ++triangle) {
+                for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
+                    const GpuRenderSemanticVertex *candidate =
+                        &semantic.triangles[triangle].vertices[vertex];
+                    bool duplicate = false;
+
+                    if (!candidate->interpolation_vertex_identity_valid)
+                        continue;
+                    for (size_t prior = 0u; prior < anchor_count; ++prior) {
+                        duplicate |= anchors[prior].vertex.interpolation_group_id ==
+                                candidate->interpolation_group_id &&
+                            anchors[prior].vertex.interpolation_vertex_id ==
+                                candidate->interpolation_vertex_id;
+                    }
+                    if (duplicate) continue;
+                    anchors[anchor_count++] =
+                        (GpuRenderInterpolationVertexAnchor){
+                            .scene_id = semantic.interpolation_identity.scene_id,
+                            .producer_id =
+                                semantic.interpolation_identity.producer_id,
+                            .material = semantic.material,
+                            .vertex = *candidate,
+                        };
+                }
+            }
+            if (anchor_count != 0u &&
+                gr_record_interpolation_anchors(anchors, anchor_count) !=
+                    GPU_RENDER_TRANSACTION_OK) {
+                pre_scene.blocker = 8u;
+                return false;
+            }
+        }
         if (record->temporal_only) {
             if (!record->interpolation_identity_valid ||
                 gr_draw_semantic_temporal_candidate(
@@ -2848,9 +3025,7 @@ static bool observe_source(CPUState *cpu, XgRenderAuthTier tier,
     append_source_pair(guest_address(pc), &source_state.pending, &metadata,
                        auxiliary);
     if (source_state.pending.metadata.operation ==
-            PSX_XG_RENDER_SOURCE_OPERATION_BUCKET &&
-        physical_address_equals(source_state.pending.pc,
-                                UINT32_C(0x800769ec)))
+            PSX_XG_RENDER_SOURCE_OPERATION_BUCKET)
         process_producer_family_candidate(cpu, auxiliary);
     clear_source_pending();
     return true;
@@ -3033,6 +3208,7 @@ static void publish_completed_proof(XgRenderAuthTier tier) {
 
     lock_completed_proof();
     completed_proof = local;
+    completed_proof_scene_generation = state.scene_generation;
     unlock_completed_proof();
     record_completed_proof_publication();
 }
@@ -3293,9 +3469,6 @@ static void observe_hook(CPUState *cpu, XgRenderAuthTier tier, uint32_t hook, ui
                                   xg_render_manifest_validation.producer_entry)))
         clear_pending_candidate();
     if (variant_event == XG_RENDER_RUNTIME_VARIANT_ACTIVATED) {
-        if (xg_render_runtime_variant_event_is_exact(variant_event, pc))
-            state.authenticated_variant_artifact_observed = true;
-        state.observed_variant_scene_generation = state.scene_generation;
         clear_pending_variant_sequence();
         if (!state.active) state.armed = true;
         if (!state.armed ||
@@ -3351,6 +3524,11 @@ static void observe_hook(CPUState *cpu, XgRenderAuthTier tier, uint32_t hook, ui
         }
         observe_return(tier, xg_render_manifest_validation.return_site,
                        xg_render_manifest_validation.return_site);
+        if (state.completed) {
+            state.authenticated_producer_entry = state.pending_variant_entry;
+            state.authenticated_producer_scene_generation =
+                state.scene_generation;
+        }
         clear_pending_variant_sequence();
         xg_render_runtime_variant_reset();
         return;
@@ -3782,8 +3960,6 @@ void psx_xg_render_auth_cold_enable(bool enabled) {
 void psx_xg_render_auth_scene_boundary(void) {
     guest_render_native_stream_clear();
     ui_ot_pending = false;
-    state.authenticated_variant_artifact_observed = false;
-    state.observed_variant_scene_generation = 0u;
     record_reset(true);
     if (source_state.pending.valid)
         block_source_proof(false, XG_RENDER_SOURCE_BLOCK_LIFECYCLE);
@@ -3821,6 +3997,8 @@ void psx_xg_render_auth_scene_boundary(void) {
     state.active = false;
     state.armed = true;
     state.completed = false;
+    state.authenticated_producer_entry = 0u;
+    state.authenticated_producer_scene_generation = 0u;
     state.rejection = (PsxXgRenderAuthRejectionReceipt){ 0 };
     world_native_cutover_in_progress = false;
     if (state.scene_generation != UINT64_MAX) {
@@ -3996,7 +4174,8 @@ static bool ft4_context_matches(const CPUState *cpu) {
            !ft4_geometry.blocked &&
            ft4_geometry.pending.scene_generation == state.scene_generation &&
            source_context_matches(ft4_geometry.pending.tier) &&
-           physical_address_equals(cpu->gpr[31], UINT32_C(0x800769d0));
+           physical_address_equals(
+               cpu->gpr[31], ft4_geometry.pending.source_return_address);
 }
 
 static bool ft4_destinations_are_valid(const uint32_t destinations[4]) {
@@ -4028,9 +4207,7 @@ static bool native_compass_cutover(CPUState *cpu, uint32_t pc,
     if (state.requested_render_mode != GUEST_RENDER_RENDER_NATIVE)
         return false;
     if (!xg_render_runtime_variant_no_gates_enabled() &&
-        !state.authenticated_artifact_candidate_valid &&
-        !state.authenticated_variant_artifact_observed &&
-        !state.artifact_candidate_seen)
+        !state.authenticated_artifact_candidate_valid)
         return false;
     if (!pending_variant_artifact_candidate_matches(pc)) {
         pre_scene.blocker = 8u;
@@ -4535,7 +4712,7 @@ static bool native_primitive_all_projective(
 
 static bool stage_active_particle(
     const XgRenderIrNativePrimitive *primitive, uint32_t packet_address,
-    uint32_t ot_bucket, uint32_t source_generation) {
+    uint32_t ot_bucket, uint32_t source_generation, uint32_t producer_pc) {
 #ifdef PSX_XG_RENDER_AUTH_RUNTIME_TESTING
     if (primitive != NULL) {
         particle_test_primitive = *primitive;
@@ -4547,7 +4724,7 @@ static bool stage_active_particle(
         UINT32_C(0x20000000) |
             (packet_address & UINT32_C(0x001ffffc)),
         ot_bucket, XG_FIELD_CHARACTER_PACKET_WORD_COUNT,
-        UINT32_C(0x800a8eac), source_generation, NULL);
+        producer_pc, source_generation, NULL);
 }
 
 static bool native_particle_cutover(CPUState *cpu, uint32_t pc) {
@@ -4691,7 +4868,7 @@ static bool native_particle_cutover(CPUState *cpu, uint32_t pc) {
         if (!word_address_is_valid(ot_address) ||
             !stage_active_particle(
                 &primitive, packet_address, bucket,
-                (uint32_t)source->generation))
+                (uint32_t)source->generation, source->producer_pc))
             goto fail_stage;
         previous_head = cpu->read_word(ot_address);
     } else {
@@ -6122,6 +6299,11 @@ static void model_ft4_shadow_begin(CPUState *cpu) {
     XgHost3dMatrix matrix;
     uint32_t matrix_stack_offset;
     uint32_t matrix_mismatch_mask = 0u;
+    uint8_t caller_contract = XG_MODEL_DISPATCH_CALLER_NONE;
+    uint32_t caller_window_start = 0u;
+    const bool caller_authenticated = model_dispatch_caller_contract_matches(
+        cpu, cpu != NULL ? cpu->gpr[31] : 0u, &caller_contract,
+        &caller_window_start, &matrix_stack_offset);
 
     if (state.requested_render_mode != GUEST_RENDER_RENDER_SHADOW &&
         state.requested_render_mode != GUEST_RENDER_RENDER_NATIVE) {
@@ -6130,7 +6312,7 @@ static void model_ft4_shadow_begin(CPUState *cpu) {
         return;
     }
     if (state.requested_render_mode == GUEST_RENDER_RENDER_NATIVE &&
-        !native_model_auth_available()) {
+        !caller_authenticated) {
         clear_model_ft4_shadow_pending();
         clear_model_ft3_shadow_pending();
         return;
@@ -6152,11 +6334,7 @@ static void model_ft4_shadow_begin(CPUState *cpu) {
     ++model_ft4_shadow.snapshot.dispatch_begin_count;
     model_ft4_shadow.snapshot.last_dispatch_caller = cpu->gpr[31];
     model_ft4_shadow.snapshot.last_dispatch_mode = cpu->gpr[7];
-    if (physical_address_equals(cpu->gpr[31], UINT32_C(0x800257dc))) {
-        matrix_stack_offset = 0x10u;
-    } else if (physical_address_equals(cpu->gpr[31], UINT32_C(0x8007519c))) {
-        matrix_stack_offset = 0x58u;
-    } else {
+    if (!caller_authenticated) {
         ++model_ft4_shadow.snapshot.dispatch_caller_reject_count;
         return;
     }
@@ -6172,7 +6350,7 @@ static void model_ft4_shadow_begin(CPUState *cpu) {
         return;
     }
     context.model_address = cpu->gpr[4];
-    /* Both resident (0x800257d4) and field (0x80075194) callers retain the
+    /* Both resident and overlay callers retain the
      * logical model-instance pointer in s0 across the dispatch. */
     context.instance_address = cpu->gpr[16];
     context.packet_base = cpu->gpr[5];
@@ -6214,8 +6392,10 @@ static void model_ft4_shadow_begin(CPUState *cpu) {
     context.tpage = cpu->read_half(UINT32_C(0x80059308));
     context.clut = cpu->read_half(UINT32_C(0x8005930c));
     context.dispatch_mode = (uint8_t)cpu->gpr[7];
-    context.resident_dispatch = physical_address_equals(
-        cpu->gpr[31], UINT32_C(0x800257dc));
+    context.caller_window_start = caller_window_start;
+    context.caller_contract = caller_contract;
+    context.resident_dispatch =
+        caller_contract == XG_MODEL_DISPATCH_CALLER_RESIDENT;
     context.valid = true;
     model_ft4_shadow.context = context;
 }
@@ -6268,6 +6448,30 @@ static bool model_ft4_shadow_decode_material(
     record->uv[3] = cpu->read_half(attribute_address + 10u);
     record->tpage = tpage;
     record->clut = clut;
+    return model_ft4_shadow_apply_material(cpu, source, record);
+}
+
+static bool model_ft4_shadow_capture_packet_material(
+    CPUState *cpu, uint32_t packet_address, XgModelFt4RawSource *source,
+    XgRenderModelFt4ShadowRecord *record) {
+    uint32_t material_word;
+
+    if (cpu == NULL || source == NULL || record == NULL ||
+        cpu->read_word == NULL || cpu->read_half == NULL ||
+        !word_address_is_valid(packet_address) ||
+        !word_address_is_valid(packet_address + 36u))
+        return false;
+    material_word = cpu->read_word(packet_address + 4u);
+    if ((material_word >> 24u) != 0x2du &&
+        (material_word >> 24u) != 0x2fu)
+        return false;
+    record->material_word = material_word;
+    record->uv[0] = cpu->read_half(packet_address + 12u);
+    record->uv[1] = cpu->read_half(packet_address + 20u);
+    record->uv[2] = cpu->read_half(packet_address + 28u);
+    record->uv[3] = cpu->read_half(packet_address + 36u);
+    record->tpage = cpu->read_half(packet_address + 22u);
+    record->clut = cpu->read_half(packet_address + 14u);
     return model_ft4_shadow_apply_material(cpu, source, record);
 }
 
@@ -6375,6 +6579,8 @@ static bool model_ft4_shadow_prepare(CPUState *cpu) {
                 source.projection = context->projection;
                 source.screen_right = (int16_t)cpu->read_word(
                     UINT32_C(0x800500f8));
+                source.screen_x_cull_margin =
+                    render_screen_x_cull_margin();
                 source.packed_screen_bottom = cpu->read_word(
                     UINT32_C(0x800500fc));
                 source.packet_address = cpu->read_word(
@@ -6405,9 +6611,11 @@ static bool model_ft4_shadow_prepare(CPUState *cpu) {
                     }
                 } else {
                     ++model_ft4_shadow.snapshot.template_miss_count;
-                    if (!model_ft4_shadow_decode_material(
-                            cpu, attribute_address, tpage, clut,
-                            &source, record)) {
+                    if (!model_ft4_shadow_capture_packet_material(
+                            cpu, source.packet_address, &source, record) &&
+                        !model_ft4_shadow_decode_material(
+                            cpu, attribute_address, tpage, clut, &source,
+                            record)) {
                         model_ft4_shadow.snapshot.prepare_failure_detail = 6u;
                         return false;
                     }
@@ -6486,7 +6694,8 @@ static bool native_model_ft4_raw_stage(CPUState *cpu) {
     XgRenderProducerLifecycle lifecycle;
 
     if (state.requested_render_mode != GUEST_RENDER_RENDER_NATIVE ||
-        !native_model_auth_available() ||
+        !model_dispatch_context_contract_matches(
+            cpu, &model_ft4_shadow.context) ||
         cpu == NULL || !model_ft4_shadow.context.valid ||
         !model_ft4_shadow_prepare(cpu) ||
         !producer_lifecycle_begin(UINT32_C(0x8002c700), &lifecycle))
@@ -6518,7 +6727,7 @@ static bool native_model_ft4_raw_stage(CPUState *cpu) {
             ((uint32_t)(model_ft4_shadow.context.dispatch_mode & 7u) << 29u);
         const bool interpolation_identity_valid =
             interpolation_producer_id != 0u;
-        const int32_t native_margin = xg_host_3d_native_view_margin();
+        const int32_t native_margin = render_screen_x_cull_margin();
         const uint32_t ordering_shift =
             cpu->read_word(UINT32_C(0x80050100));
         const bool average_depth =
@@ -6930,7 +7139,7 @@ static bool model_ft3_build_record(
     XgHost3dProject4Input input = { 0 };
     XgHost3dRotTransPers4Output output;
     GpuDrawState draw = { 0 };
-    const int32_t native_margin = xg_host_3d_native_view_margin();
+    const int32_t native_margin = render_screen_x_cull_margin();
     uint16_t max_depth = 0u;
     bool all_below = true;
     bool guest_all_horizontal_outside = true;
@@ -7244,7 +7453,8 @@ static bool native_model_ft3_raw_stage(CPUState *cpu) {
     XgRenderProducerLifecycle lifecycle;
 
     if (state.requested_render_mode != GUEST_RENDER_RENDER_NATIVE ||
-        !native_model_auth_available() ||
+        !model_dispatch_context_contract_matches(
+            cpu, &model_ft4_shadow.context) ||
           !model_ft3_shadow_prepare(cpu) ||
         !producer_lifecycle_begin(UINT32_C(0x8002c700), &lifecycle))
         return false;
@@ -7262,15 +7472,15 @@ static bool native_model_ft3_raw_stage(CPUState *cpu) {
         XgRenderModelFt3ShadowRecord *record =
             &model_ft3_shadow.records[index];
         const uint32_t interpolation_producer_id =
-            (model_ft4_shadow.context.instance_address &
-             UINT32_C(0x1fffffff)) | (UINT32_C(1) << 31u);
+            model_ft4_shadow.context.instance_address & UINT32_C(0x1fffffff);
         const uint32_t interpolation_primitive_id =
             (record->attribute_address & UINT32_C(0x1fffffff)) |
-            ((uint32_t)(model_ft4_shadow.context.dispatch_mode & 7u) << 29u);
+            ((uint32_t)(model_ft4_shadow.context.dispatch_mode & 7u) << 29u) |
+            UINT32_C(1);
         const bool interpolation_identity_valid =
             (model_ft4_shadow.context.instance_address &
              UINT32_C(0x1fffffff)) != 0u;
-        const int32_t native_margin = xg_host_3d_native_view_margin();
+        const int32_t native_margin = render_screen_x_cull_margin();
         const GpuRenderTemporalCullPolicy temporal_cull = {
             .flags = GPU_RENDER_TEMPORAL_CULL_PROJECTIVE |
                 GPU_RENDER_TEMPORAL_CULL_SCREEN |
@@ -7287,7 +7497,7 @@ static bool native_model_ft3_raw_stage(CPUState *cpu) {
                     INT32_C(65536),
             .depth_min_inclusive = 1,
             .depth_max_exclusive = 0x10000,
-            .depth_mode = GPU_RENDER_TEMPORAL_DEPTH_LAST_VERTEX,
+            .depth_mode = GPU_RENDER_TEMPORAL_DEPTH_MAXIMUM,
             .front_face = GPU_RENDER_TEMPORAL_FRONT_POSITIVE,
             .ordering_depth_shift = (uint8_t)((
                 cpu->read_word(UINT32_C(0x80050100)) + 2u) & 31u),
@@ -7433,6 +7643,14 @@ static bool capture_model_ft3_linked_source(CPUState *cpu) {
         material_template = &decoded_material;
     }
     if (!material_template->valid) return false;
+    for (uint32_t index = 0u; index < model_ft3_shadow.count; ++index) {
+        if (physical_address_equals(
+                model_ft3_shadow.records[index].packet_address,
+                packet_address)) {
+            primitive = model_ft3_shadow.records[index].primitive;
+            break;
+        }
+    }
     gpu_get_draw_state(&draw);
     apply_draw_state(&primitive.material, &draw);
     primitive.material.tpage = material_template->tpage;
@@ -7476,13 +7694,13 @@ static bool capture_model_ft3_linked_source(CPUState *cpu) {
         .lifecycle = lifecycle,
         .source_id = model_ft4_template_key(packet_address) + 4u,
         .interpolation_producer_id =
-            (model_ft4_shadow.context.instance_address &
-             UINT32_C(0x1fffffff)) | (UINT32_C(1) << 31u),
+            model_ft4_shadow.context.instance_address & UINT32_C(0x1fffffff),
         .interpolation_primitive_id =
             ((material_template->descriptor_address != 0u
                   ? material_template->descriptor_address : cpu->gpr[16]) &
              UINT32_C(0x1fffffff)) |
-            ((uint32_t)(model_ft4_shadow.context.dispatch_mode & 7u) << 29u),
+            ((uint32_t)(model_ft4_shadow.context.dispatch_mode & 7u) << 29u) |
+            UINT32_C(1),
         .interpolation_identity_valid =
             (model_ft4_shadow.context.instance_address &
              UINT32_C(0x1fffffff)) != 0u,
@@ -9817,6 +10035,33 @@ static const XgRenderWorldEntry world_entries[] = {
     { UINT32_C(0x800740b8), UINT32_C(0x27bdffc8),
       PSX_XG_RENDER_WORLD_MINIMAP },
 };
+
+static bool resident_render_site_is_authorized(uint32_t pc,
+                                                uint32_t instruction_word) {
+    static const XgRenderWorldEntry resident_sites[] = {
+        { UINT32_C(0x8007fbe0), UINT32_C(0x00a04021), 0 },
+        { UINT32_C(0x80073b64), UINT32_C(0x3c03800d), 0 },
+        { UINT32_C(0x8007412c), UINT32_C(0x266400b8), 0 },
+        { XG_WORLD_TERRAIN_WATER_NATIVE_ENTRY_PC,
+          UINT32_C(0x27bdffc8), 0 },
+        { UINT32_C(0x80084cd0), UINT32_C(0x8fbf0038), 0 },
+        { UINT32_C(0x80085f38), UINT32_C(0x8fbf0020), 0 },
+    };
+
+    for (uint32_t index = 0u;
+         index < sizeof(world_entries) / sizeof(world_entries[0]); ++index) {
+        if (physical_address_equals(pc, world_entries[index].pc) &&
+            instruction_word == world_entries[index].instruction)
+            return true;
+    }
+    for (uint32_t index = 0u;
+         index < sizeof(resident_sites) / sizeof(resident_sites[0]); ++index) {
+        if (physical_address_equals(pc, resident_sites[index].pc) &&
+            instruction_word == resident_sites[index].instruction)
+            return true;
+    }
+    return false;
+}
 
 static void observe_world_execution(uint32_t pc, uint32_t instruction_word) {
     uint32_t index;
@@ -12509,7 +12754,7 @@ static bool native_world_models_commit(CPUState *cpu) {
         const XgWorldModelsNativePrimitiveOutput *output =
             &workspace->outputs[primitive_index];
         const uint8_t mode = source->dispatch_mode;
-        const int32_t margin = xg_host_3d_native_view_margin();
+        const int32_t margin = render_screen_x_cull_margin();
         const uint32_t interpolation_primitive_id =
             source->source_index * 4096u + source->primitive_index;
         const bool average = source->primitive_family == 16u ||
@@ -14848,7 +15093,7 @@ static bool native_stream_resolve(
     return true;
 }
 
-static bool native_zoom_cutover(CPUState *cpu, uint32_t pc) {
+static bool native_zoom_cutover(CPUState *cpu, uint32_t continuation) {
     GuestRenderBridgeSnapshot bridge = { 0 };
     XgRenderZoomSource *zoom_source = xg_field_zoom_source();
     XgRenderZoomInvocation *zoom_invocation = xg_field_zoom_invocation();
@@ -14863,7 +15108,6 @@ static bool native_zoom_cutover(CPUState *cpu, uint32_t pc) {
     uint32_t index;
     bool project;
 
-    (void)pc;
     if (state.requested_render_mode != GUEST_RENDER_RENDER_NATIVE) return false;
     xg_field_zoom_note_cutover_attempt();
     if (guest_render_bridge_snapshot(&bridge) != GUEST_RENDER_OK)
@@ -15055,7 +15299,7 @@ static bool native_zoom_cutover(CPUState *cpu, uint32_t pc) {
     *zoom_invocation = (XgRenderZoomInvocation){ 0 };
     xg_field_zoom_note_native_invocation(XG_RENDER_ZOOM_QUAD_COUNT);
     cpu->gpr[2] = 0u;
-    cpu->pc = UINT32_C(0x800a6608);
+    cpu->pc = continuation;
     return true;
 }
 
@@ -15173,6 +15417,8 @@ bool psx_xg_render_auth_native_ft4_bypass(
     CPUState *cpu, uint32_t pc, uint32_t instruction_word) {
     GuestRenderBridgeSnapshot bridge = { 0 };
     XgRenderFt4GeometryPending *pending = &ft4_geometry.pending;
+    PsxXgRenderSourceSiteMetadata source_metadata = { 0 };
+    XgRenderRuntimeVariantCutoverHandler cutover_handler;
     uint32_t continuation;
     uint32_t depth_cue_address;
     uint32_t flags_address;
@@ -15180,7 +15426,7 @@ bool psx_xg_render_auth_native_ft4_bypass(
 
     observe_world_execution(pc, instruction_word);
 
-    if (!overlay_pc_is_authorized(pc)) return false;
+    if (!overlay_pc_is_authorized(pc, instruction_word)) return false;
 
     if (physical_address_equals(pc, UINT32_C(0x801c6f70)) &&
         instruction_word == UINT32_C(0x27bdffb8)) {
@@ -15232,7 +15478,7 @@ bool psx_xg_render_auth_native_ft4_bypass(
     if (physical_address_equals(pc, UINT32_C(0x801e7c50)) &&
         instruction_word == UINT32_C(0x27bdffc0)) {
         if (state.requested_render_mode == GUEST_RENDER_RENDER_NATIVE &&
-            !overlay_ft4_capture_projected_material(cpu))
+            !overlay_ft4_capture_projected_material(cpu, pc))
             overlay_ft4_2c.substitution_blocker = 7u;
         return false;
     }
@@ -15241,7 +15487,7 @@ bool psx_xg_render_auth_native_ft4_bypass(
         (overlay_ft4_find_template(cpu->gpr[4]) != NULL ||
          physical_address_equals(cpu->gpr[31], UINT32_C(0x801e63f4)))) {
         if (state.requested_render_mode == GUEST_RENDER_RENDER_NATIVE &&
-            !overlay_ft4_capture_rectangle_template(cpu))
+            !overlay_ft4_capture_rectangle_template(cpu, pc))
             overlay_ft4_2c.substitution_blocker = 5u;
         return false;
     }
@@ -15255,7 +15501,7 @@ bool psx_xg_render_auth_native_ft4_bypass(
     if (physical_address_equals(pc, UINT32_C(0x801cf85c)) &&
         instruction_word == UINT32_C(0x0c073866)) {
         if (state.requested_render_mode == GUEST_RENDER_RENDER_NATIVE &&
-            !overlay_ft4_capture_glyph_material(cpu))
+            !overlay_ft4_capture_glyph_material(cpu, pc))
             overlay_ft4_2c.substitution_blocker = 10u;
         return false;
     }
@@ -15271,25 +15517,25 @@ bool psx_xg_render_auth_native_ft4_bypass(
     }
     if (physical_address_equals(pc, UINT32_C(0x801d3ff8)) &&
         instruction_word == UINT32_C(0x27bdffc8)) {
-        if (!overlay_ft4_capture_projected_2e_material(cpu, 3u))
+        if (!overlay_ft4_capture_projected_2e_material(cpu, 3u, pc))
             overlay_ft4_2c.substitution_blocker = 10u;
         return false;
     }
     if (physical_address_equals(pc, UINT32_C(0x801d433c)) &&
         instruction_word == UINT32_C(0x27bdffc8)) {
-        if (!overlay_ft4_capture_projected_2e_material(cpu, 2u))
+        if (!overlay_ft4_capture_projected_2e_material(cpu, 2u, pc))
             overlay_ft4_2c.substitution_blocker = 10u;
         return false;
     }
     if (physical_address_equals(pc, UINT32_C(0x801d4688)) &&
         instruction_word == UINT32_C(0x27bdffc8)) {
-        if (!overlay_ft4_capture_projected_2e_material(cpu, 1u))
+        if (!overlay_ft4_capture_projected_2e_material(cpu, 1u, pc))
             overlay_ft4_2c.substitution_blocker = 10u;
         return false;
     }
     if (physical_address_equals(pc, UINT32_C(0x801d49d0)) &&
         instruction_word == UINT32_C(0x27bdffc8)) {
-        if (!overlay_ft4_capture_projected_2e_material(cpu, 0u))
+        if (!overlay_ft4_capture_projected_2e_material(cpu, 0u, pc))
             overlay_ft4_2c.substitution_blocker = 10u;
         return false;
     }
@@ -15364,7 +15610,7 @@ bool psx_xg_render_auth_native_ft4_bypass(
                     overlay_ft4_2c.last_pc = guest_address(pc);
                     if (caller == 8u && state.requested_render_mode ==
                             GUEST_RENDER_RENDER_NATIVE &&
-                        !overlay_ft4_capture_direct_templates(cpu) &&
+                        !overlay_ft4_capture_direct_templates(cpu, pc) &&
                         overlay_ft4_2c.substitution_blocker == 0u)
                         overlay_ft4_2c.substitution_blocker = 2u;
                     if (caller == 7u)
@@ -15837,73 +16083,65 @@ bool psx_xg_render_auth_native_ft4_bypass(
         instruction_word == UINT32_C(0x27bdffb8) &&
         state.requested_render_mode == GUEST_RENDER_RENDER_NATIVE)
         return run_native_world_cutover(cpu, native_world_sky_cutover);
-    if (physical_address_equals(pc, UINT32_C(0x800a663c)) &&
-        instruction_word == UINT32_C(0x27bdff98)) {
-        xg_field_zoom_observe_initializer_begin(
-            cpu, state.requested_render_mode,
-            artifact_generation_for_pc(UINT32_C(0x800a663c)));
-        return false;
-    }
-    if (physical_address_equals(pc, UINT32_C(0x800a68f0)) &&
-        instruction_word == UINT32_C(0x8fbf0064)) {
-        xg_field_zoom_observe_initializer_commit(
-            cpu, artifact_generation_for_pc(UINT32_C(0x800a68f0)));
-        if (xg_field_zoom_source()->valid) {
-            for (uint32_t quad = 0u; quad < XG_RENDER_ZOOM_QUAD_COUNT; ++quad)
-                for (uint32_t buffer = 0u;
-                     buffer < XG_RENDER_ZOOM_BUFFER_COUNT; ++buffer)
-                    watch_producer_resource(
-                        UINT32_C(0x800b1274) + quad * 0x50u +
-                            buffer * 0x28u,
-                        0x28u);
+    if (xg_render_runtime_variant_native_cutover_lookup(
+            pc, instruction_word, &cutover_handler, &continuation)) {
+        switch (cutover_handler) {
+        case XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_INITIALIZER_BEGIN:
+            xg_field_zoom_observe_initializer_begin(
+                cpu, state.requested_render_mode,
+                artifact_generation_for_pc(pc));
+            return false;
+        case XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_INITIALIZER_COMMIT:
+            xg_field_zoom_observe_initializer_commit(
+                cpu, artifact_generation_for_pc(pc));
+            if (xg_field_zoom_source()->valid) {
+                for (uint32_t quad = 0u;
+                     quad < XG_RENDER_ZOOM_QUAD_COUNT; ++quad)
+                    for (uint32_t buffer = 0u;
+                         buffer < XG_RENDER_ZOOM_BUFFER_COUNT; ++buffer)
+                        watch_producer_resource(
+                            UINT32_C(0x800b1274) + quad * 0x50u +
+                                buffer * 0x28u,
+                            0x28u);
+            }
+            return false;
+        case XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_RGB_BEGIN:
+            xg_field_zoom_observe_rgb_begin(
+                cpu, state.requested_render_mode,
+                artifact_generation_for_pc(pc));
+            return false;
+        case XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_RGB_COMMIT:
+            xg_field_zoom_observe_rgb_commit(
+                cpu, artifact_generation_for_pc(pc));
+            return false;
+        case XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_ENTRY:
+            xg_field_zoom_observe_entry(
+                cpu, state.requested_render_mode,
+                artifact_generation_for_pc(pc));
+            return false;
+        case XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_NATIVE:
+            return native_zoom_cutover(cpu, continuation);
+        case XG_RENDER_RUNTIME_VARIANT_CUTOVER_PARTICLE_INITIALIZER:
+            (void)xg_field_particles_observe_initializer(
+                cpu, state.requested_render_mode,
+                authenticated_variant_hook_matches(pc), pc);
+            return false;
+        case XG_RENDER_RUNTIME_VARIANT_CUTOVER_PARTICLE_NATIVE:
+            return native_particle_cutover(cpu, pc);
+        case XG_RENDER_RUNTIME_VARIANT_CUTOVER_COMPASS_WORLD:
+            return native_compass_cutover(cpu, pc, false);
+        case XG_RENDER_RUNTIME_VARIANT_CUTOVER_COMPASS_SCREEN:
+            return native_compass_cutover(cpu, pc, true);
+        case XG_RENDER_RUNTIME_VARIANT_CUTOVER_ACTOR:
+            return native_field_actor_cutover(cpu, continuation);
+        default:
+            return false;
         }
-        return false;
     }
-    if (physical_address_equals(pc, UINT32_C(0x800a5600)) &&
-        instruction_word == UINT32_C(0x00003021)) {
-        xg_field_zoom_observe_rgb_begin(
-            cpu, state.requested_render_mode,
-            artifact_generation_for_pc(UINT32_C(0x800a5600)));
-        return false;
-    }
-    if (physical_address_equals(pc, UINT32_C(0x800a5694)) &&
-        instruction_word == UINT32_C(0x28c20005)) {
-        xg_field_zoom_observe_rgb_commit(
-            cpu, artifact_generation_for_pc(UINT32_C(0x800a5694)));
-        return false;
-    }
-    if (physical_address_equals(pc, UINT32_C(0x800a6408)) &&
-        instruction_word == UINT32_C(0x27bdff78)) {
-        xg_field_zoom_observe_entry(
-            cpu, state.requested_render_mode,
-            artifact_generation_for_pc(UINT32_C(0x800a6408)));
-        return false;
-    }
-    if (physical_address_equals(pc, UINT32_C(0x800a6490)) &&
-        instruction_word == UINT32_C(0xafa2004c))
-        return native_zoom_cutover(cpu, pc);
-    if (physical_address_equals(pc, UINT32_C(0x800a8eac)) &&
-        instruction_word == UINT32_C(0x27bdff68)) {
-        (void)xg_field_particles_observe_initializer(
-            cpu, state.requested_render_mode,
-            authenticated_variant_hook_matches(UINT32_C(0x800a8eac)));
-        return false;
-    }
-    if (physical_address_equals(pc, UINT32_C(0x800a9b54)) &&
-        instruction_word == UINT32_C(0x27bdff38))
-        return native_particle_cutover(cpu, pc);
-    if (physical_address_equals(pc, UINT32_C(0x8007ab6c)) &&
-        instruction_word == UINT32_C(0x27bdffb8))
-        return native_compass_cutover(cpu, pc, false);
-    if (physical_address_equals(pc, UINT32_C(0x8007ac58)) &&
-        instruction_word == UINT32_C(0x27bdffb8))
-        return native_compass_cutover(cpu, pc, true);
-    if (xg_render_runtime_variant_native_cutover_matches(
-            pc, instruction_word, &continuation))
-        return native_field_actor_cutover(cpu, continuation);
     if (cpu == NULL || !pending->valid ||
-        !physical_address_equals(pc, UINT32_C(0x800769c8)) ||
-        instruction_word != UINT32_C(0x0c0129ef) ||
+        !xg_render_runtime_variant_source_site_lookup(
+            pc, instruction_word, &source_metadata) ||
+        source_metadata.operation != PSX_XG_RENDER_SOURCE_OPERATION_CALL ||
         guest_render_bridge_snapshot(&bridge) != GUEST_RENDER_OK ||
         bridge.modes.effective_render_mode != GUEST_RENDER_RENDER_NATIVE)
         return false;
@@ -15953,7 +16191,7 @@ static XgRenderOverlayFt4Template *overlay_ft4_find_template(
 }
 
 static XgRenderOverlayFt4Template *overlay_ft4_upsert_template(
-    uint32_t packet_address) {
+    uint32_t packet_address, uint32_t producer_pc) {
     XgRenderOverlayFt4Template *record =
         overlay_ft4_find_template(packet_address);
 
@@ -15971,7 +16209,7 @@ static XgRenderOverlayFt4Template *overlay_ft4_upsert_template(
     *record = (XgRenderOverlayFt4Template){
         .packet_address = packet_address,
     };
-    if (!producer_lifecycle_begin(packet_address, &record->lifecycle)) {
+    if (!producer_lifecycle_begin(producer_pc, &record->lifecycle)) {
         overlay_ft4_upsert_failure_detail = 3u;
         *record = (XgRenderOverlayFt4Template){0};
         --overlay_ft4_state.count;
@@ -15981,7 +16219,8 @@ static XgRenderOverlayFt4Template *overlay_ft4_upsert_template(
     return record;
 }
 
-static bool overlay_ft4_capture_direct_templates(CPUState *cpu) {
+static bool overlay_ft4_capture_direct_templates(CPUState *cpu,
+                                                  uint32_t producer_pc) {
     GpuDrawState draw = {0};
     uint32_t global;
     uint32_t packet_base;
@@ -16011,8 +16250,9 @@ static bool overlay_ft4_capture_direct_templates(CPUState *cpu) {
         const uint8_t u0 = (uint8_t)(index * 16u);
         const uint8_t u1 = (uint8_t)(u0 + 12u);
 
-        record = overlay_ft4_upsert_template(packet_base +
-            (index * 2u + buffer) * 0x28u + 0x277cu);
+        record = overlay_ft4_upsert_template(
+            packet_base + (index * 2u + buffer) * 0x28u + 0x277cu,
+            producer_pc);
         if (record == NULL) return false;
         record->source_primitive_index = UINT32_C(0x2c730000) | index;
         apply_draw_state(&source.material, &draw);
@@ -16047,7 +16287,8 @@ static bool overlay_ft4_capture_direct_templates(CPUState *cpu) {
     return true;
 }
 
-static bool overlay_ft4_capture_rectangle_template(CPUState *cpu) {
+static bool overlay_ft4_capture_rectangle_template(CPUState *cpu,
+                                                    uint32_t producer_pc) {
     GpuDrawState draw = {0};
     XgRenderQuadSource source = {0};
     XgRenderOverlayFt4Template *record;
@@ -16067,7 +16308,7 @@ static bool overlay_ft4_capture_rectangle_template(CPUState *cpu) {
     v = (uint8_t)cpu->read_word(stack + 0x10u);
     width = (uint8_t)cpu->read_word(stack + 0x14u);
     height = (uint8_t)cpu->read_word(stack + 0x18u);
-    record = overlay_ft4_upsert_template(cpu->gpr[4]);
+    record = overlay_ft4_upsert_template(cpu->gpr[4], producer_pc);
     if (record == NULL) return false;
     gpu_get_draw_state(&draw);
     if (record->material_ready) {
@@ -16112,7 +16353,8 @@ static bool overlay_ft4_capture_rectangle_template(CPUState *cpu) {
     return true;
 }
 
-static bool overlay_ft4_capture_projected_material(CPUState *cpu) {
+static bool overlay_ft4_capture_projected_material(CPUState *cpu,
+                                                    uint32_t producer_pc) {
     GpuDrawState draw = {0};
     uint32_t object;
     uint32_t mode;
@@ -16145,7 +16387,7 @@ static bool overlay_ft4_capture_projected_material(CPUState *cpu) {
     u1 = (uint8_t)(u0 + cpu->read_byte(object + 0x7eu));
     for (uint32_t buffer = 0u; buffer < 2u; ++buffer) {
         XgRenderOverlayFt4Template *record =
-            overlay_ft4_upsert_template(object + buffer * 0x28u);
+            overlay_ft4_upsert_template(object + buffer * 0x28u, producer_pc);
         XgRenderIrMaterialState material = {0};
         uint32_t clut_selector;
 
@@ -16197,7 +16439,8 @@ static bool overlay_ft4_capture_projected_material(CPUState *cpu) {
     return true;
 }
 
-static bool overlay_ft4_capture_glyph_material(CPUState *cpu) {
+static bool overlay_ft4_capture_glyph_material(CPUState *cpu,
+                                                uint32_t producer_pc) {
     GpuDrawState draw = {0};
     XgRenderQuadSource source = {0};
     XgRenderOverlayFt4Template *record;
@@ -16222,7 +16465,7 @@ static bool overlay_ft4_capture_glyph_material(CPUState *cpu) {
     if (!guest_data_range_is_valid(source_address, 1u, 1u, false))
         return false;
     record = overlay_ft4_upsert_template(
-        cpu->gpr[16] + (cpu->gpr[7] & 1u) * 0x28u);
+        cpu->gpr[16] + (cpu->gpr[7] & 1u) * 0x28u, producer_pc);
     if (record == NULL) return false;
     clut = cpu->gpr[2] & 0xffffu;
     u0 = (uint8_t)cpu->gpr[20];
@@ -16262,7 +16505,7 @@ static bool overlay_ft4_capture_glyph_material(CPUState *cpu) {
 }
 
 static bool overlay_ft4_capture_projected_2e_material(
-    CPUState *cpu, uint32_t template_family) {
+    CPUState *cpu, uint32_t template_family, uint32_t producer_pc) {
     GpuDrawState draw = {0};
     uint32_t global;
     uint32_t object;
@@ -16304,7 +16547,8 @@ static bool overlay_ft4_capture_projected_2e_material(
     gpu_get_draw_state(&draw);
     for (uint32_t quad = 0u; quad < 2u; ++quad) {
         XgRenderOverlayFt4Template *record = overlay_ft4_upsert_template(
-            object + (quad * 2u + buffer) * 0x28u + packet_offset);
+            object + (quad * 2u + buffer) * 0x28u + packet_offset,
+            producer_pc);
         XgRenderQuadSource source = {0};
 
         if (record == NULL) return false;
@@ -16949,6 +17193,8 @@ void psx_xg_render_auth_note_code_write(uint64_t previous_generation,
     const bool variant_code_write =
         (variant_code_write_mask & ~data_dependency_mask) != 0u;
     const bool artifact_code_write =
+        state.authenticated_artifact_candidate_valid &&
+        !state.authenticated_artifact_candidate.runtime_variant_bound &&
         current_artifact_code_range_overlaps(guest_pc, write_size);
     const bool protected_auth_code_write =
         protected_code_write_overlaps(guest_pc, write_size);
@@ -16988,11 +17234,12 @@ void psx_xg_render_auth_note_code_write(uint64_t previous_generation,
     if (producer_resource_write_may_overlap(guest_pc, write_size))
         invalidate_producer_resources_overlapping(guest_pc, write_size);
 
-    if (state.authenticated_artifact_candidate_valid &&
-        authority_code_write)
-        clear_authenticated_artifact_candidate();
-    if (authority_code_write)
-        state.authenticated_variant_artifact_observed = false;
+    if (authority_code_write || protected_auth_code_write) {
+        if (state.authenticated_artifact_candidate_valid)
+            clear_authenticated_artifact_candidate();
+        state.authenticated_producer_entry = 0u;
+        state.authenticated_producer_scene_generation = 0u;
+    }
     if (variant_watched_write || artifact_code_write) {
         const uint32_t code_write_mask = variant_code_write_mask |
             (artifact_code_write
@@ -17137,8 +17384,9 @@ void psx_xg_render_auth_loader_mismatch(uint32_t pc) {
     if (xg_render_runtime_variant_no_gates_enabled()) return;
     if (field_range_contains(pc) || current_artifact_range_contains_pc(pc)) {
         advance_interpolation_scene();
-        state.authenticated_variant_artifact_observed = false;
         clear_authenticated_artifact_candidate();
+        state.authenticated_producer_entry = 0u;
+        state.authenticated_producer_scene_generation = 0u;
         clear_particle_sources();
         clear_zoom_source();
         ++projected_lifecycle.loader_reset_count;
@@ -17172,20 +17420,24 @@ void psx_xg_render_auth_native_bad_entry(uint32_t owner, uint32_t pc) {
 
 void psx_xg_render_auth_note_artifact_candidate(
     const PsxXgRenderAuthCandidate *candidate) {
+    bool candidate_matches;
+
     if (candidate == NULL) return;
-    if (!xg_render_runtime_variant_artifact_candidate_matches(candidate) &&
-        !xg_render_authoritative_overlay_artifact_candidate_matches(candidate)) {
+    candidate_matches =
+        xg_render_runtime_variant_artifact_candidate_matches(candidate) ||
+        (!candidate->runtime_variant_bound &&
+         xg_render_authoritative_overlay_artifact_candidate_matches(candidate));
+    if (!candidate_matches) {
         if (current_artifact_memory_contains_pc(candidate->dispatch_pc) &&
             !artifact_binary_identity_matches(
                 &state.authenticated_artifact_candidate, candidate)) {
             invalidate_nonresident_producer_resources();
             clear_authenticated_artifact_candidate();
+            state.authenticated_producer_entry = 0u;
+            state.authenticated_producer_scene_generation = 0u;
         }
-        state.artifact_candidate_seen = true;
-        state.authenticated_variant_artifact_observed = false;
         return;
     }
-    state.artifact_candidate_seen = true;
     if (state.authenticated_artifact_candidate_valid &&
         state.authenticated_artifact_scene_generation == state.scene_generation &&
         artifact_binary_identity_matches(
@@ -17195,24 +17447,44 @@ void psx_xg_render_auth_note_artifact_candidate(
     }
     if (state.authenticated_artifact_generation == UINT64_MAX) {
         clear_authenticated_artifact_candidate();
+        state.authenticated_producer_entry = 0u;
+        state.authenticated_producer_scene_generation = 0u;
         return;
     }
-    if (state.authenticated_artifact_candidate_valid)
+    if (state.authenticated_artifact_candidate_valid) {
         invalidate_nonresident_producer_resources();
+        state.authenticated_producer_entry = 0u;
+        state.authenticated_producer_scene_generation = 0u;
+    }
     ++state.authenticated_artifact_generation;
     state.authenticated_artifact_candidate = *candidate;
     state.authenticated_artifact_candidate_valid = true;
     state.authenticated_artifact_scene_generation = state.scene_generation;
 }
 
+bool psx_xg_render_auth_authenticated_producer_entry(
+    uint32_t *out_producer_entry) {
+    if (out_producer_entry == NULL ||
+        state.authenticated_producer_entry == 0u ||
+        state.authenticated_producer_scene_generation != state.scene_generation)
+        return false;
+    *out_producer_entry = state.authenticated_producer_entry;
+    return true;
+}
+
 void psx_xg_render_auth_note_candidate_dispatch(
     const PsxXgRenderAuthCandidate *candidate) {
+    bool candidate_matches;
+
     psx_xg_render_auth_note_artifact_candidate(candidate);
     clear_pending_candidate();
-    if (candidate == NULL || state.active || !state.armed ||
-        (!candidate_matches_manifest(candidate) &&
-         !xg_render_runtime_variant_candidate_matches(candidate) &&
-         !xg_render_runtime_variant_artifact_candidate_matches(candidate)))
+    if (candidate == NULL || state.active || !state.armed)
+        return;
+    candidate_matches = candidate->runtime_variant_bound
+        ? xg_render_runtime_variant_candidate_matches(candidate) ||
+              xg_render_runtime_variant_artifact_candidate_matches(candidate)
+        : candidate_matches_manifest(candidate);
+    if (!candidate_matches)
         return;
     state.pending_candidate = *candidate;
     state.pending_scene_generation = state.scene_generation;
@@ -17271,7 +17543,8 @@ void psx_xg_render_auth_mode_snapshot(
     out_snapshot->modes.effective_render_mode = state.requested_render_mode;
     out_snapshot->presentation = state.presentation;
     lock_completed_proof();
-    completed_authority = completed_proof.available && !completed_proof.blocked;
+    completed_authority = completed_proof.available && !completed_proof.blocked &&
+        completed_proof_scene_generation == state.scene_generation;
     unlock_completed_proof();
     if (guest_render_bridge_snapshot(&bridge_snapshot) == GUEST_RENDER_OK) {
         out_snapshot->modes = bridge_snapshot.modes;
@@ -17573,6 +17846,7 @@ void psx_xg_render_auth_runtime_test_reset(void) {
     world_native_cutover_failed = false;
     producer_family = (PsxXgRenderProducerFamilySnapshot){ 0 };
     completed_proof = (PsxXgRenderAuthCompletedProofReceipt){ 0 };
+    completed_proof_scene_generation = 0u;
     instrumentation = (PsxXgRenderAuthInstrumentation){ .revision = 1u };
     instrumentation_next_sequence = 1u;
     particle_test_primitive = (XgRenderIrNativePrimitive){ 0 };

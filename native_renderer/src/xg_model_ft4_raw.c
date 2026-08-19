@@ -75,7 +75,10 @@ XgModelFt4RawResult xg_model_ft4_raw_build(
     bool all_below;
     bool all_left;
     bool all_right;
-    const int32_t native_margin = xg_host_3d_native_view_margin();
+    const int32_t native_margin = source != NULL &&
+            source->screen_x_cull_margin > 0
+        ? source->screen_x_cull_margin
+        : xg_host_3d_native_view_margin();
     uint16_t insertion_depth;
     uint32_t vertex;
 

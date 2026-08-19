@@ -34,25 +34,25 @@
 #define RETURN_SITE UINT32_C(0x800781c4)
 #define JAL_INSTRUCTION UINT32_C(0x0c012d53)
 #define FIELD_RANGE_SIZE UINT32_C(282624)
-#define FIELD5_ACTIVATION_SITE UINT32_C(0x80075414)
-#define FIELD5_PRODUCER_ENTRY UINT32_C(0x800764b4)
-#define FIELD5_CAPTURE_SITE UINT32_C(0x80075694)
-#define FIELD5_RETURN_SITE UINT32_C(0x8007569c)
-#define FIELD5_ACTIVATION_JAL UINT32_C(0x0c01d92d)
-#define FIELD5_ACTIVATION_DELAY UINT32_C(0x248400cc)
-#define FIELD5_CAPTURE_DELAY UINT32_C(0x34040001)
-#define FIELD5_CAPTURE_NON_JAL UINT32_C(0x08012d53)
-#define FIELD5_CAPTURE_WRONG_TARGET_JAL UINT32_C(0x0c0112f4)
-#define FIELD5_ACTIVATION_RETURN UINT32_C(0x8007541c)
-#define FIELD5_CALLER_RETURN UINT32_C(0x80075614)
-#define FIELD5_INTERNAL_CAPTURE UINT32_C(0x800764c0)
-#define FIELD5_INTERNAL_ENTRY UINT32_C(0x800764d0)
-#define FIELD5_INTERNAL_RETURN UINT32_C(0x800764dc)
-#define FIELD5_PARTICLE_INITIALIZER UINT32_C(0x800a8eac)
-#define FIELD5_PARTICLE_RENDER UINT32_C(0x800a9b54)
-#define FIELD5_ZOOM_RGB UINT32_C(0x800a5600)
-#define FIELD5_ZOOM_RENDER UINT32_C(0x800a6408)
-#define FIELD5_ZOOM_INITIALIZER UINT32_C(0x800a663c)
+#define RUNTIME_VARIANT_ACTIVATION_SITE UINT32_C(0x80075414)
+#define RUNTIME_VARIANT_PRODUCER_ENTRY UINT32_C(0x800764b4)
+#define RUNTIME_VARIANT_CAPTURE_SITE UINT32_C(0x80075694)
+#define RUNTIME_VARIANT_RETURN_SITE UINT32_C(0x8007569c)
+#define RUNTIME_VARIANT_ACTIVATION_JAL UINT32_C(0x0c01d92d)
+#define RUNTIME_VARIANT_ACTIVATION_DELAY UINT32_C(0x248400cc)
+#define RUNTIME_VARIANT_CAPTURE_DELAY UINT32_C(0x34040001)
+#define RUNTIME_VARIANT_CAPTURE_NON_JAL UINT32_C(0x08012d53)
+#define RUNTIME_VARIANT_CAPTURE_WRONG_TARGET_JAL UINT32_C(0x0c0112f4)
+#define RUNTIME_VARIANT_ACTIVATION_RETURN UINT32_C(0x8007541c)
+#define RUNTIME_VARIANT_CALLER_RETURN UINT32_C(0x80075614)
+#define RUNTIME_VARIANT_INTERNAL_CAPTURE UINT32_C(0x800764c0)
+#define RUNTIME_VARIANT_INTERNAL_ENTRY UINT32_C(0x800764d0)
+#define RUNTIME_VARIANT_INTERNAL_RETURN UINT32_C(0x800764dc)
+#define RUNTIME_VARIANT_PARTICLE_INITIALIZER UINT32_C(0x800a8eac)
+#define RUNTIME_VARIANT_PARTICLE_RENDER UINT32_C(0x800a9b54)
+#define RUNTIME_VARIANT_ZOOM_RGB UINT32_C(0x800a5600)
+#define RUNTIME_VARIANT_ZOOM_RENDER UINT32_C(0x800a6408)
+#define RUNTIME_VARIANT_ZOOM_INITIALIZER UINT32_C(0x800a663c)
 #define UI_DRAW_OT_SITE UINT32_C(0x800759cc)
 #define UI_DRAW_OT_JAL UINT32_C(0x0c0112f4)
 #define KUSEG_ADDRESS(address) ((address) & UINT32_C(0x1fffffff))
@@ -61,8 +61,8 @@ static uint32_t test_hook_return_address(uint32_t hook, uint32_t pc) {
     if (hook == PSX_XG_RENDER_AUTH_HOOK_CAPTURE) return pc + 8u;
     if (hook == PSX_XG_RENDER_AUTH_HOOK_ENTRY &&
         (pc & UINT32_C(0x1fffffff)) ==
-            (FIELD5_PRODUCER_ENTRY & UINT32_C(0x1fffffff)))
-        return FIELD5_ACTIVATION_RETURN;
+            (RUNTIME_VARIANT_PRODUCER_ENTRY & UINT32_C(0x1fffffff)))
+        return RUNTIME_VARIANT_ACTIVATION_RETURN;
     return pc;
 }
 
@@ -1443,6 +1443,14 @@ static uint8_t model_shadow_memory[MODEL_SHADOW_MEMORY_SIZE];
 static uint8_t model_shadow_stack[MODEL_SHADOW_STACK_SIZE];
 static uint32_t model_shadow_tracked_payload;
 static uint32_t model_shadow_payload_read_count;
+static const uint32_t model_shadow_resident_caller_instructions[] = {
+    UINT32_C(0x3c068006), UINT32_C(0x8cc6956c),
+    UINT32_C(0x8e020020), UINT32_C(0x8f830188),
+    UINT32_C(0x96070042), UINT32_C(0x00031880),
+    UINT32_C(0x00621821), UINT32_C(0x8c440034),
+    UINT32_C(0x8c65002c), UINT32_C(0x0c00b1c0),
+    UINT32_C(0x30e70004),
+};
 
 static uint32_t model_shadow_read_word(uint32_t address) {
     if (model_shadow_tracked_payload != 0u &&
@@ -1457,6 +1465,12 @@ static uint32_t model_shadow_read_word(uint32_t address) {
         address + 4u <= MODEL_SHADOW_STACK_BASE + MODEL_SHADOW_STACK_SIZE)
         return particle_load_u32(
             &model_shadow_stack[address - MODEL_SHADOW_STACK_BASE]);
+    if (address >= UINT32_C(0x800257b0) &&
+        address < UINT32_C(0x800257b0) +
+            sizeof(model_shadow_resident_caller_instructions) &&
+        (address & 3u) == 0u)
+        return model_shadow_resident_caller_instructions[
+            (address - UINT32_C(0x800257b0)) / 4u];
     return 0u;
 }
 
@@ -1560,6 +1574,31 @@ static void configure_model_ft4_shadow_cpu(CPUState *cpu) {
     cpu->gte_ctrl[25] = 120u << 16u;
     cpu->gte_ctrl[26] = 256u;
     cpu->gte_ctrl[30] = 1024u;
+}
+
+static void configure_overlay_model_dispatch_cpu(CPUState *cpu) {
+    static const uint32_t caller_instructions[] = {
+        UINT32_C(0x8e040004), UINT32_C(0x3c02800b),
+        UINT32_C(0x8c42db08), UINT32_C(0x86070012),
+        UINT32_C(0x3c06800c), UINT32_C(0x8cc6426c),
+        UINT32_C(0x00021080), UINT32_C(0x00501021),
+        UINT32_C(0x8c450008), UINT32_C(0x24c640d0),
+        UINT32_C(0x0c00b1c0), UINT32_C(0x00000000),
+    };
+
+    configure_model_ft4_shadow_cpu(cpu);
+    for (uint32_t index = 0u;
+         index < sizeof(caller_instructions) / sizeof(caller_instructions[0]);
+         ++index)
+        model_shadow_store_word(UINT32_C(0x8007516c) + index * 4u,
+                                caller_instructions[index]);
+    for (uint32_t index = 0u; index < 8u; ++index)
+        model_shadow_store_word(
+            MODEL_SHADOW_SP + 0x58u + index * 4u,
+            model_shadow_read_word(MODEL_SHADOW_SP + 0x10u + index * 4u));
+    model_shadow_store_word(UINT32_C(0x8005953c), 0u);
+    model_shadow_store_word(UINT32_C(0x80059568), 0u);
+    cpu->gpr[31] = UINT32_C(0x8007519c);
 }
 
 static int model_shadow_observe_ft3_guest_pass(
@@ -1804,20 +1843,24 @@ static void note_matching_candidate(void) {
     psx_xg_render_auth_note_candidate_dispatch(&candidate);
 }
 
-static PsxXgRenderAuthCandidate matching_field5_candidate(void) {
+static PsxXgRenderAuthCandidate matching_runtime_variant_candidate(void) {
     PsxXgRenderAuthCandidate candidate = {
-        FIELD5_PRODUCER_ENTRY & 0x1fffffffu,
-        FIELD5_PRODUCER_ENTRY & 0x1fffffffu, 16u,
-        FIELD5_PRODUCER_ENTRY & 0x1fffffffu,
+        RUNTIME_VARIANT_PRODUCER_ENTRY & 0x1fffffffu,
+        UINT32_C(0x0006f000), 282628u,
+        RUNTIME_VARIANT_PRODUCER_ENTRY & 0x1fffffffu,
     };
 
     set_candidate_provenance(&candidate, 0x0006f000u, 282628u,
                              UINT32_C(0xb7ce1120));
+    memcpy(candidate.runtime_variant_identity,
+           xg_render_runtime_variant_descriptors[0].companion_manifest_identity,
+           sizeof(candidate.runtime_variant_identity));
+    candidate.runtime_variant_bound = true;
     return candidate;
 }
 
-static void note_matching_field5_candidate(void) {
-    const PsxXgRenderAuthCandidate candidate = matching_field5_candidate();
+static void note_matching_runtime_variant_candidate(void) {
+    const PsxXgRenderAuthCandidate candidate = matching_runtime_variant_candidate();
 
     psx_xg_render_auth_note_candidate_dispatch(&candidate);
 }
@@ -2147,18 +2190,18 @@ static int test_runtime_rejection_receipt_latches_first_trigger(void) {
     CHECK(rejection_receipt_is(PSX_XG_RENDER_AUTH_REJECTION_SOURCE_NONE,
                                0, PSX_XG_RENDER_AUTH_HOOK_ENTRY, 0u));
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE,
-                                 FIELD5_CAPTURE_NON_JAL,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE,
+                                 RUNTIME_VARIANT_CAPTURE_NON_JAL,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     CHECK(rejection_receipt_is(
         PSX_XG_RENDER_AUTH_REJECTION_SOURCE_VARIANT_HOOK, 1,
-        PSX_XG_RENDER_AUTH_HOOK_CAPTURE, FIELD5_CAPTURE_SITE));
+        PSX_XG_RENDER_AUTH_HOOK_CAPTURE, RUNTIME_VARIANT_CAPTURE_SITE));
     CHECK(strcmp(psx_xg_render_auth_rejection_source_name(
               PSX_XG_RENDER_AUTH_REJECTION_SOURCE_VARIANT_HOOK),
                  "variant_hook") == 0);
@@ -2167,7 +2210,7 @@ static int test_runtime_rejection_receipt_latches_first_trigger(void) {
     psx_xg_render_auth_loader_mismatch(PRODUCER_ENTRY);
     CHECK(rejection_receipt_is(
         PSX_XG_RENDER_AUTH_REJECTION_SOURCE_VARIANT_HOOK, 1,
-        PSX_XG_RENDER_AUTH_HOOK_CAPTURE, FIELD5_CAPTURE_SITE));
+        PSX_XG_RENDER_AUTH_HOOK_CAPTURE, RUNTIME_VARIANT_CAPTURE_SITE));
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
@@ -2208,43 +2251,43 @@ static int test_runtime_direct_hook_rejections_latch_trigger(void) {
     return 1;
 }
 
-static int test_runtime_initial_field5_chain_is_armed(void) {
+static int test_runtime_initial_runtime_variant_chain_is_armed(void) {
     XgRenderAuth *auth = NULL;
     XgRenderAuthSnapshot snapshot = {0};
 
     set_matching_runtime_identity();
     CHECK(xg_render_auth_process_owner(&auth) == XG_RENDER_AUTH_OK);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_CAPTURE_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(snapshot.producer_begin_count == 1u);
     CHECK(snapshot.hook_count == XG_RENDER_AUTH_HOOK_STAGE_COUNT);
     CHECK(!snapshot.native_use_permitted);
 
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_CAPTURE_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(snapshot.reject_reason == XG_RENDER_AUTH_REJECT_NONE);
     CHECK(snapshot.producer_begin_count == 1u);
@@ -2257,18 +2300,18 @@ static int test_runtime_initial_field5_chain_is_armed(void) {
     CHECK(snapshot.hook_count == 0u);
     CHECK(!snapshot.native_use_permitted);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_CAPTURE_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(snapshot.reject_reason == XG_RENDER_AUTH_REJECT_NONE);
     CHECK(snapshot.producer_begin_count == 1u);
@@ -2279,7 +2322,7 @@ static int test_runtime_initial_field5_chain_is_armed(void) {
 }
 
 static int test_runtime_idle_activation_hook_is_relevant(void) {
-    PsxXgRenderAuthCandidate candidate = matching_field5_candidate();
+    PsxXgRenderAuthCandidate candidate = matching_runtime_variant_candidate();
 
     CHECK(!psx_xg_render_auth_cold_hook_relevant(
         PSX_XG_RENDER_AUTH_HOOK_ENTRY, PRODUCER_ENTRY,
@@ -2303,23 +2346,23 @@ static int test_runtime_idle_activation_hook_is_relevant(void) {
         UINT32_C(0x27bdff18)));
     candidate.artifact_crc32 ^= 1u;
     psx_xg_render_auth_note_artifact_candidate(&candidate);
-    CHECK(!psx_xg_render_auth_cold_hook_relevant(
+    CHECK(psx_xg_render_auth_cold_hook_relevant(
         PSX_XG_RENDER_AUTH_HOOK_ENTRY, PRODUCER_ENTRY,
         UINT32_C(0x27bdff18)));
     CHECK(psx_xg_render_auth_cold_hook_relevant(
-        PSX_XG_RENDER_AUTH_HOOK_CAPTURE, FIELD5_ACTIVATION_SITE,
-        FIELD5_ACTIVATION_JAL));
+        PSX_XG_RENDER_AUTH_HOOK_CAPTURE, RUNTIME_VARIANT_ACTIVATION_SITE,
+        RUNTIME_VARIANT_ACTIVATION_JAL));
     CHECK(!psx_xg_render_auth_cold_hook_relevant(
-        PSX_XG_RENDER_AUTH_HOOK_ENTRY, FIELD5_ACTIVATION_SITE,
-        FIELD5_ACTIVATION_JAL));
+        PSX_XG_RENDER_AUTH_HOOK_ENTRY, RUNTIME_VARIANT_ACTIVATION_SITE,
+        RUNTIME_VARIANT_ACTIVATION_JAL));
     CHECK(!psx_xg_render_auth_cold_hook_relevant(
-        PSX_XG_RENDER_AUTH_HOOK_CAPTURE, FIELD5_ACTIVATION_SITE + 4u,
-        FIELD5_ACTIVATION_DELAY));
+        PSX_XG_RENDER_AUTH_HOOK_CAPTURE, RUNTIME_VARIANT_ACTIVATION_SITE + 4u,
+        RUNTIME_VARIANT_ACTIVATION_DELAY));
     return 1;
 }
 
 static int test_runtime_artifact_generation_is_binary_scoped(void) {
-    PsxXgRenderAuthCandidate candidate = matching_field5_candidate();
+    PsxXgRenderAuthCandidate candidate = matching_runtime_variant_candidate();
     uint64_t generation;
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
@@ -2329,7 +2372,6 @@ static int test_runtime_artifact_generation_is_binary_scoped(void) {
     CHECK(generation != 0u);
 
     candidate.producer_entry += 0x100u;
-    candidate.range_start = candidate.producer_entry;
     candidate.dispatch_pc = candidate.producer_entry;
     CHECK(xg_render_runtime_variant_artifact_candidate_matches(&candidate));
     psx_xg_render_auth_note_artifact_candidate(&candidate);
@@ -2341,9 +2383,12 @@ static int test_runtime_artifact_generation_is_binary_scoped(void) {
 static int test_runtime_variant_accepts_bound_code_contract_artifact(void) {
     const XgRenderRuntimeVariantDescriptor *descriptor =
         &xg_render_runtime_variant_descriptors[0];
-    PsxXgRenderAuthCandidate candidate = matching_field5_candidate();
+    PsxXgRenderAuthCandidate candidate = matching_runtime_variant_candidate();
 
     candidate.artifact_crc32 ^= 1u;
+    memset(candidate.runtime_variant_identity, 0,
+           sizeof(candidate.runtime_variant_identity));
+    candidate.runtime_variant_bound = false;
     CHECK(!xg_render_runtime_variant_candidate_matches(&candidate));
     CHECK(!xg_render_runtime_variant_artifact_candidate_matches(&candidate));
     memcpy(candidate.runtime_variant_identity,
@@ -2528,18 +2573,18 @@ static int test_runtime_variant_supersedes_canonical_entry_alias(void) {
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
                                  PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_CAPTURE_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(snapshot.reject_reason == XG_RENDER_AUTH_REJECT_NONE);
     CHECK(snapshot.producer_begin_count == 1u);
@@ -2556,18 +2601,18 @@ static int test_runtime_variant_accepts_entry_at_return_terminal(void) {
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_CAPTURE_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(snapshot.reject_reason == XG_RENDER_AUTH_REJECT_NONE);
     CHECK(snapshot.hook_count == XG_RENDER_AUTH_HOOK_STAGE_COUNT);
@@ -2584,22 +2629,22 @@ static int test_runtime_variant_rearms_at_new_exact_activation(void) {
     CHECK(xg_render_auth_process_owner(&auth) == XG_RENDER_AUTH_OK);
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY + 4u, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY + 4u, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
 
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(snapshot.reject_reason == XG_RENDER_AUTH_REJECT_NONE);
@@ -2617,18 +2662,18 @@ static int test_runtime_variant_consumes_callee_hook_before_return(void) {
     CHECK(xg_render_auth_process_owner(&auth) == XG_RENDER_AUTH_OK);
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
                                  STATIC_CALLEE, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
 
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(snapshot.reject_reason == XG_RENDER_AUTH_REJECT_NONE);
@@ -2643,21 +2688,21 @@ static int test_runtime_variant_rejects_wrong_return_address(void) {
 
     set_matching_runtime_identity();
     psx_xg_render_auth_scene_boundary();
-    note_matching_field5_candidate();
-    cpu.gpr[31] = FIELD5_ACTIVATION_RETURN;
+    note_matching_runtime_variant_candidate();
+    cpu.gpr[31] = RUNTIME_VARIANT_ACTIVATION_RETURN;
     psx_xg_render_auth_warm_hook(&cpu, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_warm_hook(&cpu, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
-    cpu.gpr[31] = FIELD5_RETURN_SITE;
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
+    cpu.gpr[31] = RUNTIME_VARIANT_RETURN_SITE;
     psx_xg_render_auth_warm_hook(&cpu, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
-    cpu.gpr[31] = FIELD5_RETURN_SITE + 4u;
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
+    cpu.gpr[31] = RUNTIME_VARIANT_RETURN_SITE + 4u;
     psx_xg_render_auth_warm_hook(&cpu, PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
     return runtime_snapshot_is(XG_RENDER_AUTH_REJECT_VALIDATION_MISMATCH, 1u);
 }
 
@@ -2666,19 +2711,19 @@ static int test_runtime_variant_rejects_cold_wrong_return_address(void) {
 
     set_matching_runtime_identity();
     psx_xg_render_auth_scene_boundary();
-    cpu.gpr[31] = FIELD5_ACTIVATION_RETURN;
+    cpu.gpr[31] = RUNTIME_VARIANT_ACTIVATION_RETURN;
     test_cold_hook_with_cpu(&cpu, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                            FIELD5_ACTIVATION_SITE, FIELD5_ACTIVATION_JAL,
-                            FIELD5_ACTIVATION_DELAY);
+                            RUNTIME_VARIANT_ACTIVATION_SITE, RUNTIME_VARIANT_ACTIVATION_JAL,
+                            RUNTIME_VARIANT_ACTIVATION_DELAY);
     test_cold_hook_with_cpu(&cpu, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                            FIELD5_PRODUCER_ENTRY, 0u, 0u);
-    cpu.gpr[31] = FIELD5_RETURN_SITE;
+                            RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
+    cpu.gpr[31] = RUNTIME_VARIANT_RETURN_SITE;
     test_cold_hook_with_cpu(&cpu, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                            FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                            FIELD5_CAPTURE_DELAY);
-    cpu.gpr[31] = FIELD5_RETURN_SITE + 4u;
+                            RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                            RUNTIME_VARIANT_CAPTURE_DELAY);
+    cpu.gpr[31] = RUNTIME_VARIANT_RETURN_SITE + 4u;
     test_cold_hook_with_cpu(&cpu, PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                            FIELD5_RETURN_SITE, 0u, 0u);
+                            RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
     return runtime_snapshot_is(XG_RENDER_AUTH_REJECT_VALIDATION_MISMATCH, 1u);
 }
 
@@ -2763,7 +2808,7 @@ static int test_runtime_cold_warm_auth_parity_and_fail_closed_reset(void) {
     return 1;
 }
 
-static int test_runtime_canonicalizes_field5_physical_chain(void) {
+static int test_runtime_canonicalizes_runtime_variant_physical_chain(void) {
     XgRenderAuth *auth = NULL;
     XgRenderAuthSnapshot snapshot = {0};
     XgRenderAuthTraceSnapshot trace = {0};
@@ -2773,27 +2818,27 @@ static int test_runtime_canonicalizes_field5_physical_chain(void) {
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_INTERNAL_CAPTURE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_INTERNAL_CAPTURE, JAL_INSTRUCTION,
                                  0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_INTERNAL_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_INTERNAL_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_INTERNAL_RETURN, 0u, 0u);
+                                 RUNTIME_VARIANT_INTERNAL_RETURN, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_ACTIVATION_RETURN, 0u, 0u);
+                                 RUNTIME_VARIANT_ACTIVATION_RETURN, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_CALLER_RETURN, 0u, 0u);
+                                 RUNTIME_VARIANT_CALLER_RETURN, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(!snapshot.native_use_permitted);
     CHECK(snapshot.logical_identity.producer_entry == PRODUCER_ENTRY);
@@ -2809,7 +2854,7 @@ static int test_runtime_canonicalizes_field5_physical_chain(void) {
     return 1;
 }
 
-static int test_runtime_canonicalizes_field5_physical_alias_chain(void) {
+static int test_runtime_canonicalizes_runtime_variant_physical_alias_chain(void) {
     XgRenderAuth *auth = NULL;
     XgRenderAuthSnapshot snapshot = {0};
     XgRenderAuthTraceSnapshot trace = {0};
@@ -2819,31 +2864,31 @@ static int test_runtime_canonicalizes_field5_physical_alias_chain(void) {
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(
-        PSX_XG_RENDER_AUTH_HOOK_CAPTURE, KUSEG_ADDRESS(FIELD5_ACTIVATION_SITE),
-        FIELD5_ACTIVATION_JAL, FIELD5_ACTIVATION_DELAY);
+        PSX_XG_RENDER_AUTH_HOOK_CAPTURE, KUSEG_ADDRESS(RUNTIME_VARIANT_ACTIVATION_SITE),
+        RUNTIME_VARIANT_ACTIVATION_JAL, RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(
-        PSX_XG_RENDER_AUTH_HOOK_ENTRY, KUSEG_ADDRESS(FIELD5_PRODUCER_ENTRY),
+        PSX_XG_RENDER_AUTH_HOOK_ENTRY, KUSEG_ADDRESS(RUNTIME_VARIANT_PRODUCER_ENTRY),
         0u, 0u);
     psx_xg_render_auth_cold_hook(
-        PSX_XG_RENDER_AUTH_HOOK_CAPTURE, KUSEG_ADDRESS(FIELD5_INTERNAL_CAPTURE),
+        PSX_XG_RENDER_AUTH_HOOK_CAPTURE, KUSEG_ADDRESS(RUNTIME_VARIANT_INTERNAL_CAPTURE),
         JAL_INSTRUCTION, 0u);
     psx_xg_render_auth_cold_hook(
-        PSX_XG_RENDER_AUTH_HOOK_ENTRY, KUSEG_ADDRESS(FIELD5_INTERNAL_ENTRY),
+        PSX_XG_RENDER_AUTH_HOOK_ENTRY, KUSEG_ADDRESS(RUNTIME_VARIANT_INTERNAL_ENTRY),
         0u, 0u);
     psx_xg_render_auth_cold_hook(
-        PSX_XG_RENDER_AUTH_HOOK_RETURN, KUSEG_ADDRESS(FIELD5_INTERNAL_RETURN),
+        PSX_XG_RENDER_AUTH_HOOK_RETURN, KUSEG_ADDRESS(RUNTIME_VARIANT_INTERNAL_RETURN),
         0u, 0u);
     psx_xg_render_auth_cold_hook(
         PSX_XG_RENDER_AUTH_HOOK_RETURN,
-        KUSEG_ADDRESS(FIELD5_ACTIVATION_RETURN), 0u, 0u);
+        KUSEG_ADDRESS(RUNTIME_VARIANT_ACTIVATION_RETURN), 0u, 0u);
     psx_xg_render_auth_cold_hook(
-        PSX_XG_RENDER_AUTH_HOOK_RETURN, KUSEG_ADDRESS(FIELD5_CALLER_RETURN),
+        PSX_XG_RENDER_AUTH_HOOK_RETURN, KUSEG_ADDRESS(RUNTIME_VARIANT_CALLER_RETURN),
         0u, 0u);
     psx_xg_render_auth_cold_hook(
-        PSX_XG_RENDER_AUTH_HOOK_CAPTURE, KUSEG_ADDRESS(FIELD5_CAPTURE_SITE),
-        JAL_INSTRUCTION, FIELD5_CAPTURE_DELAY);
+        PSX_XG_RENDER_AUTH_HOOK_CAPTURE, KUSEG_ADDRESS(RUNTIME_VARIANT_CAPTURE_SITE),
+        JAL_INSTRUCTION, RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_cold_hook(
-        PSX_XG_RENDER_AUTH_HOOK_RETURN, KUSEG_ADDRESS(FIELD5_RETURN_SITE),
+        PSX_XG_RENDER_AUTH_HOOK_RETURN, KUSEG_ADDRESS(RUNTIME_VARIANT_RETURN_SITE),
         0u, 0u);
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(!snapshot.native_use_permitted);
@@ -2860,7 +2905,7 @@ static int test_runtime_canonicalizes_field5_physical_alias_chain(void) {
     return 1;
 }
 
-static int test_runtime_rejects_incomplete_or_mutated_field5_chain(void) {
+static int test_runtime_rejects_incomplete_or_mutated_runtime_variant_chain(void) {
     XgRenderAuth *auth = NULL;
     XgRenderAuthSnapshot snapshot = {0};
 
@@ -2869,132 +2914,132 @@ static int test_runtime_rejects_incomplete_or_mutated_field5_chain(void) {
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(!snapshot.native_use_permitted);
     CHECK(snapshot.producer_begin_count == 0u);
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE, JAL_INSTRUCTION,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(!snapshot.native_use_permitted);
     CHECK(snapshot.producer_begin_count == 0u);
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(!snapshot.native_use_permitted);
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
     CHECK(runtime_snapshot_is(XG_RENDER_AUTH_REJECT_VALIDATION_MISMATCH, 1u));
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION, 0u);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION, 0u);
     CHECK(runtime_snapshot_is(XG_RENDER_AUTH_REJECT_VALIDATION_MISMATCH, 1u));
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, FIELD5_CAPTURE_NON_JAL,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, RUNTIME_VARIANT_CAPTURE_NON_JAL,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     CHECK(runtime_snapshot_is(XG_RENDER_AUTH_REJECT_VALIDATION_MISMATCH, 1u));
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(
-        PSX_XG_RENDER_AUTH_HOOK_CAPTURE, FIELD5_CAPTURE_SITE,
-        FIELD5_CAPTURE_WRONG_TARGET_JAL, FIELD5_CAPTURE_DELAY);
+        PSX_XG_RENDER_AUTH_HOOK_CAPTURE, RUNTIME_VARIANT_CAPTURE_SITE,
+        RUNTIME_VARIANT_CAPTURE_WRONG_TARGET_JAL, RUNTIME_VARIANT_CAPTURE_DELAY);
     CHECK(runtime_snapshot_is(XG_RENDER_AUTH_REJECT_VALIDATION_MISMATCH, 1u));
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE + 4u, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE + 4u, 0u, 0u);
     return runtime_snapshot_is(XG_RENDER_AUTH_REJECT_VALIDATION_MISMATCH, 1u);
 }
 
-static int test_runtime_warm_field5_candidate_validation(void) {
+static int test_runtime_warm_runtime_variant_candidate_validation(void) {
     XgRenderAuth *auth = NULL;
     XgRenderAuthSnapshot snapshot = {0};
     const PsxXgRenderAuthCandidate short_range_candidate = {
-        FIELD5_PRODUCER_ENTRY & 0x1fffffffu, 0x0006f000u, 16u,
-        FIELD5_PRODUCER_ENTRY & 0x1fffffffu,
+        RUNTIME_VARIANT_PRODUCER_ENTRY & 0x1fffffffu, 0x0006f000u, 16u,
+        RUNTIME_VARIANT_PRODUCER_ENTRY & 0x1fffffffu,
     };
 
     set_matching_runtime_identity();
     CHECK(xg_render_auth_process_owner(&auth) == XG_RENDER_AUTH_OK);
 
     psx_xg_render_auth_scene_boundary();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(!snapshot.native_use_permitted);
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_note_candidate_dispatch(&short_range_candidate);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     return runtime_snapshot_is(XG_RENDER_AUTH_REJECT_VALIDATION_MISMATCH, 0u);
 }
 
-static int test_runtime_rejects_followup_field5_capture_before_return(void) {
+static int test_runtime_rejects_followup_runtime_variant_capture_before_return(void) {
     XgRenderAuth *auth = NULL;
     XgRenderAuthSnapshot snapshot = {0};
 
@@ -3003,17 +3048,17 @@ static int test_runtime_rejects_followup_field5_capture_before_return(void) {
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE + 0x10u, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE + 0x10u, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
 
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(snapshot.reject_reason == XG_RENDER_AUTH_REJECT_VALIDATION_MISMATCH);
@@ -3023,18 +3068,18 @@ static int test_runtime_rejects_followup_field5_capture_before_return(void) {
     CHECK(!snapshot.native_use_permitted);
     CHECK(rejection_receipt_is(
         PSX_XG_RENDER_AUTH_REJECTION_SOURCE_VARIANT_HOOK, 1,
-        PSX_XG_RENDER_AUTH_HOOK_CAPTURE, FIELD5_CAPTURE_SITE + 0x10u));
+        PSX_XG_RENDER_AUTH_HOOK_CAPTURE, RUNTIME_VARIANT_CAPTURE_SITE + 0x10u));
     psx_xg_render_auth_scene_boundary();
     return 1;
 }
 
-static int test_runtime_rejects_unbound_field5_candidates(void) {
+static int test_runtime_rejects_unbound_runtime_variant_candidates(void) {
     XgRenderAuth *auth = NULL;
 
     set_matching_runtime_identity();
     CHECK(xg_render_auth_process_owner(&auth) == XG_RENDER_AUTH_OK);
-    for (uint32_t rejection = 0u; rejection < 11u; rejection++) {
-        PsxXgRenderAuthCandidate candidate = matching_field5_candidate();
+    for (uint32_t rejection = 0u; rejection < 10u; rejection++) {
+        PsxXgRenderAuthCandidate candidate = matching_runtime_variant_candidate();
         switch (rejection) {
         case 0u: candidate.authority_provenance = false; break;
         case 1u: candidate.pair_bound = false; break;
@@ -3043,10 +3088,9 @@ static int test_runtime_rejects_unbound_field5_candidates(void) {
         case 4u: candidate.identity.manifest_sha256[0] ^= 1u; break;
         case 5u: candidate.artifact_base += 4u; break;
         case 6u: candidate.artifact_size -= 4u; break;
-        case 7u: candidate.artifact_crc32 ^= 1u; break;
-        case 8u: candidate.producer_entry += 4u; break;
-        case 9u: candidate.dispatch_pc += 4u; break;
-        case 10u:
+        case 7u: candidate.producer_entry += 4u; break;
+        case 8u: candidate.dispatch_pc += 4u; break;
+        case 9u:
             candidate.range_start = 0x0006f000u;
             candidate.range_size = 16u;
             break;
@@ -3054,17 +3098,17 @@ static int test_runtime_rejects_unbound_field5_candidates(void) {
         psx_xg_render_auth_scene_boundary();
         psx_xg_render_auth_note_candidate_dispatch(&candidate);
         psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                     FIELD5_ACTIVATION_SITE,
-                                     FIELD5_ACTIVATION_JAL,
-                                     FIELD5_ACTIVATION_DELAY);
+                                     RUNTIME_VARIANT_ACTIVATION_SITE,
+                                     RUNTIME_VARIANT_ACTIVATION_JAL,
+                                     RUNTIME_VARIANT_ACTIVATION_DELAY);
         psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                     FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                     RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
         CHECK(runtime_snapshot_is(XG_RENDER_AUTH_REJECT_VALIDATION_MISMATCH, 0u));
     }
     return 1;
 }
 
-static int test_runtime_ignores_unrelated_watched_writes_before_field5_entry_and_return(void) {
+static int test_runtime_ignores_unrelated_watched_writes_before_runtime_variant_entry_and_return(void) {
     XgRenderAuth *auth = NULL;
     XgRenderAuthSnapshot snapshot = {0};
 
@@ -3072,39 +3116,39 @@ static int test_runtime_ignores_unrelated_watched_writes_before_field5_entry_and
     CHECK(xg_render_auth_process_owner(&auth) == XG_RENDER_AUTH_OK);
 
     psx_xg_render_auth_scene_boundary();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_note_code_write(1u, 2u,
-                                       FIELD5_ACTIVATION_SITE + 0x100u, 4u);
+                                       RUNTIME_VARIANT_ACTIVATION_SITE + 0x100u, 4u);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(snapshot.reject_reason == XG_RENDER_AUTH_REJECT_NONE);
     CHECK(!snapshot.native_use_permitted);
 
     psx_xg_render_auth_scene_boundary();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_note_code_write(2u, 3u,
-                                       FIELD5_ACTIVATION_SITE + 0x100u, 4u);
+                                       RUNTIME_VARIANT_ACTIVATION_SITE + 0x100u, 4u);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(snapshot.reject_reason == XG_RENDER_AUTH_REJECT_NONE);
     CHECK(!snapshot.native_use_permitted);
@@ -3112,7 +3156,7 @@ static int test_runtime_ignores_unrelated_watched_writes_before_field5_entry_and
     return 1;
 }
 
-static int test_runtime_preserves_pending_field5_candidate_for_protected_pre_activation_write(void) {
+static int test_runtime_preserves_pending_runtime_variant_candidate_for_protected_pre_activation_write(void) {
     XgRenderAuth *auth = NULL;
     XgRenderAuthSnapshot snapshot = {0};
     PsxXgRenderAuthProvenance provenance = {0};
@@ -3121,19 +3165,19 @@ static int test_runtime_preserves_pending_field5_candidate_for_protected_pre_act
     CHECK(xg_render_auth_process_owner(&auth) == XG_RENDER_AUTH_OK);
 
     psx_xg_render_auth_scene_boundary();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     psx_xg_render_auth_note_code_write(1u, 2u, PRODUCER_ENTRY, 4u);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
     psx_xg_render_auth_provenance_snapshot(&provenance);
     CHECK(provenance.candidate_matched);
     CHECK(provenance.candidate_dispatched);
@@ -3151,19 +3195,19 @@ static int test_runtime_rejects_writes_overlapping_protected_auth_ranges(void) {
         CALLER_SITE,
     };
     const uint32_t canonical_write_sizes[] = { 2u, 4u };
-    const uint32_t field5_write_addresses[] = {
-        FIELD5_ACTIVATION_SITE - 8u,
-        FIELD5_PRODUCER_ENTRY,
-        KUSEG_ADDRESS(FIELD5_CAPTURE_SITE - 8u) - 1u,
-        FIELD5_RETURN_SITE,
-        FIELD5_ZOOM_RGB + 4u,
-        FIELD5_ZOOM_RENDER + 0x48u,
-        FIELD5_ZOOM_INITIALIZER + 0xc4u,
+    const uint32_t runtime_variant_write_addresses[] = {
+        RUNTIME_VARIANT_ACTIVATION_SITE - 8u,
+        RUNTIME_VARIANT_PRODUCER_ENTRY,
+        KUSEG_ADDRESS(RUNTIME_VARIANT_CAPTURE_SITE - 8u) - 1u,
+        RUNTIME_VARIANT_RETURN_SITE,
+        RUNTIME_VARIANT_ZOOM_RGB + 4u,
+        RUNTIME_VARIANT_ZOOM_RENDER + 0x48u,
+        RUNTIME_VARIANT_ZOOM_INITIALIZER + 0xc4u,
         UINT32_C(0x80078ef8),
-        FIELD5_PARTICLE_INITIALIZER + 0x100u,
-        FIELD5_PARTICLE_RENDER + 0x200u,
+        RUNTIME_VARIANT_PARTICLE_INITIALIZER + 0x100u,
+        RUNTIME_VARIANT_PARTICLE_RENDER + 0x200u,
     };
-    const uint32_t field5_write_sizes[] = {
+    const uint32_t runtime_variant_write_sizes[] = {
         1u, 4u, 2u, 4u, 4u, 4u, 4u, 8u, 4u, 4u,
     };
 
@@ -3187,23 +3231,23 @@ static int test_runtime_rejects_writes_overlapping_protected_auth_ranges(void) {
     }
 
     for (size_t index = 0u;
-         index < sizeof(field5_write_addresses) / sizeof(field5_write_addresses[0]);
+         index < sizeof(runtime_variant_write_addresses) / sizeof(runtime_variant_write_addresses[0]);
          ++index) {
         psx_xg_render_auth_scene_boundary();
         psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                     FIELD5_ACTIVATION_SITE,
-                                     FIELD5_ACTIVATION_JAL,
-                                     FIELD5_ACTIVATION_DELAY);
+                                     RUNTIME_VARIANT_ACTIVATION_SITE,
+                                     RUNTIME_VARIANT_ACTIVATION_JAL,
+                                     RUNTIME_VARIANT_ACTIVATION_DELAY);
         psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                     FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                     RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
         psx_xg_render_auth_note_code_write(
-            index + 3u, index + 4u, field5_write_addresses[index],
-            field5_write_sizes[index]);
+            index + 3u, index + 4u, runtime_variant_write_addresses[index],
+            runtime_variant_write_sizes[index]);
         CHECK(runtime_snapshot_is(XG_RENDER_AUTH_REJECT_CODE_PAGE_MUTATION, 1u));
         CHECK(rejection_receipt_is(
             PSX_XG_RENDER_AUTH_REJECTION_SOURCE_CODE_PAGE_MUTATION, 0,
             PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-            field5_write_addresses[index] | 0x80000000u));
+            runtime_variant_write_addresses[index] | 0x80000000u));
     }
 
     psx_xg_render_auth_scene_boundary();
@@ -3345,7 +3389,7 @@ static int runtime_has_open_entry_observation(void) {
     return 1;
 }
 
-static int test_source_observation_hooks_preserve_field5_variant_lifecycle(void) {
+static int test_source_observation_hooks_preserve_runtime_variant_variant_lifecycle(void) {
     XgRenderAuth *auth = NULL;
     XgRenderAuthSnapshot snapshot = {0};
     PsxXgRenderSourceSnapshot source = {0};
@@ -3354,21 +3398,21 @@ static int test_source_observation_hooks_preserve_field5_variant_lifecycle(void)
     CHECK(xg_render_auth_process_owner(&auth) == XG_RENDER_AUTH_OK);
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_source_reset();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE, FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE, RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_SOURCE_PRE,
                                  0x800769E4u, 0x8C630100u, 0x80010100u);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_SOURCE_COMMIT,
                                  0x800769E4u, 0x8C630100u, 0x80010100u);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(snapshot.reject_reason == XG_RENDER_AUTH_REJECT_NONE);
     CHECK(!snapshot.native_use_permitted);
@@ -3388,32 +3432,37 @@ static int test_source_observation_hooks_preserve_field5_variant_lifecycle(void)
     return 1;
 }
 
-static void begin_field5_source_sequence(XgRenderAuthTier tier) {
+static void begin_runtime_variant_source_sequence(XgRenderAuthTier tier) {
     psx_xg_render_auth_source_reset();
     psx_xg_render_auth_scene_boundary();
-    if (tier == XG_RENDER_AUTH_TIER_WARM_NATIVE)
-        note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     if (tier == XG_RENDER_AUTH_TIER_WARM_NATIVE) {
         psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                     FIELD5_ACTIVATION_SITE,
-                                     FIELD5_ACTIVATION_JAL,
-                                     FIELD5_ACTIVATION_DELAY);
+                                     RUNTIME_VARIANT_ACTIVATION_SITE,
+                                     RUNTIME_VARIANT_ACTIVATION_JAL,
+                                     RUNTIME_VARIANT_ACTIVATION_DELAY);
         psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                     FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                     RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
         psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                     FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                     FIELD5_CAPTURE_DELAY);
+                                     RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                     RUNTIME_VARIANT_CAPTURE_DELAY);
     } else {
         psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                     FIELD5_ACTIVATION_SITE,
-                                     FIELD5_ACTIVATION_JAL,
-                                     FIELD5_ACTIVATION_DELAY);
+                                     RUNTIME_VARIANT_ACTIVATION_SITE,
+                                     RUNTIME_VARIANT_ACTIVATION_JAL,
+                                     RUNTIME_VARIANT_ACTIVATION_DELAY);
         psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                     FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                     RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
         psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                     FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                     FIELD5_CAPTURE_DELAY);
+                                     RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                     RUNTIME_VARIANT_CAPTURE_DELAY);
     }
+}
+
+static void complete_warm_runtime_variant_sequence(void) {
+    begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_WARM_NATIVE);
+    psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_RETURN,
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
 }
 
 static uint32_t source_pre_auxiliary(
@@ -3525,7 +3574,8 @@ static int test_source_observation_cold_warm_aggregate_parity(void) {
     FieldCharacterShadowSummary warm_collector = {0};
 
     set_matching_runtime_identity();
-    CHECK(descriptor->source_site_count ==
+    CHECK(descriptor->source_site_count == 14u);
+    CHECK(descriptor->source_site_count <=
           XG_RENDER_RUNTIME_VARIANT_SOURCE_SITE_CAP);
     CHECK(descriptor->source_sites[0].operation ==
           XG_RENDER_RUNTIME_VARIANT_SOURCE_SWC2);
@@ -3537,7 +3587,7 @@ static int test_source_observation_cold_warm_aggregate_parity(void) {
           XG_RENDER_RUNTIME_VARIANT_SOURCE_BUCKET);
     CHECK(descriptor->source_sites[8].auxiliary_rule ==
           XG_RENDER_RUNTIME_VARIANT_SOURCE_RESULT_REGISTER);
-    begin_field5_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
+    begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
     for (uint32_t index = 0u; index < descriptor->source_site_count; ++index) {
         PsxXgRenderSourceSiteMetadata metadata = {0};
         const XgRenderRuntimeVariantSourceSite *site =
@@ -3572,7 +3622,7 @@ static int test_source_observation_cold_warm_aggregate_parity(void) {
     psx_xg_render_auth_source_snapshot(&cold_after_boundary);
     CHECK(source_snapshots_are_equivalent(&cold, &cold_after_boundary));
 
-    begin_field5_source_sequence(XG_RENDER_AUTH_TIER_WARM_NATIVE);
+    begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_WARM_NATIVE);
     for (uint32_t index = 0u; index < descriptor->source_site_count; ++index)
         CHECK(observe_source_site(XG_RENDER_AUTH_TIER_WARM_NATIVE,
                                   &descriptor->source_sites[index], index));
@@ -3590,7 +3640,7 @@ static int test_source_observation_diagnostic_overflow_aggregates(void) {
     FieldCharacterShadowSummary collector = {0};
 
     set_matching_runtime_identity();
-    begin_field5_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
+    begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
     for (uint32_t index = 0u;
          index <= FIELD_CHARACTER_SHADOW_MINIMUM_FAMILY_COUNT; ++index)
         CHECK(observe_source_site(XG_RENDER_AUTH_TIER_COLD_INTERPRETER,
@@ -3646,14 +3696,14 @@ static int test_source_observation_fail_closed_cases(void) {
     CHECK(source_snapshot_is_blocked(0));
     CHECK(source_collector_is_empty());
 
-    begin_field5_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
+    begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
     CHECK(!psx_xg_render_auth_cold_source_observe(
         PSX_XG_RENDER_SOURCE_STAGE_COMMIT, site->pc, site->instruction,
         0x80010100u));
     CHECK(source_snapshot_is_blocked(0));
     CHECK(source_collector_is_empty());
 
-    begin_field5_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
+    begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
     CHECK(psx_xg_render_auth_cold_source_observe(
         PSX_XG_RENDER_SOURCE_STAGE_PRE, site->pc, site->instruction,
         0x80010100u));
@@ -3662,7 +3712,7 @@ static int test_source_observation_fail_closed_cases(void) {
         0x80010100u));
     CHECK(source_snapshot_is_blocked(0));
 
-    begin_field5_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
+    begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
     CHECK(psx_xg_render_auth_cold_source_observe(
         PSX_XG_RENDER_SOURCE_STAGE_PRE, site->pc, site->instruction,
         0x80010100u));
@@ -3671,7 +3721,7 @@ static int test_source_observation_fail_closed_cases(void) {
         0x80010100u));
     CHECK(source_snapshot_is_blocked(0));
 
-    begin_field5_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
+    begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
     CHECK(psx_xg_render_auth_cold_source_observe(
         PSX_XG_RENDER_SOURCE_STAGE_PRE, site->pc, site->instruction,
         0x80010100u));
@@ -3680,46 +3730,46 @@ static int test_source_observation_fail_closed_cases(void) {
         0x80010104u));
     CHECK(source_snapshot_is_blocked(0));
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
     CHECK(xg_render_auth_process_owner(&auth) == XG_RENDER_AUTH_OK);
     CHECK(xg_render_auth_snapshot(auth, &auth_snapshot) == XG_RENDER_AUTH_OK);
     CHECK(!auth_snapshot.native_use_permitted);
     CHECK(auth_snapshot.hook_count == XG_RENDER_AUTH_HOOK_STAGE_COUNT);
 
-    begin_field5_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
+    begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
     CHECK(psx_xg_render_auth_cold_source_observe(
         PSX_XG_RENDER_SOURCE_STAGE_PRE, site->pc, site->instruction,
         0x80010100u));
     psx_xg_render_auth_scene_boundary();
     CHECK(source_snapshot_is_blocked(0));
 
-    begin_field5_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
+    begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
     CHECK(psx_xg_render_auth_cold_source_observe(
         PSX_XG_RENDER_SOURCE_STAGE_PRE, site->pc, site->instruction,
         0x80010100u));
-    psx_xg_render_auth_loader_mismatch(FIELD5_PRODUCER_ENTRY);
+    psx_xg_render_auth_loader_mismatch(RUNTIME_VARIANT_PRODUCER_ENTRY);
     CHECK(source_snapshot_is_blocked(0));
 
-    begin_field5_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
+    begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
     CHECK(psx_xg_render_auth_cold_source_observe(
         PSX_XG_RENDER_SOURCE_STAGE_PRE, site->pc, site->instruction,
         0x80010100u));
-    psx_xg_render_auth_note_code_write(1u, 2u, FIELD5_CAPTURE_SITE, 4u);
+    psx_xg_render_auth_note_code_write(1u, 2u, RUNTIME_VARIANT_CAPTURE_SITE, 4u);
     CHECK(source_snapshot_is_blocked(0));
 
     {
-        PsxXgRenderAuthCandidate candidate = matching_field5_candidate();
+        PsxXgRenderAuthCandidate candidate = matching_runtime_variant_candidate();
 
         candidate.identity.game_sha256[0] ^= 1u;
         psx_xg_render_auth_source_reset();
         psx_xg_render_auth_scene_boundary();
         psx_xg_render_auth_note_candidate_dispatch(&candidate);
         psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                     FIELD5_ACTIVATION_SITE,
-                                     FIELD5_ACTIVATION_JAL,
-                                     FIELD5_ACTIVATION_DELAY);
+                                     RUNTIME_VARIANT_ACTIVATION_SITE,
+                                     RUNTIME_VARIANT_ACTIVATION_JAL,
+                                     RUNTIME_VARIANT_ACTIVATION_DELAY);
         psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                     FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                     RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
         psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_SOURCE_PRE,
                                      site->pc, site->instruction,
                                      0x80010100u);
@@ -3730,7 +3780,7 @@ static int test_source_observation_fail_closed_cases(void) {
 }
 
 static int test_runtime_variant_context_mutations_do_not_observe(void) {
-    PsxXgRenderAuthCandidate candidate = matching_field5_candidate();
+    PsxXgRenderAuthCandidate candidate = matching_runtime_variant_candidate();
 
     set_matching_runtime_identity();
 
@@ -3738,76 +3788,76 @@ static int test_runtime_variant_context_mutations_do_not_observe(void) {
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_note_candidate_dispatch(&candidate);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     CHECK(runtime_has_no_authenticated_observations());
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY + 4u, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY + 4u, 0u, 0u);
     CHECK(runtime_has_no_authenticated_observations());
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE + 4u,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE + 4u,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     CHECK(runtime_has_no_authenticated_observations());
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE + 4u, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE + 4u, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     CHECK(runtime_has_open_entry_observation());
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
-    psx_xg_render_auth_note_code_write(41u, 42u, FIELD5_CAPTURE_SITE, 4u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
+    psx_xg_render_auth_note_code_write(41u, 42u, RUNTIME_VARIANT_CAPTURE_SITE, 4u);
     CHECK(runtime_snapshot_is(XG_RENDER_AUTH_REJECT_CODE_PAGE_MUTATION, 1u));
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE + 4u, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE + 4u, 0u, 0u);
     CHECK(runtime_snapshot_is(XG_RENDER_AUTH_REJECT_VALIDATION_MISMATCH, 1u));
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_FOREIGN_INTERIOR,
-                                 FIELD5_CAPTURE_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, 0u, 0u);
     CHECK(runtime_snapshot_is(XG_RENDER_AUTH_REJECT_VALIDATION_MISMATCH, 1u));
     psx_xg_render_auth_scene_boundary();
     return 1;
@@ -3820,7 +3870,7 @@ static int capture_ft4_geometry(XgRenderAuthTier tier,
     CPUState cpu = {0};
     PsxXgRenderFt4GeometrySnapshot snapshot = {0};
 
-    begin_field5_source_sequence(tier);
+    begin_runtime_variant_source_sequence(tier);
     psx_xg_render_auth_ft4_geometry_enable(true);
     CHECK(configure_host_geometry_cpu(&cpu, 0x80101000u));
     CHECK(observe_source_site_cpu(&cpu, tier, call_site, 0u));
@@ -3881,13 +3931,13 @@ static int test_native_stream_authority_starts_at_authenticated_scene(void) {
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     CHECK(!guest_render_native_stream_enabled());
     set_matching_runtime_identity();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     CHECK(guest_render_native_stream_enabled());
     psx_xg_render_auth_scene_boundary();
     CHECK(guest_render_native_stream_enabled());
@@ -3903,13 +3953,13 @@ static int test_disabled_producer_family_does_not_abort_native_scene(void) {
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     CHECK(guest_render_bridge_snapshot(&before) == GUEST_RENDER_OK);
     CHECK(before.modes.effective_render_mode == GUEST_RENDER_RENDER_NATIVE);
 
@@ -3970,7 +4020,7 @@ static int test_resident_residual_recaptures_after_producer_write(void) {
         &cpu, command, UINT32_C(0x8007dbb4), 0x70u);
     psx_xg_render_auth_note_code_write(
         2u, 3u, command + 0x1cu, 4u);
-    psx_xg_render_auth_loader_mismatch(FIELD5_CAPTURE_SITE);
+    psx_xg_render_auth_loader_mismatch(RUNTIME_VARIANT_CAPTURE_SITE);
 
     psx_xg_render_auth_scene_boundary();
     guest_render_native_stream_set_enabled(true);
@@ -3989,9 +4039,9 @@ static int test_resident_residual_recaptures_after_producer_write(void) {
                 target->b = 0x70u;
             }
     }
-    CHECK(guest_render_native_stream_resolve_active_miss(
+    CHECK(!guest_render_native_stream_resolve_active_miss(
         &identity, &packet_semantic, &visual_id, &semantic));
-    CHECK(visual_id.scene_epoch != 0u);
+    CHECK(visual_id.scene_epoch == 0u);
     guest_render_native_stream_set_enabled(false);
     return 1;
 }
@@ -4073,13 +4123,13 @@ static int test_native_particle_sidecar_and_cutover(void) {
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     configure_particle_cpu(&cpu);
     cpu.gpr[5] = 0u;
     cpu.gpr[6] = 2u;
@@ -4183,13 +4233,13 @@ static int test_native_particle_requires_authenticated_sidecar(void) {
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     configure_particle_cpu(&cpu);
 
     CHECK(!psx_xg_render_auth_native_ft4_bypass(
@@ -4217,13 +4267,13 @@ static int test_native_particle_retains_native_on_presentation_gate_failure(void
         GUEST_RENDER_TIMING_NATIVE_59_94, GUEST_RENDER_RENDER_NATIVE,
         test_presentation_gate, NULL));
     set_matching_runtime_identity();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     configure_particle_cpu(&cpu);
     cpu.gpr[5] = 0u;
     cpu.gpr[6] = 2u;
@@ -4254,12 +4304,12 @@ static int test_native_particle_cold_observer_rejects_tag_mismatch(void) {
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
-    note_matching_field5_candidate();
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
+    note_matching_runtime_variant_candidate();
     configure_particle_cpu(&cpu);
     cpu.gpr[5] = 0u;
     cpu.gpr[6] = 2u;
@@ -4286,13 +4336,13 @@ static int test_native_particle_code_write_invalidates_sidecar(void) {
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     configure_particle_cpu(&cpu);
     cpu.gpr[5] = 0u;
     cpu.gpr[6] = 2u;
@@ -4301,7 +4351,7 @@ static int test_native_particle_code_write_invalidates_sidecar(void) {
     materialize_particle_source();
     CHECK(psx_xg_render_auth_particle_test_source_present(PARTICLE_BASE));
     psx_xg_render_auth_note_code_write(
-        1u, 2u, FIELD5_PARTICLE_INITIALIZER + 4u, 4u);
+        1u, 2u, RUNTIME_VARIANT_PARTICLE_INITIALIZER + 4u, 4u);
     CHECK(!psx_xg_render_auth_particle_test_source_present(PARTICLE_BASE));
     psx_xg_render_auth_scene_boundary();
     return 1;
@@ -4314,24 +4364,24 @@ static int test_completed_proof_write_retires_auth_without_scene_reset(void) {
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     configure_particle_cpu(&cpu);
     cpu.gpr[5] = 0u;
     cpu.gpr[6] = 2u;
     CHECK(!psx_xg_render_auth_native_ft4_bypass(
-        &cpu, FIELD5_PARTICLE_INITIALIZER, UINT32_C(0x27bdff68)));
+        &cpu, RUNTIME_VARIANT_PARTICLE_INITIALIZER, UINT32_C(0x27bdff68)));
     CHECK(psx_xg_render_auth_particle_test_source_present(PARTICLE_BASE));
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
 
     psx_xg_render_auth_note_code_write(
         1u, 2u, UINT32_C(0x80071a90), 4u);
@@ -4340,18 +4390,18 @@ static int test_completed_proof_write_retires_auth_without_scene_reset(void) {
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(snapshot.hook_count == 0u);
 
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
     CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
     CHECK(snapshot.hook_count == XG_RENDER_AUTH_HOOK_STAGE_COUNT);
     psx_xg_render_auth_scene_boundary();
@@ -4364,20 +4414,20 @@ static int test_native_particle_generation_survives_resets(void) {
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     configure_particle_cpu(&cpu);
     cpu.gpr[5] = 0u;
     cpu.gpr[6] = 2u;
     CHECK(!psx_xg_render_auth_native_ft4_bypass(
-        &cpu, FIELD5_PARTICLE_INITIALIZER, UINT32_C(0x27bdff68)));
+        &cpu, RUNTIME_VARIANT_PARTICLE_INITIALIZER, UINT32_C(0x27bdff68)));
     first_generation =
         psx_xg_render_auth_runtime_test_particle_generation(PARTICLE_BASE);
     CHECK(first_generation != 0u);
 
     psx_xg_render_auth_scene_boundary();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     CHECK(!psx_xg_render_auth_native_ft4_bypass(
-        &cpu, FIELD5_PARTICLE_INITIALIZER, UINT32_C(0x27bdff68)));
+        &cpu, RUNTIME_VARIANT_PARTICLE_INITIALIZER, UINT32_C(0x27bdff68)));
     CHECK(psx_xg_render_auth_runtime_test_particle_generation(PARTICLE_BASE) >
           first_generation);
     psx_xg_render_auth_scene_boundary();
@@ -4477,7 +4527,7 @@ static int test_zoom_opcode_2e_template_contract_is_producer_scoped(void) {
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
     configure_zoom_memory();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     memcpy(guest_templates_before, zoom_memory, sizeof(zoom_memory));
 
     CHECK(materialize_zoom_source(&cpu, 1u, 1u));
@@ -4531,7 +4581,7 @@ static int test_overlay_same_instruction_requires_exact_artifact_candidate(void)
     return 1;
 }
 
-static int test_overlay_artifact_authority_is_not_field5_specific(void) {
+static int test_overlay_artifact_authority_is_not_runtime_variant_specific(void) {
     PsxXgRenderAuthCandidate candidate = {
         UINT32_C(0x801e927c), UINT32_C(0x801e927c), 0x50u,
         UINT32_C(0x801e927c),
@@ -4835,7 +4885,7 @@ static int test_sidecar_rejects_address_reuse_across_scene_and_stale_packet(void
     PsxXgRenderSpriteFt4ShadowSnapshot sprite = {0};
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     sidecar_packet_watch_registered = false;
     sidecar_source_watch_registered = false;
     psx_xg_render_auth_register_code_watches(record_render_code_watch);
@@ -4887,7 +4937,7 @@ static int test_sidecar_rejects_address_reuse_across_scene_and_stale_packet(void
     CHECK(!guest_render_native_stream_resolve_miss(&miss, &first));
     miss.command_id = KUSEG_ADDRESS(PACKET + 4u);
     CHECK(guest_render_native_stream_resolve_miss(&miss, &first));
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     ++miss.visual_id.state_sequence;
     CHECK(guest_render_native_stream_stage_exact(
               miss.visual_id, miss.command_id, &first) ==
@@ -4987,7 +5037,7 @@ static int test_field_sprite_overlay_accepts_runtime_observed_capacity(void) {
     for (uint32_t index = 0u; index < OBSERVED_TEMPLATE_COUNT; ++index) {
         const uint32_t packet = packet_base + index * 0x28u;
 
-        if (index == 1u) note_matching_field5_candidate();
+        if (index == 1u) note_matching_runtime_variant_candidate();
         cpu.gpr[6] = packet;
         CHECK(!psx_xg_render_auth_native_ft4_bypass(
             &cpu, UINT32_C(0x8002675c), UINT32_C(0x27bdffb0)));
@@ -5050,7 +5100,7 @@ static int test_field_sprite_identity_normalizes_packet_buffer(void) {
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     guest_render_native_stream_set_enabled(true);
     CHECK(guest_render_native_stream_stage_exact(
               visual_id, UINT32_C(0x100), &placeholder) ==
@@ -5292,7 +5342,7 @@ static int test_native_zoom_unity_sidecar_and_ordering(void) {
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
     configure_zoom_memory();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
 
     CHECK(materialize_zoom_source(&cpu, 1u, 1u));
 
@@ -5427,7 +5477,7 @@ static int test_native_zoom_projects_without_packet_sources(void) {
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
     configure_zoom_memory();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
 
     CHECK(materialize_zoom_source(&cpu, 0u, 0u));
 
@@ -5470,7 +5520,7 @@ static int test_native_zoom_requires_authenticated_initializer(void) {
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
     configure_zoom_memory();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     memset(&cpu, 0, sizeof(cpu));
     cpu.read_word = zoom_read_word;
     cpu.write_word = zoom_write_word;
@@ -5491,7 +5541,7 @@ static int test_native_zoom_requires_authenticated_initializer(void) {
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
     configure_zoom_memory();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     CHECK(materialize_zoom_source(&cpu, 1u, 1u));
     cpu.gpr[29] = ZOOM_ENTRY_SP;
     cpu.gpr[31] = UINT32_C(0x80078f04);
@@ -5509,7 +5559,7 @@ static int test_native_zoom_requires_authenticated_initializer(void) {
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
     configure_zoom_memory();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     CHECK(materialize_zoom_source(&cpu, 0u, 0u));
     cpu.gpr[29] = ZOOM_ENTRY_SP;
     cpu.gpr[31] = UINT32_C(0x80078f00);
@@ -7639,6 +7689,16 @@ static int model_ft4_raw_shadow_reconstructs_source(uint8_t dispatch_mode) {
     CHECK(!psx_xg_render_auth_native_ft4_bypass(
         &cpu, UINT32_C(0x8002d100), UINT32_C(0x3c048006)));
     model_shadow_store_word(UINT32_C(0x80059424), MODEL_SHADOW_PACKET);
+    model_shadow_store_word(MODEL_SHADOW_PACKET + 4u,
+                            UINT32_C(0x2f808080));
+    model_shadow_store_word(MODEL_SHADOW_PACKET + 12u,
+                            UINT32_C(0x00420000));
+    model_shadow_store_word(MODEL_SHADOW_PACKET + 20u,
+                            UINT32_C(0x00182010));
+    model_shadow_store_word(MODEL_SHADOW_PACKET + 28u,
+                            UINT32_C(0x00000020));
+    model_shadow_store_word(MODEL_SHADOW_PACKET + 36u,
+                            UINT32_C(0x00004030));
     CHECK(!psx_xg_render_auth_native_ft4_bypass(
         &cpu, UINT32_C(0x8002c700), UINT32_C(0x27bdffd0)));
     cpu.gpr[4] = MODEL_SHADOW_TOPOLOGY + 4u;
@@ -7771,20 +7831,20 @@ static int test_resident_model_uses_completed_proof_after_artifact_retirement(vo
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
     psx_xg_render_auth_note_code_write(
-        1u, 2u, FIELD5_CAPTURE_SITE, 4u);
+        1u, 2u, RUNTIME_VARIANT_CAPTURE_SITE, 4u);
     CHECK(!psx_xg_render_auth_runtime_test_artifact_active());
 
     configure_model_ft4_shadow_cpu(&cpu);
@@ -7797,21 +7857,14 @@ static int test_resident_model_uses_completed_proof_after_artifact_retirement(vo
     return 1;
 }
 
-static int test_field_model_dispatch_does_not_require_resident_globals(void) {
+static int test_overlay_model_dispatch_uses_exact_descriptor_contract(void) {
     CPUState cpu;
     PsxXgRenderModelFt4ShadowSnapshot snapshot = {0};
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
-    note_matching_field5_candidate();
-    configure_model_ft4_shadow_cpu(&cpu);
-    for (uint32_t index = 0u; index < 8u; ++index)
-        model_shadow_store_word(
-            MODEL_SHADOW_SP + 0x58u + index * 4u,
-            model_shadow_read_word(MODEL_SHADOW_SP + 0x10u + index * 4u));
-    model_shadow_store_word(UINT32_C(0x8005953c), 0u);
-    model_shadow_store_word(UINT32_C(0x80059568), 0u);
-    cpu.gpr[31] = UINT32_C(0x8007519c);
+    complete_warm_runtime_variant_sequence();
+    configure_overlay_model_dispatch_cpu(&cpu);
     CHECK(!psx_xg_render_auth_native_ft4_bypass(
         &cpu, UINT32_C(0x8002c700), UINT32_C(0x27bdffd0)));
     cpu.gpr[4] = MODEL_SHADOW_TOPOLOGY + 4u;
@@ -7828,13 +7881,32 @@ static int test_field_model_dispatch_does_not_require_resident_globals(void) {
     return 1;
 }
 
+static int test_overlay_model_dispatch_rejects_mutated_caller(void) {
+    CPUState cpu;
+    PsxXgRenderModelFt4ShadowSnapshot snapshot = {0};
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    complete_warm_runtime_variant_sequence();
+    configure_overlay_model_dispatch_cpu(&cpu);
+    model_shadow_store_word(UINT32_C(0x80075190), UINT32_C(0x24c640d1));
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8002c700), UINT32_C(0x27bdffd0)));
+    psx_xg_render_auth_model_ft4_shadow_snapshot(&snapshot);
+    CHECK(snapshot.dispatch_begin_count == 0u);
+    CHECK(!snapshot.pending);
+    CHECK(!snapshot.blocked);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
 static int test_model_ft4_unsupported_invocation_does_not_poison_shadow(void) {
     CPUState cpu;
     PsxXgRenderModelFt4ShadowSnapshot snapshot = {0};
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     configure_model_ft4_shadow_cpu(&cpu);
     CHECK(!psx_xg_render_auth_native_ft4_bypass(
         &cpu, UINT32_C(0x8002c700), UINT32_C(0x27bdffd0)));
@@ -7871,7 +7943,7 @@ static int test_model_ft4_native_accepts_runtime_observed_group_size(void) {
     const uint32_t rejected_packet = MODEL_SHADOW_PACKET +
         (RUNTIME_OBSERVED_PRIMITIVE_COUNT - 1u) * 0x28u;
     PsxXgRenderAuthCandidate replacement_artifact =
-        matching_field5_candidate();
+        matching_runtime_variant_candidate();
     CPUState cpu;
     GpuRenderSemantic placeholder = {
         .topology = GPU_RENDER_SEMANTIC_TRIANGLES,
@@ -7895,7 +7967,7 @@ static int test_model_ft4_native_accepts_runtime_observed_group_size(void) {
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     guest_render_native_stream_set_enabled(true);
     CHECK(guest_render_native_stream_stage_exact(
               visual_id, UINT32_C(0x100), &placeholder) ==
@@ -7921,10 +7993,16 @@ static int test_model_ft4_native_accepts_runtime_observed_group_size(void) {
     for (uint32_t primitive = 0u;
          primitive < RUNTIME_OBSERVED_PRIMITIVE_COUNT; ++primitive) {
         const uint32_t material = material_base + 8u + primitive * 12u;
+        const uint32_t packet = MODEL_SHADOW_PACKET + primitive * 0x28u;
 
         model_shadow_store_word(material, UINT32_C(0x2f808080));
         model_shadow_store_word(material + 4u, UINT32_C(0x20100000));
         model_shadow_store_word(material + 8u, UINT32_C(0x40300020));
+        model_shadow_store_word(packet + 4u, UINT32_C(0x2f808080));
+        model_shadow_store_word(packet + 12u, UINT32_C(0x00420000));
+        model_shadow_store_word(packet + 20u, UINT32_C(0x00182010));
+        model_shadow_store_word(packet + 28u, UINT32_C(0x00000020));
+        model_shadow_store_word(packet + 36u, UINT32_C(0x00004030));
     }
 
     cpu.gpr[7] = XG_MODEL_FT4_RAW_DISPATCH_FARTHEST;
@@ -8004,7 +8082,7 @@ static int test_model_ft4_native_accepts_runtime_observed_group_size(void) {
         model_shadow_store_word(packet, UINT32_C(0x09000000) | previous);
         model_shadow_store_word(packet + 4u, UINT32_C(0x2f808080));
         model_shadow_store_word(packet + 12u, UINT32_C(0x00420000));
-        model_shadow_store_word(packet + 20u, UINT32_C(0x01232010));
+        model_shadow_store_word(packet + 20u, UINT32_C(0x00182010));
         model_shadow_store_word(packet + 28u, UINT32_C(0x00000020));
         model_shadow_store_word(packet + 36u, UINT32_C(0x00004030));
         for (uint32_t vertex = 0u; vertex < 4u; ++vertex)
@@ -8048,7 +8126,7 @@ static int test_model_ft4_native_accepts_runtime_observed_group_size(void) {
     psx_xg_render_auth_note_code_write(
         2u, 3u, UINT32_C(0x8004fe50), 4u);
     psx_xg_render_auth_note_code_write(
-        3u, 4u, FIELD5_CAPTURE_SITE, 4u);
+        3u, 4u, RUNTIME_VARIANT_CAPTURE_SITE, 4u);
     psx_xg_render_auth_model_ft4_shadow_snapshot(&snapshot);
     CHECK(!snapshot.blocked);
     replacement_artifact.artifact_crc32 ^= 1u;
@@ -8167,7 +8245,7 @@ static int test_model_ft3_native_decodes_descriptor_and_publishes_after_finish(
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     guest_render_native_stream_set_enabled(true);
     CHECK(guest_render_native_stream_stage_exact(
               visual_id, UINT32_C(0x100), &placeholder) ==
@@ -8246,10 +8324,10 @@ static int test_model_ft3_native_decodes_descriptor_and_publishes_after_finish(
     }
     CHECK(resolved.interpolation_identity.valid);
     CHECK(resolved.interpolation_identity.producer_id ==
-          ((MODEL_SHADOW_MODEL & UINT32_C(0x1fffffff)) |
-           (UINT32_C(1) << 31u)));
+          (MODEL_SHADOW_MODEL & UINT32_C(0x1fffffff)));
     CHECK(resolved.interpolation_identity.primitive_id ==
-          ((MODEL_SHADOW_MATERIAL + 8u) & UINT32_C(0x1fffffff)));
+          (((MODEL_SHADOW_MATERIAL + 8u) & UINT32_C(0x1fffffff)) |
+           UINT32_C(1)));
     for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
         CHECK(resolved.triangles[0].vertices[vertex]
                   .interpolation_vertex_identity_valid);
@@ -8373,7 +8451,7 @@ static int test_model_ft3_native_cull_uses_wide_margin(void) {
 
             CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
             set_matching_runtime_identity();
-            note_matching_field5_candidate();
+            note_matching_runtime_variant_candidate();
             xg_host_3d_configure_native_view(wide != 0u, 54 << 16);
             configure_model_ft4_shadow_cpu(&cpu);
             initial_counter = model_shadow_read_word(UINT32_C(0x80059578));
@@ -8432,7 +8510,7 @@ static int test_model_ft3_native_cull_uses_wide_margin(void) {
 
         CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
         set_matching_runtime_identity();
-        note_matching_field5_candidate();
+        note_matching_runtime_variant_candidate();
         xg_host_3d_configure_native_view(0, 0);
         configure_model_ft4_shadow_cpu(&cpu);
         cpu.gte_ctrl[24] = 1010u << 16u;
@@ -8663,7 +8741,7 @@ static int test_sprite_ft4_native_contract_is_wrapper_scoped(void) {
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
-    note_matching_field5_candidate();
+    note_matching_runtime_variant_candidate();
     guest_render_native_stream_set_enabled(true);
     CHECK(guest_render_native_stream_stage_exact(
               visual_id, UINT32_C(0x100), &placeholder) ==
@@ -8738,7 +8816,7 @@ static int test_sprite_ft4_native_contract_is_wrapper_scoped(void) {
     CHECK(snapshot.native_primitive_count == 1u);
     CHECK(snapshot.resident_publish_source_count == 1u);
     psx_xg_render_auth_note_code_write(
-        2u, 3u, FIELD5_CAPTURE_SITE, 4u);
+        2u, 3u, RUNTIME_VARIANT_CAPTURE_SITE, 4u);
     psx_xg_render_auth_sprite_ft4_shadow_snapshot(&snapshot);
     CHECK(!snapshot.blocked);
     CHECK(guest_render_native_stream_resolve_miss(&miss, &resolved));
@@ -8813,7 +8891,7 @@ static int test_resident_ft4_geometry_accepts_scratchpad_stack(void) {
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_SHADOW));
     set_matching_runtime_identity();
-    begin_field5_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
+    begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
     psx_xg_render_auth_ft4_geometry_enable(true);
     CHECK(configure_host_geometry_cpu(&cpu, 0x80101000u));
     producer_family_stack_base = UINT32_C(0x1f8002c0);
@@ -8838,7 +8916,7 @@ static int test_native_ft4_bypass_accepts_scratchpad_outputs(void) {
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
-    begin_field5_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
+    begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
     psx_xg_render_auth_ft4_geometry_enable(true);
     CHECK(configure_host_geometry_cpu(&cpu, 0x80101000u));
     producer_family_stack_base = UINT32_C(0x1f8002c0);
@@ -8866,7 +8944,7 @@ static int test_resident_ft4_geometry_rejects_wrong_caller_and_stride(void) {
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_SHADOW));
     set_matching_runtime_identity();
-    begin_field5_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
+    begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
     psx_xg_render_auth_ft4_geometry_enable(true);
     CHECK(configure_host_geometry_cpu(&cpu, 0x80101000u));
     CHECK(observe_source_site_cpu(&cpu,
@@ -8880,7 +8958,7 @@ static int test_resident_ft4_geometry_rejects_wrong_caller_and_stride(void) {
     CHECK(snapshot.blocked);
     CHECK(snapshot.queued_count == 0u);
 
-    begin_field5_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
+    begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
     psx_xg_render_auth_ft4_geometry_enable(true);
     CHECK(configure_host_geometry_cpu(&cpu, 0x80101000u));
     CHECK(observe_source_site_cpu(&cpu,
@@ -9036,20 +9114,21 @@ static int test_producer_family_native_stages_authenticated_source(void) {
     set_matching_runtime_identity();
     psx_xg_render_auth_source_reset();
     psx_xg_render_auth_scene_boundary();
+    note_matching_runtime_variant_candidate();
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     psx_xg_render_auth_producer_family_enable(true);
     cpu.read_half = producer_family_read_half;
     cpu.read_word = producer_family_read_word;
     CHECK(produce_family_candidate_for_actor(
         &cpu, call_site, bucket_site, 0x800b06dcu, 250u, 0u));
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_CAPTURE_SITE, JAL_INSTRUCTION,
-                                 FIELD5_CAPTURE_DELAY);
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
     CHECK(produce_family_candidate_for_actor(
         &cpu, call_site, bucket_site, 0x800b071cu, 250u, 1u));
     psx_xg_render_auth_producer_family_snapshot(&snapshot);
@@ -9079,7 +9158,7 @@ static int test_producer_family_native_stages_authenticated_source(void) {
     CHECK(auth_snapshot.native_item_count == 0u);
     CHECK(!auth_snapshot.native_use_permitted);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                 FIELD5_RETURN_SITE, 0u, 0u);
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
     CHECK(xg_render_auth_snapshot(auth, &auth_snapshot) == XG_RENDER_AUTH_OK);
     CHECK(!auth_snapshot.scene_aborted);
     CHECK(auth_snapshot.native_item_count == 2u);
@@ -9107,7 +9186,7 @@ static int test_producer_family_shadow_compares_without_staging(void) {
     guest_render_transaction_test_reset();
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_SHADOW));
     set_matching_runtime_identity();
-    begin_field5_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
+    begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
     psx_xg_render_auth_producer_family_enable(true);
     cpu.read_half = producer_family_read_half;
     cpu.read_word = producer_family_read_word;
@@ -9168,7 +9247,7 @@ static int test_runtime_render_modes_are_independent_and_gate_staging(void) {
             test_presentation_gate, NULL));
         set_matching_runtime_identity();
         psx_xg_render_auth_cold_enable(true);
-        begin_field5_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
+        begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
         psx_xg_render_auth_producer_family_enable(true);
         CHECK(produce_family_candidate(&cpu, call_site, bucket_site,
                                        0x800b06dcu, 250u));
@@ -9197,7 +9276,7 @@ static int test_runtime_render_modes_are_independent_and_gate_staging(void) {
             CHECK(stream_snapshot.staged_count == 0u);
         }
         psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_RETURN,
-                                     FIELD5_RETURN_SITE, 0u, 0u);
+                                     RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
         CHECK(xg_render_auth_process_owner(&auth) == XG_RENDER_AUTH_OK);
         CHECK(xg_render_auth_snapshot(auth, &auth_snapshot) ==
               XG_RENDER_AUTH_OK);
@@ -9236,13 +9315,14 @@ static int test_runtime_discards_pre_capture_provisional_candidate(void) {
     set_matching_runtime_identity();
     psx_xg_render_auth_source_reset();
     psx_xg_render_auth_scene_boundary();
+    note_matching_runtime_variant_candidate();
     psx_xg_render_auth_producer_family_enable(true);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
-                                 FIELD5_ACTIVATION_SITE,
-                                 FIELD5_ACTIVATION_JAL,
-                                 FIELD5_ACTIVATION_DELAY);
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
     psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
-                                 FIELD5_PRODUCER_ENTRY, 0u, 0u);
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
     CHECK(produce_family_candidate(&cpu, call_site, bucket_site,
                                    0x800b06dcu, 250u));
     CHECK(guest_render_bridge_snapshot(&bridge) == GUEST_RENDER_OK);
@@ -9277,7 +9357,7 @@ static int test_runtime_gate_failure_retains_native_authority(void) {
         GUEST_RENDER_TIMING_NATIVE_59_94, GUEST_RENDER_RENDER_NATIVE,
         test_presentation_gate, NULL));
     set_matching_runtime_identity();
-    begin_field5_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
+    begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
     CHECK(presentation_gate_saw_closed_state);
     CHECK(guest_render_bridge_snapshot(&bridge) == GUEST_RENDER_OK);
     CHECK(bridge.state_open && bridge.producer_open);
@@ -9395,7 +9475,7 @@ int main(void) {
     ok &= test_runtime_idle_activation_hook_is_relevant();
     ok &= test_cold_ui_draw_ot_observation_is_relevant();
     ok &= test_runtime_variant_supersedes_canonical_entry_alias();
-    ok &= test_runtime_initial_field5_chain_is_armed();
+    ok &= test_runtime_initial_runtime_variant_chain_is_armed();
     ok &= test_runtime_variant_accepts_entry_at_return_terminal();
     ok &= test_runtime_variant_rearms_at_new_exact_activation();
     ok &= test_runtime_variant_consumes_callee_hook_before_return();
@@ -9409,19 +9489,19 @@ int main(void) {
     ok &= test_runtime_rejection_receipt_latches_first_trigger();
     ok &= test_runtime_direct_hook_rejections_latch_trigger();
     ok &= test_runtime_cold_warm_auth_parity_and_fail_closed_reset();
-    ok &= test_runtime_canonicalizes_field5_physical_chain();
-    ok &= test_runtime_canonicalizes_field5_physical_alias_chain();
-    ok &= test_runtime_rejects_incomplete_or_mutated_field5_chain();
-    ok &= test_runtime_rejects_followup_field5_capture_before_return();
-    ok &= test_runtime_warm_field5_candidate_validation();
-    ok &= test_runtime_rejects_unbound_field5_candidates();
-    ok &= test_runtime_ignores_unrelated_watched_writes_before_field5_entry_and_return();
-    ok &= test_runtime_preserves_pending_field5_candidate_for_protected_pre_activation_write();
+    ok &= test_runtime_canonicalizes_runtime_variant_physical_chain();
+    ok &= test_runtime_canonicalizes_runtime_variant_physical_alias_chain();
+    ok &= test_runtime_rejects_incomplete_or_mutated_runtime_variant_chain();
+    ok &= test_runtime_rejects_followup_runtime_variant_capture_before_return();
+    ok &= test_runtime_warm_runtime_variant_candidate_validation();
+    ok &= test_runtime_rejects_unbound_runtime_variant_candidates();
+    ok &= test_runtime_ignores_unrelated_watched_writes_before_runtime_variant_entry_and_return();
+    ok &= test_runtime_preserves_pending_runtime_variant_candidate_for_protected_pre_activation_write();
     ok &= test_runtime_rejects_writes_overlapping_protected_auth_ranges();
     ok &= test_runtime_cold_auth_accepts_physical_manifest_aliases();
     ok &= test_runtime_filters_broad_hooks_and_rearms_at_exact_entry();
     ok &= test_runtime_variant_context_mutations_do_not_observe();
-    ok &= test_source_observation_hooks_preserve_field5_variant_lifecycle();
+    ok &= test_source_observation_hooks_preserve_runtime_variant_variant_lifecycle();
     ok &= test_source_observation_cold_warm_aggregate_parity();
     ok &= test_source_observation_diagnostic_overflow_aggregates();
     ok &= test_source_observation_fail_closed_cases();
@@ -9441,7 +9521,7 @@ int main(void) {
     ok &= test_native_zoom_ignores_foreign_overlay_alias();
     ok &= test_zoom_opcode_2e_template_contract_is_producer_scoped();
     ok &= test_overlay_same_instruction_requires_exact_artifact_candidate();
-    ok &= test_overlay_artifact_authority_is_not_field5_specific();
+    ok &= test_overlay_artifact_authority_is_not_runtime_variant_specific();
     ok &= test_sidecar_rejects_address_reuse_across_scene_and_stale_packet();
     ok &= test_field_sprite_overlay_accepts_runtime_observed_capacity();
     ok &= test_field_sprite_identity_normalizes_packet_buffer();
@@ -9484,7 +9564,8 @@ int main(void) {
     ok &= test_model_ft4_raw_shadow_reconstructs_average_source();
     ok &= test_model_ft4_raw_shadow_reconstructs_farthest_source();
     ok &= test_resident_model_uses_completed_proof_after_artifact_retirement();
-    ok &= test_field_model_dispatch_does_not_require_resident_globals();
+    ok &= test_overlay_model_dispatch_uses_exact_descriptor_contract();
+    ok &= test_overlay_model_dispatch_rejects_mutated_caller();
     ok &= test_model_ft4_unsupported_invocation_does_not_poison_shadow();
     ok &= test_model_ft4_native_accepts_runtime_observed_group_size();
     ok &= test_model_ft3_native_cull_uses_wide_margin();

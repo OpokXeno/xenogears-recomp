@@ -14,6 +14,7 @@ enum { XG_RENDER_PARTICLE_SOURCE_CAPACITY = 128u };
 typedef struct XgRenderParticleSource {
     uint64_t generation;
     uint32_t particle_address;
+    uint32_t producer_pc;
     int16_t x[4];
     int16_t y[4];
     uint8_t u[4];
@@ -39,7 +40,7 @@ XgRenderParticleSource *xg_field_particles_find(uint32_t particle_address);
 void xg_field_particles_invalidate(uint32_t particle_address);
 bool xg_field_particles_observe_initializer(
     CPUState *cpu, GuestRenderRenderMode render_mode,
-    bool artifact_candidate_authorized);
+    bool artifact_candidate_authorized, uint32_t producer_pc);
 bool xg_field_particles_source_matches_memory(
     CPUState *cpu, const XgRenderParticleSource *source);
 bool xg_field_particles_build_matrix(

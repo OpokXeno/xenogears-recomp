@@ -32,6 +32,7 @@ typedef struct XgModelFt4RawSource {
     XgRenderIrMaterialState material;
     uint8_t uv[XG_HOST_3D_VERTEX_COUNT][2];
     uint32_t screen_right;
+    int32_t screen_x_cull_margin;
     uint32_t packed_screen_bottom;
     uint32_t packet_address;
     uint32_t ordering_shift;

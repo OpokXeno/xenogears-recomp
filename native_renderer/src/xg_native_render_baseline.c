@@ -6,7 +6,6 @@
 #define XG_FNV_OFFSET UINT64_C(1469598103934665603)
 #define XG_FNV_PRIME UINT64_C(1099511628211)
 #define XG_GUEST_RAM_BYTES (2u * 1024u * 1024u)
-#define XG_FIELD_5_EXECUTION_ADDRESS UINT32_C(0x800764B4)
 #define XG_CAMERA_EYE_PHYS UINT32_C(0x000af880)
 #define XG_CAMERA_AT_PHYS UINT32_C(0x000af890)
 #define XG_CAMERA_MATRIX_PHYS UINT32_C(0x000af990)
@@ -80,7 +79,6 @@ XgNativeRenderBaselineResult xg_native_render_baseline_configure(
     digest = hash_bytes(digest, runtime_identity->manifest_sha256,
                         sizeof(runtime_identity->manifest_sha256));
     if (digest == 0u) digest = UINT64_C(1);
-    out_config->authenticated_producer_address = XG_FIELD_5_EXECUTION_ADDRESS;
     out_config->max_vblanks = max_vblanks;
     out_config->game_digest = digest;
     return success(digest);

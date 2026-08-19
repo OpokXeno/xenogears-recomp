@@ -43,19 +43,20 @@ def main() -> int:
     arguments = parser.parse_args()
     try:
         if arguments.command == "emit-declared":
+            contract = load_contract(arguments.companion)
             atomic_write(arguments.out, render_c(declare(
-                load_contract(arguments.companion), arguments.companion,
+                contract, arguments.companion,
                 arguments.canonical_manifest)))
-            print("emit PASS: declared field5 runtime descriptor")
+            print(f"emit PASS: {len(contract.variants)} declared runtime descriptor(s)")
             return 0
         inputs = VerificationInputs(arguments.companion, arguments.canonical_manifest,
                                     arguments.artifact)
         verified = verify(load_contract(arguments.companion), inputs)
         if arguments.command == "validate":
-            print("validate PASS: one identity-bound field5 runtime descriptor")
+            print(f"validate PASS: {len(verified.contract.variants)} identity-bound runtime descriptor(s)")
             return 0
         atomic_write(arguments.out, render_c(verified))
-        print("emit PASS: one identity-bound field5 runtime descriptor")
+        print(f"emit PASS: {len(verified.contract.variants)} identity-bound runtime descriptor(s)")
         return 0
     except ManifestError as error:
         print(f"FAIL: {error}", file=os.sys.stderr)

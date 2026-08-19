@@ -27,6 +27,7 @@ typedef struct XgFieldCharacterSourceCaptureRequest {
     XgFieldCharacterSourceVisualState visual_state;
     uint64_t vram_mutation_serial;
     uint32_t producer_record_id;
+    uint32_t producer_entry;
     uint32_t actor_index;
     uint32_t actor_record_address;
     uint32_t model_address;

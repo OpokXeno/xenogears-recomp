@@ -64,7 +64,7 @@ int main(void) {
     CHECK(result.digest != 0u);
     CHECK(config.game_digest == result.digest);
     CHECK(config.max_vblanks == 3508u);
-    CHECK(config.authenticated_producer_address == UINT32_C(0x800764B4));
+    CHECK(config.authenticated_producer_address == 0u);
     SEED_CONFIG(config);
     result = xg_native_render_baseline_configure(NULL, 3508u, &config);
     CHECK(!result.success);

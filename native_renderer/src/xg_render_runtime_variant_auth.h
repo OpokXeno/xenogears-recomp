@@ -2,6 +2,7 @@
 #define XG_RENDER_RUNTIME_VARIANT_AUTH_H
 
 #include "xg_render_auth_runtime.h"
+#include "xg_render_runtime_variants_generated.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -16,6 +17,12 @@ typedef enum XgRenderRuntimeVariantEvent {
     XG_RENDER_RUNTIME_VARIANT_REJECT,
 } XgRenderRuntimeVariantEvent;
 
+typedef struct XgRenderRuntimeVariantModelDispatchContract {
+    const uint32_t *instructions;
+    uint32_t instruction_count;
+    uint32_t matrix_stack_offset;
+} XgRenderRuntimeVariantModelDispatchContract;
+
 void xg_render_runtime_variant_reset(void);
 bool xg_render_runtime_variant_no_gates_enabled(void);
 XgRenderRuntimeVariantEvent xg_render_runtime_variant_observe(
@@ -28,13 +35,15 @@ bool xg_render_runtime_variant_candidate_matches(
     const PsxXgRenderAuthCandidate *candidate);
 bool xg_render_runtime_variant_artifact_candidate_matches(
     const PsxXgRenderAuthCandidate *candidate);
+uint32_t xg_render_runtime_variant_model_dispatch_contract_count(void);
+bool xg_render_runtime_variant_model_dispatch_contract_at(
+    uint32_t index, XgRenderRuntimeVariantModelDispatchContract *out_contract);
 bool xg_render_runtime_variant_artifact_candidate_authorizes_pc(
     const PsxXgRenderAuthCandidate *candidate, uint32_t pc);
 bool xg_render_authoritative_overlay_artifact_candidate_matches(
     const PsxXgRenderAuthCandidate *candidate);
 bool xg_render_authoritative_overlay_artifact_candidate_authorizes_pc(
     const PsxXgRenderAuthCandidate *candidate, uint32_t pc);
-bool xg_render_runtime_variant_artifact_contains_pc(uint32_t pc);
 bool xg_render_runtime_variant_active_code_write_overlaps(
     uint32_t write_address, uint32_t write_size);
 uint32_t xg_render_runtime_variant_code_write_overlap_mask(
@@ -49,8 +58,10 @@ bool xg_render_runtime_variant_source_site_lookup(
     uint32_t pc, uint32_t instruction_word,
     PsxXgRenderSourceSiteMetadata *out_metadata);
 bool xg_render_runtime_variant_source_pc_relevant(uint32_t pc);
-bool xg_render_runtime_variant_native_cutover_matches(
-    uint32_t pc, uint32_t instruction_word, uint32_t *out_continuation);
+bool xg_render_runtime_variant_native_cutover_lookup(
+    uint32_t pc, uint32_t instruction_word,
+    XgRenderRuntimeVariantCutoverHandler *out_handler,
+    uint32_t *out_continuation);
 bool xg_render_runtime_variant_hook_relevant(uint32_t hook, uint32_t pc);
 
 #endif

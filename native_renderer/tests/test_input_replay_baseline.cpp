@@ -2,6 +2,7 @@
 #include "input_replay.h"
 #include "native_render_baseline.h"
 #include "xg_native_render_baseline.h"
+#include "xg_render_auth_runtime.h"
 
 #include <SDL.h>
 
@@ -12,6 +13,13 @@
 #include <iomanip>
 #include <sstream>
 #include <string>
+
+extern "C" bool psx_xg_render_auth_authenticated_producer_entry(
+    uint32_t *out_producer_entry) {
+    if (out_producer_entry == nullptr) return false;
+    *out_producer_entry = UINT32_C(0x800764b4);
+    return true;
+}
 
 namespace {
 std::array<uint8_t, 2u * 1024u * 1024u> ram{};
@@ -220,7 +228,7 @@ void gte_attribution_reset(void) {}
 
 int main() {
     const std::string task5 = "input_replay_baseline_task5.toml";
-    const std::string wrong_field = "input_replay_baseline_wrong_field.toml";
+    const std::string other_field = "input_replay_baseline_other_field.toml";
     const std::string v2 = "input_replay_baseline_v2.toml";
     const std::string evidence_path = "input_replay_baseline_evidence.json";
     std::string error;
@@ -241,8 +249,8 @@ int main() {
     runtime_completed.slot_count = 1u;
     runtime_completed.binding_count = 1u;
 
-    write_v3_trace(wrong_field, true, 6u, 3508u);
-    assert(!input_replay::load(wrong_field.c_str(), &error));
+    write_v3_trace(other_field, true, 6u, 3508u);
+    assert(input_replay::load(other_field.c_str(), &error));
     write_v3_trace(v2, true, 5u, 3508u);
     {
         std::fstream trace(v2, std::ios::in | std::ios::out);
@@ -298,6 +306,7 @@ int main() {
     const XgNativeRenderBaselineResult configured =
         xg_native_render_baseline_configure(&runtime_identity, 4528u, &config);
     assert(configured.success);
+    config.authenticated_producer_address = UINT32_C(0x800764b4);
     native_render_baseline_note_execution(config.authenticated_producer_address,
                                           NATIVE_RENDER_BASELINE_INTERPRETER);
     native_render_baseline_ot_begin(UINT32_C(0x1000));
@@ -360,7 +369,7 @@ int main() {
     assert(snapshot.incomplete_reason == NATIVE_RENDER_BASELINE_DISABLED);
 
     std::remove(task5.c_str());
-    std::remove(wrong_field.c_str());
+    std::remove(other_field.c_str());
     std::remove(v2.c_str());
     std::remove(evidence_path.c_str());
     SDL_Quit();

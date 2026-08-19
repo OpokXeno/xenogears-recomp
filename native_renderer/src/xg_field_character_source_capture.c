@@ -328,7 +328,7 @@ XgFieldCharacterSourceCaptureResult xg_field_character_source_capture(
     if (request == NULL || reader == NULL || reader->read_u16 == NULL ||
         reader->read_u32 == NULL || request->source_generation == 0u ||
         request->visual_state.scene_epoch == 0u ||
-        request->producer_record_id == 0u ||
+        request->producer_record_id == 0u || request->producer_entry == 0u ||
         !digest_is_present(request->game_sha256) ||
         !digest_is_present(request->manifest_sha256) ||
         !raster_state_is_valid(&request->raster))
@@ -410,7 +410,7 @@ XgFieldCharacterSourceCaptureResult xg_field_character_source_capture(
            sizeof(snapshot.identity.game_sha256));
     memcpy(snapshot.identity.manifest_sha256, request->manifest_sha256,
            sizeof(snapshot.identity.manifest_sha256));
-    snapshot.identity.producer_entry = XG_FIELD_CHARACTER_SOURCE_PRODUCER_ENTRY;
+    snapshot.identity.producer_entry = request->producer_entry;
     snapshot.identity.producer_record_id = request->producer_record_id;
     snapshot.identity.actor_index = request->actor_index;
     snapshot.identity.actor_count = actor_count;

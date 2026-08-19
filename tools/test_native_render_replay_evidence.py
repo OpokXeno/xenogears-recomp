@@ -112,7 +112,7 @@ def test_duplicate_runs_when_given_private_disc_preserve_it_for_each_child() -> 
         original_execute_run = replay_cli.execute_run
         replay_cli.execute_run = lambda child, _watchdog, **options: observed.append((
             child.disc, child.memcard_dir,
-            options.get("require_post_checkpoint_cross"),
+            options.get("require_post_checkpoint_activity"),
         )) or run
         try:
             replay_cli.run_duplicate(request, 1)
@@ -155,7 +155,7 @@ def test_duplicate_run_validation_uses_requested_render_mode() -> None:
 
 def test_field_five_trace_when_parsed_is_bounded_by_its_guest_budget() -> None:
     replay = replay_module()
-    trace = replay.parse_trace(ROOT / "tools" / "native_render_replays" / "field5_clean_boot.toml")
+    trace = replay.parse_trace(ROOT / "tools" / "native_render_replays" / "field_clean_boot.toml")
     assert len(trace.states) == trace.vblank_budget
 
 

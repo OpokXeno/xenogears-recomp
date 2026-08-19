@@ -204,7 +204,7 @@ def build_producer_family_evidence(
         "schema_version": 1,
         "task": 12,
         "status": "PASS",
-        "scenario": "field5-natural",
+        "scenario": "game-producer",
         "timing_mode": "original",
         "render_mode": "shadow",
         "authentication": {
@@ -249,7 +249,7 @@ def parse_producer_family_evidence(value: JsonValue) -> JsonObject:
         or record["schema_version"] != 1
         or record["task"] != 12
         or record["status"] != "PASS"
-        or record["scenario"] != "field5-natural"
+        or record["scenario"] != "game-producer"
         or record["timing_mode"] != "original"
         or record["render_mode"] != "shadow"
     ):

@@ -18,13 +18,13 @@ set(XG_RENDER_OVERLAYS
     CACHE PATH "Overlay directory authenticated by the producer manifest")
 set(XG_RENDER_RUNTIME_VARIANTS
     "${CMAKE_CURRENT_SOURCE_DIR}/native_renderer/xg_render_runtime_variants.toml"
-    CACHE FILEPATH "Identity-bound Field 5 runtime variant manifest")
+    CACHE FILEPATH "Identity-bound game runtime variant manifest")
 set(XG_RENDER_OVERLAY_RANGES
     "${CMAKE_CURRENT_SOURCE_DIR}/native_renderer/xg_render_overlay_ranges.toml"
     CACHE FILEPATH "Identity-bound overlay cutover and source-observation manifest")
-set(XG_RENDER_FIELD5_RUNTIME_ARTIFACT
-    "${CMAKE_CURRENT_SOURCE_DIR}/overlays/field5_runtime.bin"
-    CACHE FILEPATH "Private Field 5 runtime variant artifact")
+set(XG_RENDER_RUNTIME_ARTIFACT
+    "${CMAKE_CURRENT_SOURCE_DIR}/overlays/field_runtime.bin"
+    CACHE FILEPATH "Private game runtime variant artifact")
 set(XG_RENDER_MANIFEST_TOOL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest_fixture.py"
@@ -65,7 +65,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${XG_RENDER_RUNTIME_VARIANTS}"
     "${XG_RENDER_OVERLAY_RANGES}"
     "${XG_RENDER_GAME_EXE}"
-    "${XG_RENDER_FIELD5_RUNTIME_ARTIFACT}"
+    "${XG_RENDER_RUNTIME_ARTIFACT}"
     ${XG_RENDER_MANIFEST_TOOL_SOURCES}
     ${XG_OVERLAY_CODEGEN_INPUTS})
 
@@ -444,17 +444,17 @@ add_custom_command(
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_BINARY_DIR}/generated"
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_runtime_variants.py"
             validate "${XG_RENDER_RUNTIME_VARIANTS}"
-            --artifact "${XG_RENDER_FIELD5_RUNTIME_ARTIFACT}"
+            --artifact "${XG_RENDER_RUNTIME_ARTIFACT}"
             --canonical-manifest "${XG_RENDER_MANIFEST}"
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_runtime_variants.py"
             emit "${XG_RENDER_RUNTIME_VARIANTS}"
-            --artifact "${XG_RENDER_FIELD5_RUNTIME_ARTIFACT}"
+            --artifact "${XG_RENDER_RUNTIME_ARTIFACT}"
             --canonical-manifest "${XG_RENDER_MANIFEST}"
             --out "${XG_RENDER_RUNTIME_VARIANT_TABLE}"
     DEPENDS
         "${XG_RENDER_RUNTIME_VARIANTS}"
         "${XG_RENDER_MANIFEST}"
-        "${XG_RENDER_FIELD5_RUNTIME_ARTIFACT}"
+        "${XG_RENDER_RUNTIME_ARTIFACT}"
         ${XG_RENDER_MANIFEST_TOOL_SOURCES}
     VERBATIM)
 add_custom_target(xg_render_runtime_variant_table

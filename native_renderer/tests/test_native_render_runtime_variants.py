@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 
 
@@ -22,13 +23,18 @@ CANONICAL_MANIFEST = REPOSITORY / "native_renderer" / "xg_render_manifest.toml"
 GAME = REPOSITORY / "game" / "slus_006.64"
 OVERLAYS = REPOSITORY / "overlays"
 COMPANION = REPOSITORY / "native_renderer" / "xg_render_runtime_variants.toml"
-ARTIFACT = REPOSITORY / "overlays" / "field5_runtime.bin"
+ARTIFACT = REPOSITORY / "overlays" / "field_runtime.bin"
 
 
 class NativeRenderRuntimeVariantsTests(unittest.TestCase):
     def require_private_artifact(self) -> None:
         if not ARTIFACT.is_file():
-            self.skipTest("private Field 5 artifact is unavailable")
+            self.skipTest("private runtime artifact is unavailable")
+        artifact = tomllib.loads(COMPANION.read_text(encoding="utf-8"))["artifact"]
+        contents = ARTIFACT.read_bytes()
+        if (len(contents) != artifact["full_size"] or
+                hashlib.sha256(contents).hexdigest() != artifact["full_sha256"]):
+            self.skipTest("private runtime artifact does not match companion identity")
     def run_tool(self, *arguments: str, expect: int = 0) -> subprocess.CompletedProcess[str]:
         result = subprocess.run(
             [sys.executable, str(TOOL), *arguments],
@@ -42,12 +48,12 @@ class NativeRenderRuntimeVariantsTests(unittest.TestCase):
 
     def test_private_artifact_end_to_end_contract(self) -> None:
         self.require_private_artifact()
-        self._check_emits_bound_field5_companion_table()
+        self._check_emits_bound_runtime_companion_table()
         self._check_companion_emission_preserves_canonical_generated_bytes()
         self._check_rejects_wrong_canonical_binding_and_artifact_identity()
         self._check_rejects_hook_constraint_and_descriptor_ambiguity()
 
-    def _check_emits_bound_field5_companion_table(self) -> None:
+    def _check_emits_bound_runtime_companion_table(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "runtime_variants.c"
 
@@ -119,7 +125,7 @@ class NativeRenderRuntimeVariantsTests(unittest.TestCase):
 
             self.assertIn("canonical game", result.stderr.lower())
             manifest.write_text(COMPANION.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
-            artifact = root / "field5_runtime.bin"
+            artifact = root / "field_runtime.bin"
             artifact.write_bytes(ARTIFACT.read_bytes()[:-1] + b"X")
             result = self.run_tool("validate", str(manifest), "--artifact", str(artifact), expect=1)
             self.assertIn("artifact identity", result.stderr.lower())
@@ -140,7 +146,7 @@ class NativeRenderRuntimeVariantsTests(unittest.TestCase):
                 with self.subTest(name=name):
                     manifest.write_text(original.replace(source, replacement), encoding="utf-8", newline="\n")
                     result = self.run_tool("validate", str(manifest), "--artifact", str(ARTIFACT), expect=1)
-                    self.assertIn("field5", result.stderr.lower())
+                    self.assertIn("runtime", result.stderr.lower())
             manifest.write_text(original + original[original.index("[[variants]]") :], encoding="utf-8", newline="\n")
 
             result = self.run_tool("validate", str(manifest), "--artifact", str(ARTIFACT), expect=1)
@@ -160,7 +166,7 @@ class NativeRenderRuntimeVariantsTests(unittest.TestCase):
     def test_missing_private_artifact_fails_closed(self) -> None:
         result = self.run_tool(
             "validate", str(COMPANION), "--artifact",
-            str(ARTIFACT.with_name("missing-field5-runtime.bin")), expect=1)
+            str(ARTIFACT.with_name("missing-runtime.bin")), expect=1)
         self.assertIn("artifact filename mismatch", result.stderr.lower())
 
     def test_declared_descriptor_binds_companion_manifest_identity(self) -> None:

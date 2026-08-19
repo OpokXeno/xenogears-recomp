@@ -154,10 +154,12 @@ def producer_inputs(root: Path) -> tuple[Path, Path, Path, Path, Path]:
     metadata.write_text(json.dumps(shadow_summary()), encoding="utf-8")
     build = root / "XenogearsRecomp"
     build.write_bytes(b"executable")
-    trace = root / "field5.toml"
+    trace = root / "field.toml"
     trace.write_text(
-        'schema = "xenogears.native-render-replay/v1"\n'
+        'schema = "xenogears.native-render-replay/v3"\n'
+        "complete = true\n"
         "vblank_budget = 1\n"
+        "record_on_close = true\n"
         "[[vblank]]\n"
         "repeat = 1\n",
         encoding="utf-8",

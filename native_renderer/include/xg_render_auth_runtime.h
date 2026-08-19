@@ -822,6 +822,8 @@ void psx_xg_render_auth_loader_mismatch(uint32_t pc);
 void psx_xg_render_auth_native_bad_entry(uint32_t owner, uint32_t pc);
 void psx_xg_render_auth_note_artifact_candidate(
     const PsxXgRenderAuthCandidate *candidate);
+bool psx_xg_render_auth_authenticated_producer_entry(
+    uint32_t *out_producer_entry);
 void psx_xg_render_auth_note_candidate_dispatch(
     const PsxXgRenderAuthCandidate *candidate);
 void psx_xg_render_auth_provenance_snapshot(

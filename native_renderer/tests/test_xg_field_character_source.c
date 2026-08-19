@@ -148,6 +148,7 @@ static XgFieldCharacterSourceCaptureRequest request(void) {
     value.visual_state.state_sequence = 9u;
     value.vram_mutation_serial = 23u;
     value.producer_record_id = 3u;
+    value.producer_entry = UINT32_C(0x800764b4);
     value.actor_index = ACTOR_INDEX;
     value.actor_record_address = ACTOR_ADDRESS;
     value.model_address = MODEL_ADDRESS;

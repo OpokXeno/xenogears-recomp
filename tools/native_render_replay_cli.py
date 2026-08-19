@@ -78,7 +78,7 @@ def _terminate_and_reap(process: Popen[str]) -> tuple[str, str]:
 
 def execute_run(
     request: RunRequest, watchdog_seconds: int, *, producer_family: bool = False,
-    require_post_checkpoint_cross: bool | None = None,
+    require_post_checkpoint_activity: bool | None = None,
     on_process_start: Callable[[Popen[str]], None] | None = None,
 ) -> dict[str, object]:
     request.runtime_state.mkdir(mode=0o700, parents=True, exist_ok=False)
@@ -118,20 +118,18 @@ def execute_run(
         payload,
         trace,
         request.render_mode,
-        require_post_checkpoint_cross=(
-            not producer_family and trace.checkpoint_field == 5
-            if require_post_checkpoint_cross is None
-            else require_post_checkpoint_cross
-        ),
+        require_post_checkpoint_activity=(
+            not trace.record_on_close
+            if require_post_checkpoint_activity is None
+            else require_post_checkpoint_activity),
     )
     proof = payload.get("auth_proof")
     if not isinstance(proof, dict):
         raise RuntimeError("runtime auth proof is missing")
-    if trace.checkpoint_field == 5:
-        try:
-            assert_auth_proof(proof)
-        except ValueError as error:
-            raise RuntimeError("runtime auth proof is invalid") from error
+    try:
+        assert_auth_proof(proof)
+    except ValueError as error:
+        raise RuntimeError("runtime auth proof is invalid") from error
     return payload
 
 
@@ -198,7 +196,7 @@ def run_duplicate(request: RunRequest, watchdog_seconds: int) -> dict[str, objec
                        request.memcard_dir, request.evidence, request.renderer, request.disc,
                        request.timing_mode, request.render_mode, request.overlay_mode,
                        request.bios, request.baseline_request),
-            watchdog_seconds, require_post_checkpoint_cross=False))
+            watchdog_seconds, require_post_checkpoint_activity=False))
     assert_duplicate_runs(
         (runs[0], runs[1]), parse_trace(request.trace), request.render_mode)
     return {"schema": "xenogears.native-render-replay-evidence/v1", "status": "PASS", "runs": runs}
@@ -221,6 +219,10 @@ def run_producer_family(
         if build.is_symlink() or not build.is_file():
             raise RecordArgumentError("build must be a regular executable")
         parsed_trace = parse_trace(trace)
+        if (parsed_trace.checkpoint_field is None and
+                not parsed_trace.record_on_close):
+            raise RecordArgumentError(
+                "producer-family trace requires a completion mode")
         if len(parsed_trace.states) != parsed_trace.vblank_budget:
             raise RecordArgumentError("producer-family trace must exhaust its budget")
         before_cards = snapshot_root_cards(memcard_dir)
@@ -273,7 +275,7 @@ def run_task15_matrix(
         )
         try:
             runtime = execute_run(
-                request, watchdog_seconds, require_post_checkpoint_cross=False)
+                request, watchdog_seconds, require_post_checkpoint_activity=False)
             native_render = runtime.get("native_render")
             if not isinstance(native_render, dict):
                 raise RuntimeError("runtime native-render evidence is missing")
@@ -330,7 +332,7 @@ def run_p0_mode_matrix(
             try:
                 runtime = execute_run(
                     request, watchdog_seconds,
-                    require_post_checkpoint_cross=False)
+                    require_post_checkpoint_activity=False)
                 native_render = runtime.get("native_render")
                 if not isinstance(native_render, dict):
                     raise RuntimeError("runtime native-render evidence is missing")
@@ -375,13 +377,12 @@ def main() -> None:
     run_parser.add_argument("--timing-mode", choices=("original",), required=True)
     run_parser.add_argument(
         "--render-mode", choices=("original", "shadow", "native"), required=True)
-    run_parser.add_argument("--scenario", choices=("field5-natural",), required=True)
     run_parser.add_argument(
         "--overlay-mode", choices=("cold", "warm"), required=True)
     run_parser.add_argument("--runs", type=int, choices=(1, 2), default=2)
     run_parser.add_argument("--watchdog-seconds", type=int, default=900)
     baseline_parser = subparsers.add_parser("baseline")
-    baseline_parser.add_argument("--scenario", choices=("field5-natural",), required=True)
+    baseline_parser.add_argument("--trace", type=Path, required=True)
     baseline_parser.add_argument("--builds", required=True)
     baseline_parser.add_argument("--timing-mode", choices=("original",), required=True)
     baseline_parser.add_argument("--render-mode", choices=("original",), required=True)
@@ -392,7 +393,7 @@ def main() -> None:
     baseline_parser.add_argument("--disc", type=Path)
     baseline_parser.add_argument("--watchdog-seconds", type=int, default=1200)
     auth_proof_parser = subparsers.add_parser("auth-proof")
-    auth_proof_parser.add_argument("--scenario", choices=("field5-natural",), required=True)
+    auth_proof_parser.add_argument("--trace", type=Path, required=True)
     auth_proof_parser.add_argument("--builds", required=True)
     auth_proof_parser.add_argument("--timing-mode", choices=("original",), required=True)
     auth_proof_parser.add_argument("--render-mode", choices=("original",), required=True)
@@ -403,12 +404,8 @@ def main() -> None:
     auth_proof_parser.add_argument("--disc", type=Path)
     auth_proof_parser.add_argument("--watchdog-seconds", type=int, default=1200)
     matrix_parser = subparsers.add_parser("matrix")
-    matrix_parser.add_argument(
-        "--scenario", choices=("field5-natural",), default="field5-natural")
     matrix_parser.add_argument("--build", type=Path, required=True)
-    matrix_parser.add_argument(
-        "--trace", type=Path,
-        default=root / "tools" / "native_render_replays" / "field5_baseline.toml")
+    matrix_parser.add_argument("--trace", type=Path, required=True)
     matrix_parser.add_argument("--runtime-state-root", type=Path)
     matrix_parser.add_argument("--memcard-dir", type=Path, default=root)
     matrix_parser.add_argument("--evidence", type=Path, required=True)
@@ -423,12 +420,8 @@ def main() -> None:
         choices=("cold", "warm"), required=True)
     matrix_parser.add_argument("--watchdog-seconds", type=int, default=1200)
     p0_matrix_parser = subparsers.add_parser("p0-matrix")
-    p0_matrix_parser.add_argument(
-        "--scenario", choices=("field5-natural",), default="field5-natural")
     p0_matrix_parser.add_argument("--build", type=Path, required=True)
-    p0_matrix_parser.add_argument(
-        "--trace", type=Path,
-        default=root / "tools" / "native_render_replays" / "field5_baseline.toml")
+    p0_matrix_parser.add_argument("--trace", type=Path, required=True)
     p0_matrix_parser.add_argument("--runtime-state-root", type=Path)
     p0_matrix_parser.add_argument("--memcard-dir", type=Path, default=root)
     p0_matrix_parser.add_argument("--evidence", type=Path, required=True)
@@ -444,12 +437,11 @@ def main() -> None:
     p0_matrix_parser.add_argument("--watchdog-seconds", type=int, default=1200)
     producer_parser = subparsers.add_parser("producer-family")
     producer_parser.add_argument("--family-metadata", type=Path, required=True)
-    producer_parser.add_argument("--scenario", choices=("field5-natural",), required=True)
     producer_parser.add_argument("--timing-mode", choices=("original",), required=True)
     producer_parser.add_argument("--render-mode", choices=("shadow",), required=True)
     producer_parser.add_argument("--evidence", type=Path, required=True)
     producer_parser.add_argument("--build", type=Path, default=root / "build-dbg" / "XenogearsRecomp")
-    producer_parser.add_argument("--trace", type=Path, default=root / "tools" / "native_render_replays" / "field5_baseline.toml")
+    producer_parser.add_argument("--trace", type=Path, required=True)
     producer_parser.add_argument("--memcard-dir", type=Path, default=root)
     producer_parser.add_argument("--disc", type=Path, default=root / "game" / "disc1.cue")
     producer_parser.add_argument("--bios", type=Path, default=root / "game" / "SCPH1001.BIN")
@@ -466,6 +458,7 @@ def main() -> None:
     record_parser.add_argument("--render-mode", choices=("original",), required=True)
     record_parser.add_argument("--max-vblanks", type=int, required=True)
     record_parser.add_argument("--on-close", action="store_true")
+    record_parser.add_argument("--checkpoint-field", type=int)
     record_parser.add_argument("--watchdog-seconds", type=int, default=900)
     arguments = parser.parse_args()
     if arguments.command == "self-test":
@@ -474,10 +467,16 @@ def main() -> None:
     if arguments.command == "record":
         if arguments.max_vblanks < 1:
             raise RecordArgumentError("max-vblanks must be positive")
+        if arguments.on_close == (arguments.checkpoint_field is not None):
+            raise RecordArgumentError(
+                "choose exactly one of --on-close or --checkpoint-field")
+        if arguments.checkpoint_field is not None and not (
+                1 <= arguments.checkpoint_field <= 0xffff):
+            raise RecordArgumentError("checkpoint-field must be an unsigned 16-bit value")
         request = RecordRequest(arguments.build, arguments.trace, arguments.runtime_state,
                                  validate_memcard_dir(arguments.memcard_dir), arguments.renderer,
                                  validate_disc(arguments.disc), arguments.max_vblanks,
-                                 arguments.on_close)
+                                 arguments.checkpoint_field, arguments.on_close)
         execute_record(request, arguments.watchdog_seconds)
         print('{"schema":"xenogears.native-render-record-evidence/v1","status":"PASS"}')
         return
@@ -547,8 +546,10 @@ def main() -> None:
         if memcard_dir.resolve() != root.resolve():
             raise RecordArgumentError("memcard-dir must be the XenogearsRecomp repository root")
         warm_cache = validate_warm_cache(arguments.warm_cache) if arguments.command == "baseline" else arguments.warm_cache
+        trace = arguments.trace.resolve()
+        parse_trace(trace)
         request = BaselineRequest(
-            root, root / "tools" / "native_render_replays" / "field5_baseline.toml",
+            root, trace,
             (BuildTarget("debug", build_paths[0]), BuildTarget("release", build_paths[1])), disc,
             warm_cache, arguments.evidence, arguments.watchdog_seconds, memcard_dir,
         )
@@ -567,9 +568,7 @@ def main() -> None:
                            arguments.timing_mode, arguments.render_mode,
                            arguments.overlay_mode, arguments.bios)
     if arguments.runs == 1:
-        run = execute_run(
-            request, arguments.watchdog_seconds,
-            require_post_checkpoint_cross=False)
+        run = execute_run(request, arguments.watchdog_seconds)
         payload = {
             "schema": "xenogears.native-render-replay-evidence/v1",
             "status": "PASS",

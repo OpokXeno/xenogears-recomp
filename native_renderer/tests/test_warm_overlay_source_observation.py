@@ -88,7 +88,8 @@ def synthetic_contract(data: bytes) -> RuntimeVariantContract:
     )
     site = SourceSite(BASE, SITE_INSTRUCTION, "read", 4, "effective-address")
     variant = RuntimeVariant(
-        "synthetic-v1", activation, PRODUCER, capture, RETURN, (site,)
+        "synthetic-v1", activation, PRODUCER, capture, RETURN,
+        BASE, 16, (SITE_INSTRUCTION,), (site,)
     )
     return RuntimeVariantContract(
         CanonicalTuple(

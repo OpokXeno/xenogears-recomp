@@ -87,6 +87,7 @@ class TraceState:
 class Trace:
     vblank_budget: int
     states: tuple[TraceState, ...]
+    checkpoint_address: int | None
     checkpoint_field: int | None
     record_on_close: bool
 
@@ -152,6 +153,7 @@ class RecordRequest:
     renderer: str
     disc: Path
     max_vblanks: int
+    checkpoint_field: int | None
     on_close: bool = False
 
 
@@ -317,7 +319,7 @@ def assert_baseline_evidence(evidence: dict[str, object]) -> None:
     if privacy != {"raw_payloads": False, "private_paths": False, "card_hashes": False}:
         raise ValueError("privacy policy is invalid")
     matrix = _mapping(evidence.get("matrix"), "matrix is missing")
-    if set(matrix) != {"scenario", "rows"} or matrix.get("scenario") != "field5-natural":
+    if set(matrix) != {"scenario", "rows"} or matrix.get("scenario") != "game-producer":
         raise ValueError("baseline matrix is invalid")
     rows = matrix.get("rows")
     if not isinstance(rows, list) or len(rows) != len(BASELINE_ROWS):
@@ -393,10 +395,22 @@ def parse_trace(path: Path) -> Trace:
             raise ValueError("trace v2 must be complete and use the closed record schema")
         if checkpoint_variant:
             checkpoint = document.get("checkpoint")
+            checkpoint_address = checkpoint.get("address") if isinstance(
+                checkpoint, dict) else None
+            try:
+                parsed_checkpoint_address = int(checkpoint_address, 0)
+            except (TypeError, ValueError):
+                parsed_checkpoint_address = -1
+            checkpoint_value = checkpoint.get("equals") if isinstance(
+                checkpoint, dict) else None
             if (not isinstance(checkpoint, dict) or set(checkpoint) != {"kind", "address", "equals"} or
                     checkpoint.get("kind") != "u16" or
-                    checkpoint.get("address") != "0x8006F94E" or
-                    checkpoint.get("equals") != document.get("record_stop_field") or
+                    not 1 <= parsed_checkpoint_address <= 0xffffffff or
+                    parsed_checkpoint_address & 1 or
+                    (parsed_checkpoint_address & 0x1fffffff) > 0x1ffffe or
+                    type(checkpoint_value) is not int or
+                    not 0 <= checkpoint_value <= 0xffff or
+                    checkpoint_value != document.get("record_stop_field") or
                     document.get("record_stable_vblanks") != 4):
                 raise ValueError("trace checkpoint metadata is invalid")
     budget = document.get("vblank_budget")
@@ -417,11 +431,15 @@ def parse_trace(path: Path) -> Trace:
         if len(states) > budget:
             raise ValueError("trace states exceed guest vblank budget")
     checkpoint = document.get("checkpoint")
+    checkpoint_address = int(checkpoint["address"], 0) if isinstance(
+        checkpoint, dict) else None
     checkpoint_field = checkpoint.get("equals") if isinstance(checkpoint, dict) else None
     record_on_close = document.get("record_on_close") is True
     if record_on_close and len(states) != budget:
         raise ValueError("close-record trace must exhaust its declared budget")
-    return Trace(budget, tuple(states), checkpoint_field, record_on_close)
+    return Trace(
+        budget, tuple(states), checkpoint_address, checkpoint_field,
+        record_on_close)
 
 
 def validate_disc(path: Path) -> Path:
@@ -482,8 +500,15 @@ def runtime_command(request: RunRequest, runtime_evidence: Path | None = None) -
 
 def runtime_record_command(request: RecordRequest) -> tuple[str, ...]:
     memcard_dir = request.memcard_dir.resolve()
+    if request.on_close == (request.checkpoint_field is not None):
+        raise RecordArgumentError(
+            "choose exactly one recording completion mode")
+    if request.checkpoint_field is not None and not (
+            1 <= request.checkpoint_field <= 0xffff):
+        raise RecordArgumentError(
+            "checkpoint-field must be an unsigned 16-bit value")
     completion_arguments = ("--record-on-close",) if request.on_close else (
-        "--record-stop-field", "5")
+        "--record-stop-field", str(request.checkpoint_field))
     command = (
         str(request.build.resolve()), "--game", str((REPOSITORY_ROOT / "game.toml").resolve()),
         "--no-launcher", "--runtime-state", str(request.runtime_state.resolve()),
@@ -497,7 +522,7 @@ def runtime_record_command(request: RecordRequest) -> tuple[str, ...]:
 
 def assert_run_evidence(
     run: dict[str, object], trace: Trace, render_mode: str = "original",
-    require_post_checkpoint_cross: bool = True,
+    require_post_checkpoint_activity: bool = True,
 ) -> None:
     if run.get("status") != "PASS":
         raise ValueError("runtime did not report PASS")
@@ -509,10 +534,7 @@ def assert_run_evidence(
             raise ValueError("manual trace did not complete cleanly")
     elif (not isinstance(checkpoint, dict) or
           checkpoint.get("field_id") != trace.checkpoint_field):
-        raise ValueError(
-            "Field ID 5 was not reached" if trace.checkpoint_field == 5
-            else "configured checkpoint was not reached"
-        )
+        raise ValueError("configured checkpoint was not reached")
     if run.get("backend") != "opengl":
         raise ValueError("effective backend is not opengl")
     native_render = run.get("native_render")
@@ -836,22 +858,19 @@ def assert_run_evidence(
         value = counters.get(key)
         if not isinstance(value, int) or value < latches:
             raise ValueError(f"missing replay traversal counter: {key}")
-    if require_post_checkpoint_cross:
-        if trace.checkpoint_field != 5:
-            raise ValueError("post-checkpoint validation requires Field 5")
+    if require_post_checkpoint_activity:
+        if trace.checkpoint_field is None:
+            raise ValueError(
+                "post-checkpoint validation requires a checkpoint trace")
         replay = run.get("replay")
-        sio = run.get("sio")
-        if not isinstance(replay, dict) or not isinstance(sio, dict):
+        if not isinstance(replay, dict):
             raise ValueError("runtime tail evidence is missing")
         checkpoint_vblank = replay.get("checkpoint_seen_vblank")
-        cross_count = sio.get("cross_count")
-        cross_first = sio.get("cross_first")
-        cross_last = sio.get("cross_last")
-        if (not isinstance(checkpoint_vblank, int) or not isinstance(cross_count, int) or
-                not isinstance(cross_first, int) or not isinstance(cross_last, int)):
+        if not isinstance(checkpoint_vblank, int):
             raise ValueError("runtime tail evidence is malformed")
-        if checkpoint_vblank < 1 or cross_count < 1 or cross_last <= checkpoint_vblank or cross_last < cross_first:
-            raise ValueError("Cross activity did not follow the Field 5 checkpoint")
+        if checkpoint_vblank < 1 or latches <= checkpoint_vblank:
+            raise ValueError(
+                "runtime activity did not follow the configured checkpoint")
     prohibited = run.get("prohibited_apis")
     if not isinstance(prohibited, dict) or any(value is not False for value in prohibited.values()):
         raise ValueError("a prohibited replay API was enabled")
@@ -864,7 +883,7 @@ def assert_duplicate_runs(
     for run in runs:
         assert_run_evidence(
             run, trace, render_mode,
-            require_post_checkpoint_cross=trace.checkpoint_field == 5)
+            require_post_checkpoint_activity=not trace.record_on_close)
     first, second = runs
     for key in ("backend", "guest_sequence", "counters"):
         if first.get(key) != second.get(key):

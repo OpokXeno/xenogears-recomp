@@ -142,8 +142,7 @@ XgFieldCharacterSourceAdapterResult xg_field_character_source_adapter_build(
             XG_FIELD_CHARACTER_SOURCE_SCHEMA_VERSION ||
         snapshot->presence_mask !=
             XG_FIELD_CHARACTER_SOURCE_REQUIRED_PRESENCE ||
-        snapshot->identity.producer_entry !=
-            XG_FIELD_CHARACTER_SOURCE_PRODUCER_ENTRY ||
+        snapshot->identity.producer_entry == 0u ||
         snapshot->identity.producer_record_id == 0u ||
         snapshot->identity.actor_count == 0u ||
         snapshot->identity.actor_index >= snapshot->identity.actor_count ||

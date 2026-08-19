@@ -42,11 +42,26 @@ def render_c(verified: VerifiedRuntimeVariants) -> bytes:
             f"        UINT32_C(0x{variant.capture.target:08x}),",
             f"        UINT32_C(0x{variant.capture.delay_instruction:08x}),",
             f"        UINT32_C(0x{variant.physical_return_site:08x}),",
+            f"        UINT32_C(0x{variant.model_dispatch_window_start:08x}),",
+            f"        {variant.model_dispatch_matrix_stack_offset}u,",
+            f"        {len(variant.model_dispatch_instructions)}u,",
+            "        {",
+            *(f"            UINT32_C(0x{instruction:08x})," for instruction in variant.model_dispatch_instructions),
+            "        },",
             f"        {len(variant.source_sites)}u,",
             "        {",
             *(f"            {{UINT32_C(0x{site.pc:08x}), UINT32_C(0x{site.instruction:08x}), "
               f"{ {'read': 0, 'write': 1, 'swc2': 2, 'call': 3, 'bucket': 4}[site.operation] }u, "
               f"{site.width}u, { {'effective-address': 0, 'none': 1, 'result-register': 2}[site.auxiliary] }u}}," for site in variant.source_sites),
+            "        },",
+            f"        {len(variant.native_cutovers)}u,",
+            "        {",
+            *(f"            {{UINT32_C(0x{cutover.pc:08x}), UINT32_C(0x{cutover.instruction:08x}), "
+               f"UINT32_C(0x{cutover.continuation:08x}), "
+               f"UINT32_C(0x{cutover.code_range_start:08x}), {cutover.code_range_size}u, "
+               f"{{{bytes_initializer(cutover.code_range_identity)}}}, "
+               f"{ {'observe': 0, 'local': 1, 'return': 2}[cutover.transfer] }u, "
+               f"{ {'actor': 0, 'compass-world': 1, 'compass-screen': 2, 'zoom-rgb-begin': 3, 'zoom-rgb-commit': 4, 'zoom-entry': 5, 'zoom-native': 6, 'zoom-initializer-begin': 7, 'zoom-initializer-commit': 8, 'particle-initializer': 9, 'particle-native': 10}[cutover.handler] }u}}," for cutover in variant.native_cutovers),
             "        },",
             "    },",
         ))
