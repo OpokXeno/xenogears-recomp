@@ -17,6 +17,13 @@ endif()
 set(OPENBIOS_IMAGE "${PROJECT_ROOT}/psxrecomp/bios/openbios.bin")
 set(OPENBIOS_LICENSE "${PROJECT_ROOT}/psxrecomp/bios/OpenBIOS.LICENSE")
 set(OPENBIOS_PROFILE "${PROJECT_ROOT}/psxrecomp/bios/OpenBIOS.toml")
+set(BUILTIN_MODS_CATALOG "${PROJECT_ROOT}/psxrecomp/mods/builtin")
+set(CD_SPEED_MANIFEST
+    "packages/psx.enhancement.cd-speed/1.0.0/manifest.toml")
+set(FAST_LOADING_MANIFEST
+    "packages/psx.enhancement.fast-loading/1.0.0/manifest.toml")
+set(PGXP_MANIFEST
+    "packages/psx.enhancement.pgxp/1.0.0/manifest.toml")
 set(VERIFIER "${PROJECT_ROOT}/cmake/verify_release_archive.cmake")
 set(HARDLINK_FIXTURE_GENERATOR "${PROJECT_ROOT}/cmake/tests/create_hardlink_archive.py")
 
@@ -25,9 +32,13 @@ find_program(PYTHON_EXECUTABLE NAMES python3 python REQUIRED)
 foreach(_required_path IN ITEMS
         "${OPENBIOS_IMAGE}"
         "${OPENBIOS_LICENSE}"
-        "${OPENBIOS_PROFILE}")
+        "${OPENBIOS_PROFILE}"
+        "${BUILTIN_MODS_CATALOG}"
+        "${BUILTIN_MODS_CATALOG}/${CD_SPEED_MANIFEST}"
+        "${BUILTIN_MODS_CATALOG}/${FAST_LOADING_MANIFEST}"
+        "${BUILTIN_MODS_CATALOG}/${PGXP_MANIFEST}")
     if(NOT EXISTS "${_required_path}")
-        message(FATAL_ERROR "Required tracked OpenBIOS resource is missing: ${_required_path}")
+        message(FATAL_ERROR "Required tracked release resource is missing: ${_required_path}")
     endif()
 endforeach()
 
@@ -56,6 +67,7 @@ function(create_package_root platform case_name output_variable)
     file(MAKE_DIRECTORY
         "${_package_root}/assets"
         "${_package_root}/bios"
+        "${_package_root}/mods"
         "${_package_root}/overlay_toolchain/include"
         "${_package_root}/overlay_toolchain/licenses"
         "${_package_root}/overlay_toolchain/tcc")
@@ -82,8 +94,11 @@ function(create_package_root platform case_name output_variable)
 
     copy_fixture_file("${OPENBIOS_PROFILE}" "${_package_root}/game.toml")
     file(WRITE "${_package_root}/LICENSE" "Synthetic release license fixture.\n")
+    file(WRITE "${_package_root}/MODS.md" "Synthetic player mod guide fixture.\n")
+    file(WRITE "${_package_root}/MOD_AUTHORING.md" "Synthetic mod authoring guide fixture.\n")
     file(WRITE "${_package_root}/README.md" "Synthetic release README fixture.\n")
     file(WRITE "${_package_root}/assets/placeholder.txt" "Synthetic release asset fixture.\n")
+    file(COPY "${BUILTIN_MODS_CATALOG}/" DESTINATION "${_package_root}/mods")
     copy_fixture_file("${OPENBIOS_IMAGE}" "${_package_root}/bios/openbios.bin")
     copy_fixture_file("${OPENBIOS_LICENSE}" "${_package_root}/bios/OpenBIOS.LICENSE")
     add_placeholder("${_package_root}" "overlay_toolchain/compile_overlays.py")
@@ -274,6 +289,8 @@ function(assert_fixture_tree archive platform case_name)
     set(_expected_files
         "${_executable}"
         "LICENSE"
+        "MODS.md"
+        "MOD_AUTHORING.md"
         "README.md"
         "assets/placeholder.txt"
         "bios/OpenBIOS.LICENSE"
@@ -291,6 +308,13 @@ function(assert_fixture_tree archive platform case_name)
         "overlay_toolchain/include/overlay_codegen_hash.h"
         "overlay_toolchain/licenses/PYTHON-LICENSE.txt"
         "overlay_toolchain/licenses/TCC-COPYING.txt")
+    file(GLOB_RECURSE _builtin_mod_files
+        RELATIVE "${BUILTIN_MODS_CATALOG}"
+        LIST_DIRECTORIES FALSE
+        "${BUILTIN_MODS_CATALOG}/*")
+    foreach(_mod_file IN LISTS _builtin_mod_files)
+        list(APPEND _expected_files "mods/${_mod_file}")
+    endforeach()
     if(platform STREQUAL "linux")
         list(APPEND _expected_files
             "overlay_toolchain/psxrecomp-game"
@@ -376,6 +400,46 @@ function(assert_invalid_fixture archive platform case_name)
         if(EXISTS "${_package_root}/bios/OpenBIOS.LICENSE")
             message(FATAL_ERROR "Missing-license fixture still contains OpenBIOS.LICENSE")
         endif()
+    elseif(case_name STREQUAL "missing-mods-guide")
+        if(EXISTS "${_package_root}/MODS.md")
+            message(FATAL_ERROR "Missing-mods-guide fixture still contains MODS.md")
+        endif()
+    elseif(case_name STREQUAL "missing-mod-authoring-guide")
+        if(EXISTS "${_package_root}/MOD_AUTHORING.md")
+            message(FATAL_ERROR
+                "Missing-mod-authoring-guide fixture still contains MOD_AUTHORING.md")
+        endif()
+    elseif(case_name STREQUAL "missing-cd-speed-manifest")
+        if(EXISTS "${_package_root}/mods/${CD_SPEED_MANIFEST}")
+            message(FATAL_ERROR
+                "Missing-cd-speed-manifest fixture still contains its manifest")
+        endif()
+    elseif(case_name STREQUAL "missing-fast-loading-manifest")
+        if(EXISTS "${_package_root}/mods/${FAST_LOADING_MANIFEST}")
+            message(FATAL_ERROR
+                "Missing-fast-loading-manifest fixture still contains its manifest")
+        endif()
+    elseif(case_name STREQUAL "missing-pgxp-manifest")
+        if(EXISTS "${_package_root}/mods/${PGXP_MANIFEST}")
+            message(FATAL_ERROR
+                "Missing-pgxp-manifest fixture still contains its manifest")
+        endif()
+    elseif(case_name STREQUAL "modified-builtin-manifest")
+        file(SHA256 "${_package_root}/mods/${FAST_LOADING_MANIFEST}" _bundled_hash)
+        file(SHA256 "${BUILTIN_MODS_CATALOG}/${FAST_LOADING_MANIFEST}" _canonical_hash)
+        if(_bundled_hash STREQUAL _canonical_hash)
+            message(FATAL_ERROR
+                "Modified-builtin-manifest fixture still matches the canonical manifest")
+        endif()
+    elseif(case_name STREQUAL "mod-state-artifact")
+        set(_unexpected_path "mods/state.toml")
+    elseif(case_name STREQUAL "mod-cache-artifact")
+        set(_unexpected_path "mods/cache/entry.dat")
+    elseif(case_name STREQUAL "mod-staging-artifact")
+        set(_unexpected_path "mods/staging/entry.dat")
+    elseif(case_name STREQUAL "unexpected-mod-asset")
+        set(_unexpected_path
+            "mods/packages/psx.enhancement.fast-loading/1.0.0/assets/unexpected.bin")
     elseif(case_name STREQUAL "same-size-corrupt-image")
         file(SIZE "${_package_root}/bios/openbios.bin" _image_size)
         file(SHA256 "${_package_root}/bios/openbios.bin" _image_hash)
@@ -419,6 +483,28 @@ function(create_invalid_archive platform case_name output_variable)
         file(REMOVE "${_package_root}/bios/openbios.bin")
     elseif(case_name STREQUAL "missing-license")
         file(REMOVE "${_package_root}/bios/OpenBIOS.LICENSE")
+    elseif(case_name STREQUAL "missing-mods-guide")
+        file(REMOVE "${_package_root}/MODS.md")
+    elseif(case_name STREQUAL "missing-mod-authoring-guide")
+        file(REMOVE "${_package_root}/MOD_AUTHORING.md")
+    elseif(case_name STREQUAL "missing-cd-speed-manifest")
+        file(REMOVE "${_package_root}/mods/${CD_SPEED_MANIFEST}")
+    elseif(case_name STREQUAL "missing-fast-loading-manifest")
+        file(REMOVE "${_package_root}/mods/${FAST_LOADING_MANIFEST}")
+    elseif(case_name STREQUAL "missing-pgxp-manifest")
+        file(REMOVE "${_package_root}/mods/${PGXP_MANIFEST}")
+    elseif(case_name STREQUAL "modified-builtin-manifest")
+        file(APPEND "${_package_root}/mods/${FAST_LOADING_MANIFEST}"
+            "\n# Synthetic release-test mutation.\n")
+    elseif(case_name STREQUAL "mod-state-artifact")
+        add_placeholder("${_package_root}" "mods/state.toml")
+    elseif(case_name STREQUAL "mod-cache-artifact")
+        add_placeholder("${_package_root}" "mods/cache/entry.dat")
+    elseif(case_name STREQUAL "mod-staging-artifact")
+        add_placeholder("${_package_root}" "mods/staging/entry.dat")
+    elseif(case_name STREQUAL "unexpected-mod-asset")
+        add_placeholder("${_package_root}"
+            "mods/packages/psx.enhancement.fast-loading/1.0.0/assets/unexpected.bin")
     elseif(case_name STREQUAL "same-size-corrupt-image")
         corrupt_image_same_size("${_package_root}/bios/openbios.bin")
     elseif(case_name STREQUAL "retail-bios")
@@ -513,6 +599,16 @@ assert_fixture_tree("${VALID_WINDOWS_ARCHIVE}" "windows" "valid")
 set(INVALID_CASES
     missing-image
     missing-license
+    missing-mods-guide
+    missing-mod-authoring-guide
+    missing-cd-speed-manifest
+    missing-fast-loading-manifest
+    missing-pgxp-manifest
+    modified-builtin-manifest
+    mod-state-artifact
+    mod-cache-artifact
+    mod-staging-artifact
+    unexpected-mod-asset
     same-size-corrupt-image
     truncated-archive
     retail-bios

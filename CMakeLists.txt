@@ -196,13 +196,52 @@ target_link_libraries(psx-runtime PRIVATE
     xg_render_static_auth
     xg_field_character_runtime)
 target_sources(psx-runtime PRIVATE
-        native_renderer/src/xg_native_render_baseline.c)
-target_include_directories(psx-runtime PRIVATE native_renderer/include)
+        native_renderer/src/xg_native_render_baseline.c
+        src/mods/xenogears_indexed_disc.cpp)
+target_include_directories(psx-runtime PRIVATE
+    native_renderer/include
+    src/mods)
 target_compile_definitions(psx-runtime PRIVATE
     PSX_INPUT_REPLAY_XG_BASELINE=1
     PSX_INPUT_REPLAY_XG_AUTH_PROOF=1)
+if(TARGET psx-runtime-pgxp)
+    target_link_libraries(psx-runtime-pgxp PRIVATE
+        xg_visual_state
+        xg_render_ir
+        xg_render_static_auth
+        xg_field_character_runtime)
+    target_sources(psx-runtime-pgxp PRIVATE
+        native_renderer/src/xg_native_render_baseline.c
+        src/mods/xenogears_indexed_disc.cpp)
+    target_include_directories(psx-runtime-pgxp PRIVATE
+        native_renderer/include
+        src/mods)
+    target_compile_definitions(psx-runtime-pgxp PRIVATE
+        PSX_INPUT_REPLAY_XG_BASELINE=1
+        PSX_INPUT_REPLAY_XG_AUTH_PROOF=1)
+endif()
 
 if(BUILD_TESTING)
+    add_test(NAME perfect_works_to_psxmod
+        COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_perfect_works_to_psxmod.py")
+
+    add_executable(xenogears_indexed_disc_test
+        tests/xenogears_indexed_disc_test.cpp
+        src/mods/xenogears_indexed_disc.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/disc_path.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/cue_sheet.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/iso_reader.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/psx_sha256.c)
+    target_include_directories(xenogears_indexed_disc_test PRIVATE
+        src/mods
+        ${PSXRECOMP_ROOT}/runtime/include)
+    target_compile_definitions(xenogears_indexed_disc_test PRIVATE
+        XG_INDEXED_DISC_NO_REGISTRATION=1)
+    target_compile_features(xenogears_indexed_disc_test PRIVATE cxx_std_17)
+    target_link_libraries(xenogears_indexed_disc_test PRIVATE chdr-static)
+    add_test(NAME xenogears_indexed_disc COMMAND xenogears_indexed_disc_test)
+
     if(NOT WIN32)
         add_executable(autocompile_posix_test
             psxrecomp/runtime/tests/test_autocompile_posix.c
@@ -511,3 +550,9 @@ target_sources(psx-runtime PRIVATE "${XG_RENDER_MANIFEST_TABLE}"
     "${XG_RENDER_RUNTIME_VARIANT_TABLE}")
 add_dependencies(psx-runtime xg_render_manifest_table)
 add_dependencies(psx-runtime xg_render_runtime_variant_table)
+if(TARGET psx-runtime-pgxp)
+    target_sources(psx-runtime-pgxp PRIVATE "${XG_RENDER_MANIFEST_TABLE}"
+        "${XG_RENDER_RUNTIME_VARIANT_TABLE}")
+    add_dependencies(psx-runtime-pgxp xg_render_manifest_table)
+    add_dependencies(psx-runtime-pgxp xg_render_runtime_variant_table)
+endif()

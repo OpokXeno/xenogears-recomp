@@ -69,9 +69,12 @@ podman run --rm --userns=keep-id \
         rm -rf "$pkg"
         mkdir -p "$pkg"
         strip "$XGR_RUNTIME_BUILD_DIR/XenogearsRecomp" -o "$pkg/XenogearsRecomp"
-        cp game.toml LICENSE README.md "$pkg/"
+        cp game.toml LICENSE README.md MODS.md MOD_AUTHORING.md "$pkg/"
         cp -r "$XGR_RUNTIME_BUILD_DIR/bios" "$pkg/bios"
         cp -r "$XGR_RUNTIME_BUILD_DIR/assets" "$pkg/assets"
+        test -d "$XGR_RUNTIME_BUILD_DIR/mods/packages"
+        mkdir -p "$pkg/mods"
+        cp -r "$XGR_RUNTIME_BUILD_DIR/mods/packages" "$pkg/mods/"
         rm -f "$pkg/assets/img/boxart.tga"
         toolchain_tmp=/tmp/xgr-overlay-toolchain
         rm -rf "$toolchain_tmp"

@@ -6,7 +6,7 @@ mod manager shipped with XenogearsRecomp.
 
 For the player-facing workflow, see [`MODS.md`](MODS.md). For the framework's
 complete normative schema, see
-[`psxrecomp/docs/MOD_PACKAGES.md`](psxrecomp/docs/MOD_PACKAGES.md).
+[`MOD_PACKAGES.md`](https://github.com/OpokXeno/psxrecomp/blob/master/docs/MOD_PACKAGES.md).
 
 ## Design rules
 
@@ -81,7 +81,7 @@ url = "https://example.com/author"
 
 | Field | Meaning |
 |---|---|
-| `format_version` | Manifest feature level. Use the lowest version that provides the operations you need, from 1 through 5. |
+| `format_version` | Manifest feature level. Use the lowest version that provides the operations you need, from 1 through 6. |
 | `id` | Stable package identity. Do not change it between releases. Use lowercase letters, digits, `.`, `-`, and `_`; maximum 96 characters. |
 | `version` | Semantic package version such as `1.0.0`. Publish changed content as a new version. |
 | `name` | Player-facing package name. |
@@ -102,6 +102,7 @@ versions are cumulative:
 | 3 | Ordered integer constraints and linked MIPS `LUI`/`ORI` encoding. |
 | 4 | Sparse owned fields and integer predicates. |
 | 5 | Trusted static plugin selectors. |
+| 6 | Authenticated replacement of game-specific indexed files. |
 
 ## Targets and revision guards
 
@@ -114,35 +115,48 @@ exe_sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 disc_sha256 = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
 ```
 
-`game_id` is required. `exe_sha256` and `disc_sha256` narrow support to exact
-files and use lowercase 64-character SHA-256 values.
+`game_id` is required. `exe_sha256` narrows support to one exact loose
+executable. `disc_sha256` identifies the canonical mounted disc content. Both
+fields use lowercase 64-character SHA-256 values.
 
 - Add `exe_sha256` when the package depends on one exact loose
   `SLUS-006.64`. Release installs may not contain a loose executable, so
   expected-byte guards remain mandatory.
-- Add `disc_sha256` for every target used by a feature with a disc overlay.
-  The manager requires an exact disc digest for overlays.
+- Add `disc_sha256` for every target used by a feature with a disc overlay or
+  indexed-file replacement. The manager requires an exact canonical disc
+  digest for those operations.
 - Use multiple `[[target]]` entries only after independently verifying each
   revision. Never assume two pressings have the same layout.
 
-Useful local hash commands are:
+`disc_sha256` is not the hash of the selected container file. The core runtime
+supplies a representation-neutral digest for the mounted disc, so equivalent
+CUE/BIN and CHD representations have the same identity. Package-authoring and
+hash tooling must use that runtime canonical digest; hashing a `.cue`, `.bin`,
+or `.chd` directly does not produce a valid `disc_sha256`.
+
+Use the runtime itself to print that canonical digest:
+
+```sh
+./build-debug/XenogearsRecomp --disc-hash game/disc1.cue
+```
+
+```powershell
+.\build-win\XenogearsRecomp.exe --disc-hash .\game\disc1.cue
+```
+
+Ordinary hash tools remain useful for `exe_sha256` and package payloads:
 
 ```sh
 # Linux/macOS
 sha256sum game/slus_006.64
-sha256sum "game/Xenogears Disc 1.bin"
+sha256sum assets/retranslated-script.bin
 ```
 
 ```powershell
 # Windows PowerShell
 (Get-FileHash .\game\slus_006.64 -Algorithm SHA256).Hash.ToLower()
-(Get-FileHash ".\game\Xenogears Disc 1.bin" -Algorithm SHA256).Hash.ToLower()
+(Get-FileHash .\assets\retranslated-script.bin -Algorithm SHA256).Hash.ToLower()
 ```
-
-Hash the exact image representation your target declares and document it for
-testers; the commands above illustrate a package that targets a direct BIN. A
-BIN digest is not interchangeable with a CUE file, CHD container, or another
-dump layout even when they contain the same game.
 
 ## Features
 
@@ -435,6 +449,108 @@ An overlay is sparse: it replaces reads in the declared range without copying
 or rebuilding the rest of the disc. Keep payloads limited to bytes you have the
 right to redistribute.
 
+## Xenogears indexed files
+
+Format 6 can replace a file in Xenogears' hidden disc index without requiring a
+fixed-size payload or distributing a rebuilt image:
+
+```toml
+format_version = 6
+
+[[indexed_file]]
+feature = "script-retranslation"
+format = "xenogears"
+index = 1234
+disc_sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+file = "assets/retranslated-script.bin"
+sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+expected_sha256 = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+```
+
+`index` is the zero-based entry in the stock Xenogears table. XA stream entries,
+directory/negative entries, the sentinel, and out-of-range indices cannot be
+replaced. Entries exposed through the disc's ISO9660 filesystem are also not
+eligible: `[[indexed_file]]` is only for files reachable through Xenogears'
+hidden index. `expected_sha256` must hash the exact stock file bytes, not padded
+sectors.
+
+For a package targeting both Xenogears discs, set `disc_sha256` on each
+`[[indexed_file]]` to the matching digest declared by one of the package's
+`[[target]]` entries. The runtime activates only the selected disc's files while
+keeping one feature selection for both targets. Omit it only when the same
+index, payload, and stock guard apply to every declared target.
+
+An active indexed-file plan cannot be combined with `disc_raw` or `disc_user`
+writes, file-backed overlays, or a legacy `derived_disc`, even when their ranges
+would be disjoint or they come from different packages. Main-executable patches
+and trusted plugins may still coexist with indexed replacements. The total
+payload of all active indexed-file replacements is limited to 128 MiB.
+
+At launch XenogearsRecomp authenticates the stock files, appends replacements
+to a virtual extension of the selected CUE/BIN/CHD data track, and updates both
+stock table copies. The original image is never changed. Replacement sectors
+are rebuilt as complete Mode 2 Form 1 sectors with valid EDC and ECC. A mount
+with audio tracks after the data track is rejected unless the runtime provides
+virtual TOC support; extending the data track must never overlap or displace a
+real trailing audio track.
+
+### Perfect Works Build converter
+
+`tools/perfect_works_to_psxmod.py` can create one independent package for every
+representable Perfect Works Build 0.11.2 patcher option without modifying the
+stock discs:
+
+The converter intentionally supports **only Perfect Works Build 0.11.2**. It
+detects the extraction version from the first `### Version` entry in
+`README.md` before reading either disc. A different or unidentifiable version
+fails with an explicit error; there is no flag to bypass the version check or
+apply 0.11.2 composition rules to another release.
+
+```sh
+python tools/perfect_works_to_psxmod.py \
+  --edition-root /path/to/Xenogears_Perfect_Works_Edition_0.11.2 \
+  --disc1 game/disc1.bin \
+  --disc2 game/disc2.bin \
+  --individual-output game/Perfect_Works_Individual_Mods_0.11.2
+```
+
+This produces 20 separate, default-disabled `.psxmod` files, one per patcher
+option. Mutually exclusive values are launcher selectors inside their mod:
+1x/1.5x/2x EXP, 1x/1.5x/2x gold, basic/expert arena, original/resized portraits,
+and fast/instant text. `CATALOG.tsv` records every filename and SHA-256;
+`CONFLICTS.tsv` records package pairs with differing claims over the same
+executable bytes or indexed files.
+
+Xenogears indexed files are atomic resources. The individual packages can be
+installed separately, but packages listed as overlapping cannot be enabled
+together and dynamically merged. Use a composed profile for those combinations;
+the converter reproduces the upstream hybrid payloads and copy precedence:
+
+```sh
+python tools/perfect_works_to_psxmod.py \
+  --edition-root /path/to/Xenogears_Perfect_Works_Edition_0.11.2 \
+  --disc1 game/disc1.bin \
+  --disc2 game/disc2.bin \
+  --profile story_mode_script \
+  --output game/perfect-works-story-mode-script.psxmod
+```
+
+The inputs must be clean raw MODE2/2352 USA BINs and an unmodified extraction of
+the published 0.11.2 edition. The converter authenticates every selected source
+directory and helper, validates both discs, reads the discs only to derive stock
+guards, reproduces the released 0.11.2 copy precedence and binary edits, and
+creates deterministic multidisc packages. Use `--profile custom --help` to see
+the composition controls. Options that use `xenocomp.exe` or
+`xenopack.exe` run those authenticated helpers directly on Windows and through
+Wine on other platforms; profiles that do not use them do not require Wine.
+
+The package's `PORTING_REPORT.txt` records selected options and coverage. FMV
+undubbing is reported but omitted because it rebuilds raw stream tables and an
+ISO-visible executable, which cannot coexist with an indexed-file plan. The
+disc-specific JPN-control executable edits are also omitted from multidisc
+packages because `main_exe` patches do not have a per-disc condition; the field,
+image, and battle-control portions remain included. No omission is silent.
+
 ## Dependencies and conflicts
 
 Declare a dependency only when your package actually requires another package
@@ -533,18 +649,18 @@ and tested against the declared stock target.
 
 ## Packing the archive
 
-From the `psxrecomp` directory:
+Download `psxmod_pack.py` from the
+[`psxrecomp` tools directory](https://github.com/OpokXeno/psxrecomp/blob/master/tools/psxmod_pack.py),
+then run:
 
 ```sh
-python tools/psxmod_pack.py ../my-xenogears-mod \
-  ../my-xenogears-mod-1.0.0.psxmod
+python psxmod_pack.py my-xenogears-mod my-xenogears-mod-1.0.0.psxmod
 ```
 
 PowerShell:
 
 ```powershell
-python tools/psxmod_pack.py ..\my-xenogears-mod `
-  ..\my-xenogears-mod-1.0.0.psxmod
+python psxmod_pack.py .\my-xenogears-mod .\my-xenogears-mod-1.0.0.psxmod
 ```
 
 The tool requires `manifest.toml`, sorts entries, fixes timestamps and file
@@ -623,9 +739,10 @@ conversion scaffolding and is rejected by new feature-style manifests.
 |---|---|
 | Package does not install | Missing root `manifest.toml`, malformed TOML, invalid ID/version, unsafe archive path, or archive limits exceeded. |
 | Package appears but feature does not | Feature disabled, condition does not match, selected package version is different, or operation is a stock-valued no-op. |
-| Launch reports wrong target | `game_id`, `exe_sha256`, or `disc_sha256` does not match the selected files. |
+| Launch reports wrong target | `game_id`, `exe_sha256`, or `disc_sha256` does not match the selected executable and mounted disc. |
 | Expected bytes mismatch | Wrong guest address, wrong revision, incorrect endianness, or bytes taken from an already patched image. |
 | Overlay is rejected | Missing exact target `disc_sha256`, wrong payload hash, wrong stock-range hash, or path escapes the archive. |
+| Indexed file is rejected | The entry is not a replaceable hidden-index file, the active plan also contains a disc patch/overlay/derived disc, active payloads exceed 128 MiB, or trailing audio requires unavailable virtual TOC support. |
 | Two features conflict | They own at least one differing byte/range or provide incompatible guards. Split true adjacent ownership into format-4 fields; otherwise require the player to disable one. |
 | Plugin is unavailable | The ID is not registered in this XenogearsRecomp build. A package cannot provide the implementation. |
 | Option cannot be enabled | Bounds, step, or an ordered constraint is invalid. |
@@ -638,9 +755,9 @@ authorship, legality, gameplay correctness, or compatibility.
 ## Reference
 
 - [`MODS.md`](MODS.md): installing and using mods.
-- [`psxrecomp/docs/MOD_PACKAGES.md`](psxrecomp/docs/MOD_PACKAGES.md): normative
-  package schema and resolution behavior.
-- [`psxrecomp/runtime/include/mod_plugins.h`](psxrecomp/runtime/include/mod_plugins.h):
+- [`MOD_PACKAGES.md`](https://github.com/OpokXeno/psxrecomp/blob/master/docs/MOD_PACKAGES.md):
+  normative package schema and resolution behavior.
+- [`mod_plugins.h`](https://github.com/OpokXeno/psxrecomp/blob/master/runtime/include/mod_plugins.h):
   trusted plugin API for reviewed game source integrations.
-- [`psxrecomp/mods/builtin/packages/`](psxrecomp/mods/builtin/packages/): small,
-  current format-5 package examples.
+- [`mods/builtin/packages`](https://github.com/OpokXeno/psxrecomp/tree/master/mods/builtin/packages):
+  small, current package examples.

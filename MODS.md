@@ -4,18 +4,23 @@ XenogearsRecomp supports versioned `.psxmod` packages through the launcher's
 **Mods** page. Mods are applied over a verified stock Xenogears disc at launch;
 the original image is never rewritten.
 
-Support currently targets **Xenogears (USA, Disc 1), SLUS-00664**. A package
-must declare its target game; disc overlays must also identify the exact stock
-image revision. Packages for another game, guarded bytes that do not match, and
-overlays for an incompatible disc revision fail before the game starts.
+Support currently targets **Xenogears (USA), SLUS-00664**. A package must
+declare its target game; disc overlays and indexed replacements must also
+identify the exact stock revision through the runtime's canonical mounted-disc
+digest. Multi-disc indexed packages can declare separate operations for the
+stock Disc 1 and Disc 2 digests so one enabled feature resolves correctly when
+either disc is selected. Equivalent CUE/BIN and CHD representations share that
+identity.
+Packages for another game, guarded bytes that do not match, and operations for
+an incompatible disc revision fail before the game starts.
 
 ## Using mods
 
 1. Start XenogearsRecomp and select your original game disc.
 2. Open **Mods** in the launcher.
 3. Enable the features you want and configure their options.
-4. To add a downloaded package, open the package management view and install
-   its `.psxmod` archive.
+4. To add downloaded packages, open the package management view and select one
+   or more `.psxmod` archives in the install dialog.
 5. Press **Launch**. The launcher validates and commits the selected mod plan
    before starting the game.
 
@@ -50,7 +55,8 @@ A `.psxmod` is a ZIP-based, versioned installation and trust boundary. Its
 - one or more supported game/disc targets;
 - independently toggleable features and typed options;
 - guarded executable or disc patches;
-- sparse, file-backed disc overlays; and
+- sparse, file-backed disc overlays;
+- authenticated replacements for Xenogears' indexed internal files; and
 - optional trusted plugin IDs implemented by XenogearsRecomp itself.
 
 Feature identity is `(package_id, feature_id)`. At launch, the manager expands
@@ -63,6 +69,12 @@ Executable patches use PSX guest virtual addresses and run only after the BIOS
 loads the main executable. Disc patches and overlays are served as sparse reads
 over the selected stock image. Neither operation creates or modifies a patched
 disc file.
+
+Indexed replacements apply only to files in Xenogears' hidden index, not files
+visible through ISO9660. They cannot be enabled in the same plan as disc
+patches, overlays, or legacy derived discs. A disc with audio tracks after its
+data track is rejected for indexed replacement unless the build supports a
+virtual TOC that preserves those tracks.
 
 ## Creating mods
 

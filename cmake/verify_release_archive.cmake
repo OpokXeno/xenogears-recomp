@@ -16,12 +16,24 @@ endif()
 set(OPENBIOS_IMAGE "${PROJECT_ROOT}/psxrecomp/bios/openbios.bin")
 set(OPENBIOS_LICENSE "${PROJECT_ROOT}/psxrecomp/bios/OpenBIOS.LICENSE")
 set(OPENBIOS_PROFILE "${PROJECT_ROOT}/psxrecomp/bios/OpenBIOS.toml")
+set(BUILTIN_MODS_CATALOG "${PROJECT_ROOT}/psxrecomp/mods/builtin")
+set(REQUIRED_BUILTIN_MOD_MANIFESTS
+    packages/psx.enhancement.cd-speed/1.0.0/manifest.toml
+    packages/psx.enhancement.fast-loading/1.0.0/manifest.toml
+    packages/psx.enhancement.pgxp/1.0.0/manifest.toml)
 foreach(_required_path IN ITEMS
         "${OPENBIOS_IMAGE}"
         "${OPENBIOS_LICENSE}"
-        "${OPENBIOS_PROFILE}")
+        "${OPENBIOS_PROFILE}"
+        "${BUILTIN_MODS_CATALOG}")
     if(NOT EXISTS "${_required_path}")
-        message(FATAL_ERROR "Canonical OpenBIOS resource is missing: ${_required_path}")
+        message(FATAL_ERROR "Canonical release resource is missing: ${_required_path}")
+    endif()
+endforeach()
+foreach(_manifest IN LISTS REQUIRED_BUILTIN_MOD_MANIFESTS)
+    if(NOT EXISTS "${BUILTIN_MODS_CATALOG}/${_manifest}")
+        message(FATAL_ERROR
+            "Canonical built-in mod manifest is missing: ${_manifest}")
     endif()
 endforeach()
 
@@ -136,9 +148,13 @@ set(_required_archive_entries
     "${PACKAGE_ROOT}/bios"
     "${PACKAGE_ROOT}/bios/OpenBIOS.LICENSE"
     "${PACKAGE_ROOT}/bios/openbios.bin"
+    "${PACKAGE_ROOT}/mods"
+    "${PACKAGE_ROOT}/mods/packages"
     "${PACKAGE_ROOT}/overlay_toolchain"
     "${PACKAGE_ROOT}/game.toml"
     "${PACKAGE_ROOT}/LICENSE"
+    "${PACKAGE_ROOT}/MODS.md"
+    "${PACKAGE_ROOT}/MOD_AUTHORING.md"
     "${PACKAGE_ROOT}/README.md"
     "${PACKAGE_ROOT}/${EXECUTABLE_NAME}")
 foreach(_entry IN LISTS _archive_entries)
@@ -148,6 +164,11 @@ foreach(_entry IN LISTS _archive_entries)
     string(REGEX REPLACE "/+$" "" _normalized_entry "${_entry}")
     string(REGEX REPLACE "^${PACKAGE_ROOT}/?" "" _relative_entry "${_normalized_entry}")
     if(_relative_entry STREQUAL "")
+        continue()
+    endif()
+    # Package payloads may use otherwise prohibited extensions. The extracted
+    # catalog is compared byte-for-byte with the canonical built-in tree below.
+    if(_relative_entry MATCHES "^mods/packages(/|$)")
         continue()
     endif()
     is_banned_path("${_relative_entry}" _is_banned)
@@ -229,9 +250,12 @@ set(_required_top_level
     "${EXECUTABLE_NAME}"
     assets
     bios
+    mods
     overlay_toolchain
     game.toml
     LICENSE
+    MODS.md
+    MOD_AUTHORING.md
     README.md)
 file(GLOB _top_level_entries
     RELATIVE "${_package_directory}"
@@ -258,9 +282,45 @@ endif()
 if(NOT IS_DIRECTORY "${_package_directory}/bios")
     fail("Archive bios path is not a directory")
 endif()
+if(NOT IS_DIRECTORY "${_package_directory}/mods")
+    fail("Archive mods path is not a directory")
+endif()
 if(NOT IS_DIRECTORY "${_package_directory}/overlay_toolchain")
     fail("Archive overlay_toolchain path is not a directory")
 endif()
+
+file(GLOB_RECURSE _canonical_mod_entries
+    RELATIVE "${BUILTIN_MODS_CATALOG}"
+    LIST_DIRECTORIES TRUE
+    "${BUILTIN_MODS_CATALOG}/*")
+file(GLOB_RECURSE _bundled_mod_entries
+    RELATIVE "${_package_directory}/mods"
+    LIST_DIRECTORIES TRUE
+    "${_package_directory}/mods/*")
+list(SORT _canonical_mod_entries)
+list(SORT _bundled_mod_entries)
+if(NOT "${_bundled_mod_entries}" STREQUAL "${_canonical_mod_entries}")
+    fail(
+        "Archive mods catalog must contain only the canonical built-in packages.\n"
+        "Expected: ${_canonical_mod_entries}\n"
+        "Actual: ${_bundled_mod_entries}")
+endif()
+foreach(_manifest IN LISTS REQUIRED_BUILTIN_MOD_MANIFESTS)
+    if(NOT EXISTS "${_package_directory}/mods/${_manifest}"
+            OR IS_DIRECTORY "${_package_directory}/mods/${_manifest}")
+        fail("Archive is missing required built-in mod manifest: ${_manifest}")
+    endif()
+endforeach()
+foreach(_entry IN LISTS _canonical_mod_entries)
+    if(IS_DIRECTORY "${BUILTIN_MODS_CATALOG}/${_entry}")
+        continue()
+    endif()
+    file(SHA256 "${BUILTIN_MODS_CATALOG}/${_entry}" _canonical_mod_hash)
+    file(SHA256 "${_package_directory}/mods/${_entry}" _bundled_mod_hash)
+    if(NOT _bundled_mod_hash STREQUAL _canonical_mod_hash)
+        fail("Bundled built-in mod file does not match the canonical catalog: ${_entry}")
+    endif()
+endforeach()
 
 set(_required_toolchain_files
     compile_overlays.py
