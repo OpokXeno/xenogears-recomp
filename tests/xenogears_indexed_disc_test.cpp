@@ -2,6 +2,7 @@
 
 #include "disc_path.h"
 #include "iso_reader.h"
+#include "mod_packages.h"
 #include "psx_sha256.h"
 
 #include <array>
@@ -12,6 +13,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -299,9 +301,260 @@ bool build_real_identity_plan(const fs::path& path, ModVirtualDisc& output,
     return true;
 }
 
+bool build_real_fmv_plan(const fs::path& path, const fs::path& bundle_path,
+                         ModVirtualDisc& output, std::string& error) {
+    const auto resolved = PSXRecompV4::resolve_disc_path(path);
+    PS1::ISOReader disc;
+    if (resolved.mount.empty() || !disc.Open(resolved.mount.string())) {
+        error = "cannot open real FMV integration disc";
+        return false;
+    }
+    std::ifstream bundle_stream(bundle_path, std::ios::binary);
+    std::vector<uint8_t> bundle(
+        (std::istreambuf_iterator<char>(bundle_stream)),
+        std::istreambuf_iterator<char>());
+    if (bundle.size() < 16 ||
+        std::memcmp(bundle.data(), "XGFMV112", 8) != 0 ||
+        u32(bundle.data() + 8) != 1) {
+        error = "cannot read real FMV integration bundle";
+        return false;
+    }
+    const uint32_t disc_number = u32(bundle.data() + 12);
+    const uint32_t raw_count = u32(bundle.data() + 16);
+    const uint32_t subtitle_count = u32(bundle.data() + 20);
+    const uint32_t soft_executable_size = u32(bundle.data() + 24);
+    size_t bundle_offset = 28 + size_t(raw_count) * (4 + 32 + kRawSize);
+    for (uint32_t i = 0; i < subtitle_count; ++i) {
+        if (bundle_offset + 8 > bundle.size()) {
+            error = "real FMV integration subtitle header is truncated";
+            return false;
+        }
+        const uint32_t size = u32(bundle.data() + bundle_offset + 4);
+        bundle_offset += 8 + size;
+    }
+    if (bundle_offset + soft_executable_size != bundle.size()) {
+        error = "real FMV integration executable is truncated";
+        return false;
+    }
+    const std::vector<uint8_t> soft_executable(
+        bundle.begin() + bundle_offset, bundle.end());
+    const uint32_t executable_index = disc_number == 1 ? 22 : 17;
+    const uint32_t stream_index = disc_number == 1 ? 4150 : 4145;
+    const uint32_t final_stream_index = disc_number == 1 ? 4161 : 4156;
+    const uint32_t sentinel_index = disc_number == 1 ? 4162 : 4157;
+    if (disc_number < 1 || disc_number > 2) {
+        error = "real FMV integration bundle has an invalid disc number";
+        return false;
+    }
+
+    std::vector<uint8_t> table(16 * kUserSize);
+    for (uint32_t i = 0; i < 16; ++i) {
+        if (!disc.ReadSector(0x18 + i, table.data() + i * kUserSize)) {
+            error = "cannot read real FMV integration table";
+            return false;
+        }
+    }
+    const uint8_t* executable_entry =
+        table.data() + size_t(executable_index) * 7;
+    const uint32_t executable_lba = u24(executable_entry);
+    const uint32_t executable_size = u32(executable_entry + 3);
+    std::vector<uint8_t> stock_executable(executable_size);
+    size_t copied = 0;
+    std::array<uint8_t, kUserSize> sector{};
+    for (uint32_t i = 0; copied < stock_executable.size(); ++i) {
+        if (!disc.ReadSector(executable_lba + i, sector.data())) {
+            error = "cannot read real FMV integration executable";
+            return false;
+        }
+        const size_t amount =
+            std::min(sector.size(), stock_executable.size() - copied);
+        std::memcpy(stock_executable.data() + copied, sector.data(), amount);
+        copied += amount;
+    }
+    const uint32_t stock_stream_lba =
+        u24(table.data() + size_t(stream_index) * 7);
+    const uint32_t stock_stream_size =
+        u32(table.data() + size_t(stream_index) * 7 + 3);
+
+    ModResolution::IndexedFile replacement;
+    replacement.format = XenogearsRecomp::kIndexedDiscFormat;
+    replacement.index = executable_index;
+    replacement.payload = std::move(bundle);
+    replacement.expected_sha256 = hash(stock_executable);
+    replacement.package_id = "integration.fmv";
+    replacement.feature_id = "perfect-works";
+    replacement.compose = "xenogears-pwb-fmv-0.11.2";
+    const uint32_t base_sectors = disc.GetSectorCount();
+    if (!XenogearsRecomp::build_indexed_disc(
+            resolved.mount, {replacement}, base_sectors, output, &error))
+        return false;
+
+    const auto read_virtual_entry = [&](uint32_t index, uint32_t& lba,
+                                        uint32_t& size) {
+        const size_t offset = size_t(index) * 7;
+        const uint32_t sector_lba = 0x18 + static_cast<uint32_t>(offset / kUserSize);
+        const auto found = output.raw_sectors.find(sector_lba);
+        if (found == output.raw_sectors.end()) return false;
+        const uint8_t* p = found->second.data() + kUserOffset + offset % kUserSize;
+        lba = u24(p);
+        size = u32(p + 3);
+        return true;
+    };
+    uint32_t final_lba = 0;
+    uint32_t final_size = 0;
+    uint32_t sentinel_lba = 0;
+    uint32_t sentinel_size = 1;
+    if (!read_virtual_entry(final_stream_index, final_lba, final_size) ||
+        !read_virtual_entry(sentinel_index, sentinel_lba, sentinel_size) ||
+        final_lba != stock_stream_lba || final_size != stock_stream_size ||
+        sentinel_lba != 0xFFFFFF || sentinel_size != 0 ||
+        output.raw_sectors.find(executable_lba) == output.raw_sectors.end() ||
+        output.appended_raw_sectors.empty()) {
+        error = "real FMV virtual plan did not rebuild the expected layout";
+        return false;
+    }
+    constexpr size_t injected_code_offset = 0xFB0;
+    const auto injected_sector = output.raw_sectors.find(
+        executable_lba + injected_code_offset / kUserSize);
+    if (injected_sector == output.raw_sectors.end() ||
+        std::memcmp(
+            injected_sector->second.data() + kUserOffset +
+                injected_code_offset % kUserSize,
+            soft_executable.data() + injected_code_offset, 64) != 0) {
+        error = "real FMV virtual plan overwrote the soft-sub executable code";
+        return false;
+    }
+    return true;
+}
+
+bool validate_real_catalog(const fs::path& catalog, const fs::path& disc1,
+                           const fs::path& disc2, std::string& error) {
+    const fs::path root =
+        fs::temp_directory_path() / "xenogears-pw-catalog-validation";
+    std::error_code cleanup_error;
+    fs::remove_all(root, cleanup_error);
+    PSXRecompV4::ModPackageManager manager(root);
+    size_t installed = 0;
+    std::vector<fs::path> archives;
+    for (const fs::directory_entry& item : fs::directory_iterator(catalog))
+        if (item.path().extension() == ".psxmod")
+            archives.push_back(item.path());
+    std::sort(archives.begin(), archives.end());
+    for (const fs::path& archive : archives) {
+        if (!manager.install_archive(archive, nullptr, nullptr, &error)) {
+            fs::remove_all(root, cleanup_error);
+            return false;
+        }
+        ++installed;
+    }
+    if (installed != 21 ||
+        (!PSXRecompV4::mod_indexed_file_format_register("xenogears") &&
+         !PSXRecompV4::mod_indexed_file_format_registered("xenogears"))) {
+        fs::remove_all(root, cleanup_error);
+        error = "real catalog package count or format registration failed";
+        return false;
+    }
+    size_t enabled = 0;
+    for (const auto& [package_id, versions] : manager.packages()) {
+        (void)versions;
+        if (package_id ==
+            "org.perfectworksbuild.individual.story-mode")
+            continue;
+        if (!manager.set_feature_enabled(
+                package_id, "perfect-works", true, &error)) {
+            fs::remove_all(root, cleanup_error);
+            return false;
+        }
+        ++enabled;
+    }
+    if (enabled != 20) {
+        fs::remove_all(root, cleanup_error);
+        error = "real catalog did not enable all compatible packages";
+        return false;
+    }
+
+    const std::array<std::tuple<fs::path, std::string>, 2> discs = {{
+        {disc1, "74265236654985f8d5d76f79767ca62a9b2b6ba299c995211ff94588928a6235"},
+        {disc2, "b5fce68b407e9f4ae7474b3487a3d9a35ccd2c98e8b377374dd1fc1060450e30"},
+    }};
+    for (const auto& [path, digest] : discs) {
+        const ModResolution resolution =
+            manager.resolve("SLUS-00664", {}, digest);
+        if (!resolution.ok) {
+            error = resolution.errors.empty()
+                ? "real catalog resolution failed"
+                : resolution.errors.front();
+            fs::remove_all(root, cleanup_error);
+            return false;
+        }
+        const auto resolved = PSXRecompV4::resolve_disc_path(path);
+        PS1::ISOReader reader;
+        if (resolved.mount.empty() || !reader.Open(resolved.mount.string())) {
+            fs::remove_all(root, cleanup_error);
+            error = "cannot open real catalog disc";
+            return false;
+        }
+        ModVirtualDisc output;
+        if (!XenogearsRecomp::build_indexed_disc(
+                resolved.mount, resolution.indexed_files,
+                reader.GetSectorCount(), output, &error) ||
+            resolution.writes.empty() || output.raw_sectors.size() < 1000 ||
+            output.appended_raw_sectors.empty()) {
+            fs::remove_all(root, cleanup_error);
+            if (error.empty()) error = "real catalog virtual plan is incomplete";
+            return false;
+        }
+        if (digest == std::get<1>(discs[0])) {
+            const auto primary = output.raw_sectors.find(0x18);
+            if (primary == output.raw_sectors.end()) {
+                fs::remove_all(root, cleanup_error);
+                error = "real catalog primary table is missing";
+                return false;
+            }
+            const uint32_t executable_lba =
+                u24(primary->second.data() + kUserOffset + 22 * 7);
+            constexpr size_t injected_code_offset = 0xFB0;
+            const auto code = output.raw_sectors.find(
+                executable_lba + injected_code_offset / kUserSize);
+            static constexpr std::array<uint8_t, 4> prologue = {
+                0xF8, 0xFF, 0xBD, 0x27};
+            if (code == output.raw_sectors.end() ||
+                !std::equal(
+                    prologue.begin(), prologue.end(),
+                    code->second.begin() + kUserOffset +
+                        injected_code_offset % kUserSize)) {
+                fs::remove_all(root, cleanup_error);
+                error = "real catalog overwrote the soft-sub executable code";
+                return false;
+            }
+        }
+    }
+    fs::remove_all(root, cleanup_error);
+    return true;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
+    if (argc == 5 && std::string(argv[1]) == "--catalog") {
+        std::string error;
+        if (!validate_real_catalog(argv[2], argv[3], argv[4], error)) {
+            std::cerr << "FAIL: " << error << '\n';
+            return 1;
+        }
+        std::cout << "xenogears real catalog integration passed\n";
+        return 0;
+    }
+    if (argc == 4 && std::string(argv[1]) == "--fmv") {
+        ModVirtualDisc output;
+        std::string error;
+        if (!build_real_fmv_plan(argv[2], argv[3], output, error)) {
+            std::cerr << "FAIL: " << error << '\n';
+            return 1;
+        }
+        std::cout << "xenogears real-disc FMV integration passed\n";
+        return 0;
+    }
     if (argc > 1) {
         ModVirtualDisc reference;
         std::string error;

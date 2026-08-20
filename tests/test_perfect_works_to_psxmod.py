@@ -241,9 +241,9 @@ class PerfectWorksConverterTests(unittest.TestCase):
 
     def test_individual_catalog_groups_option_values_in_selectors(self):
         keys = [individual.key for individual in pw.INDIVIDUAL_MODS]
-        self.assertEqual(len(keys), 20)
+        self.assertEqual(len(keys), 21)
         self.assertEqual(len(keys), len(set(keys)))
-        self.assertNotIn("fmv-undub", keys)
+        self.assertIn("fmv-undub", keys)
         self.assertIn("exp", keys)
         self.assertIn("gold", keys)
         self.assertIn("arena", keys)
@@ -308,7 +308,7 @@ class PerfectWorksConverterTests(unittest.TestCase):
         )
         self.assertEqual(tomllib.loads(manifest)["conflicts"], list(conflicts))
 
-    def test_format_seven_composition_metadata_is_serialized(self):
+    def test_format_eight_composition_metadata_is_serialized(self):
         condition = pw.FeatureCondition(
             "org.perfectworksbuild.individual.retranslation"
         )
@@ -338,10 +338,41 @@ class PerfectWorksConverterTests(unittest.TestCase):
             )
         )
         indexed = parsed["indexed_file"][0]
-        self.assertEqual(parsed["format_version"], 7)
+        self.assertEqual(parsed["format_version"], 8)
         self.assertEqual(indexed["compose"], "xenogears-pwb-0.11.2")
         self.assertEqual(indexed["when_features"][0]["package"], condition.package_id)
         self.assertEqual(indexed["supersedes"], [condition.package_id])
+
+    def test_format_eight_scopes_executable_patches(self):
+        condition = pw.FeatureCondition(
+            pw.individual_package_id("fmv-undub"), enabled=False
+        )
+        patch = pw.ExePatch(
+            0x80012340,
+            b"\x01\x02",
+            b"\x03\x04",
+            "disc-specific",
+            disc_sha256="1" * 64,
+            when_features=(condition,),
+        )
+        parsed = tomllib.loads(
+            pw.make_manifest(
+                "test.patch",
+                "Patch",
+                "Patch",
+                {1: "1" * 64, 2: "2" * 64},
+                [],
+                [patch],
+                False,
+            )
+        )
+        serialized = parsed["patch"][0]
+        self.assertEqual(serialized["disc_sha256"], "1" * 64)
+        self.assertFalse(serialized["when_features"][0]["enabled"])
+        reparsed = pw.feature_conditions_from_manifest(
+            serialized["when_features"]
+        )
+        self.assertEqual(reparsed, (condition,))
 
     def test_composition_variant_claims_all_participant_resources(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -561,7 +592,7 @@ class PerfectWorksConverterTests(unittest.TestCase):
                 )
             packages = sorted(output.glob("*.psxmod"))
             self.assertEqual(len(packages), len(pw.INDIVIDUAL_MODS))
-            self.assertIn("Individual packages: 20", report)
+            self.assertIn("Individual packages: 21", report)
             self.assertIn("Incompatible package pairs: 8", report)
             self.assertTrue((output / "CATALOG.tsv").is_file())
             self.assertTrue((output / "CONFLICTS.tsv").is_file())
@@ -604,9 +635,74 @@ class PerfectWorksConverterTests(unittest.TestCase):
         patches = pw.build_exe_patches(
             {1: bytes(executable), 2: bytes(executable)},
             pw.PatchOptions(text_speed="fast"),
+            Path("."),
+            {1: "1" * 64, 2: "2" * 64},
+            "test.text-speed",
         )
         self.assertEqual([patch.address for patch in patches], [0x80034964, 0x80034967])
-        self.assertEqual([patch.replacement for patch in patches], [b"\x05\x00", b"\x34\x00"])
+        self.assertEqual([patch.replacement for patch in patches], [b"\x05", b"\x34"])
+
+    def test_jpn_executable_guards_follow_fmv_selection(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            edition = Path(temporary)
+            (edition / "data/controls").mkdir(parents=True)
+            (edition / "data/controls/0022.csv").write_text(
+                "2251,0x0a60\n38144,0x20\n", encoding="ascii"
+            )
+            executables = {}
+            for disc_number, name, expected in (
+                (1, "SLUS_006.64", b"\x64\x00"),
+                (2, "SLUS_006.69", b"\x00\x00"),
+            ):
+                executable = bytearray(40000)
+                executable[:8] = b"PS-X EXE"
+                executable[0x18:0x1C] = (0x80010000).to_bytes(4, "little")
+                executable[0x1C:0x20] = (37952).to_bytes(4, "little")
+                executable[2251:2253] = expected
+                executables[disc_number] = bytes(executable)
+                directory = edition / f"gamefiles/sub_executable/disc{disc_number}"
+                directory.mkdir(parents=True)
+                (directory / name).write_bytes(executable)
+
+            patches = pw.build_exe_patches(
+                executables,
+                pw.PatchOptions(jpn_controls=True),
+                edition,
+                {1: "1" * 64, 2: "2" * 64},
+                pw.individual_package_id("jpn-controls"),
+            )
+            self.assertEqual(len(patches), 2)
+            self.assertEqual(
+                {patch.when_features[0].enabled for patch in patches},
+                {False, True},
+            )
+            self.assertTrue(all(patch.address == 0x80018D00 for patch in patches))
+
+    def test_text_selector_guards_follow_fmv_selection(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            edition = Path(temporary)
+            executable = bytearray(303104)
+            executable[:8] = b"PS-X EXE"
+            executable[0x18:0x1C] = (0x80010000).to_bytes(4, "little")
+            executable[0x1C:0x20] = (301056).to_bytes(4, "little")
+            executable[151908:151910] = b"\x68\x00"
+            executable[151911:151913] = b"\x92\x00"
+            for disc_number, name in ((1, "SLUS_006.64"), (2, "SLUS_006.69")):
+                directory = edition / f"gamefiles/sub_executable/disc{disc_number}"
+                directory.mkdir(parents=True)
+                (directory / name).write_bytes(executable)
+            patches = pw.build_exe_patches(
+                {1: bytes(executable), 2: bytes(executable)},
+                pw.PatchOptions(text_speed="fast"),
+                edition,
+                {1: "1" * 64, 2: "2" * 64},
+                "org.perfectworksbuild.variant.text-speed.fast",
+            )
+            self.assertEqual(len(patches), 4)
+            self.assertEqual(
+                [patch.when_features[0].enabled for patch in patches],
+                [False, False, True, True],
+            )
 
     def test_story_mode_rejects_gameplay_combinations(self):
         with self.assertRaisesRegex(ValueError, "story mode"):

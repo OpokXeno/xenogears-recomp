@@ -229,13 +229,16 @@ if(BUILD_TESTING)
     add_executable(xenogears_indexed_disc_test
         tests/xenogears_indexed_disc_test.cpp
         src/mods/xenogears_indexed_disc.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/mod_packages.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/crc32.c
         ${PSXRECOMP_ROOT}/runtime/src/disc_path.cpp
         ${PSXRECOMP_ROOT}/runtime/src/cue_sheet.cpp
         ${PSXRECOMP_ROOT}/runtime/src/iso_reader.cpp
         ${PSXRECOMP_ROOT}/runtime/src/psx_sha256.c)
     target_include_directories(xenogears_indexed_disc_test PRIVATE
         src/mods
-        ${PSXRECOMP_ROOT}/runtime/include)
+        ${PSXRECOMP_ROOT}/runtime/include
+        ${PSXRECOMP_ROOT}/recompiler/lib/toml11)
     target_compile_definitions(xenogears_indexed_disc_test PRIVATE
         XG_INDEXED_DISC_NO_REGISTRATION=1)
     target_compile_features(xenogears_indexed_disc_test PRIVATE cxx_std_17)

@@ -515,14 +515,14 @@ python tools/perfect_works_to_psxmod.py \
   --individual-output game/Perfect_Works_Individual_Mods_0.11.2
 ```
 
-This produces 20 separate, default-disabled `.psxmod` files, one per patcher
+This produces 21 separate, default-disabled `.psxmod` files, one per patcher
 option. Mutually exclusive values are launcher selectors inside their mod:
 1x/1.5x/2x EXP, 1x/1.5x/2x gold, basic/expert arena, original/resized portraits,
 and fast/instant text. `CATALOG.tsv` records every filename and SHA-256;
 `CONFLICTS.tsv` records only upstream combinations that cannot coexist. Raw
-same-resource overlaps are not conflicts when format-7 composition resolves them.
+same-resource overlaps are not conflicts when authenticated composition resolves them.
 
-The individual catalog uses package format 7. Supported overlaps are composed at
+The individual catalog uses package format 8. Supported overlaps are composed at
 launch with the authenticated `xenogears-pwb-0.11.2` compositor. The converter
 embeds conditional payloads for the upstream `Script_items`, encounter/script,
 monster/script/items, arena/script, story/script, portrait/Roni, text/script, and
@@ -531,6 +531,13 @@ subfiles, music insertion, and EXP/gold transforms follow PWB's published stagin
 order. Story Mode's eight upstream gameplay/arena exclusions are declared as
 package conflicts; the launcher greys the blocked side and activating either
 side disables the other. Unknown structural combinations still fail closed.
+
+FMV Undub uses the trusted `xenogears-pwb-fmv-0.11.2` compositor. Its bundle
+contains only authenticated stock-to-PWB XA sector replacements, subtitle
+payloads, and the soft-sub executable; the stock FMV stream is aliased instead
+of duplicated. Japanese Controls and text-speed packages use format-8 patch
+predicates to select the correct guards for each disc and for stock versus
+soft-sub executables.
 
 Standalone composed profiles remain useful for distributing one fixed option
 set:

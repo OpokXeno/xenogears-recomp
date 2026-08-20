@@ -9,6 +9,7 @@
 #include <cstring>
 #include <exception>
 #include <limits>
+#include <map>
 #include <set>
 #include <utility>
 
@@ -26,6 +27,9 @@ constexpr uint32_t kMaxMsfLba = 99u * 60u * 75u + 59u * 75u + 74u - 150u;
 constexpr uint32_t kMaxEmbeddedFiles = 64;
 constexpr uint32_t kMaxScannedFileBytes = 64u * 1024u * 1024u;
 constexpr uint32_t kMaxVirtualSectors = 256u * 1024u;
+constexpr char kPwbFmvCompose[] = "xenogears-pwb-fmv-0.11.2";
+constexpr std::array<uint8_t, 8> kPwbFmvMagic = {
+    'X', 'G', 'F', 'M', 'V', '1', '1', '2'};
 
 struct TableEntry {
     uint32_t lba;
@@ -40,6 +44,30 @@ struct EmbeddedTable {
 
 struct ReplacementAllocation {
     const PSXRecompV4::ModResolution::IndexedFile* file = nullptr;
+    uint32_t lba = 0;
+    uint32_t sectors = 0;
+};
+
+struct FmvRawSector {
+    uint32_t lba = 0;
+    std::array<uint8_t, 32> expected_sha256{};
+    std::array<uint8_t, kRawSectorSize> replacement{};
+};
+
+struct FmvSubtitle {
+    uint32_t index = 0;
+    std::vector<uint8_t> payload;
+};
+
+struct FmvBundle {
+    uint32_t disc = 0;
+    std::vector<FmvRawSector> raw_sectors;
+    std::vector<FmvSubtitle> subtitles;
+    std::vector<uint8_t> executable;
+};
+
+struct FmvAllocation {
+    const FmvSubtitle* subtitle = nullptr;
     uint32_t lba = 0;
     uint32_t sectors = 0;
 };
@@ -124,6 +152,99 @@ std::string hash_bytes(const std::vector<uint8_t>& bytes) {
         result[i * 2 + 1] = hex[digest[i] & 15];
     }
     return result;
+}
+
+std::array<uint8_t, 32> hash_memory(const uint8_t* bytes, size_t size) {
+    std::array<uint8_t, 32> digest{};
+    psx_sha256_compute(bytes, size, digest.data());
+    return digest;
+}
+
+bool parse_fmv_bundle(const std::vector<uint8_t>& payload,
+                      FmvBundle& bundle, std::string* error) {
+    constexpr uint32_t kMaxRawSectors = 20000;
+    constexpr uint32_t kMaxSubtitles = 16;
+    constexpr uint32_t kMaxExecutableSize = 1024 * 1024;
+    size_t at = 0;
+    auto take_u32 = [&](uint32_t& value) {
+        if (at + 4 > payload.size()) return false;
+        value = read_u32(payload.data() + at);
+        at += 4;
+        return true;
+    };
+    if (payload.size() < kPwbFmvMagic.size() ||
+        !std::equal(kPwbFmvMagic.begin(), kPwbFmvMagic.end(), payload.begin()))
+        return fail(error, "Perfect Works FMV bundle has an invalid signature");
+    at = kPwbFmvMagic.size();
+    uint32_t version = 0;
+    uint32_t raw_count = 0;
+    uint32_t subtitle_count = 0;
+    uint32_t executable_size = 0;
+    if (!take_u32(version) || !take_u32(bundle.disc) ||
+        !take_u32(raw_count) || !take_u32(subtitle_count) ||
+        !take_u32(executable_size) || version != 1 ||
+        (bundle.disc != 1 && bundle.disc != 2) ||
+        raw_count == 0 || raw_count > kMaxRawSectors ||
+        subtitle_count == 0 || subtitle_count > kMaxSubtitles ||
+        executable_size == 0 || executable_size > kMaxExecutableSize)
+        return fail(error, "Perfect Works FMV bundle header is invalid");
+
+    bundle.raw_sectors.clear();
+    bundle.raw_sectors.reserve(raw_count);
+    std::set<uint32_t> raw_lbas;
+    for (uint32_t i = 0; i < raw_count; ++i) {
+        FmvRawSector sector;
+        if (!take_u32(sector.lba) ||
+            at + sector.expected_sha256.size() + sector.replacement.size() >
+                payload.size() ||
+            !raw_lbas.insert(sector.lba).second)
+            return fail(error, "Perfect Works FMV raw-sector list is invalid");
+        std::memcpy(sector.expected_sha256.data(), payload.data() + at,
+                    sector.expected_sha256.size());
+        at += sector.expected_sha256.size();
+        std::memcpy(sector.replacement.data(), payload.data() + at,
+                    sector.replacement.size());
+        at += sector.replacement.size();
+        bundle.raw_sectors.push_back(std::move(sector));
+    }
+
+    bundle.subtitles.clear();
+    bundle.subtitles.reserve(subtitle_count);
+    std::set<uint32_t> subtitle_indices;
+    for (uint32_t i = 0; i < subtitle_count; ++i) {
+        FmvSubtitle subtitle;
+        uint32_t size = 0;
+        if (!take_u32(subtitle.index) || !take_u32(size) || size == 0 ||
+            size > kMaxScannedFileBytes || at + size > payload.size() ||
+            !subtitle_indices.insert(subtitle.index).second)
+            return fail(error, "Perfect Works FMV subtitle list is invalid");
+        subtitle.payload.assign(payload.begin() + at, payload.begin() + at + size);
+        at += size;
+        bundle.subtitles.push_back(std::move(subtitle));
+    }
+    if (at + executable_size != payload.size())
+        return fail(error, "Perfect Works FMV bundle length is invalid");
+    bundle.executable.assign(payload.begin() + at, payload.end());
+    return true;
+}
+
+bool split_fmv_claim(
+    const std::vector<PSXRecompV4::ModResolution::IndexedFile>& files,
+    std::vector<PSXRecompV4::ModResolution::IndexedFile>& regular,
+    const PSXRecompV4::ModResolution::IndexedFile*& claim,
+    FmvBundle& bundle, std::string* error) {
+    regular.clear();
+    claim = nullptr;
+    for (const auto& file : files) {
+        if (file.compose != kPwbFmvCompose) {
+            regular.push_back(file);
+            continue;
+        }
+        if (claim || file.feature_id != "perfect-works")
+            return fail(error, "Perfect Works FMV claim identity is invalid");
+        claim = &file;
+    }
+    return !claim || parse_fmv_bundle(claim->payload, bundle, error);
 }
 
 bool merge_three_way(const std::vector<uint8_t>& stock,
@@ -810,6 +931,56 @@ bool patch_serialized_table(PS1::ISOReader& disc, uint32_t start_lba,
     return true;
 }
 
+bool patch_file_in_place(PS1::ISOReader& disc, const TableEntry& entry,
+                         const std::vector<uint8_t>& payload,
+                         PSXRecompV4::ModVirtualDisc& output,
+                         std::string* error) {
+    if (entry.size <= 0 || payload.size() != static_cast<uint32_t>(entry.size))
+        return fail(error, "Perfect Works FMV executable size disagrees");
+    for (uint32_t i = 0; i < sector_count_for(payload.size()); ++i) {
+        const uint32_t lba = entry.lba + i;
+        auto [it, inserted] = output.raw_sectors.try_emplace(lba);
+        if (inserted && !disc.ReadRawSector(lba, it->second.data()))
+            return fail(error, "cannot read the stock FMV executable sector");
+        if (it->second[15] != 2 ||
+            std::memcmp(it->second.data() + 16, it->second.data() + 20, 4) != 0 ||
+            (it->second[18] & 0x20) != 0)
+            return fail(error, "Perfect Works FMV executable is not Mode 2 Form 1");
+        const size_t offset = size_t(i) * kUserSectorSize;
+        const size_t amount =
+            std::min(kUserSectorSize, payload.size() - offset);
+        std::memcpy(it->second.data() + kUserOffset, payload.data() + offset,
+                    amount);
+        regenerate_mode2_form1(it->second);
+    }
+    return true;
+}
+
+bool install_fmv_raw_sectors(PS1::ISOReader& disc,
+                             const FmvBundle& fmv,
+                             uint32_t base_sector_count,
+                             PSXRecompV4::ModVirtualDisc& output,
+                             std::string* error) {
+    for (const FmvRawSector& replacement : fmv.raw_sectors) {
+        if (replacement.lba >= base_sector_count)
+            return fail(error, "Perfect Works FMV sector is outside the stock disc");
+        std::array<uint8_t, kRawSectorSize> stock{};
+        if (!disc.ReadRawSector(replacement.lba, stock.data()) ||
+            hash_memory(stock.data(), stock.size()) != replacement.expected_sha256)
+            return fail(error, "Perfect Works FMV stock-sector checksum failed");
+        if (!std::equal(stock.begin(), stock.begin() + kUserOffset,
+                        replacement.replacement.begin()) ||
+            replacement.replacement[15] != 2 ||
+            std::memcmp(replacement.replacement.data() + 16,
+                        replacement.replacement.data() + 20, 4) != 0 ||
+            (replacement.replacement[18] & 0x20) == 0 ||
+            !output.raw_sectors.emplace(
+                replacement.lba, replacement.replacement).second)
+            return fail(error, "Perfect Works FMV sector structure overlaps or disagrees");
+    }
+    return true;
+}
+
 } // namespace
 
 bool build_indexed_disc(
@@ -846,10 +1017,19 @@ bool build_indexed_disc(
     const std::vector<PS1::ISOFileEntry> iso_files =
         disc.ListFilesRecursive();
 
+    std::vector<PSXRecompV4::ModResolution::IndexedFile> regular_claims;
+    const PSXRecompV4::ModResolution::IndexedFile* fmv_claim = nullptr;
+    FmvBundle fmv;
+    if (!split_fmv_claim(
+            files, regular_claims, fmv_claim, fmv, error))
+        return false;
     std::vector<PSXRecompV4::ModResolution::IndexedFile> composed_files;
-    if (!compose_files(disc, entries, files, composed_files, error)) return false;
+    if (!regular_claims.empty() &&
+        !compose_files(disc, entries, regular_claims, composed_files, error))
+        return false;
 
     std::set<uint32_t> claimed;
+    std::set<size_t> updated_table_indices;
     uint64_t next_lba = base_sector_count;
     const int64_t xa_children = -int64_t(entries.front().size);
     PSXRecompV4::ModVirtualDisc built;
@@ -899,8 +1079,101 @@ bool build_indexed_disc(
             return fail(error, "Xenogears virtual sector count is excessive");
         write_entry(table.data() + file.index * kEntrySize,
                      static_cast<uint32_t>(next_lba), payload_size);
+        updated_table_indices.insert(file.index);
         allocations.push_back({&file, static_cast<uint32_t>(next_lba), sectors});
         next_lba += sectors;
+    }
+
+    std::vector<FmvAllocation> fmv_allocations;
+    std::vector<uint8_t> fmv_executable;
+    if (fmv_claim) {
+        const bool disc1 = fmv.disc == 1;
+        const uint32_t executable_index = disc1 ? 22 : 17;
+        const size_t stock_stream_index = disc1 ? 4150 : 4145;
+        const size_t final_sentinel_index = disc1 ? 4162 : 4157;
+        const std::vector<uint32_t> expected_subtitles = disc1
+            ? std::vector<uint32_t>{4150, 4151, 4152, 4153, 4154, 4155, 4156, 4157}
+            : std::vector<uint32_t>{4153, 4154, 4155};
+        if (fmv_claim->index != executable_index ||
+            entries.size() != stock_stream_index + 1 ||
+            embedded.entry_index != executable_index ||
+            fmv.subtitles.size() != expected_subtitles.size() ||
+            (final_sentinel_index + 1) * kEntrySize > table.size())
+            return fail(error, "Perfect Works FMV disc layout disagrees");
+        std::map<uint32_t, const FmvSubtitle*> subtitles;
+        for (const FmvSubtitle& subtitle : fmv.subtitles)
+            subtitles.emplace(subtitle.index, &subtitle);
+        for (uint32_t index : expected_subtitles)
+            if (subtitles.find(index) == subtitles.end())
+                return fail(error, "Perfect Works FMV subtitle indices disagree");
+
+        std::string executable_hash;
+        if (!hash_file(disc, entries[executable_index], executable_hash) ||
+            executable_hash != fmv_claim->expected_sha256)
+            return fail(error, "Perfect Works FMV executable checksum failed");
+        std::vector<uint8_t> stock_executable;
+        if (!read_file(disc, entries[executable_index], stock_executable) ||
+            fmv.executable.size() != stock_executable.size())
+            return fail(error, "cannot read the stock FMV executable");
+        if (embedded.lba < entries[executable_index].lba)
+            return fail(error, "Perfect Works FMV embedded table is invalid");
+        const size_t embedded_offset =
+            size_t(embedded.lba - entries[executable_index].lba) *
+                kUserSectorSize + embedded.offset;
+        if (embedded_offset + table.size() > stock_executable.size())
+            return fail(error, "Perfect Works FMV embedded table exceeds the executable");
+
+        const TableEntry stock_stream = entries[stock_stream_index];
+        for (size_t index = stock_stream_index;
+             index <= final_sentinel_index; ++index)
+            write_entry(table.data() + index * kEntrySize, 0, 0);
+        fmv_allocations.reserve(expected_subtitles.size());
+        for (uint32_t index : expected_subtitles) {
+            const FmvSubtitle& subtitle = *subtitles.at(index);
+            const uint32_t size = static_cast<uint32_t>(subtitle.payload.size());
+            const uint32_t sectors = sector_count_for(size);
+            if (next_lba + sectors > kSentinelLba ||
+                next_lba + sectors > kMaxMsfLba ||
+                next_lba + sectors >
+                    uint64_t(base_sector_count) + kMaxVirtualSectors)
+                return fail(error, "Perfect Works FMV virtual extension is excessive");
+            write_entry(table.data() + index * kEntrySize,
+                        static_cast<uint32_t>(next_lba), size);
+            fmv_allocations.push_back(
+                {&subtitle, static_cast<uint32_t>(next_lba), sectors});
+            next_lba += sectors;
+        }
+        if (disc1) {
+            write_entry(table.data() + 4160 * kEntrySize,
+                        stock_stream.lba, 18688);
+            write_entry(table.data() + 4161 * kEntrySize,
+                        stock_stream.lba,
+                        static_cast<uint32_t>(stock_stream.size));
+        } else {
+            write_entry(table.data() + 4156 * kEntrySize,
+                        stock_stream.lba,
+                        static_cast<uint32_t>(stock_stream.size));
+        }
+        write_entry(table.data() + final_sentinel_index * kEntrySize,
+                    kSentinelLba, 0);
+        table_size = (final_sentinel_index + 1) * kEntrySize;
+        for (size_t index = stock_stream_index;
+             index <= final_sentinel_index; ++index)
+            updated_table_indices.insert(index);
+
+        fmv_executable = fmv.executable;
+        for (size_t index : updated_table_indices) {
+            const size_t offset = index * kEntrySize;
+            if (index < stock_stream_index &&
+                !std::equal(
+                    fmv.executable.begin() + embedded_offset + offset,
+                    fmv.executable.begin() + embedded_offset + offset + kEntrySize,
+                    stock_executable.begin() + embedded_offset + offset))
+                return fail(error,
+                            "indexed replacement overlaps Perfect Works soft-sub code");
+            std::memcpy(fmv_executable.data() + embedded_offset + offset,
+                        table.data() + offset, kEntrySize);
+        }
     }
 
     built.appended_start_lba = base_sector_count;
@@ -944,13 +1217,38 @@ bool build_indexed_disc(
         }
     }
 
-    if (!patch_serialized_table(disc, kPrimaryTableLba, 0, table, table_size,
-                                built, error) ||
-        !patch_serialized_table(disc, embedded.lba, embedded.offset, table,
-                                table_size, built, error))
+    for (const FmvAllocation& allocation : fmv_allocations) {
+        const std::vector<uint8_t>& payload = allocation.subtitle->payload;
+        for (uint32_t i = 0; i < allocation.sectors; ++i) {
+            const size_t offset = size_t(i) * kUserSectorSize;
+            const size_t amount =
+                std::min(kUserSectorSize, payload.size() - offset);
+            built.appended_raw_sectors.push_back(
+                make_sector(allocation.lba + i, payload.data() + offset,
+                            amount, i + 1 == allocation.sectors));
+        }
+    }
+
+    if (!patch_serialized_table(
+            disc, kPrimaryTableLba, 0, table, table_size,
+            built, error))
         return false;
+    if (fmv_claim) {
+        if (!patch_file_in_place(
+                disc, entries[embedded.entry_index], fmv_executable,
+                built, error) ||
+            !install_fmv_raw_sectors(
+                disc, fmv, base_sector_count, built, error))
+            return false;
+    } else if (!patch_serialized_table(
+                   disc, embedded.lba, embedded.offset, table,
+                   table_size, built, error)) {
+        return false;
+    }
     for (auto& [lba, sector] : built.raw_sectors) {
-        if (lba < base_sector_count) regenerate_mode2_form1(sector);
+        if (lba < base_sector_count && sector[15] == 2 &&
+            (sector[18] & 0x20) == 0)
+            regenerate_mode2_form1(sector);
     }
     built.sector_count = static_cast<uint32_t>(next_lba);
     output = std::move(built);

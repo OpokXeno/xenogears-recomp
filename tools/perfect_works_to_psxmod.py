@@ -16,6 +16,7 @@ import sys
 import tempfile
 import tomllib
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable
@@ -28,10 +29,12 @@ TABLE_LBA = 0x18
 TABLE_SECTORS = 0x10
 SENTINEL_LBA = 0xFFFFFF
 PSX_EXE_HEADER_SIZE = 0x800
-MAX_ACTIVE_PAYLOAD = 128 * 1024 * 1024
+PSX_EXE_EMBEDDED_TABLE_OFFSET = PSX_EXE_HEADER_SIZE + 4
+PSX_EXE_EMBEDDED_TABLE_CAPACITY = TABLE_SECTORS * USER_SECTOR_SIZE
+MAX_ACTIVE_PAYLOAD = 512 * 1024 * 1024
 MAX_EXPANDED_ARCHIVE = 256 * 1024 * 1024
 MAX_ARCHIVE_FILES = 4096
-MAX_VIRTUAL_SECTORS = 64 * 1024
+MAX_VIRTUAL_SECTORS = 256 * 1024
 SUPPORTED_PWB_VERSION = "0.11.2"
 STORY_MODE_INCOMPATIBLE_KEYS = (
     "half-encounters",
@@ -71,6 +74,8 @@ EDITION_DIRECTORY_SHA256 = {
     "gamefiles/encounterone_script": "f5c1976426d09d7523995ad538ef15a792a0f5d11fa75c719622054f737d8871",
     "gamefiles/encountertwo_script": "c133f11323582ed0ad2a956bccab8477f7d0d4b4a731b0c3a6b970e31ea47e9f",
     "gamefiles/exp_data": "425f28e1a523cbc6ef3bca8d1b134b6cde7fc7e5c006963753bd824cb6adcdad",
+    "gamefiles/fmv1": "fb9423286559bce681762f3dea23ffb812201bb5f9b2e2d27c5359a8e2aa3923",
+    "gamefiles/fmv2": "dbf223e7425c0014a23549fb18f088d8e7a135a32b3133dd31c2ba1d26ea2381",
     "gamefiles/filesbasic": "e522ffa863e730142d6688d86f49fea590eb6051e5cea0d61a24420ff8534b0d",
     "gamefiles/filesbasic_script": "dd6aa0935a8b3ff83f38f1970152e9b832ea07551f3179dcd0a8710d012fd333",
     "gamefiles/filesexpert": "f855a4a86b13c5d50bdc3c1d0bdf9a7879daaa2955ffdc3e461cd6dd727c49c4",
@@ -99,6 +104,8 @@ EDITION_DIRECTORY_SHA256 = {
     "gamefiles/storyfiles_cd2": "8d6237162938b54d50e33626994d6d96c3ae6965002f04ba08765cf3c4468a9a",
     "gamefiles/storyfiles_script_cd1": "78cdb27df588d93b179c28a90180cfd705f87af9c4d7b1b0855820e6775c3157",
     "gamefiles/storyfiles_script_cd2": "816aa1d729fa576e206db94f61d8902f6bb09b23f0a3e6fbbe2d4d14c8efbc31",
+    "gamefiles/sub_executable/disc1": "ce2a77fd60cd975b95863ca52eb695039b9f247c221a65413d7836e0786cadb3",
+    "gamefiles/sub_executable/disc2": "3a972fa474e4ae7d58b6b3bc1e153a96ee3d636dffaa0cdf09f6a93e30e0b794",
     "gamefiles/text_cd1": "ea4e389f3df46ad5950244e8b72255701e7238b53641e6b4d43199df174547f6",
     "gamefiles/text_cd2": "a9b8185627e1a92de861c88a5e17238a2e20b86c7a6ac612adf20e5a2b319f37",
     "gamefiles/text_old1": "e02ffb71d23f1f8c00e9a11cae8fbf199bba21f2c2f6515178a324fd788ca669",
@@ -110,6 +117,9 @@ EDITION_FILE_SHA256 = {
     "README.md": "7d2b3f87a6a30eff35b4e78921178e8a9a59bd47f3664b611bc0a40fc296f0a9",
     "Tools/xenocomp.exe": "738e8dd4f1e46af13af026bd17d7af2138a0bba0c6f8197ae7ef01b97f446933",
     "Tools/xenopack.exe": "6a20de13c87e5439d9ad4072e64398965e3c8f65a13775ffe4059590ae9f2623",
+    "Tools/xdelta3-3.0.11-i686.exe": "9bf8d067de9448e521afe1f8108caa0f85b4b7c7933641efd44bc43533920565",
+    "patches/cd1_fmvs.xdelta": "38caa79f4e9cd305e0d12b2cc85ed45cd8baff716e840b4447fc809fafe8891f",
+    "patches/cd2_fmvs.xdelta": "80117837b223deba60a688f8dc7d4d26aa53192ee40721ca2859214363135538",
 }
 
 
@@ -235,6 +245,8 @@ class ExePatch:
     replacement: bytes
     purpose: str
     when: tuple[tuple[str, str], ...] = ()
+    disc_sha256: str = ""
+    when_features: tuple[FeatureCondition, ...] = ()
 
 
 ALL_COMMON = dict(
@@ -473,8 +485,14 @@ INDIVIDUAL_MODS = (
     IndividualMod(
         "jpn-controls",
         "Perfect Works - Japanese Controls",
-        "Applies Japanese field, image, and battle controls where representable.",
+        "Applies Japanese field, image, battle, and executable controls.",
         PatchOptions(jpn_controls=True),
+    ),
+    IndividualMod(
+        "fmv-undub",
+        "Perfect Works - FMV Undub",
+        "Restores Japanese FMV audio with the Perfect Works soft subtitles.",
+        PatchOptions(fmv_undub=True),
     ),
 )
 
@@ -736,6 +754,29 @@ def required_edition_paths(
         files.add("Tools/xenocomp.exe")
     if options.no_deathblow_levels or options.jpn_controls:
         files.add("Tools/xenopack.exe")
+    if options.jpn_controls or options.text_speed != "normal":
+        directories.update(
+            {
+                "gamefiles/sub_executable/disc1",
+                "gamefiles/sub_executable/disc2",
+            }
+        )
+    if options.fmv_undub:
+        directories.update(
+            {
+                "gamefiles/fmv1",
+                "gamefiles/fmv2",
+                "gamefiles/sub_executable/disc1",
+                "gamefiles/sub_executable/disc2",
+            }
+        )
+        files.update(
+            {
+                "Tools/xdelta3-3.0.11-i686.exe",
+                "patches/cd1_fmvs.xdelta",
+                "patches/cd2_fmvs.xdelta",
+            }
+        )
     return directories, files
 
 
@@ -951,6 +992,20 @@ class UpstreamToolRunner:
         if mode == "auto":
             mode = "native" if os.name == "nt" else "wine"
         self.mode = mode
+
+    def path_argument(self, path: Path) -> str:
+        resolved = path.resolve()
+        if self.mode != "wine":
+            return str(resolved)
+        result = subprocess.run(
+            ["winepath", "-w", str(resolved)],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            raise RuntimeError(f"winepath failed for {resolved}")
+        return result.stdout.strip()
 
     def run(self, executable: str, arguments: Iterable[str], cwd: Path) -> None:
         tool = self.tools / executable
@@ -1359,27 +1414,173 @@ def exe_offset_to_address(executable: bytes, offset: int) -> int:
     return load_address + offset - PSX_EXE_HEADER_SIZE
 
 
-def build_exe_patches(executables: dict[int, bytes], options: PatchOptions) -> list[ExePatch]:
-    if options.text_speed == "normal":
-        return []
-    speed = 0x05 if options.text_speed == "fast" else 0xFF
-    specifications = ((151908, speed.to_bytes(2, "little")), (151911, b"\x34\x00"))
-    patches: list[ExePatch] = []
-    for offset, replacement in specifications:
-        expected_values = {data[offset : offset + len(replacement)] for data in executables.values()}
-        if len(expected_values) != 1:
-            raise RuntimeError(
-                f"stock executables disagree at Perfect Works text offset {offset}"
+def changed_spans(source: bytes, result: bytes) -> list[tuple[int, bytes, bytes]]:
+    if len(source) != len(result):
+        raise RuntimeError("Perfect Works executable edits changed the file size")
+    spans: list[tuple[int, bytes, bytes]] = []
+    position = 0
+    while position < len(source):
+        if source[position] == result[position]:
+            position += 1
+            continue
+        begin = position
+        while position < len(source) and source[position] != result[position]:
+            position += 1
+        spans.append((begin, source[begin:position], result[begin:position]))
+    return spans
+
+
+def guarded_executable_patches(
+    executables: dict[int, bytes],
+    results: dict[int, bytes],
+    disc_hashes: dict[int, str],
+    purpose: str,
+    when_features: tuple[FeatureCondition, ...] = (),
+) -> list[ExePatch]:
+    grouped: dict[tuple[int, bytes, bytes], set[int]] = {}
+    for disc_number in (1, 2):
+        source = executables[disc_number]
+        for offset, expected, replacement in changed_spans(
+            source, results[disc_number]
+        ):
+            address = exe_offset_to_address(source, offset)
+            grouped.setdefault((address, expected, replacement), set()).add(
+                disc_number
             )
-        expected = expected_values.pop()
-        if len(expected) != len(replacement):
-            raise RuntimeError("stock executable is truncated at a text-speed edit")
-        addresses = {exe_offset_to_address(data, offset) for data in executables.values()}
-        if len(addresses) != 1:
-            raise RuntimeError("stock executables disagree on the text load address")
-        patches.append(
-            ExePatch(addresses.pop(), expected, replacement, f"text-speed@{offset}")
+    patches: list[ExePatch] = []
+    for (address, expected, replacement), discs in sorted(
+        grouped.items(), key=lambda item: (item[0][0], item[0][1], item[0][2])
+    ):
+        if discs == {1, 2}:
+            patches.append(
+                ExePatch(
+                    address,
+                    expected,
+                    replacement,
+                    purpose,
+                    when_features=when_features,
+                )
+            )
+        else:
+            for disc_number in sorted(discs):
+                patches.append(
+                    ExePatch(
+                        address,
+                        expected,
+                        replacement,
+                        purpose,
+                        disc_sha256=disc_hashes[disc_number],
+                        when_features=when_features,
+                    )
+                )
+    return patches
+
+
+def build_exe_patches(
+    executables: dict[int, bytes],
+    options: PatchOptions,
+    edition_root: Path,
+    disc_hashes: dict[int, str],
+    package_id: str,
+) -> list[ExePatch]:
+    if not options.jpn_controls and options.text_speed == "normal":
+        return []
+
+    fmv_package = individual_package_id("fmv-undub")
+    toggle_aware = package_id in {
+        individual_package_id("jpn-controls"),
+        individual_package_id("text-speed-selector"),
+    } or package_id.startswith("org.perfectworksbuild.variant.text-speed.")
+    variants: list[tuple[dict[int, bytes], tuple[FeatureCondition, ...]]] = []
+    if toggle_aware or not options.fmv_undub:
+        variants.append(
+            (
+                executables,
+                (FeatureCondition(fmv_package, enabled=False),)
+                if toggle_aware
+                else (),
+            )
         )
+    if toggle_aware or options.fmv_undub:
+        softsub_executables = {
+            disc_number: (
+                edition_root
+                / "gamefiles"
+                / "sub_executable"
+                / f"disc{disc_number}"
+                / ("SLUS_006.64" if disc_number == 1 else "SLUS_006.69")
+            ).read_bytes()
+            for disc_number in (1, 2)
+        }
+        variants.append(
+            (
+                softsub_executables,
+                (FeatureCondition(fmv_package, enabled=True),)
+                if toggle_aware
+                else (),
+            )
+        )
+
+    jpn_edits: list[tuple[int, int]] = []
+    if options.jpn_controls:
+        # xenoiso rewrites this embedded table after ControlEditor runs, so
+        # upstream output retains only CSV edits beyond the reserved region.
+        embedded_table_end = (
+            PSX_EXE_EMBEDDED_TABLE_OFFSET + PSX_EXE_EMBEDDED_TABLE_CAPACITY
+        )
+        jpn_edits = [
+            edit
+            for edit in read_csv_edits(
+                edition_root / "data" / "controls" / "0022.csv"
+            )
+            if edit[0] >= embedded_table_end
+        ]
+    text_edits: list[tuple[int, bytes]] = []
+    if options.text_speed != "normal":
+        speed = 0x05 if options.text_speed == "fast" else 0xFF
+        text_edits = [(151908, speed.to_bytes(2, "little")), (151911, b"\x34\x00")]
+
+    patches: list[ExePatch] = []
+    for sources, conditions in variants:
+        if jpn_edits:
+            results: dict[int, bytes] = {}
+            for disc_number, source in sources.items():
+                result = bytearray(source)
+                for offset, value in jpn_edits:
+                    if value < 0 or value > 0xFFFF:
+                        raise RuntimeError("Japanese control executable value exceeds 16 bits")
+                    write_at(
+                        result,
+                        offset,
+                        value.to_bytes(2, "little"),
+                        "Japanese control executable",
+                    )
+                results[disc_number] = bytes(result)
+            patches.extend(
+                guarded_executable_patches(
+                    sources,
+                    results,
+                    disc_hashes,
+                    "jpn-controls",
+                    conditions,
+                )
+            )
+        if text_edits:
+            results = {}
+            for disc_number, source in sources.items():
+                result = bytearray(source)
+                for offset, replacement in text_edits:
+                    write_at(result, offset, replacement, "text speed")
+                results[disc_number] = bytes(result)
+            patches.extend(
+                guarded_executable_patches(
+                    sources,
+                    results,
+                    disc_hashes,
+                    "text-speed",
+                    conditions,
+                )
+            )
     return patches
 
 
@@ -1462,9 +1663,9 @@ def collect_operations(
             payload_bytes += len(payload)
             virtual_sectors += (len(payload) + USER_SECTOR_SIZE - 1) // USER_SECTOR_SIZE
     if payload_bytes > MAX_ACTIVE_PAYLOAD:
-        raise RuntimeError(f"Disc {disc} active payload exceeds 128 MiB")
+        raise RuntimeError(f"Disc {disc} active payload exceeds 512 MiB")
     if virtual_sectors > MAX_VIRTUAL_SECTORS:
-        raise RuntimeError(f"Disc {disc} virtual extension exceeds 64K sectors")
+        raise RuntimeError(f"Disc {disc} virtual extension exceeds 256K sectors")
     return operations, {
         "staged": len(stage.files),
         "changed": len(operations),
@@ -1473,6 +1674,140 @@ def collect_operations(
         "virtual_sectors": virtual_sectors,
         "table_entries": len(entries),
         "xa_children": xa_children,
+    }
+
+
+def build_fmv_operation(
+    disc: int,
+    image_path: Path,
+    entries: list[TableEntry],
+    edition_root: Path,
+    package_root: Path,
+    runner: UpstreamToolRunner,
+    temporary_root: Path,
+) -> tuple[IndexedOperation, dict[str, int]]:
+    patched_image = temporary_root / f"fmv-audio-disc{disc}.bin"
+    runner.run(
+        "xdelta3-3.0.11-i686.exe",
+        [
+            "-d",
+            "-s",
+            runner.path_argument(image_path),
+            runner.path_argument(edition_root / "patches" / f"cd{disc}_fmvs.xdelta"),
+            runner.path_argument(patched_image),
+        ],
+        temporary_root,
+    )
+    if (
+        not patched_image.is_file()
+        or patched_image.stat().st_size != image_path.stat().st_size
+    ):
+        raise RuntimeError(f"Perfect Works Disc {disc} FMV xdelta output is invalid")
+
+    raw_records: list[tuple[int, bytes, bytes]] = []
+    with image_path.open("rb") as stock, patched_image.open("rb") as patched:
+        lba = 0
+        while True:
+            stock_sector = stock.read(RAW_SECTOR_SIZE)
+            patched_sector = patched.read(RAW_SECTOR_SIZE)
+            if not stock_sector and not patched_sector:
+                break
+            if len(stock_sector) != RAW_SECTOR_SIZE or len(patched_sector) != RAW_SECTOR_SIZE:
+                raise RuntimeError(f"Disc {disc} FMV xdelta output is sector-truncated")
+            if stock_sector != patched_sector:
+                if (
+                    stock_sector[:USER_OFFSET] != patched_sector[:USER_OFFSET]
+                    or patched_sector[15] != 2
+                    or patched_sector[16:20] != patched_sector[20:24]
+                    or not (patched_sector[18] & 0x20)
+                ):
+                    raise RuntimeError(
+                        f"Disc {disc} FMV xdelta changed non-XA structure at LBA {lba}"
+                    )
+                raw_records.append(
+                    (lba, hashlib.sha256(stock_sector).digest(), patched_sector)
+                )
+            lba += 1
+    patched_image.unlink()
+    if not raw_records:
+        raise RuntimeError(f"Disc {disc} FMV xdelta changed no sectors")
+
+    stream_index = 4150 if disc == 1 else 4145
+    stream_source = edition_root / "gamefiles" / f"fmv{disc}" / "4161.bin"
+    with image_path.open("rb") as image:
+        if stream_source.read_bytes() != read_entry(image, entries[stream_index]):
+            raise RuntimeError(f"Disc {disc} Perfect Works FMV stream is not the stock stream")
+
+    subtitle_paths = sorted(
+        (edition_root / "gamefiles" / f"fmv{disc}").glob("*.str"),
+        key=source_index,
+    )
+    subtitles = [
+        (table_index(disc, source_index(path)), path.read_bytes())
+        for path in subtitle_paths
+    ]
+    expected_indices = (
+        list(range(4150, 4158)) if disc == 1 else list(range(4153, 4156))
+    )
+    if [index for index, _payload in subtitles] != expected_indices:
+        raise RuntimeError(f"Disc {disc} Perfect Works FMV subtitle indices disagree")
+
+    executable_name = "SLUS_006.64" if disc == 1 else "SLUS_006.69"
+    executable = (
+        edition_root
+        / "gamefiles"
+        / "sub_executable"
+        / f"disc{disc}"
+        / executable_name
+    ).read_bytes()
+    executable_index = DISC_EXECUTABLE_INDEX[disc]
+    if len(executable) != entries[executable_index].size:
+        raise RuntimeError(f"Disc {disc} Perfect Works soft-sub executable size disagrees")
+
+    bundle = bytearray(b"XGFMV112")
+    bundle.extend(
+        struct.pack(
+            "<IIIII", 1, disc, len(raw_records), len(subtitles), len(executable)
+        )
+    )
+    for lba, expected_sha256, replacement in raw_records:
+        bundle.extend(struct.pack("<I", lba))
+        bundle.extend(expected_sha256)
+        bundle.extend(replacement)
+    for index, payload in subtitles:
+        bundle.extend(struct.pack("<II", index, len(payload)))
+        bundle.extend(payload)
+    bundle.extend(executable)
+
+    relative = Path("assets") / "fmv" / f"disc{disc}.pwbfmv"
+    destination = package_root / relative
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(bundle)
+    with image_path.open("rb") as image:
+        expected_executable = read_entry(image, entries[executable_index])
+    operation = IndexedOperation(
+        disc=disc,
+        index=executable_index,
+        listed_index=22,
+        payload_path=relative,
+        payload_sha256=hashlib.sha256(bundle).hexdigest(),
+        expected_sha256=hashlib.sha256(expected_executable).hexdigest(),
+        payload_size=len(bundle),
+        sources=(
+            f"patches/cd{disc}_fmvs.xdelta",
+            f"gamefiles/fmv{disc}",
+            f"gamefiles/sub_executable/disc{disc}/{executable_name}",
+        ),
+        transforms=("fmv-xdelta-sector-diff", "fmv-soft-sub-bundle"),
+        compose="xenogears-pwb-fmv-0.11.2",
+    )
+    return operation, {
+        "raw_sectors": len(raw_records),
+        "payload_bytes": len(bundle),
+        "virtual_sectors": sum(
+            (len(payload) + USER_SECTOR_SIZE - 1) // USER_SECTOR_SIZE
+            for _index, payload in subtitles
+        ),
     }
 
 
@@ -1510,6 +1845,19 @@ def toml_feature_conditions(values: tuple[FeatureCondition, ...]) -> str:
             )
         conditions.append("{ " + ", ".join(fields) + " }")
     return "[" + ", ".join(conditions) + "]"
+
+
+def feature_conditions_from_manifest(values: list[dict]) -> tuple[FeatureCondition, ...]:
+    return tuple(
+        FeatureCondition(
+            value["package"],
+            value["feature"],
+            value.get("enabled", True),
+            value.get("option", ""),
+            value.get("value", ""),
+        )
+        for value in values
+    )
 
 
 def indexed_operation_toml(
@@ -1570,7 +1918,7 @@ def make_manifest(
     conflicts: tuple[str, ...] = (),
 ) -> str:
     lines = [
-        "format_version = 7",
+        "format_version = 8",
         f"id = {toml_string(package_id)}",
         f"version = {toml_string(SUPPORTED_PWB_VERSION)}",
         f"name = {toml_string(package_name)}",
@@ -1644,8 +1992,14 @@ def make_manifest(
                 f"replace = {toml_string(bytes_text(patch.replacement))}",
             ]
         )
+        if patch.disc_sha256:
+            lines.append(f"disc_sha256 = {toml_string(patch.disc_sha256)}")
         if patch.when:
             lines.append(f"when = {toml_condition(patch.when)}")
+        if patch.when_features:
+            lines.append(
+                f"when_features = {toml_feature_conditions(patch.when_features)}"
+            )
         lines.append("")
     for operation in sorted(
         operations, key=lambda item: (item.disc, item.index, item.when)
@@ -1697,19 +2051,7 @@ def is_gameplay_profile(options: PatchOptions) -> bool:
 
 
 def coverage_notes(options: PatchOptions) -> list[str]:
-    notes: list[str] = []
-    if options.fmv_undub:
-        notes.append(
-            "FMV undub omitted: it applies raw-disc xdelta changes, expands the stream table, "
-            "and replaces the ISO-visible SLUS; indexed-file plans cannot express that path."
-        )
-    if options.jpn_controls:
-        notes.append(
-            "JPN executable edits omitted: the two stock SLUS files require different guards, "
-            "while main_exe patches have no per-disc condition. Field images and battle controls "
-            "are included."
-        )
-    return notes
+    return []
 
 
 def make_report(
@@ -1930,8 +2272,7 @@ def build_package(
 
     runner = UpstreamToolRunner(edition_root, tool_mode)
     notes = coverage_notes(options)
-    suffix = " (FMV excluded)" if options.fmv_undub else ""
-    final_name = package_name + suffix
+    final_name = package_name
     final_description = profile.description
     if notes:
         final_description += " See PORTING_REPORT.txt for omitted operations."
@@ -1970,13 +2311,36 @@ def build_package(
                 package_root,
                 iso_files[disc],
             )
+            if options.fmv_undub:
+                notify(f"Building Perfect Works FMV bundle for Disc {disc}...")
+                fmv_operation, fmv_stats = build_fmv_operation(
+                    disc,
+                    disc_paths[disc],
+                    entries,
+                    edition_root,
+                    package_root,
+                    runner,
+                    temporary_root,
+                )
+                operations.append(fmv_operation)
+                disc_stats["changed"] += 1
+                disc_stats["payload_bytes"] += fmv_stats["payload_bytes"]
+                disc_stats["virtual_sectors"] += fmv_stats["virtual_sectors"]
+                if disc_stats["payload_bytes"] > MAX_ACTIVE_PAYLOAD:
+                    raise RuntimeError(f"Disc {disc} active payload exceeds 512 MiB")
+                if disc_stats["virtual_sectors"] > MAX_VIRTUAL_SECTORS:
+                    raise RuntimeError(
+                        f"Disc {disc} virtual extension exceeds 256K sectors"
+                    )
             all_operations.extend(operations)
             stats[disc] = disc_stats
             if oracle_paths and disc in oracle_paths:
                 notify(f"Checking Disc {disc} against the supplied oracle...")
                 oracle_stats[disc] = verify_oracle(disc, oracle_paths[disc], stage)
 
-        exe_patches = build_exe_patches(executables, options)
+        exe_patches = build_exe_patches(
+            executables, options, edition_root, disc_hashes, package_id
+        )
         manifest = make_manifest(
             package_id,
             final_name,
@@ -2094,11 +2458,15 @@ def build_selector_package(
             for patch in parsed.get("patch", []):
                 combined_patches.append(
                     ExePatch(
-                        patch["address"],
-                        bytes.fromhex(patch["expected"]),
-                        bytes.fromhex(patch["replace"]),
-                        f"selector:{choice.value}",
-                        condition,
+                        address=patch["address"],
+                        expected=bytes.fromhex(patch["expected"]),
+                        replacement=bytes.fromhex(patch["replace"]),
+                        purpose=f"selector:{choice.value}",
+                        when=condition,
+                        disc_sha256=patch.get("disc_sha256", ""),
+                        when_features=feature_conditions_from_manifest(
+                            patch.get("when_features", [])
+                        ),
                     )
                 )
             for indexed in parsed.get("indexed_file", []):
@@ -2462,9 +2830,14 @@ def add_compatibility_variants(
     tool_mode: str,
     prepared: PreparedInputs,
     authentication_cache: dict[tuple[str, str], str],
+    jobs: int = 1,
+    progress: Callable[[str], None] | None = None,
 ) -> int:
+    notify = progress or (lambda _message: None)
     count = 0
-    for number, variant in enumerate(compatibility_variants()):
+    variants = compatibility_variants()
+
+    def build_variant(number: int, variant: CompositionVariant) -> Path:
         combined_root = temporary_root / f"composition-{number}-{variant.name}"
         profile = Profile(
             f"Compatibility {variant.name}",
@@ -2490,9 +2863,28 @@ def add_compatibility_variants(
             authentication_cache=authentication_cache,
             pack_output=False,
         )
+        return combined_root
+
+    combined_roots: dict[int, Path] = {}
+    with ThreadPoolExecutor(max_workers=min(jobs, len(variants))) as executor:
+        futures = {
+            executor.submit(build_variant, number, variant): (number, variant)
+            for number, variant in enumerate(variants)
+        }
+        completed = 0
+        for future in as_completed(futures):
+            number, variant = futures[future]
+            combined_roots[number] = future.result()
+            completed += 1
+            notify(
+                f"Compatibility composition {completed}/{len(variants)}: "
+                f"{variant.name}"
+            )
+
+    for number, variant in enumerate(variants):
         count += add_composition_variant(
             source_roots,
-            combined_root,
+            combined_roots[number],
             variant,
             disc_paths,
             disc_hashes,
@@ -2509,6 +2901,7 @@ def build_individual_catalog(
     output_directory: Path,
     tool_mode: str,
     progress: Callable[[str], None] | None = None,
+    jobs: int = 1,
 ) -> str:
     notify = progress or (lambda _message: None)
     resolved_output = output_directory.resolve()
@@ -2532,10 +2925,9 @@ def build_individual_catalog(
         catalog_root.mkdir()
         source_roots: dict[str, Path] = {}
         pending_rows: list[tuple[IndividualMod, Path, list[str]]] = []
-        for number, individual in enumerate(INDIVIDUAL_MODS, start=1):
-            notify(
-                f"[{number}/{len(INDIVIDUAL_MODS)}] Building {individual.name}..."
-            )
+        def build_individual(
+            number: int, individual: IndividualMod
+        ) -> tuple[IndividualMod, Path, Path, list[str]]:
             filename = (
                 f"perfect-works-{individual.key}-{SUPPORTED_PWB_VERSION}.psxmod"
             )
@@ -2582,6 +2974,27 @@ def build_individual_catalog(
                     pack_output=False,
                 )
                 notes = coverage_notes(choices[0].options)
+            return individual, package, source_root, notes
+
+        built: dict[str, tuple[IndividualMod, Path, Path, list[str]]] = {}
+        with ThreadPoolExecutor(
+            max_workers=min(jobs, len(INDIVIDUAL_MODS))
+        ) as executor:
+            futures = {
+                executor.submit(build_individual, number, individual): individual
+                for number, individual in enumerate(INDIVIDUAL_MODS, start=1)
+            }
+            completed = 0
+            for future in as_completed(futures):
+                result = future.result()
+                individual = result[0]
+                built[individual.key] = result
+                completed += 1
+                notify(
+                    f"[{completed}/{len(INDIVIDUAL_MODS)}] Built {individual.name}"
+                )
+        for individual in INDIVIDUAL_MODS:
+            _item, package, source_root, notes = built[individual.key]
             source_roots[individual.key] = source_root
             pending_rows.append((individual, package, notes))
 
@@ -2596,6 +3009,8 @@ def build_individual_catalog(
             tool_mode,
             prepared,
             authentication_cache,
+            jobs,
+            notify,
         )
         notify("Packing deterministic individual psxmod archives...")
         for individual, package, notes in pending_rows:
@@ -2632,8 +3047,8 @@ def build_individual_catalog(
             "\n"
             "Authenticated compatibility variants are selected automatically for supported overlapping combinations.\n"
             "Unsupported structural overlaps fail closed instead of silently discarding either mod.\n"
-            "FMV undubbing has no package because it requires raw-disc and ISO-visible executable replacement.\n"
-            "The Japanese-controls package omits its disc-specific executable edits; its package report identifies the partial coverage.\n"
+            "FMV undubbing uses authenticated XA-sector, subtitle, and soft-sub executable bundles.\n"
+            "Japanese controls and text speed select stock or soft-sub executable guards automatically.\n"
         )
         write_utf8(catalog_root / "README.txt", readme)
         os.replace(catalog_root, resolved_output)
@@ -2701,7 +3116,7 @@ def main(argv: list[str] | None = None) -> int:
         description=(
             f"Compose Perfect Works Build {SUPPORTED_PWB_VERSION} assets without "
             "modifying the stock "
-            "discs, then create a deterministic format-7 psxmod."
+            "discs, then create a deterministic format-8 psxmod."
         )
     )
     parser.add_argument("--edition-root", type=Path, required=True)
@@ -2725,6 +3140,12 @@ def main(argv: list[str] | None = None) -> int:
         help="do not add the patcher's implicit bug-fix and title-screen payloads",
     )
     parser.add_argument("--tool-mode", choices=("auto", "native", "wine"), default="auto")
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=min(8, os.cpu_count() or 1),
+        help="parallel package/composition jobs for full catalog generation",
+    )
     parser.add_argument("--disc1-sha256", default=DISC_CANONICAL_SHA256[1])
     parser.add_argument("--disc2-sha256", default=DISC_CANONICAL_SHA256[2])
     parser.add_argument("--disc1-bin-sha256", default=DISC_BIN_SHA256[1])
@@ -2735,6 +3156,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        if args.jobs < 1:
+            raise ValueError("--jobs must be at least 1")
         disc_hashes = {
             1: validate_sha256(args.disc1_sha256, "Disc 1 canonical hash"),
             2: validate_sha256(args.disc2_sha256, "Disc 2 canonical hash"),
@@ -2777,6 +3200,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.individual_output,
                 args.tool_mode,
                 progress,
+                args.jobs,
             )
             print(report, end="")
             return 0
