@@ -290,6 +290,173 @@ class PerfectWorksConverterTests(unittest.TestCase):
             parsed["indexed_file"][0]["when"], {"multiplier": "2x"}
         )
 
+    def test_story_mode_declares_upstream_gameplay_exclusions(self):
+        conflicts = pw.individual_conflicts("story-mode")
+        self.assertEqual(len(conflicts), 8)
+        self.assertIn(pw.individual_package_id("arena"), conflicts)
+        self.assertIn(pw.individual_package_id("rebalanced-enemies"), conflicts)
+        self.assertEqual(pw.individual_conflicts("retranslation"), ())
+        manifest = pw.make_manifest(
+            pw.individual_package_id("story-mode"),
+            "Story Mode",
+            "Story Mode",
+            {1: "1" * 64, 2: "2" * 64},
+            [],
+            [],
+            True,
+            conflicts=conflicts,
+        )
+        self.assertEqual(tomllib.loads(manifest)["conflicts"], list(conflicts))
+
+    def test_format_seven_composition_metadata_is_serialized(self):
+        condition = pw.FeatureCondition(
+            "org.perfectworksbuild.individual.retranslation"
+        )
+        operation = pw.IndexedOperation(
+            1,
+            42,
+            42,
+            Path("assets/hybrid.bin"),
+            "a" * 64,
+            "b" * 64,
+            10,
+            (),
+            (),
+            (),
+            (condition,),
+            ("org.perfectworksbuild.individual.retranslation",),
+        )
+        parsed = tomllib.loads(
+            pw.make_manifest(
+                "test.hybrid",
+                "Hybrid",
+                "Hybrid",
+                {1: "1" * 64, 2: "2" * 64},
+                [operation],
+                [],
+                False,
+            )
+        )
+        indexed = parsed["indexed_file"][0]
+        self.assertEqual(parsed["format_version"], 7)
+        self.assertEqual(indexed["compose"], "xenogears-pwb-0.11.2")
+        self.assertEqual(indexed["when_features"][0]["package"], condition.package_id)
+        self.assertEqual(indexed["supersedes"], [condition.package_id])
+
+    def test_composition_variant_claims_all_participant_resources(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            disc_hashes = {1: "1" * 64, 2: "2" * 64}
+            expected = "e" * 64
+            owner_root = root / "owner"
+            bug_root = root / "bug"
+            combined_root = root / "combined"
+            for package_root in (owner_root, bug_root, combined_root):
+                package_root.mkdir()
+
+            def write_source(
+                package_root: Path,
+                package_id: str,
+                entries: tuple[tuple[int, bytes], ...],
+            ) -> None:
+                operations = []
+                for index, payload in entries:
+                    relative = Path("assets") / f"{index}.bin"
+                    destination = package_root / relative
+                    destination.parent.mkdir(exist_ok=True)
+                    destination.write_bytes(payload)
+                    operations.append(
+                        pw.IndexedOperation(
+                            1,
+                            index,
+                            index,
+                            relative,
+                            pw.sha256_bytes(payload),
+                            expected,
+                            len(payload),
+                            (),
+                            (),
+                        )
+                    )
+                (package_root / "manifest.toml").write_text(
+                    pw.make_manifest(
+                        package_id,
+                        package_id,
+                        package_id,
+                        disc_hashes,
+                        operations,
+                        [],
+                        False,
+                    ),
+                    encoding="utf-8",
+                )
+                (package_root / "PORTING_REPORT.txt").write_text(
+                    "", encoding="utf-8"
+                )
+                (package_root / "PORTING_INDEX.tsv").write_text(
+                    "disc\tlisted_index\tlogical_index\tpayload\tbytes\texpected_sha256\tpayload_sha256\tsources\n",
+                    encoding="utf-8",
+                )
+
+            write_source(
+                owner_root,
+                pw.individual_package_id("retranslation"),
+                ((7, b"owner"),),
+            )
+            write_source(
+                bug_root,
+                pw.individual_package_id("bug-fixes"),
+                ((8, b"bug"),),
+            )
+            write_source(
+                combined_root,
+                "test.combined",
+                ((7, b"combined-owner"), (8, b"combined-bug")),
+            )
+            discs = {1: root / "disc1.bin", 2: root / "disc2.bin"}
+            for path in discs.values():
+                path.write_bytes(b"")
+            variant = pw.CompositionVariant(
+                "retranslation",
+                "script-with-bug-suppressed",
+                pw.PatchOptions(script=True),
+                (
+                    pw.FeatureCondition(
+                        pw.individual_package_id("bug-fixes")
+                    ),
+                ),
+                suppressed=("bug-fixes",),
+            )
+            count = pw.add_composition_variant(
+                {"retranslation": owner_root, "bug-fixes": bug_root},
+                combined_root,
+                variant,
+                discs,
+                disc_hashes,
+                pw.PreparedInputs({}, {}, {}, {}),
+            )
+            self.assertEqual(count, 2)
+            parsed = tomllib.loads(
+                (owner_root / "manifest.toml").read_text(encoding="utf-8")
+            )
+            hybrids = [
+                item for item in parsed["indexed_file"] if item.get("supersedes")
+            ]
+            self.assertEqual({item["index"] for item in hybrids}, {7, 8})
+            self.assertEqual(
+                set(hybrids[0]["supersedes"]),
+                {
+                    pw.individual_package_id("retranslation"),
+                    pw.individual_package_id("bug-fixes"),
+                },
+            )
+            self.assertEqual(
+                len((owner_root / "PORTING_INDEX.tsv").read_text(
+                    encoding="utf-8"
+                ).splitlines()),
+                3,
+            )
+
     def test_conflicts_ignore_identical_resource_claims(self):
         first = {"disc:one:index:7": {"xenogears:stock:payload"}}
         identical = {"disc:one:index:7": {"xenogears:stock:payload"}}
@@ -320,12 +487,26 @@ class PerfectWorksConverterTests(unittest.TestCase):
                     [],
                     False,
                 )
-                with zipfile.ZipFile(package, "w") as archive:
-                    archive.writestr("manifest.toml", manifest)
+                source_output = kwargs.get("source_output")
+                if source_output is not None:
+                    source_output.mkdir()
+                    (source_output / "manifest.toml").write_text(
+                        manifest, encoding="utf-8"
+                    )
+                    (source_output / "PORTING_REPORT.txt").write_text(
+                        "", encoding="utf-8"
+                    )
+                    (source_output / "PORTING_INDEX.tsv").write_text(
+                        "disc\tlisted_index\tlogical_index\tpayload\tbytes\texpected_sha256\tpayload_sha256\tsources\n",
+                        encoding="utf-8",
+                    )
+                else:
+                    with zipfile.ZipFile(package, "w") as archive:
+                        archive.writestr("manifest.toml", manifest)
                 self.assertFalse(kwargs["implicit_patches"])
                 return ""
 
-            def fake_selector(*args, **_kwargs):
+            def fake_selector(*args, **kwargs):
                 individual = args[0]
                 package = args[5]
                 choices = pw.individual_choices(individual)
@@ -344,8 +525,22 @@ class PerfectWorksConverterTests(unittest.TestCase):
                         tuple((choice.value, choice.label) for choice in choices),
                     ),
                 )
-                with zipfile.ZipFile(package, "w") as archive:
-                    archive.writestr("manifest.toml", manifest)
+                source_output = kwargs.get("source_output")
+                if source_output is not None:
+                    source_output.mkdir()
+                    (source_output / "manifest.toml").write_text(
+                        manifest, encoding="utf-8"
+                    )
+                    (source_output / "PORTING_REPORT.txt").write_text(
+                        "", encoding="utf-8"
+                    )
+                    (source_output / "PORTING_INDEX.tsv").write_text(
+                        "choice\tdisc\tlisted_index\tlogical_index\tpayload\tbytes\texpected_sha256\tpayload_sha256\tsources\n",
+                        encoding="utf-8",
+                    )
+                else:
+                    with zipfile.ZipFile(package, "w") as archive:
+                        archive.writestr("manifest.toml", manifest)
                 return []
 
             prepared = pw.PreparedInputs({}, {}, {}, {})
@@ -367,8 +562,14 @@ class PerfectWorksConverterTests(unittest.TestCase):
             packages = sorted(output.glob("*.psxmod"))
             self.assertEqual(len(packages), len(pw.INDIVIDUAL_MODS))
             self.assertIn("Individual packages: 20", report)
+            self.assertIn("Incompatible package pairs: 8", report)
             self.assertTrue((output / "CATALOG.tsv").is_file())
             self.assertTrue((output / "CONFLICTS.tsv").is_file())
+            conflicts = (output / "CONFLICTS.tsv").read_text(
+                encoding="utf-8"
+            ).splitlines()
+            self.assertEqual(len(conflicts), 9)
+            self.assertEqual(conflicts[0], "first\tsecond\treason")
 
     def test_exp_reproduces_release_low_16_bit_behavior(self):
         with tempfile.TemporaryDirectory() as temporary:

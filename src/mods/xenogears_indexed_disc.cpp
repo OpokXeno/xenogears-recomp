@@ -25,7 +25,7 @@ constexpr uint32_t kSentinelLba = 0xFFFFFF;
 constexpr uint32_t kMaxMsfLba = 99u * 60u * 75u + 59u * 75u + 74u - 150u;
 constexpr uint32_t kMaxEmbeddedFiles = 64;
 constexpr uint32_t kMaxScannedFileBytes = 64u * 1024u * 1024u;
-constexpr uint32_t kMaxVirtualSectors = 64u * 1024u;
+constexpr uint32_t kMaxVirtualSectors = 256u * 1024u;
 
 struct TableEntry {
     uint32_t lba;
@@ -57,6 +57,8 @@ uint32_t read_u32(const uint8_t* p) {
     return uint32_t(p[0]) | (uint32_t(p[1]) << 8) |
            (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
 }
+
+void write_u32(uint8_t* p, uint32_t value);
 
 void write_entry(uint8_t* p, uint32_t lba, uint32_t size) {
     p[0] = static_cast<uint8_t>(lba);
@@ -96,7 +98,7 @@ bool hash_file(PS1::ISOReader& disc, const TableEntry& entry,
 }
 
 bool read_file(PS1::ISOReader& disc, const TableEntry& entry,
-               std::vector<uint8_t>& bytes) {
+                std::vector<uint8_t>& bytes) {
     bytes.resize(static_cast<uint32_t>(entry.size));
     std::array<uint8_t, kUserSectorSize> sector{};
     size_t copied = 0;
@@ -105,6 +107,476 @@ bool read_file(PS1::ISOReader& disc, const TableEntry& entry,
         const size_t amount = std::min(sector.size(), bytes.size() - copied);
         std::memcpy(bytes.data() + copied, sector.data(), amount);
         copied += amount;
+    }
+    return true;
+}
+
+std::string hash_bytes(const std::vector<uint8_t>& bytes) {
+    psx_sha256_ctx hash;
+    psx_sha256_init(&hash);
+    psx_sha256_update(&hash, bytes.data(), bytes.size());
+    uint8_t digest[32];
+    psx_sha256_final(&hash, digest);
+    static constexpr char hex[] = "0123456789abcdef";
+    std::string result(64, '0');
+    for (size_t i = 0; i < 32; ++i) {
+        result[i * 2] = hex[digest[i] >> 4];
+        result[i * 2 + 1] = hex[digest[i] & 15];
+    }
+    return result;
+}
+
+bool merge_three_way(const std::vector<uint8_t>& stock,
+                     std::vector<uint8_t>& current,
+                     const std::vector<uint8_t>& incoming,
+                     const std::string& owner,
+                     uint32_t index,
+                     std::string* error) {
+    if (current.size() != stock.size() || incoming.size() != stock.size())
+        return fail(error,
+                    "Xenogears three-way composition requires equal-size payloads at index " +
+                        std::to_string(index));
+    for (size_t offset = 0; offset < stock.size(); ++offset) {
+        if (incoming[offset] == stock[offset]) continue;
+        if (current[offset] != stock[offset] &&
+            current[offset] != incoming[offset])
+            return fail(error, owner +
+                " overlaps another change while composing Xenogears index " +
+                std::to_string(index) + " at byte " +
+                std::to_string(offset));
+        current[offset] = incoming[offset];
+    }
+    return true;
+}
+
+bool lzss_decompress(const std::vector<uint8_t>& input,
+                     std::vector<uint8_t>& output) {
+    if (input.size() < 4) return false;
+    const uint32_t size = read_u32(input.data());
+    if (size == 0 || size > kMaxScannedFileBytes) return false;
+    output.assign(size, 0);
+    std::array<uint8_t, 4096> window{};
+    size_t window_at = 4096 - 18;
+    size_t input_at = 4;
+    size_t output_at = 0;
+    while (output_at < size) {
+        // The original decompressor leaves a zero-filled tail when a stream
+        // ends between complete tokens. PWB 0.11.2 contains such files.
+        if (input_at >= input.size()) return true;
+        const uint8_t control = input[input_at++];
+        for (unsigned bit = 0; bit < 8 && output_at < size; ++bit) {
+            if (input_at >= input.size()) return true;
+            if ((control & (1u << bit)) == 0) {
+                const uint8_t value = input[input_at++];
+                output[output_at++] = value;
+                window[window_at] = value;
+                window_at = (window_at + 1) & 4095;
+                continue;
+            }
+            if (input_at + 1 >= input.size()) return false;
+            const uint8_t low = input[input_at++];
+            const uint8_t high = input[input_at++];
+            const size_t distance = size_t(low) | (size_t(high & 0x0F) << 8);
+            const size_t length = size_t(high >> 4) + 3;
+            for (size_t i = 0; i < length && output_at < size; ++i) {
+                const uint8_t value = window[(window_at - distance) & 4095];
+                output[output_at++] = value;
+                window[window_at] = value;
+                window_at = (window_at + 1) & 4095;
+            }
+        }
+    }
+    return true;
+}
+
+std::vector<uint8_t> lzss_store_literals(const std::vector<uint8_t>& input) {
+    // Xenogears checks the output size only between eight-token groups. Pad
+    // the final literal group so the guest decoder reaches the declared end.
+    const size_t stored_size = (input.size() + 7) & ~size_t(7);
+    std::vector<uint8_t> output;
+    output.reserve(4 + stored_size + stored_size / 8);
+    output.resize(4);
+    write_u32(output.data(), static_cast<uint32_t>(stored_size));
+    for (size_t offset = 0; offset < stored_size; offset += 8) {
+        output.push_back(0);
+        const size_t amount = std::min<size_t>(8, input.size() - offset);
+        output.insert(output.end(), input.begin() + offset,
+                      input.begin() + offset + amount);
+        output.insert(output.end(), 8 - amount, 0);
+    }
+    return output;
+}
+
+bool packet_unpack(const std::vector<uint8_t>& input,
+                   std::vector<std::vector<uint8_t>>& files) {
+    if (input.size() < 8) return false;
+    const uint32_t count = read_u32(input.data());
+    if (count == 0 || count > 4096 ||
+        4ull + uint64_t(count + 1) * 4 > input.size())
+        return false;
+    files.clear();
+    files.reserve(count);
+    uint32_t previous = read_u32(input.data() + 4);
+    if (previous < 4 + (count + 1) * 4 || previous > input.size() ||
+        read_u32(input.data() + 4 + count * 4) != input.size())
+        return false;
+    for (uint32_t index = 0; index < count; ++index) {
+        const uint32_t end = index + 1 == count
+            ? static_cast<uint32_t>(input.size())
+            : read_u32(input.data() + 4 + (index + 1) * 4);
+        if (end < previous || end > input.size()) return false;
+        files.emplace_back(input.begin() + previous, input.begin() + end);
+        previous = end;
+    }
+    return true;
+}
+
+bool packet_pack(const std::vector<std::vector<uint8_t>>& files,
+                 std::vector<uint8_t>& output) {
+    if (files.empty() || files.size() > 4096) return false;
+    uint64_t total = 4 + (files.size() + 1) * 4;
+    for (const auto& file : files) total += file.size();
+    if (total > std::numeric_limits<uint32_t>::max()) return false;
+    output.assign(static_cast<size_t>(4 + (files.size() + 1) * 4), 0);
+    write_u32(output.data(), static_cast<uint32_t>(files.size()));
+    uint32_t offset = static_cast<uint32_t>(output.size());
+    for (size_t index = 0; index < files.size(); ++index) {
+        write_u32(output.data() + 4 + index * 4, offset);
+        output.insert(output.end(), files[index].begin(), files[index].end());
+        offset += static_cast<uint32_t>(files[index].size());
+    }
+    write_u32(output.data() + 4 + files.size() * 4, offset);
+    return true;
+}
+
+bool is_pwb_package(
+    const PSXRecompV4::ModResolution::IndexedFile& file,
+    const char* key) {
+    return file.package_id ==
+        std::string("org.perfectworksbuild.individual.") + key;
+}
+
+bool represents_pwb_package(
+    const PSXRecompV4::ModResolution::IndexedFile& file,
+    const char* key) {
+    const std::string package_id =
+        std::string("org.perfectworksbuild.individual.") + key;
+    return file.package_id == package_id ||
+        std::find(file.supersedes.begin(), file.supersedes.end(), package_id) !=
+            file.supersedes.end();
+}
+
+int pwb_copy_priority(
+    const PSXRecompV4::ModResolution::IndexedFile& file) {
+    static constexpr std::array<const char*, 14> order = {
+        "rebalanced-items", "retranslation", "jpn-controls",
+        "half-encounters", "story-mode", "bug-fixes", "portraits",
+        "rebalanced-enemies", "arena", "text-speed", "battle-undub",
+        "title-screen", "pw-roni", "emeralda-cafe-fix",
+    };
+    for (size_t index = 0; index < order.size(); ++index)
+        if (is_pwb_package(file, order[index]))
+            return static_cast<int>(index);
+    return -1;
+}
+
+bool apply_packet_delta(const std::vector<uint8_t>& stock,
+                        std::vector<uint8_t>& current,
+                        const std::vector<uint8_t>& incoming,
+                        uint32_t index,
+                        std::string* error) {
+    std::vector<std::vector<uint8_t>> stock_files;
+    std::vector<std::vector<uint8_t>> current_files;
+    std::vector<std::vector<uint8_t>> incoming_files;
+    if (!packet_unpack(stock, stock_files) ||
+        !packet_unpack(current, current_files) ||
+        !packet_unpack(incoming, incoming_files) ||
+        stock_files.size() != current_files.size() ||
+        stock_files.size() != incoming_files.size())
+        return fail(error,
+                    "Perfect Works packet structure disagrees at Xenogears index " +
+                        std::to_string(index));
+    for (size_t file = 0; file < stock_files.size(); ++file) {
+        if (incoming_files[file] == stock_files[file]) continue;
+        if (incoming_files[file].size() != stock_files[file].size() ||
+            current_files[file].size() != stock_files[file].size()) {
+            current_files[file] = incoming_files[file];
+            continue;
+        }
+        for (size_t offset = 0; offset < stock_files[file].size(); ++offset)
+            if (incoming_files[file][offset] != stock_files[file][offset])
+                current_files[file][offset] = incoming_files[file][offset];
+    }
+    if (!packet_pack(current_files, current))
+        return fail(error, "cannot rebuild a Perfect Works packet archive");
+    return true;
+}
+
+bool apply_music_delta(const std::vector<uint8_t>& incoming,
+                       std::vector<uint8_t>& current,
+                       uint32_t index,
+                       std::string* error) {
+    if (incoming.size() < 332 || current.size() < 332)
+        return fail(error, "Perfect Works music target is truncated");
+    const uint32_t source_begin = read_u32(incoming.data() + 324);
+    const uint32_t source_end = read_u32(incoming.data() + 328);
+    const uint32_t target_begin = read_u32(current.data() + 324);
+    const uint32_t target_end = read_u32(current.data() + 328);
+    if (source_begin > source_end || source_end > incoming.size() ||
+        target_begin > target_end || target_end > current.size())
+        return fail(error,
+                    "Perfect Works music region is invalid at Xenogears index " +
+                        std::to_string(index));
+    const size_t target_size = target_end - target_begin;
+    const size_t source_size = source_end - source_begin;
+    const size_t amount = std::min(target_size, source_size);
+    std::copy_n(incoming.begin() + source_begin, amount,
+                current.begin() + target_begin);
+    std::fill(current.begin() + target_begin + amount,
+              current.begin() + target_end, 0);
+    return true;
+}
+
+uint32_t scale_value(uint32_t value, const std::string& multiplier) {
+    if (multiplier == "1-5x") return value * 3 / 2;
+    if (multiplier == "2x") return value * 2;
+    return value;
+}
+
+bool apply_reward_scale(std::vector<uint8_t>& bytes,
+                        const std::string& exp_multiplier,
+                        const std::string& gold_multiplier,
+                        uint32_t index,
+                        std::string* error) {
+    if (bytes.size() < 2) return fail(error, "Perfect Works monster file is truncated");
+    const uint32_t data_size = uint32_t(bytes[0]) | (uint32_t(bytes[1]) << 8);
+    for (uint32_t record = 126; record < data_size; record += 368) {
+        if (record + 0x10C > bytes.size())
+            return fail(error,
+                        "Perfect Works monster record is truncated at Xenogears index " +
+                            std::to_string(index));
+        if (!exp_multiplier.empty()) {
+            const size_t offset = record + 0x100;
+            const uint32_t value = uint32_t(bytes[offset]) |
+                                   (uint32_t(bytes[offset + 1]) << 8);
+            write_u32(bytes.data() + offset,
+                      scale_value(value, exp_multiplier));
+        }
+        if (!gold_multiplier.empty() && gold_multiplier != "1x") {
+            const size_t offset = record + 0x10A;
+            const uint32_t value = uint32_t(bytes[offset]) |
+                                   (uint32_t(bytes[offset + 1]) << 8);
+            const uint32_t scaled = scale_value(value, gold_multiplier);
+            bytes[offset] = static_cast<uint8_t>(scaled);
+            bytes[offset + 1] = static_cast<uint8_t>(scaled >> 8);
+        }
+    }
+    return true;
+}
+
+bool compose_pwb_group(
+    uint32_t index,
+    const std::vector<const PSXRecompV4::ModResolution::IndexedFile*>& claims,
+    const std::vector<uint8_t>& stock,
+    std::vector<uint8_t>& composed,
+    std::string* error) {
+    std::vector<const PSXRecompV4::ModResolution::IndexedFile*> base;
+    std::vector<const PSXRecompV4::ModResolution::IndexedFile*> battle_edits;
+    std::vector<const PSXRecompV4::ModResolution::IndexedFile*> packet_edits;
+    std::vector<const PSXRecompV4::ModResolution::IndexedFile*> music_edits;
+    std::string exp_multiplier;
+    std::string gold_multiplier;
+    bool insert_music = false;
+
+    std::vector<uint8_t> stock_lzss;
+    const bool stock_is_lzss = lzss_decompress(stock, stock_lzss);
+    for (const auto* claim : claims) {
+        if (is_pwb_package(*claim, "exp")) {
+            const auto value = claim->options.find("multiplier");
+            if (value != claim->options.end()) exp_multiplier = value->second;
+        } else if (is_pwb_package(*claim, "gold")) {
+            const auto value = claim->options.find("multiplier");
+            if (value != claim->options.end()) gold_multiplier = value->second;
+        } else if (is_pwb_package(*claim, "music-changes")) {
+            music_edits.push_back(claim);
+        } else if (is_pwb_package(*claim, "no-battle-flashes") ||
+                   is_pwb_package(*claim, "no-damage-cap")) {
+            battle_edits.push_back(claim);
+        } else if (is_pwb_package(*claim, "no-deathblow-levels")) {
+            packet_edits.push_back(claim);
+        } else if (is_pwb_package(*claim, "jpn-controls")) {
+            if (index == 2593 || index == 2588 || index == 3958 ||
+                index == 3953 || index == 2614 || index == 2609) {
+                std::vector<std::vector<uint8_t>> stock_files;
+                std::vector<std::vector<uint8_t>> incoming_files;
+                if (packet_unpack(stock, stock_files) &&
+                    packet_unpack(claim->payload, incoming_files))
+                    packet_edits.push_back(claim);
+                else
+                    base.push_back(claim);
+            } else if (index == 38 || index == 33) {
+                std::vector<uint8_t> incoming;
+                if (stock_is_lzss &&
+                    lzss_decompress(claim->payload, incoming))
+                    battle_edits.push_back(claim);
+                else
+                    base.push_back(claim);
+            } else {
+                base.push_back(claim);
+            }
+        } else {
+            base.push_back(claim);
+        }
+    }
+
+    composed = stock;
+    if (!base.empty()) {
+        const auto selected = std::max_element(
+            base.begin(), base.end(), [](const auto* lhs, const auto* rhs) {
+                return pwb_copy_priority(*lhs) < pwb_copy_priority(*rhs);
+            });
+        const int priority = pwb_copy_priority(**selected);
+        if (priority < 0)
+            return fail(error,
+                        "unknown Perfect Works base claim at Xenogears index " +
+                            std::to_string(index));
+        const auto ambiguous = std::find_if(
+            base.begin(), base.end(), [&](const auto* claim) {
+                return claim != *selected &&
+                    pwb_copy_priority(*claim) == priority &&
+                    claim->payload != (*selected)->payload;
+            });
+        if (ambiguous != base.end())
+            return fail(error,
+                        "ambiguous Perfect Works copy priority at Xenogears index " +
+                            std::to_string(index));
+        composed = (*selected)->payload;
+        insert_music = composed != stock &&
+            (represents_pwb_package(**selected, "retranslation") ||
+             represents_pwb_package(**selected, "text-speed") ||
+             represents_pwb_package(**selected, "arena"));
+    }
+
+    if (!battle_edits.empty()) {
+        std::vector<uint8_t> current_lzss;
+        if (!stock_is_lzss || !lzss_decompress(composed, current_lzss))
+            return fail(error,
+                        "Perfect Works LZSS structure disagrees at Xenogears index " +
+                            std::to_string(index));
+        std::vector<uint8_t> delta = stock_lzss;
+        for (const auto* claim : battle_edits) {
+            std::vector<uint8_t> incoming;
+            if (!lzss_decompress(claim->payload, incoming))
+                return fail(error,
+                            "Perfect Works battle edit is not valid LZSS at Xenogears index " +
+                                std::to_string(index));
+            const size_t common = std::min(stock_lzss.size(), incoming.size());
+            for (size_t offset = 0; offset < common; ++offset) {
+                if (incoming[offset] == stock_lzss[offset]) continue;
+                if (delta[offset] != stock_lzss[offset] &&
+                    delta[offset] != incoming[offset])
+                    return fail(
+                        error, claim->package_id + "/" + claim->feature_id +
+                            " overlaps another Perfect Works battle edit at Xenogears index " +
+                            std::to_string(index) + " byte " +
+                            std::to_string(offset));
+                delta[offset] = incoming[offset];
+            }
+        }
+        for (size_t offset = 0; offset < stock_lzss.size(); ++offset)
+            if (delta[offset] != stock_lzss[offset]) {
+                if (offset >= current_lzss.size())
+                    return fail(error,
+                                "Perfect Works battle edit is outside the target at Xenogears index " +
+                                    std::to_string(index));
+                current_lzss[offset] = delta[offset];
+            }
+        composed = lzss_store_literals(current_lzss);
+    }
+
+    for (const auto* claim : packet_edits)
+        if (!apply_packet_delta(
+                stock, composed, claim->payload, index, error))
+            return false;
+
+    for (const auto* claim : music_edits) {
+        if (insert_music) {
+            if (!apply_music_delta(claim->payload, composed, index, error))
+                return false;
+        } else {
+            composed = claim->payload;
+        }
+    }
+
+    if ((!exp_multiplier.empty() || !gold_multiplier.empty()) &&
+        !apply_reward_scale(
+            composed, exp_multiplier, gold_multiplier, index, error))
+        return false;
+    return true;
+}
+
+bool compose_files(
+    PS1::ISOReader& disc,
+    const std::vector<TableEntry>& entries,
+    const std::vector<PSXRecompV4::ModResolution::IndexedFile>& files,
+    std::vector<PSXRecompV4::ModResolution::IndexedFile>& output,
+    std::string* error) {
+    std::vector<std::pair<
+        uint32_t,
+        std::vector<const PSXRecompV4::ModResolution::IndexedFile*>>> groups;
+    std::map<uint32_t, size_t> group_by_index;
+    for (const auto& file : files) {
+        const auto [found, inserted] =
+            group_by_index.emplace(file.index, groups.size());
+        if (inserted) groups.push_back({file.index, {}});
+        groups[found->second].second.push_back(&file);
+    }
+    output.clear();
+    output.reserve(groups.size());
+    for (const auto& [index, claims] : groups) {
+        if (claims.size() == 1) {
+            output.push_back(*claims.front());
+            continue;
+        }
+        if (index >= entries.size() || entries[index].size <= 0)
+            return fail(error, "cannot compose an invalid Xenogears indexed file");
+        const std::string& expected = claims.front()->expected_sha256;
+        if (std::any_of(
+                claims.begin(), claims.end(),
+                [&](const auto* claim) {
+                    return claim->compose != claims.front()->compose ||
+                           claim->expected_sha256 != expected;
+                }))
+            return fail(error,
+                        "Xenogears indexed-file composition metadata disagrees");
+        std::vector<uint8_t> stock;
+        if (!read_file(disc, entries[index], stock) ||
+            hash_bytes(stock) != expected)
+            return fail(error,
+                        "stock Xenogears indexed-file checksum failed during composition");
+        std::vector<uint8_t> composed = stock;
+        if (claims.front()->compose == "three-way") {
+            for (const auto* claim : claims)
+                if (!merge_three_way(
+                        stock, composed, claim->payload,
+                        claim->package_id + "/" + claim->feature_id,
+                        index, error))
+                    return false;
+        } else if (claims.front()->compose == "xenogears-pwb-0.11.2") {
+            if (!compose_pwb_group(index, claims, stock, composed, error))
+                return false;
+        } else {
+            return fail(error,
+                        "unsupported Xenogears indexed-file compositor: " +
+                            claims.front()->compose);
+        }
+        auto resolved = *claims.front();
+        resolved.payload = std::move(composed);
+        resolved.payload_sha256 = hash_bytes(resolved.payload);
+        resolved.package_id = "composed";
+        resolved.feature_id = "composed";
+        resolved.supersedes.clear();
+        output.push_back(std::move(resolved));
     }
     return true;
 }
@@ -374,13 +846,16 @@ bool build_indexed_disc(
     const std::vector<PS1::ISOFileEntry> iso_files =
         disc.ListFilesRecursive();
 
+    std::vector<PSXRecompV4::ModResolution::IndexedFile> composed_files;
+    if (!compose_files(disc, entries, files, composed_files, error)) return false;
+
     std::set<uint32_t> claimed;
     uint64_t next_lba = base_sector_count;
     const int64_t xa_children = -int64_t(entries.front().size);
     PSXRecompV4::ModVirtualDisc built;
     std::vector<ReplacementAllocation> allocations;
-    allocations.reserve(files.size());
-    for (const auto& file : files) {
+    allocations.reserve(composed_files.size());
+    for (const auto& file : composed_files) {
         if (file.format != kIndexedDiscFormat)
             return fail(error, "unexpected indexed-file format in Xenogears handler");
         if (!claimed.insert(file.index).second)

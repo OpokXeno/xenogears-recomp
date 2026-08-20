@@ -81,7 +81,7 @@ url = "https://example.com/author"
 
 | Field | Meaning |
 |---|---|
-| `format_version` | Manifest feature level. Use the lowest version that provides the operations you need, from 1 through 6. |
+| `format_version` | Manifest feature level. Use the lowest version that provides the operations you need, from 1 through 7. |
 | `id` | Stable package identity. Do not change it between releases. Use lowercase letters, digits, `.`, `-`, and `_`; maximum 96 characters. |
 | `version` | Semantic package version such as `1.0.0`. Publish changed content as a new version. |
 | `name` | Player-facing package name. |
@@ -484,7 +484,8 @@ An active indexed-file plan cannot be combined with `disc_raw` or `disc_user`
 writes, file-backed overlays, or a legacy `derived_disc`, even when their ranges
 would be disjoint or they come from different packages. Main-executable patches
 and trusted plugins may still coexist with indexed replacements. The total
-payload of all active indexed-file replacements is limited to 128 MiB.
+payload of all active indexed-file replacements is limited to 512 MiB after
+explicit supersession removes inactive base claims.
 
 At launch XenogearsRecomp authenticates the stock files, appends replacements
 to a virtual extension of the selected CUE/BIN/CHD data track, and updates both
@@ -518,13 +519,21 @@ This produces 20 separate, default-disabled `.psxmod` files, one per patcher
 option. Mutually exclusive values are launcher selectors inside their mod:
 1x/1.5x/2x EXP, 1x/1.5x/2x gold, basic/expert arena, original/resized portraits,
 and fast/instant text. `CATALOG.tsv` records every filename and SHA-256;
-`CONFLICTS.tsv` records package pairs with differing claims over the same
-executable bytes or indexed files.
+`CONFLICTS.tsv` records only upstream combinations that cannot coexist. Raw
+same-resource overlaps are not conflicts when format-7 composition resolves them.
 
-Xenogears indexed files are atomic resources. The individual packages can be
-installed separately, but packages listed as overlapping cannot be enabled
-together and dynamically merged. Use a composed profile for those combinations;
-the converter reproduces the upstream hybrid payloads and copy precedence:
+The individual catalog uses package format 7. Supported overlaps are composed at
+launch with the authenticated `xenogears-pwb-0.11.2` compositor. The converter
+embeds conditional payloads for the upstream `Script_items`, encounter/script,
+monster/script/items, arena/script, story/script, portrait/Roni, text/script, and
+Japanese-control variants. Whole-file precedence, LZSS battle edits, packet
+subfiles, music insertion, and EXP/gold transforms follow PWB's published staging
+order. Story Mode's eight upstream gameplay/arena exclusions are declared as
+package conflicts; the launcher greys the blocked side and activating either
+side disables the other. Unknown structural combinations still fail closed.
+
+Standalone composed profiles remain useful for distributing one fixed option
+set:
 
 ```sh
 python tools/perfect_works_to_psxmod.py \

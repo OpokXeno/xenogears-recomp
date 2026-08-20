@@ -28,6 +28,12 @@ Selections are stored in `mods/state.toml` beside the executable. Packages can
 contain multiple independently configurable features; changing one feature
 does not silently change another.
 
+If two packages declare an explicit incompatibility, the inactive side remains
+visible in grey and cannot be selected while its blocker is enabled. Activating
+the other side disables the previous selection. This is separate from compatible
+same-file composition, which is performed automatically when both packages carry
+an authenticated format-specific recipe.
+
 Only install packages from authors you trust. The package loader validates the
 archive and does not allow a package to load arbitrary native libraries, but a
 mod can intentionally change game code, data, and assets.
@@ -62,8 +68,11 @@ A `.psxmod` is a ZIP-based, versioned installation and trust boundary. Its
 Feature identity is `(package_id, feature_id)`. At launch, the manager expands
 only enabled features, verifies payloads and expected bytes, resolves package
 order, detects overlapping writes, and creates a canonical plan fingerprint.
-Conflicting features are reported by name and target range; the manager never
-silently chooses a winner.
+Unresolved conflicting features are reported by name and target range; the
+manager never silently chooses an unspecified winner. Format-7 packages can
+instead provide conditional upstream hybrid payloads, explicit supersession, or
+a trusted compositor ID. Those recipes are stock-hash guarded and become part of
+the canonical plan fingerprint.
 
 Executable patches use PSX guest virtual addresses and run only after the BIOS
 loads the main executable. Disc patches and overlays are served as sparse reads

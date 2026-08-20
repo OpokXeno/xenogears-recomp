@@ -33,6 +33,16 @@ MAX_EXPANDED_ARCHIVE = 256 * 1024 * 1024
 MAX_ARCHIVE_FILES = 4096
 MAX_VIRTUAL_SECTORS = 64 * 1024
 SUPPORTED_PWB_VERSION = "0.11.2"
+STORY_MODE_INCOMPATIBLE_KEYS = (
+    "half-encounters",
+    "exp",
+    "gold",
+    "rebalanced-items",
+    "rebalanced-enemies",
+    "no-deathblow-levels",
+    "no-damage-cap",
+    "arena",
+)
 
 DISC_BIN_SHA256 = {
     1: "39c547a9afc6da15d847ef81a2c6cea1a6516bdfa562cf13b0999b04e8598bda",
@@ -204,6 +214,18 @@ class IndexedOperation:
     sources: tuple[str, ...]
     transforms: tuple[str, ...]
     when: tuple[tuple[str, str], ...] = ()
+    when_features: tuple[FeatureCondition, ...] = ()
+    supersedes: tuple[str, ...] = ()
+    compose: str = "xenogears-pwb-0.11.2"
+
+
+@dataclass(frozen=True)
+class FeatureCondition:
+    package_id: str
+    feature_id: str = "perfect-works"
+    enabled: bool = True
+    option_id: str = ""
+    option_value: str = ""
 
 
 @dataclass(frozen=True)
@@ -455,6 +477,175 @@ INDIVIDUAL_MODS = (
         PatchOptions(jpn_controls=True),
     ),
 )
+
+
+@dataclass(frozen=True)
+class CompositionVariant:
+    owner: str
+    name: str
+    options: PatchOptions
+    conditions: tuple[FeatureCondition, ...]
+    owner_when: tuple[tuple[str, str], ...] = ()
+    suppressed: tuple[str, ...] = ()
+
+
+def compatibility_variants() -> tuple[CompositionVariant, ...]:
+    def condition(
+        key: str,
+        enabled: bool = True,
+        option_id: str = "",
+        option_value: str = "",
+    ) -> FeatureCondition:
+        return FeatureCondition(
+            individual_package_id(key),
+            enabled=enabled,
+            option_id=option_id,
+            option_value=option_value,
+        )
+
+    script_on = condition("retranslation")
+    script_off = condition("retranslation", False)
+    items_on = condition("rebalanced-items")
+    items_off = condition("rebalanced-items", False)
+    bug_on = condition("bug-fixes")
+    return (
+        CompositionVariant(
+            "retranslation",
+            "script-with-bug-suppressed",
+            PatchOptions(script=True),
+            (bug_on,),
+            suppressed=("bug-fixes",),
+        ),
+        CompositionVariant(
+            "rebalanced-items",
+            "items-with-bug-suppressed",
+            PatchOptions(rebalanced_items=True),
+            (bug_on, script_off),
+            suppressed=("bug-fixes",),
+        ),
+        CompositionVariant(
+            "half-encounters",
+            "script",
+            PatchOptions(script=True, half_encounters=True),
+            (script_on,),
+            suppressed=("bug-fixes",),
+        ),
+        CompositionVariant(
+            "rebalanced-items",
+            "script",
+            PatchOptions(script=True, rebalanced_items=True),
+            (script_on,),
+            suppressed=("bug-fixes",),
+        ),
+        CompositionVariant(
+            "rebalanced-enemies",
+            "items",
+            PatchOptions(rebalanced_items=True, rebalanced_enemies=True),
+            (script_off, items_on),
+            suppressed=("bug-fixes",),
+        ),
+        CompositionVariant(
+            "rebalanced-enemies",
+            "script",
+            PatchOptions(script=True, rebalanced_enemies=True),
+            (script_on, items_off),
+            suppressed=("bug-fixes",),
+        ),
+        CompositionVariant(
+            "rebalanced-enemies",
+            "script-items",
+            PatchOptions(
+                script=True,
+                rebalanced_items=True,
+                rebalanced_enemies=True,
+            ),
+            (script_on, items_on),
+            suppressed=("bug-fixes",),
+        ),
+        CompositionVariant(
+            "arena",
+            "basic-script",
+            PatchOptions(script=True, arena="basic"),
+            (script_on,),
+            (("mode", "basic"),),
+            ("bug-fixes",),
+        ),
+        CompositionVariant(
+            "arena",
+            "expert-script",
+            PatchOptions(script=True, arena="expert"),
+            (script_on,),
+            (("mode", "expert"),),
+            ("bug-fixes",),
+        ),
+        CompositionVariant(
+            "story-mode",
+            "script",
+            PatchOptions(script=True, story_mode=True),
+            (script_on,),
+            suppressed=("bug-fixes",),
+        ),
+        CompositionVariant(
+            "pw-roni",
+            "portraits-original",
+            PatchOptions(face_fix="normal", pw_roni=True),
+            (condition("portraits", option_id="size", option_value="original"),),
+        ),
+        CompositionVariant(
+            "pw-roni",
+            "portraits-resized",
+            PatchOptions(face_fix="resize", pw_roni=True),
+            (condition("portraits", option_id="size", option_value="resized"),),
+        ),
+        CompositionVariant(
+            "emeralda-cafe-fix",
+            "script",
+            PatchOptions(script=True, emeralda_cafe_fix=True),
+            (script_on,),
+            suppressed=("bug-fixes",),
+        ),
+        CompositionVariant(
+            "text-speed",
+            "fast-script",
+            PatchOptions(script=True, text_speed="fast"),
+            (script_on,),
+            (("speed", "fast"),),
+            ("bug-fixes",),
+        ),
+        CompositionVariant(
+            "text-speed",
+            "instant-script",
+            PatchOptions(script=True, text_speed="instant"),
+            (script_on,),
+            (("speed", "instant"),),
+            ("bug-fixes",),
+        ),
+        CompositionVariant(
+            "jpn-controls",
+            "items",
+            PatchOptions(rebalanced_items=True, jpn_controls=True),
+            (script_off, items_on),
+            suppressed=("bug-fixes",),
+        ),
+        CompositionVariant(
+            "jpn-controls",
+            "script",
+            PatchOptions(script=True, jpn_controls=True),
+            (script_on, items_off),
+            suppressed=("bug-fixes",),
+        ),
+        CompositionVariant(
+            "jpn-controls",
+            "script-items",
+            PatchOptions(
+                script=True,
+                rebalanced_items=True,
+                jpn_controls=True,
+            ),
+            (script_on, items_on),
+            suppressed=("bug-fixes",),
+        ),
+    )
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -1302,10 +1493,69 @@ def toml_condition(values: tuple[tuple[str, str], ...]) -> str:
     ) + " }"
 
 
+def toml_feature_conditions(values: tuple[FeatureCondition, ...]) -> str:
+    conditions = []
+    for value in values:
+        fields = [
+            f"package = {toml_string(value.package_id)}",
+            f"feature = {toml_string(value.feature_id)}",
+            f"enabled = {'true' if value.enabled else 'false'}",
+        ]
+        if value.option_id:
+            fields.extend(
+                (
+                    f"option = {toml_string(value.option_id)}",
+                    f"value = {toml_string(value.option_value)}",
+                )
+            )
+        conditions.append("{ " + ", ".join(fields) + " }")
+    return "[" + ", ".join(conditions) + "]"
+
+
+def indexed_operation_toml(
+    operation: IndexedOperation, disc_hashes: dict[int, str]
+) -> str:
+    lines = [
+        "[[indexed_file]]",
+        'feature = "perfect-works"',
+        'format = "xenogears"',
+        f"index = {operation.index}",
+        f"disc_sha256 = {toml_string(disc_hashes[operation.disc])}",
+        f"file = {toml_string(operation.payload_path.as_posix())}",
+        f"sha256 = {toml_string(operation.payload_sha256)}",
+        f"expected_sha256 = {toml_string(operation.expected_sha256)}",
+    ]
+    if operation.when:
+        lines.append(f"when = {toml_condition(operation.when)}")
+    if operation.when_features:
+        lines.append(
+            f"when_features = {toml_feature_conditions(operation.when_features)}"
+        )
+    if operation.supersedes:
+        lines.append(
+            "supersedes = ["
+            + ", ".join(toml_string(item) for item in operation.supersedes)
+            + "]"
+        )
+    if operation.compose:
+        lines.append(f"compose = {toml_string(operation.compose)}")
+    return "\n".join(lines) + "\n"
+
+
 def package_id_for(profile_key: str) -> str:
     if profile_key == "retranslation":
         return "org.perfectworksbuild.retranslation"
     return "org.perfectworksbuild.indexed." + profile_key.replace("_", "-")
+
+
+def individual_package_id(key: str) -> str:
+    return f"org.perfectworksbuild.individual.{key}"
+
+
+def individual_conflicts(key: str) -> tuple[str, ...]:
+    if key != "story-mode":
+        return ()
+    return tuple(individual_package_id(item) for item in STORY_MODE_INCOMPATIBLE_KEYS)
 
 
 def make_manifest(
@@ -1317,9 +1567,10 @@ def make_manifest(
     exe_patches: list[ExePatch],
     isolated_saves: bool,
     choice_option: ChoiceOption | None = None,
+    conflicts: tuple[str, ...] = (),
 ) -> str:
     lines = [
-        "format_version = 6",
+        "format_version = 7",
         f"id = {toml_string(package_id)}",
         f"version = {toml_string(SUPPORTED_PWB_VERSION)}",
         f"name = {toml_string(package_name)}",
@@ -1336,6 +1587,11 @@ def make_manifest(
         'url = "https://github.com/PWBuild-Team/Perfect_Works_Build"',
         "",
     ]
+    if conflicts:
+        lines.insert(
+            12,
+            "conflicts = [" + ", ".join(toml_string(item) for item in conflicts) + "]",
+        )
     for disc in (1, 2):
         lines.extend(
             [
@@ -1394,20 +1650,7 @@ def make_manifest(
     for operation in sorted(
         operations, key=lambda item: (item.disc, item.index, item.when)
     ):
-        lines.extend(
-            [
-                "[[indexed_file]]",
-                'feature = "perfect-works"',
-                'format = "xenogears"',
-                f"index = {operation.index}",
-                f"disc_sha256 = {toml_string(disc_hashes[operation.disc])}",
-                f"file = {toml_string(operation.payload_path.as_posix())}",
-                f"sha256 = {toml_string(operation.payload_sha256)}",
-                f"expected_sha256 = {toml_string(operation.expected_sha256)}",
-            ]
-        )
-        if operation.when:
-            lines.append(f"when = {toml_condition(operation.when)}")
+        lines.extend(indexed_operation_toml(operation, disc_hashes).splitlines())
         lines.append("")
     return "\n".join(lines)
 
@@ -1742,6 +1985,7 @@ def build_package(
             all_operations,
             exe_patches,
             is_gameplay_profile(options),
+            conflicts=individual_conflicts(profile_key),
         )
         try:
             tomllib.loads(manifest)
@@ -1793,6 +2037,8 @@ def build_selector_package(
     tool_mode: str,
     prepared_inputs: PreparedInputs,
     authentication_cache: dict[tuple[str, str], str],
+    source_output: Path | None = None,
+    pack_output: bool = True,
 ) -> list[str]:
     choices = individual_choices(individual)
     if len(choices) < 2 or individual.option_id is None or individual.option_label is None:
@@ -1897,7 +2143,7 @@ def build_selector_package(
             tuple((choice.value, choice.label) for choice in choices),
         )
         manifest = make_manifest(
-            f"org.perfectworksbuild.individual.{individual.key}",
+            individual_package_id(individual.key),
             individual.name,
             individual.description,
             disc_hashes,
@@ -1905,6 +2151,7 @@ def build_selector_package(
             combined_patches,
             isolated_saves,
             choice_option,
+            individual_conflicts(individual.key),
         )
         try:
             tomllib.loads(manifest)
@@ -1923,7 +2170,12 @@ def build_selector_package(
         write_utf8(package_root / "manifest.toml", manifest)
         write_utf8(package_root / "PORTING_REPORT.txt", selector_report)
         write_utf8(package_root / "PORTING_INDEX.tsv", "\n".join(index_lines) + "\n")
-        pack_archive(package_root, output)
+        if source_output is not None:
+            if source_output.exists():
+                raise RuntimeError(f"source output already exists: {source_output}")
+            shutil.copytree(package_root, source_output)
+        if pack_output:
+            pack_archive(package_root, output)
     return sorted(set(notes))
 
 
@@ -1960,25 +2212,293 @@ def incompatible_claims(
 
 
 def write_catalog_conflicts(catalog_root: Path) -> int:
-    claims = {
-        individual.key: package_claims(
-            catalog_root
-            / f"perfect-works-{individual.key}-{SUPPORTED_PWB_VERSION}.psxmod"
+    lines = ["first\tsecond\treason"]
+    for key in STORY_MODE_INCOMPATIBLE_KEYS:
+        lines.append(
+            f"{key}\tstory-mode\t"
+            f"Perfect Works Build {SUPPORTED_PWB_VERSION} declares these options incompatible"
         )
-        for individual in INDIVIDUAL_MODS
-    }
-    conflicts: list[tuple[str, str, set[str]]] = []
-    for offset, first in enumerate(INDIVIDUAL_MODS):
-        for second in INDIVIDUAL_MODS[offset + 1 :]:
-            shared = incompatible_claims(claims[first.key], claims[second.key])
-            if shared:
-                conflicts.append((first.key, second.key, shared))
-    lines = ["first\tsecond\tshared_resources\texamples"]
-    for first, second, shared in conflicts:
-        examples = ",".join(sorted(shared)[:8])
-        lines.append(f"{first}\t{second}\t{len(shared)}\t{examples}")
     write_utf8(catalog_root / "CONFLICTS.tsv", "\n".join(lines) + "\n")
-    return len(conflicts)
+    return len(STORY_MODE_INCOMPATIBLE_KEYS)
+
+
+def add_composition_variant(
+    source_roots: dict[str, Path],
+    combined_root: Path,
+    variant: CompositionVariant,
+    disc_paths: dict[int, Path],
+    disc_hashes: dict[int, str],
+    prepared: PreparedInputs,
+) -> int:
+    owner_root = source_roots[variant.owner]
+    owner_manifest_path = owner_root / "manifest.toml"
+    owner_manifest = tomllib.loads(
+        owner_manifest_path.read_text(encoding="utf-8")
+    )
+    combined_manifest = tomllib.loads(
+        (combined_root / "manifest.toml").read_text(encoding="utf-8")
+    )
+    disc_by_hash = {digest: disc for disc, digest in disc_hashes.items()}
+    participant_options = {variant.owner: dict(variant.owner_when)}
+    package_prefix = "org.perfectworksbuild.individual."
+    for condition in variant.conditions:
+        if not condition.enabled:
+            continue
+        if not condition.package_id.startswith(package_prefix):
+            raise RuntimeError(
+                f"unsupported compatibility participant: {condition.package_id}"
+            )
+        key = condition.package_id[len(package_prefix) :]
+        selected = participant_options.setdefault(key, {})
+        if condition.option_id:
+            selected[condition.option_id] = condition.option_value
+    for key in variant.suppressed:
+        participant_options.setdefault(key, {})
+    participant_resources: dict[tuple[int, int], list[tuple[str, dict]]] = {}
+    for key, selected in participant_options.items():
+        manifest = tomllib.loads(
+            (source_roots[key] / "manifest.toml").read_text(encoding="utf-8")
+        )
+        for operation in manifest.get("indexed_file", []):
+            if operation.get("when_features") or operation.get("supersedes"):
+                continue
+            local_when = operation.get("when", {})
+            if any(selected.get(option) != value
+                   for option, value in local_when.items()):
+                continue
+            disc = disc_by_hash[operation["disc_sha256"]]
+            resource = (disc, operation["index"])
+            previous = participant_resources.get(resource, [])
+            if previous and previous[0][1]["expected_sha256"] != operation[
+                "expected_sha256"
+            ]:
+                raise RuntimeError(
+                    f"compatibility participants disagree on the stock guard for {resource}"
+                )
+            participant_resources.setdefault(resource, []).append((key, operation))
+    if not participant_resources:
+        return 0
+    combined_resources = {
+        (disc_by_hash[operation["disc_sha256"]], operation["index"]): operation
+        for operation in combined_manifest.get("indexed_file", [])
+    }
+    supersedes = tuple(
+        dict.fromkeys(
+            (
+                individual_package_id(variant.owner),
+                *(
+                    condition.package_id
+                    for condition in variant.conditions
+                    if condition.enabled
+                ),
+                *(individual_package_id(key) for key in variant.suppressed),
+            )
+        )
+    )
+    appended: list[IndexedOperation] = []
+    payload_cache: dict[str, Path] = {}
+    for operation in owner_manifest.get("indexed_file", []):
+        relative = Path(operation["file"])
+        if (owner_root / relative).is_file():
+            payload_cache.setdefault(operation["sha256"], relative)
+    copy_priority = {
+        key: priority
+        for priority, key in enumerate(
+            (
+                "rebalanced-items",
+                "retranslation",
+                "jpn-controls",
+                "half-encounters",
+                "story-mode",
+                "bug-fixes",
+                "portraits",
+                "rebalanced-enemies",
+                "arena",
+                "text-speed",
+                "battle-undub",
+                "title-screen",
+                "pw-roni",
+                "emeralda-cafe-fix",
+            )
+        )
+    }
+    stock_streams = {
+        disc: disc_paths[disc].open("rb") for disc in (1, 2)
+    }
+    try:
+        for (disc, index), participants in sorted(
+            participant_resources.items()
+        ):
+            combined = combined_resources.get((disc, index))
+            expected_sha256 = participants[0][1]["expected_sha256"]
+            if (
+                combined is not None
+                and combined["expected_sha256"] != expected_sha256
+            ):
+                raise RuntimeError(
+                    f"combined compatibility guard disagrees for {(disc, index)}"
+                )
+            desired_sha256 = (
+                combined["sha256"] if combined is not None else expected_sha256
+            )
+            positive = [
+                (key, operation)
+                for key, operation in participants
+                if key not in variant.suppressed
+            ]
+            suppressed = [
+                (key, operation)
+                for key, operation in participants
+                if key in variant.suppressed
+            ]
+            if positive:
+                _direct_key, direct_operation = max(
+                    positive,
+                    key=lambda item: copy_priority.get(item[0], -1),
+                )
+                direct_sha256 = direct_operation["sha256"]
+                if (
+                    len(positive) > 1
+                    and any(key == "jpn-controls" for key, _ in positive)
+                    and index
+                    in {33, 38, 2588, 2593, 2609, 2614, 3953, 3958}
+                ):
+                    direct_sha256 = ""
+            else:
+                direct_sha256 = expected_sha256
+            needs_variant = direct_sha256 != desired_sha256
+            if not needs_variant and not suppressed:
+                continue
+            conditions = variant.conditions
+            if not needs_variant:
+                for key, _operation in suppressed:
+                    package_id = individual_package_id(key)
+                    if not any(
+                        condition.package_id == package_id and condition.enabled
+                        for condition in conditions
+                    ):
+                        conditions += (FeatureCondition(package_id),)
+            relative = payload_cache.get(desired_sha256)
+            if relative is None:
+                if combined is None:
+                    payload = read_entry(
+                        stock_streams[disc], prepared.tables[disc][0][index]
+                    )
+                else:
+                    payload = (combined_root / combined["file"]).read_bytes()
+                if sha256_bytes(payload) != desired_sha256:
+                    raise RuntimeError(
+                        f"compatibility payload checksum disagrees for {(disc, index)}"
+                    )
+                relative = (
+                    Path("assets")
+                    / "composition"
+                    / variant.name
+                    / f"disc{disc}"
+                    / f"{index:04d}.bin"
+                )
+                destination = owner_root / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(payload)
+                payload_cache[desired_sha256] = relative
+                payload_size = len(payload)
+            else:
+                payload_size = (owner_root / relative).stat().st_size
+            appended.append(
+                IndexedOperation(
+                    disc,
+                    index,
+                    index + 5 if disc == 2 else index,
+                    relative,
+                    desired_sha256,
+                    expected_sha256,
+                    payload_size,
+                    (f"composition:{variant.name}",),
+                    (),
+                    variant.owner_when,
+                    conditions,
+                    supersedes,
+                )
+            )
+    finally:
+        for stream in stock_streams.values():
+            stream.close()
+    if not appended:
+        return 0
+    with owner_manifest_path.open("a", encoding="utf-8", newline="\n") as manifest:
+        manifest.write("\n")
+        for operation in appended:
+            manifest.write(indexed_operation_toml(operation, disc_hashes))
+            manifest.write("\n")
+    tomllib.loads(owner_manifest_path.read_text(encoding="utf-8"))
+    report_path = owner_root / "PORTING_REPORT.txt"
+    with report_path.open("a", encoding="utf-8", newline="\n") as report:
+        report.write(
+            f"\nCompatibility variant {variant.name}: {len(appended)} indexed files.\n"
+        )
+    index_path = owner_root / "PORTING_INDEX.tsv"
+    index_header = index_path.read_text(encoding="utf-8").splitlines()[0]
+    index_rows = make_index_report(appended).splitlines()[1:]
+    if index_header.startswith("choice\t"):
+        if not variant.owner_when:
+            raise RuntimeError(
+                f"selector compatibility variant has no owner condition: {variant.name}"
+            )
+        choice = variant.owner_when[0][1]
+        index_rows = [f"{choice}\t{row}" for row in index_rows]
+    with index_path.open("a", encoding="utf-8", newline="\n") as index_report:
+        for row in index_rows:
+            index_report.write(row + "\n")
+    return len(appended)
+
+
+def add_compatibility_variants(
+    source_roots: dict[str, Path],
+    temporary_root: Path,
+    edition_root: Path,
+    disc_paths: dict[int, Path],
+    disc_hashes: dict[int, str],
+    expected_bin_hashes: dict[int, str],
+    tool_mode: str,
+    prepared: PreparedInputs,
+    authentication_cache: dict[tuple[str, str], str],
+) -> int:
+    count = 0
+    for number, variant in enumerate(compatibility_variants()):
+        combined_root = temporary_root / f"composition-{number}-{variant.name}"
+        profile = Profile(
+            f"Compatibility {variant.name}",
+            "Authenticated Perfect Works compatibility payload.",
+            variant.options,
+            False,
+        )
+        build_package(
+            edition_root,
+            disc_paths,
+            disc_hashes,
+            expected_bin_hashes,
+            temporary_root / f"unused-composition-{number}.psxmod",
+            f"composition-{variant.name}",
+            profile,
+            f"org.perfectworksbuild.composition.{number}",
+            profile.name,
+            tool_mode,
+            source_output=combined_root,
+            progress=None,
+            implicit_patches=False,
+            prepared_inputs=prepared,
+            authentication_cache=authentication_cache,
+            pack_output=False,
+        )
+        count += add_composition_variant(
+            source_roots,
+            combined_root,
+            variant,
+            disc_paths,
+            disc_hashes,
+            prepared,
+        )
+    return count
 
 
 def build_individual_catalog(
@@ -2010,6 +2530,8 @@ def build_individual_catalog(
     ) as temporary:
         catalog_root = Path(temporary) / "catalog"
         catalog_root.mkdir()
+        source_roots: dict[str, Path] = {}
+        pending_rows: list[tuple[IndividualMod, Path, list[str]]] = []
         for number, individual in enumerate(INDIVIDUAL_MODS, start=1):
             notify(
                 f"[{number}/{len(INDIVIDUAL_MODS)}] Building {individual.name}..."
@@ -2018,6 +2540,7 @@ def build_individual_catalog(
                 f"perfect-works-{individual.key}-{SUPPORTED_PWB_VERSION}.psxmod"
             )
             package = catalog_root / filename
+            source_root = Path(temporary) / f"package-{individual.key}"
             choices = individual_choices(individual)
             if len(choices) > 1:
                 notes = build_selector_package(
@@ -2030,6 +2553,8 @@ def build_individual_catalog(
                     tool_mode,
                     prepared,
                     authentication_cache,
+                    source_output=source_root,
+                    pack_output=False,
                 )
             else:
                 profile = Profile(
@@ -2046,22 +2571,37 @@ def build_individual_catalog(
                     package,
                     individual.key,
                     profile,
-                    f"org.perfectworksbuild.individual.{individual.key}",
+                    individual_package_id(individual.key),
                     individual.name,
                     tool_mode,
+                    source_output=source_root,
                     progress=None,
                     implicit_patches=False,
                     prepared_inputs=prepared,
                     authentication_cache=authentication_cache,
+                    pack_output=False,
                 )
                 notes = coverage_notes(choices[0].options)
+            source_roots[individual.key] = source_root
+            pending_rows.append((individual, package, notes))
+
+        notify("Building authenticated compatibility variants...")
+        compatibility_count = add_compatibility_variants(
+            source_roots,
+            Path(temporary),
+            edition_root,
+            disc_paths,
+            disc_hashes,
+            expected_bin_hashes,
+            tool_mode,
+            prepared,
+            authentication_cache,
+        )
+        notify("Packing deterministic individual psxmod archives...")
+        for individual, package, notes in pending_rows:
+            pack_archive(source_roots[individual.key], package)
             rows.append(
-                (
-                    individual,
-                    package,
-                    sha256_file(package),
-                    notes,
-                )
+                (individual, package, sha256_file(package), notes)
             )
 
         catalog_lines = ["key\tfile\tsha256\tcoverage\tname"]
@@ -2088,10 +2628,10 @@ def build_individual_catalog(
             f"This directory contains {len(rows)} independent, default-disabled psxmod files.\n"
             "Each archive represents one patcher option; mutually exclusive values use a launcher selector.\n"
             "CATALOG.tsv records package identities and hashes.\n"
-            "CONFLICTS.tsv lists packages with differing claims over the same indexed files or executable bytes.\n"
+            "CONFLICTS.tsv lists the upstream package combinations that cannot coexist.\n"
             "\n"
-            "Indexed Xenogears files are atomic resources. Overlapping individual mods cannot be merged at runtime; "
-            "use one of the converter's composed profiles when a combination appears in CONFLICTS.tsv.\n"
+            "Authenticated compatibility variants are selected automatically for supported overlapping combinations.\n"
+            "Unsupported structural overlaps fail closed instead of silently discarding either mod.\n"
             "FMV undubbing has no package because it requires raw-disc and ISO-visible executable replacement.\n"
             "The Japanese-controls package omits its disc-specific executable edits; its package report identifies the partial coverage.\n"
         )
@@ -2100,7 +2640,8 @@ def build_individual_catalog(
 
     return (
         f"Individual packages: {len(rows)}\n"
-        f"Overlapping package pairs: {conflict_count}\n"
+        f"Compatibility indexed files: {compatibility_count}\n"
+        f"Incompatible package pairs: {conflict_count}\n"
         f"Catalog: {resolved_output}\n"
     )
 
@@ -2160,7 +2701,7 @@ def main(argv: list[str] | None = None) -> int:
         description=(
             f"Compose Perfect Works Build {SUPPORTED_PWB_VERSION} assets without "
             "modifying the stock "
-            "discs, then create a deterministic format-6 psxmod."
+            "discs, then create a deterministic format-7 psxmod."
         )
     )
     parser.add_argument("--edition-root", type=Path, required=True)

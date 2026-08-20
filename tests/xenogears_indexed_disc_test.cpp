@@ -53,6 +53,46 @@ void put_u32(uint8_t* p, uint32_t value) {
     p[3] = static_cast<uint8_t>(value >> 24);
 }
 
+std::vector<uint8_t> packet(
+    const std::vector<std::vector<uint8_t>>& files) {
+    std::vector<uint8_t> result(4 + (files.size() + 1) * 4, 0);
+    put_u32(result.data(), static_cast<uint32_t>(files.size()));
+    uint32_t offset = static_cast<uint32_t>(result.size());
+    for (size_t index = 0; index < files.size(); ++index) {
+        put_u32(result.data() + 4 + index * 4, offset);
+        result.insert(result.end(), files[index].begin(), files[index].end());
+        offset += static_cast<uint32_t>(files[index].size());
+    }
+    put_u32(result.data() + 4 + files.size() * 4, offset);
+    return result;
+}
+
+std::vector<uint8_t> lzss_literals(const std::vector<uint8_t>& bytes) {
+    const size_t stored_size = (bytes.size() + 7) & ~size_t(7);
+    std::vector<uint8_t> result(4, 0);
+    put_u32(result.data(), static_cast<uint32_t>(stored_size));
+    for (size_t offset = 0; offset < stored_size; offset += 8) {
+        result.push_back(0);
+        const size_t amount = std::min<size_t>(8, bytes.size() - offset);
+        result.insert(result.end(), bytes.begin() + offset,
+                      bytes.begin() + offset + amount);
+        result.insert(result.end(), 8 - amount, 0);
+    }
+    return result;
+}
+
+std::vector<uint8_t> lzss_truncated_literals(const std::vector<uint8_t>& bytes) {
+    std::vector<uint8_t> result(4, 0);
+    put_u32(result.data(), static_cast<uint32_t>(bytes.size()));
+    for (size_t offset = 0; offset < bytes.size(); offset += 8) {
+        result.push_back(0);
+        const size_t amount = std::min<size_t>(8, bytes.size() - offset);
+        result.insert(result.end(), bytes.begin() + offset,
+                      bytes.begin() + offset + amount);
+    }
+    return result;
+}
+
 void put_733(uint8_t* p, uint32_t value) {
     put_u32(p, value);
     p[4] = static_cast<uint8_t>(value >> 24);
@@ -291,14 +331,21 @@ int main(int argc, char** argv) {
     constexpr uint32_t base_sectors = 80;
     constexpr uint32_t embedded_lba = 44;
     constexpr size_t embedded_offset = 2030;
-    constexpr size_t table_size = 5 * 7;
+    constexpr size_t table_size = 7 * 7;
 
     std::vector<uint8_t> table(16 * kUserSize);
     entry(table.data() + 0, 40, -1);
     entry(table.data() + 7, 41, 100);
     entry(table.data() + 14, embedded_lba, 4096);
     entry(table.data() + 21, 60, 3000);
-    entry(table.data() + 28, 0xFFFFFF, 0);
+    const std::vector<uint8_t> stock_packet = packet({
+        {0x10, 0x11, 0x12, 0x13}, {0x20, 0x21, 0x22, 0x23}});
+    std::vector<uint8_t> stock_lzss_data(18, 0);
+    std::vector<uint8_t> stock_lzss = {0, 0, 0, 0, 1, 0, 0};
+    put_u32(stock_lzss.data(), static_cast<uint32_t>(stock_lzss_data.size()));
+    entry(table.data() + 28, 62, static_cast<int32_t>(stock_packet.size()));
+    entry(table.data() + 35, 63, static_cast<int32_t>(stock_lzss.size()));
+    entry(table.data() + 42, 0xFFFFFF, 0);
 
     std::vector<std::array<uint8_t, kRawSize>> sectors(base_sectors);
     for (uint32_t lba = 0; lba < base_sectors; ++lba)
@@ -317,11 +364,25 @@ int main(int argc, char** argv) {
     std::vector<uint8_t> stock(3000);
     for (size_t i = 0; i < stock.size(); ++i)
         stock[i] = static_cast<uint8_t>(i * 13 + 9);
+    stock[0] = 0xEE;
+    stock[1] = 0x01;
+    stock[126 + 0x100] = 2;
+    stock[126 + 0x101] = 0;
+    stock[126 + 0x102] = 2;
+    stock[126 + 0x103] = 0;
+    stock[126 + 0x10A] = 0x34;
+    stock[126 + 0x10B] = 0x12;
     std::array<uint8_t, kUserSize> stock_tail{};
     std::memcpy(stock_tail.data(), stock.data() + kUserSize,
                 stock.size() - kUserSize);
     sectors[60] = raw_sector(60, stock.data());
     sectors[61] = raw_sector(61, stock_tail.data());
+    std::array<uint8_t, kUserSize> packet_sector{};
+    std::copy(stock_packet.begin(), stock_packet.end(), packet_sector.begin());
+    sectors[62] = raw_sector(62, packet_sector.data());
+    std::array<uint8_t, kUserSize> lzss_sector{};
+    std::copy(stock_lzss.begin(), stock_lzss.end(), lzss_sector.begin());
+    sectors[63] = raw_sector(63, lzss_sector.data());
 
     const fs::path dir = fs::temp_directory_path() /
         ("xg-indexed-disc-test-" + std::to_string(
@@ -456,6 +517,158 @@ int main(int argc, char** argv) {
               replaced_embedded, &error),
           "replacement table containers must preserve one recognizable table");
 
+    ModResolution::IndexedFile merge_left;
+    merge_left.format = XenogearsRecomp::kIndexedDiscFormat;
+    merge_left.index = 3;
+    merge_left.payload = stock;
+    merge_left.payload[10] ^= 0x55;
+    merge_left.expected_sha256 = hash(stock);
+    merge_left.package_id = "merge.left";
+    merge_left.feature_id = "left";
+    merge_left.compose = "three-way";
+    ModResolution::IndexedFile merge_right = merge_left;
+    merge_right.payload = stock;
+    merge_right.payload[2500] ^= 0xAA;
+    merge_right.package_id = "merge.right";
+    merge_right.feature_id = "right";
+    ModVirtualDisc merged;
+    const bool merged_ok = XenogearsRecomp::build_indexed_disc(
+        cue, {merge_left, merge_right}, base_sectors, merged, &error);
+    check(merged_ok, error.c_str());
+    if (merged_ok) {
+        check((*virtual_sector(merged, 80))[kUserOffset + 10] ==
+                  merge_left.payload[10] &&
+              (*virtual_sector(merged, 81))[
+                  kUserOffset + 2500 - kUserSize] == merge_right.payload[2500],
+              "three-way composition preserves disjoint edits from both owners");
+    }
+    merge_right.payload[10] ^= 0x33;
+    check(!XenogearsRecomp::build_indexed_disc(
+              cue, {merge_left, merge_right}, base_sectors, merged, &error) &&
+              error.find("overlaps") != std::string::npos,
+          "three-way composition rejects differing edits to the same byte");
+    merge_right.payload = stock;
+    merge_right.payload.pop_back();
+    check(!XenogearsRecomp::build_indexed_disc(
+              cue, {merge_left, merge_right}, base_sectors, merged, &error) &&
+              error.find("equal-size") != std::string::npos,
+           "three-way composition rejects structural payload changes");
+
+    ModResolution::IndexedFile items_packet;
+    items_packet.format = XenogearsRecomp::kIndexedDiscFormat;
+    items_packet.index = 4;
+    items_packet.payload = packet({
+        {0x10, 0x11, 0x12, 0x13}, {0x20, 0x21, 0xA2, 0x23}});
+    items_packet.expected_sha256 = hash(stock_packet);
+    items_packet.package_id =
+        "org.perfectworksbuild.individual.rebalanced-items";
+    items_packet.feature_id = "perfect-works";
+    items_packet.compose = "xenogears-pwb-0.11.2";
+    ModResolution::IndexedFile deathblow_packet = items_packet;
+    deathblow_packet.payload = packet({
+        {0x10, 0xB1, 0x12, 0x13}, {0x20, 0x21, 0x22, 0x23}});
+    deathblow_packet.package_id =
+        "org.perfectworksbuild.individual.no-deathblow-levels";
+    ModVirtualDisc packet_output;
+    const bool packet_ok = XenogearsRecomp::build_indexed_disc(
+        cue, {items_packet, deathblow_packet}, base_sectors,
+        packet_output, &error);
+    check(packet_ok, error.c_str());
+    if (packet_ok) {
+        const std::vector<uint8_t> expected_packet = packet({
+            {0x10, 0xB1, 0x12, 0x13}, {0x20, 0x21, 0xA2, 0x23}});
+        const uint8_t* actual =
+            virtual_sector(packet_output, base_sectors)->data() + kUserOffset;
+        check(std::memcmp(actual, expected_packet.data(),
+                          expected_packet.size()) == 0 &&
+                  u32(actual + 12) == expected_packet.size(),
+              "PWB packet composition preserves both edits and terminal offset");
+    }
+    std::vector<uint8_t> longer_battle(20);
+    for (size_t i = 0; i < longer_battle.size(); ++i)
+        longer_battle[i] = static_cast<uint8_t>(0x40 + i);
+    std::vector<uint8_t> flash_edit = stock_lzss_data;
+    flash_edit[5] = 0xEE;
+    ModResolution::IndexedFile bug_lzss;
+    bug_lzss.format = XenogearsRecomp::kIndexedDiscFormat;
+    bug_lzss.index = 5;
+    bug_lzss.payload = lzss_truncated_literals(longer_battle);
+    bug_lzss.expected_sha256 = hash(stock_lzss);
+    bug_lzss.package_id = "org.perfectworksbuild.individual.bug-fixes";
+    bug_lzss.feature_id = "perfect-works";
+    bug_lzss.compose = "xenogears-pwb-0.11.2";
+    ModResolution::IndexedFile flash_lzss = bug_lzss;
+    flash_lzss.payload = lzss_truncated_literals(flash_edit);
+    flash_lzss.package_id =
+        "org.perfectworksbuild.individual.no-battle-flashes";
+    ModVirtualDisc lzss_output;
+    const bool lzss_ok = XenogearsRecomp::build_indexed_disc(
+        cue, {bug_lzss, flash_lzss}, base_sectors, lzss_output, &error);
+    check(lzss_ok, error.c_str());
+    if (lzss_ok) {
+        longer_battle[5] = 0xEE;
+        const std::vector<uint8_t> expected_lzss = lzss_literals(longer_battle);
+        const uint8_t* actual =
+            virtual_sector(lzss_output, base_sectors)->data() + kUserOffset;
+        check(std::memcmp(actual, expected_lzss.data(), expected_lzss.size()) == 0 &&
+                  u32(actual) == 24,
+              "PWB LZSS composition pads the final guest token group");
+    }
+
+    ModResolution::IndexedFile exp_claim;
+    exp_claim.format = XenogearsRecomp::kIndexedDiscFormat;
+    exp_claim.index = 3;
+    exp_claim.payload = stock;
+    exp_claim.expected_sha256 = hash(stock);
+    exp_claim.package_id = "org.perfectworksbuild.individual.exp";
+    exp_claim.feature_id = "perfect-works";
+    exp_claim.compose = "xenogears-pwb-0.11.2";
+    exp_claim.options["multiplier"] = "1x";
+    ModResolution::IndexedFile gold_claim = exp_claim;
+    gold_claim.package_id = "org.perfectworksbuild.individual.gold";
+    gold_claim.options["multiplier"] = "2x";
+    ModVirtualDisc reward_output;
+    const bool reward_ok = XenogearsRecomp::build_indexed_disc(
+        cue, {exp_claim, gold_claim}, base_sectors, reward_output, &error);
+    check(reward_ok, error.c_str());
+    if (reward_ok) {
+        const uint8_t* actual =
+            virtual_sector(reward_output, base_sectors)->data() + kUserOffset;
+        check(u32(actual + 126 + 0x100) == 2,
+              "PWB EXP 1x zero-extends the original low word");
+        check(actual[126 + 0x10A] == 0x68 &&
+                  actual[126 + 0x10B] == 0x24,
+              "PWB gold scaling composes with EXP");
+    }
+
+    ModResolution::IndexedFile item_copy = exp_claim;
+    item_copy.options.clear();
+    item_copy.package_id =
+        "org.perfectworksbuild.individual.rebalanced-items";
+    item_copy.payload[100] = 0xA1;
+    ModResolution::IndexedFile script_copy = item_copy;
+    script_copy.package_id =
+        "org.perfectworksbuild.individual.retranslation";
+    script_copy.payload[100] = 0xA2;
+    ModResolution::IndexedFile jpn_copy = item_copy;
+    jpn_copy.package_id = "org.perfectworksbuild.individual.jpn-controls";
+    jpn_copy.payload[100] = 0xA3;
+    ModResolution::IndexedFile encounter_copy = item_copy;
+    encounter_copy.package_id =
+        "org.perfectworksbuild.individual.half-encounters";
+    encounter_copy.payload[100] = 0xA4;
+    ModVirtualDisc copy_order_output;
+    const bool copy_order_ok = XenogearsRecomp::build_indexed_disc(
+        cue, {encounter_copy, jpn_copy, script_copy, item_copy},
+        base_sectors, copy_order_output, &error);
+    check(copy_order_ok, error.c_str());
+    if (copy_order_ok) {
+        const uint8_t* actual =
+            virtual_sector(copy_order_output, base_sectors)->data() + kUserOffset;
+        check(actual[100] == 0xA4,
+              "PWB whole-file claims follow items, script, JPN, encounter order");
+    }
+
     replacement.expected_sha256.assign(64, '0');
     check(!XenogearsRecomp::build_indexed_disc(
               cue, {replacement}, base_sectors, repeated, &error),
@@ -465,7 +678,7 @@ int main(int argc, char** argv) {
     check(!XenogearsRecomp::build_indexed_disc(
               cue, {replacement}, base_sectors, repeated, &error),
           "initial XA child index rejected");
-    replacement.index = 4;
+    replacement.index = 6;
     check(!XenogearsRecomp::build_indexed_disc(
               cue, {replacement}, base_sectors, repeated, &error),
           "sentinel index rejected");
