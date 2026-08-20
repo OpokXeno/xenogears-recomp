@@ -570,23 +570,17 @@ XgWorldActorSpritesResult xg_world_actor_sprites_build(
     uint32_t *out_record_count) {
     XgWorldActorSpritesAdaptedActor
         adapted[XG_WORLD_ACTOR_SPRITES_ACTOR_CAPACITY];
-    uint32_t clear_count = record_capacity;
     uint32_t required_count = 0u;
     uint32_t record_count = 0u;
     uint32_t actor_index;
 
     if (out_record_count == NULL) return XG_WORLD_ACTOR_SPRITES_INVALID_ARGUMENT;
     *out_record_count = 0u;
-    if (clear_count > XG_WORLD_ACTOR_SPRITES_RECORD_CAPACITY)
-        clear_count = XG_WORLD_ACTOR_SPRITES_RECORD_CAPACITY;
-    if (records != NULL && clear_count != 0u)
-        memset(records, 0, sizeof(*records) * clear_count);
     if (source == NULL || records == NULL)
         return XG_WORLD_ACTOR_SPRITES_INVALID_ARGUMENT;
     if (!validate_source(source))
         return XG_WORLD_ACTOR_SPRITES_INVALID_SOURCE;
 
-    memset(adapted, 0, sizeof(adapted));
     for (actor_index = 0u; actor_index < source->actor_count; ++actor_index) {
         const XgWorldActorSpriteActorSource *actor =
             &source->actors[actor_index];

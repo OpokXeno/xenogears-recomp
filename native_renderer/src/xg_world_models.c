@@ -126,9 +126,6 @@ XgWorldModelsResult xg_world_models_build(
 
     memset(records, 0,
            sizeof(*records) * (size_t)(uint32_t)source->record_count);
-    if (node_side_effects != NULL)
-        memset(node_side_effects, 0,
-               sizeof(*node_side_effects) * node_side_effect_capacity);
     summary->record_count = (uint32_t)source->record_count;
 
     for (index = 0u; index < (uint32_t)source->record_count; ++index) {

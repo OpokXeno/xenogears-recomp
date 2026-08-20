@@ -495,8 +495,12 @@ static XgRenderModelFt4Template model_ft4_templates[
     XG_RENDER_MODEL_FT4_TEMPLATE_CAPACITY];
 static XgRenderModelFt4Template model_ft4_descriptor_templates[
     XG_RENDER_MODEL_FT4_TEMPLATE_CAPACITY];
-static uint16_t model_ft4_packet_lookup[XG_RENDER_LOOKUP_WORD_CAPACITY];
-static uint16_t model_ft4_descriptor_lookup[XG_RENDER_LOOKUP_WORD_CAPACITY];
+static XgRenderAddressLookupSlot model_ft4_packet_lookup[
+    XG_RENDER_LOOKUP_WORD_CAPACITY];
+static XgRenderAddressLookupSlot model_ft4_descriptor_lookup[
+    XG_RENDER_LOOKUP_WORD_CAPACITY];
+static uint16_t model_ft4_packet_lookup_epoch = 1u;
+static uint16_t model_ft4_descriptor_lookup_epoch = 1u;
 static uint16_t model_ft4_descriptor_packet_heads[
     XG_RENDER_MODEL_FT4_TEMPLATE_CAPACITY];
 static uint32_t model_ft4_table_epoch = 1u;
@@ -515,9 +519,10 @@ static void invalidate_model_ft4_templates_overlapping(uint32_t address,
 static void invalidate_model_ft4_templates(void) {
     model_ft4_template_count = 0u;
     model_ft4_descriptor_template_count = 0u;
-    memset(model_ft4_packet_lookup, 0, sizeof(model_ft4_packet_lookup));
-    memset(model_ft4_descriptor_lookup, 0,
-           sizeof(model_ft4_descriptor_lookup));
+    xg_render_lookup_reset(model_ft4_packet_lookup,
+                           &model_ft4_packet_lookup_epoch);
+    xg_render_lookup_reset(model_ft4_descriptor_lookup,
+                           &model_ft4_descriptor_lookup_epoch);
     memset(model_ft4_descriptor_packet_heads, 0,
            sizeof(model_ft4_descriptor_packet_heads));
     if (model_ft4_table_epoch == UINT32_MAX) {
@@ -533,6 +538,7 @@ static void invalidate_model_ft4_templates(void) {
 typedef struct XgRenderWorldModelTemplate {
     uint32_t words[XG_WORLD_MODELS_MAX_PACKET_WORD_COUNT];
     uint64_t resource_epoch;
+    uint32_t table_epoch;
     CPUState *owner_cpu;
     uint32_t model_address;
     uint32_t packet_base;
@@ -633,8 +639,9 @@ typedef struct XgRenderWorldTerrainWaterNativeState {
         int32_t canonical_y;
         int32_t native_x;
         int32_t native_y;
-        bool seen;
+        uint32_t generation;
     } mesh_vertices[145u * 145u];
+    uint32_t mesh_generation;
     XgWorldTerrainWaterSource source;
     XgWorldTerrainWaterRecord records[XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY];
     XgWorldTerrainWaterRecord
@@ -945,6 +952,7 @@ static bool world_model_templates_populated;
 static bool world_model_initializer_populated;
 static uint32_t world_model_template_read_failure;
 static uint64_t world_model_resource_epoch;
+static uint32_t world_model_template_epoch = 1u;
 static XgRenderWorldModelsNativeState world_models_native_state;
 static XgRenderWorldTerrainWaterNativeState world_terrain_water_native_state;
 static XgWorldTerrainWaterTileSource world_terrain_water_temporal_tiles[81];
@@ -2058,8 +2066,6 @@ static void clear_model_ft4_shadow_pending(void) {
     if (!model_ft4_shadow.context.valid &&
         !model_ft4_shadow.snapshot.pending && model_ft4_shadow.count == 0u)
         return;
-    memset(model_ft4_shadow.records, 0,
-           model_ft4_shadow.count * sizeof(model_ft4_shadow.records[0]));
     model_ft4_shadow.context = (XgRenderModelFt4ShadowContext){ 0 };
     model_ft4_shadow.initial_packet_cursor = 0u;
     model_ft4_shadow.initial_counter = 0u;
@@ -2079,8 +2085,6 @@ static void block_model_ft4_shadow(uint32_t blocker) {
 static void clear_model_ft3_shadow_pending(void) {
     if (!model_ft3_shadow.snapshot.pending && model_ft3_shadow.count == 0u)
         return;
-    memset(model_ft3_shadow.records, 0,
-           model_ft3_shadow.count * sizeof(model_ft3_shadow.records[0]));
     model_ft3_shadow.initial_packet_cursor = 0u;
     model_ft3_shadow.initial_counter = 0u;
     model_ft3_shadow.expected_counter_delta = 0u;
@@ -4042,7 +4046,7 @@ void psx_xg_render_auth_cold_enable(bool enabled) {
         clear_model_ft4_sources();
         clear_model_ft3_sources();
         clear_residual_templates();
-        overlay_ft4_state = (XgRenderOverlayFt4State){0};
+        overlay_ft4_state.count = 0u;
         clear_field_polyline_pending();
         clear_resident_line_f2_source();
         clear_world_horizon_shadow_pending();
@@ -5269,17 +5273,15 @@ static uint32_t model_ft4_template_slot(uint32_t address) {
 
 static XgRenderModelFt4Template *model_ft4_template_direct_find_in(
     XgRenderModelFt4Template templates[XG_RENDER_MODEL_FT4_TEMPLATE_CAPACITY],
-    const uint16_t lookup[XG_RENDER_LOOKUP_WORD_CAPACITY], uint32_t address,
-    bool descriptor_key) {
+    const XgRenderAddressLookupSlot lookup[XG_RENDER_LOOKUP_WORD_CAPACITY],
+    uint16_t lookup_epoch, uint32_t address, bool descriptor_key) {
     const uint32_t key = model_ft4_template_key(address);
-    uint32_t word;
-    uint16_t encoded;
+    const uint32_t index = xg_render_lookup_find(
+        lookup, lookup_epoch, key, XG_RENDER_MODEL_FT4_TEMPLATE_CAPACITY);
     XgRenderModelFt4Template *entry;
 
-    if (!xg_render_lookup_key(key, &word)) return NULL;
-    encoded = lookup[word];
-    if (encoded == 0u) return NULL;
-    entry = &templates[encoded - 1u];
+    if (index == UINT32_MAX) return NULL;
+    entry = &templates[index];
     if (!model_ft4_template_is_current(entry) ||
         (descriptor_key ? entry->descriptor_address :
                           entry->packet_address) != key)
@@ -5288,31 +5290,33 @@ static XgRenderModelFt4Template *model_ft4_template_direct_find_in(
 }
 
 static void model_ft4_template_direct_remove(
-    uint16_t lookup[XG_RENDER_LOOKUP_WORD_CAPACITY], uint32_t address,
-    uint32_t index) {
-    uint32_t word;
+    XgRenderAddressLookupSlot lookup[XG_RENDER_LOOKUP_WORD_CAPACITY],
+    uint32_t address, uint32_t index) {
+    const uint16_t lookup_epoch = lookup == model_ft4_packet_lookup
+        ? model_ft4_packet_lookup_epoch
+        : model_ft4_descriptor_lookup_epoch;
 
-    if (!xg_render_lookup_key(address, &word) || index >= UINT16_MAX) return;
-    if (lookup[word] == (uint16_t)(index + 1u)) lookup[word] = 0u;
+    xg_render_lookup_remove(lookup, lookup_epoch, address, index);
 }
 
 static void model_ft4_template_direct_put(
-    uint16_t lookup[XG_RENDER_LOOKUP_WORD_CAPACITY], uint32_t address,
-    uint32_t index) {
-    uint32_t word;
+    XgRenderAddressLookupSlot lookup[XG_RENDER_LOOKUP_WORD_CAPACITY],
+    uint32_t address, uint32_t index) {
+    const uint16_t lookup_epoch = lookup == model_ft4_packet_lookup
+        ? model_ft4_packet_lookup_epoch
+        : model_ft4_descriptor_lookup_epoch;
 
-    if (!xg_render_lookup_key(address, &word) || index >= UINT16_MAX) return;
-    lookup[word] = (uint16_t)(index + 1u);
+    xg_render_lookup_put(lookup, lookup_epoch, address, index);
 }
 
 static XgRenderModelFt4Template *model_ft4_template_find_in(
     XgRenderModelFt4Template templates[XG_RENDER_MODEL_FT4_TEMPLATE_CAPACITY],
-    uint16_t lookup[XG_RENDER_LOOKUP_WORD_CAPACITY], uint32_t address,
-    bool descriptor_key, bool insert,
+    XgRenderAddressLookupSlot lookup[XG_RENDER_LOOKUP_WORD_CAPACITY],
+    uint16_t lookup_epoch, uint32_t address, bool descriptor_key, bool insert,
     bool require_lifecycle) {
     const uint32_t key = model_ft4_template_key(address);
     XgRenderModelFt4Template *direct = model_ft4_template_direct_find_in(
-        templates, lookup, key, descriptor_key);
+        templates, lookup, lookup_epoch, key, descriptor_key);
     uint32_t slot = model_ft4_template_slot(key);
     XgRenderModelFt4Template *first_invalid = NULL;
 
@@ -5358,14 +5362,15 @@ static XgRenderModelFt4Template *model_ft4_template_find_packet(
     uint32_t packet_address, bool insert) {
     return model_ft4_template_find_in(
         model_ft4_templates, model_ft4_packet_lookup,
-        packet_address, false, insert, true);
+        model_ft4_packet_lookup_epoch, packet_address, false, insert, true);
 }
 
 static XgRenderModelFt4Template *model_ft4_template_find_descriptor(
     uint32_t descriptor_address, bool insert) {
     return model_ft4_template_find_in(
         model_ft4_descriptor_templates, model_ft4_descriptor_lookup,
-        descriptor_address, true, insert, true);
+        model_ft4_descriptor_lookup_epoch, descriptor_address, true, insert,
+        true);
 }
 
 static XgRenderModelFt4Template *model_ft4_template_find_current_in(
@@ -5375,6 +5380,8 @@ static XgRenderModelFt4Template *model_ft4_template_find_current_in(
         templates,
         descriptor_key ? model_ft4_descriptor_lookup :
                          model_ft4_packet_lookup,
+        descriptor_key ? model_ft4_descriptor_lookup_epoch :
+                         model_ft4_packet_lookup_epoch,
         address, descriptor_key);
 }
 
@@ -5559,6 +5566,8 @@ static XgRenderWorldModelTemplate *world_model_template_find(
          ++probe) {
         XgRenderWorldModelTemplate *entry = &world_model_templates[slot];
 
+        if (entry->table_epoch != world_model_template_epoch)
+            return insert ? entry : NULL;
         if (!entry->valid)
             return insert && first_inactive != NULL ? first_inactive :
                 (insert ? entry : NULL);
@@ -5587,7 +5596,9 @@ static XgRenderWorldModelColorWrite *world_model_color_write_find(
         XgRenderWorldModelColorWrite *entry =
             &world_model_color_writes[slot];
 
-        if (!entry->valid) return insert ? entry : NULL;
+        if (!entry->valid || entry->resource_epoch !=
+                world_model_initializer.resource_epoch)
+            return insert ? entry : NULL;
         if (entry->address == key) return entry;
         slot = (slot + 1u) &
             (XG_RENDER_WORLD_MODEL_COLOR_WRITE_CAPACITY - 1u);
@@ -5602,13 +5613,12 @@ static void clear_world_actor_context(void) {
 
 static void clear_world_actor_native_pending(void) {
     if (!world_actor_sprites_native_state.valid) return;
-    memset(&world_actor_sprites_native_state, 0,
-           sizeof(world_actor_sprites_native_state));
+    world_actor_sprites_native_state.valid = false;
 }
 
 static void clear_world_models_native_pending(void) {
     if (!world_models_native_state.valid) return;
-    memset(&world_models_native_state, 0, sizeof(world_models_native_state));
+    world_models_native_state.valid = false;
 }
 
 static void invalidate_world_model_templates(void) {
@@ -5616,16 +5626,18 @@ static void invalidate_world_model_templates(void) {
     world_model_packet_copy_range_count = 0u;
     world_models_native_snapshot.packet_copy_range_count = 0u;
     if (world_model_templates_populated) {
-        memset(world_model_templates, 0, sizeof(world_model_templates));
         world_model_templates_populated = false;
     }
     if (world_model_initializer_populated) {
-        memset(world_model_color_writes, 0, sizeof(world_model_color_writes));
-        memset(world_model_initializer_receipts, 0,
-               sizeof(world_model_initializer_receipts));
         world_model_initializer =
             (XgRenderWorldModelInitializerContext){0};
         world_model_initializer_populated = false;
+    }
+    if (world_model_template_epoch == UINT32_MAX) {
+        memset(world_model_templates, 0, sizeof(world_model_templates));
+        world_model_template_epoch = 1u;
+    } else {
+        ++world_model_template_epoch;
     }
     invalidate_model_ft4_templates();
 }
@@ -5636,9 +5648,6 @@ static void invalidate_world_model_initializer(void) {
         return;
     }
     if (world_model_initializer_populated) {
-        memset(world_model_color_writes, 0, sizeof(world_model_color_writes));
-        memset(world_model_initializer_receipts, 0,
-               sizeof(world_model_initializer_receipts));
         world_model_initializer =
             (XgRenderWorldModelInitializerContext){0};
         world_model_initializer_populated = false;
@@ -5702,14 +5711,12 @@ static void world_model_initializer_begin(CPUState *cpu) {
          ++index) {
         XgRenderWorldModelTemplate *entry = &world_model_templates[index];
 
-        if (entry->valid && guest_ranges_overlap(
+        if (entry->table_epoch == world_model_template_epoch &&
+            entry->valid && guest_ranges_overlap(
                 entry->packet_address, (uint32_t)entry->word_count * 4u,
                 cpu->gpr[5], packet_capacity))
             world_model_templates[index].active = false;
     }
-    memset(world_model_color_writes, 0, sizeof(world_model_color_writes));
-    memset(world_model_initializer_receipts, 0,
-           sizeof(world_model_initializer_receipts));
     world_model_initializer = (XgRenderWorldModelInitializerContext){
         .resource_epoch = world_model_resource_epoch,
         .authentication_generation = authentication_generation,
@@ -5983,6 +5990,7 @@ static bool world_model_seed_templates(CPUState *cpu) {
                 return false;
             captured.packet_address = model_ft4_template_key(packet);
             captured.resource_epoch = context.resource_epoch;
+            captured.table_epoch = world_model_template_epoch;
             captured.owner_cpu = cpu;
             captured.model_address =
                 model_ft4_template_key(context.model_address);
@@ -6037,6 +6045,8 @@ static bool world_model_seed_templates(CPUState *cpu) {
     for (group = 0u; group < XG_RENDER_WORLD_MODEL_COLOR_WRITE_CAPACITY;
          ++group) {
         if (world_model_color_writes[group].valid &&
+            world_model_color_writes[group].resource_epoch ==
+                context.resource_epoch &&
             !world_model_color_writes[group].used)
             return false;
     }
@@ -6049,9 +6059,6 @@ static void world_model_initializer_finish(CPUState *cpu) {
         invalidate_world_model_templates();
         return;
     }
-    memset(world_model_color_writes, 0, sizeof(world_model_color_writes));
-    memset(world_model_initializer_receipts, 0,
-           sizeof(world_model_initializer_receipts));
     world_model_initializer =
         (XgRenderWorldModelInitializerContext){0};
     world_model_initializer_populated = false;
@@ -8025,12 +8032,23 @@ static void model_ft3_shadow_finish(CPUState *cpu) {
 }
 
 static void clear_sprite_ft4_shadow_context(void) {
-    PsxXgRenderSpriteFt4ShadowSnapshot snapshot = sprite_ft4_shadow.snapshot;
-
-    if (!snapshot.context_active && !snapshot.pending) return;
-    snapshot.context_active = false;
-    snapshot.pending = false;
-    sprite_ft4_shadow = (XgRenderSpriteFt4ShadowState){ .snapshot = snapshot };
+    if (!sprite_ft4_shadow.snapshot.context_active &&
+        !sprite_ft4_shadow.snapshot.pending)
+        return;
+    sprite_ft4_shadow.snapshot.context_active = false;
+    sprite_ft4_shadow.snapshot.pending = false;
+    sprite_ft4_shadow.sprite_address = 0u;
+    sprite_ft4_shadow.packet_address = 0u;
+    sprite_ft4_shadow.descriptor_address = 0u;
+    sprite_ft4_shadow.material_word = 0u;
+    sprite_ft4_shadow.tpage = 0u;
+    sprite_ft4_shadow.clut = 0u;
+    sprite_ft4_shadow.phase = XG_RENDER_SPRITE_FT4_SHADOW_IDLE;
+    sprite_ft4_shadow.native_record_count = 0u;
+    sprite_ft4_shadow.geometry_matches = false;
+    sprite_ft4_shadow.payload_matches = false;
+    sprite_ft4_shadow.invocation_matches = false;
+    sprite_ft4_shadow.wrapper_scope = false;
 }
 
 static void block_sprite_ft4_shadow(uint32_t blocker) {
@@ -8045,7 +8063,8 @@ static void clear_field_sprite_builder(void) {
         field_sprite_builder.overlay_family == 0u &&
         !sprite_ft4_shadow.snapshot.field_builder_pending)
         return;
-    field_sprite_builder = (XgRenderFieldSpriteBuilderState){ 0 };
+    field_sprite_builder.count = 0u;
+    field_sprite_builder.overlay_family = 0u;
     sprite_ft4_shadow.snapshot.field_builder_pending = false;
 }
 
@@ -11020,7 +11039,14 @@ static int32_t terrain_fixed_floor(int32_t value) {
 
 static void diagnose_world_terrain_mesh(
     XgRenderWorldTerrainWaterNativeState *workspace, uint32_t record_count) {
+    uint32_t mesh_generation = ++workspace->mesh_generation;
     uint32_t record_index;
+
+    if (mesh_generation == 0u) {
+        memset(workspace->mesh_vertices, 0,
+               sizeof(workspace->mesh_vertices));
+        mesh_generation = ++workspace->mesh_generation;
+    }
 
     world_terrain_mesh_duplicate_vertices = 0u;
     world_terrain_mesh_cross_tile_duplicate_vertices = 0u;
@@ -11046,14 +11072,16 @@ static void diagnose_world_terrain_mesh(
                 vertex->native_view_position ? vertex->native_view_x : vertex->x);
             const int32_t native_y = terrain_fixed_floor(
                 vertex->native_view_position ? vertex->native_view_y : vertex->y);
-            if (!workspace->mesh_vertices[mesh_index].seen) {
+            if (workspace->mesh_vertices[mesh_index].generation !=
+                    mesh_generation) {
                 workspace->mesh_vertices[mesh_index].group_id =
                     vertex->interpolation_group_id;
                 workspace->mesh_vertices[mesh_index].canonical_x = canonical_x;
                 workspace->mesh_vertices[mesh_index].canonical_y = canonical_y;
                 workspace->mesh_vertices[mesh_index].native_x = native_x;
                 workspace->mesh_vertices[mesh_index].native_y = native_y;
-                workspace->mesh_vertices[mesh_index].seen = true;
+                workspace->mesh_vertices[mesh_index].generation =
+                    mesh_generation;
                 continue;
             }
             ++world_terrain_mesh_duplicate_vertices;
@@ -11150,7 +11178,7 @@ static bool native_world_terrain_water_cutover(CPUState *cpu) {
         .authentication_generation = generation,
         .authenticated = true,
     };
-    memset(workspace, 0, sizeof(*workspace));
+    memset(workspace->ot_touched, 0, sizeof(workspace->ot_touched));
     world_terrain_water_native_blocker_detail = 3u;
     scene_id = interpolation_scene_generation();
     if (xg_world_terrain_water_native_prepare(
@@ -11434,7 +11462,7 @@ static bool native_world_entity_shadows_cutover(CPUState *cpu) {
         .authentication_generation = generation,
         .authenticated = true,
     };
-    memset(workspace, 0, sizeof(*workspace));
+    memset(workspace->ot_touched, 0, sizeof(workspace->ot_touched));
     if (xg_world_entity_shadows_source_capture(
             &request, &reader, &capture) !=
             XG_WORLD_ENTITY_SHADOWS_CAPTURE_OK ||
@@ -11632,7 +11660,7 @@ static bool native_world_decorations_cutover(CPUState *cpu) {
         .authentication_generation = generation,
         .authenticated = true,
     };
-    memset(workspace, 0, sizeof(*workspace));
+    memset(workspace->ot_touched, 0, sizeof(workspace->ot_touched));
     shared_count_before = cpu->read_word(
         XG_WORLD_DECORATIONS_NATIVE_SHARED_COUNT_ADDRESS);
     if (xg_world_decorations_native_prepare_temporal(
@@ -11975,7 +12003,7 @@ static bool native_world_actor_sprites_prepare(CPUState *cpu) {
             world_actor_context.authentication_generation,
         .authenticated = true,
     };
-    memset(workspace, 0, sizeof(*workspace));
+    memset(workspace->ot_touched, 0, sizeof(workspace->ot_touched));
     if (xg_world_actor_sprites_native_prepare(
             &request, &reader, workspace->records,
             XG_WORLD_ACTOR_SPRITES_NATIVE_RECORD_CAPACITY, preparation) !=
@@ -12354,7 +12382,7 @@ static bool native_world_models_prepare(CPUState *cpu) {
         .transform_nodes = workspace->transform_nodes,
         .transform_node_capacity = XG_RENDER_WORLD_MODEL_NODE_CAPACITY,
     };
-    memset(workspace, 0, sizeof(*workspace));
+    memset(workspace->ot_touched, 0, sizeof(workspace->ot_touched));
     world_model_template_read_failure = 0u;
     native_result = xg_world_models_native_prepare(
         &request, &reader, &native_workspace, workspace->records,
@@ -12410,6 +12438,7 @@ static bool native_world_models_prepare(CPUState *cpu) {
             &workspace->dispatch_outputs[dispatch_index];
         uint32_t dispatch_primitive;
 
+        *dispatch_output = (XgWorldModelsNativeDispatchOutput){0};
         dispatch_output->source_index = dispatch->source_index;
         dispatch_output->bounds_accepted = dispatch->bounds_accepted;
         dispatch_output->guest_bounds_accepted =
@@ -17384,7 +17413,7 @@ void psx_xg_render_auth_note_code_write(uint64_t previous_generation,
             clear_f4_sources();
             retain_resident_residual_templates();
             if (overlay_ft4_state.count != 0u)
-                overlay_ft4_state = (XgRenderOverlayFt4State){0};
+                overlay_ft4_state.count = 0u;
         }
         if (model_ft4_code_write) {
             if (model_ft4_shadow.context.valid ||
@@ -17497,7 +17526,7 @@ void psx_xg_render_auth_loader_mismatch(uint32_t pc) {
         clear_projected_source();
         clear_field_sprite_templates();
         retain_resident_residual_templates();
-        overlay_ft4_state = (XgRenderOverlayFt4State){0};
+        overlay_ft4_state.count = 0u;
         clear_f4_sources();
         clear_model_ft4_sources();
         clear_model_ft3_sources();
@@ -17967,7 +17996,7 @@ void psx_xg_render_auth_runtime_test_reset(void) {
            sizeof(producer_resource_invalidated_byte_masks));
     overlay_ft4_2c = (PsxXgRenderOverlayFt4Snapshot){ 0 };
     overlay_projected_2e_descriptor_scope = false;
-    overlay_ft4_state = (XgRenderOverlayFt4State){ 0 };
+    overlay_ft4_state.count = 0u;
     xg_render_runtime_variant_reset();
 }
 

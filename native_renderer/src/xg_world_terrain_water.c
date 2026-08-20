@@ -811,7 +811,6 @@ static XgWorldTerrainWaterResult xg_world_terrain_water_build_internal(
             ? XG_WORLD_TERRAIN_WATER_UNCULLED_CAPACITY
             : XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY))
         return XG_WORLD_TERRAIN_WATER_CAPACITY_EXCEEDED;
-    memset(records, 0, sizeof(*records) * record_capacity);
     if (source->projection_distance == 0u ||
         source->screen_x_cull_margin < 0 ||
         source->screen_x_cull_margin > (INT32_MAX - 320) / 2 ||
