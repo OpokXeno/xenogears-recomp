@@ -10,6 +10,7 @@ import tempfile
 import tomllib
 import unittest
 import zipfile
+import zlib
 from pathlib import Path
 from unittest import mock
 
@@ -36,7 +37,9 @@ def make_disc(path: Path, entries: int = 1600, visible_file: bool = False) -> No
     for sector in range(pw.TABLE_SECTORS):
         start = sector * pw.USER_SECTOR_SIZE
         raw = (pw.TABLE_LBA + sector) * pw.RAW_SECTOR_SIZE + pw.USER_OFFSET
-        image[raw : raw + pw.USER_SECTOR_SIZE] = table[start : start + pw.USER_SECTOR_SIZE]
+        image[raw : raw + pw.USER_SECTOR_SIZE] = table[
+            start : start + pw.USER_SECTOR_SIZE
+        ]
     image[48 * pw.RAW_SECTOR_SIZE + pw.USER_OFFSET] = 0xAA
 
     primary = bytearray(pw.USER_SECTOR_SIZE)
@@ -72,6 +75,41 @@ def make_disc(path: Path, entries: int = 1600, visible_file: bool = False) -> No
     path.write_bytes(image)
 
 
+def vcdiff_integer(value: int) -> bytes:
+    encoded = bytearray((value & 0x7F,))
+    value >>= 7
+    while value:
+        encoded.append(0x80 | (value & 0x7F))
+        value >>= 7
+    encoded.reverse()
+    return bytes(encoded)
+
+
+def vcdiff_window(
+    target: bytes,
+    data: bytes,
+    instructions: bytes,
+    addresses: bytes = b"",
+    source_length: int | None = None,
+) -> bytes:
+    indicator = 0x04 | (0x01 if source_length is not None else 0)
+    delta = bytearray(vcdiff_integer(len(target)))
+    delta.append(0)
+    for section in (data, instructions, addresses):
+        delta.extend(vcdiff_integer(len(section)))
+    delta.extend(zlib.adler32(target).to_bytes(4, "big"))
+    delta.extend(data)
+    delta.extend(instructions)
+    delta.extend(addresses)
+    window = bytearray((indicator,))
+    if source_length is not None:
+        window.extend(vcdiff_integer(source_length))
+        window.extend(vcdiff_integer(0))
+    window.extend(vcdiff_integer(len(delta)))
+    window.extend(delta)
+    return bytes(window)
+
+
 class PerfectWorksConverterTests(unittest.TestCase):
     def test_version_detection_prefers_version_history(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -91,7 +129,8 @@ class PerfectWorksConverterTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(
-                RuntimeError, r"unsupported Perfect Works Build version 0\.11\.1.*0\.11\.2"
+                RuntimeError,
+                r"unsupported Perfect Works Build version 0\.11\.1.*0\.11\.2",
             ):
                 pw.require_supported_pwb_version(root)
             (root / "README.md").write_text("Perfect Works\n", encoding="utf-8")
@@ -102,14 +141,93 @@ class PerfectWorksConverterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "disc.bin"
             make_disc(path, visible_file=True)
-            self.assertEqual(
-                pw.read_iso_files(path), [pw.IsoFile("/TEST.BIN", 48, 1)]
+            self.assertEqual(pw.read_iso_files(path), [pw.IsoFile("/TEST.BIN", 48, 1)])
+
+    def test_native_lzss_matches_pwb_token_and_tie_breaking(self):
+        source = b"ABCXABCYABCQ"
+        compressed = bytes.fromhex("0c000000 50 41424358 0400 59 0800 51")
+        self.assertEqual(pw.lzss_compress(source), compressed)
+        self.assertEqual(pw.lzss_decompress(compressed)[0], source)
+
+    def test_native_packet_preserves_pwb_alignment_readthrough(self):
+        packet = bytes.fromhex(
+            "02000000 10000000 1c000000 24000000 "
+            "0d000000 08 414243 0330 0000 "
+            "08000000 00 5a 0000"
+        )
+        self.assertEqual(
+            pw.packet_pack([bytearray(b"ABCABCABC"), bytearray(b"Z")]),
+            packet,
+        )
+        self.assertEqual(
+            pw.packet_unpack(packet),
+            [bytearray(b"ABCABCABC\x00\x00\x08\x00"), bytearray(b"Z" + b"\x00" * 7)],
+        )
+
+    def test_helper_dependent_options_require_no_windows_tools(self):
+        _directories, files = pw.required_edition_paths(
+            pw.PatchOptions(
+                no_battle_flashes=True,
+                no_damage_cap=True,
+                no_deathblow_levels=True,
+                jpn_controls=True,
+                fmv_undub=True,
+            ),
+            False,
+        )
+        self.assertFalse(any(path.startswith("Tools/") for path in files))
+        self.assertEqual(
+            {path for path in files if path.startswith("patches/")},
+            {"patches/cd1_fmvs.xdelta", "patches/cd2_fmvs.xdelta"},
+        )
+
+    def test_fmv_decode_runs_in_process_with_source_and_source_less_windows(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source.bin"
+            patch = root / "patch.xdelta"
+            output = root / "output.bin"
+            source.write_bytes(b"abcdefghijklmnop")
+            first = b"abcdXYZabcd"
+            second = b"hello"
+            patch.write_bytes(
+                b"\xd6\xc3\xc4\x00\x04\x04test"
+                + vcdiff_window(
+                    first,
+                    b"XYZ",
+                    bytes((20, 4, 52)),
+                    b"\x00\x00",
+                    source_length=16,
+                )
+                + vcdiff_window(second, second, bytes((6,)))
             )
 
-    def test_static_profile_does_not_require_wine(self):
-        with mock.patch.object(pw.shutil, "which", return_value=None):
-            runner = pw.UpstreamToolRunner(Path("/unused"), "auto")
-        self.assertEqual(runner.mode, "wine" if pw.os.name != "nt" else "native")
+            pw.run_xdelta_decode(source, patch, output)
+
+            self.assertEqual(output.read_bytes(), first + second)
+
+    def test_fmv_decode_rejects_bad_checksum_without_leaving_output(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source.bin"
+            patch = root / "patch.xdelta"
+            output = root / "output.bin"
+            source.write_bytes(b"source")
+            malformed = bytearray(
+                b"\xd6\xc3\xc4\x00\x00"
+                + vcdiff_window(b"hello", b"hello", bytes((6,)))
+            )
+            malformed[-10] ^= 1
+            patch.write_bytes(malformed)
+
+            with self.assertRaisesRegex(RuntimeError, "checksum mismatch"):
+                pw.run_xdelta_decode(source, patch, output)
+            self.assertFalse(output.exists())
+
+            output.write_bytes(b"existing")
+            with self.assertRaisesRegex(RuntimeError, "output already exists"):
+                pw.run_xdelta_decode(source, patch, output)
+            self.assertEqual(output.read_bytes(), b"existing")
 
     def test_toml_strings_escape_control_characters(self):
         manifest = pw.make_manifest(
@@ -162,18 +280,25 @@ class PerfectWorksConverterTests(unittest.TestCase):
     def test_edition_authentication_rejects_modified_inputs(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            directories = ("gamefiles/bug_fix1", "gamefiles/bug_fix2", "gamefiles/title_screen")
+            directories = (
+                "gamefiles/bug_fix1",
+                "gamefiles/bug_fix2",
+                "gamefiles/title_screen",
+            )
             for relative in directories:
                 path = root / relative
                 path.mkdir(parents=True)
                 (path / "0002").write_bytes(relative.encode())
             (root / "README.md").write_bytes(b"release")
             expected_directories = {
-                relative: pw.directory_sha256(root / relative) for relative in directories
+                relative: pw.directory_sha256(root / relative)
+                for relative in directories
             }
             expected_files = {"README.md": hashlib.sha256(b"release").hexdigest()}
             with (
-                mock.patch.dict(pw.EDITION_DIRECTORY_SHA256, expected_directories, clear=True),
+                mock.patch.dict(
+                    pw.EDITION_DIRECTORY_SHA256, expected_directories, clear=True
+                ),
                 mock.patch.dict(pw.EDITION_FILE_SHA256, expected_files, clear=True),
             ):
                 pw.authenticate_edition(root, pw.PatchOptions())
@@ -197,11 +322,19 @@ class PerfectWorksConverterTests(unittest.TestCase):
             jpn_controls=True,
         )
         selected = pw.selected_directories(1, options)
-        self.assertEqual(selected[:4], [
-            "encounterone_script", "Script_items", "jpn_script_1", "resized_portraits"
-        ])
+        self.assertEqual(
+            selected[:4],
+            [
+                "encounterone_script",
+                "Script_items",
+                "jpn_script_1",
+                "resized_portraits",
+            ],
+        )
         self.assertLess(selected.index("og_monsters"), selected.index("monsters_both"))
-        self.assertLess(selected.index("monsters_both"), selected.index("filesbasic_script"))
+        self.assertLess(
+            selected.index("monsters_both"), selected.index("filesbasic_script")
+        )
         self.assertLess(selected.index("filesbasic_script"), selected.index("text_cd1"))
         self.assertEqual(selected[-2:], ["voice", "title_screen"])
 
@@ -286,9 +419,7 @@ class PerfectWorksConverterTests(unittest.TestCase):
         parsed = tomllib.loads(manifest)
         self.assertEqual(parsed["option"][0]["type"], "choice")
         self.assertEqual(parsed["option"][0]["default"], "1-5x")
-        self.assertEqual(
-            parsed["indexed_file"][0]["when"], {"multiplier": "2x"}
-        )
+        self.assertEqual(parsed["indexed_file"][0]["when"], {"multiplier": "2x"})
 
     def test_story_mode_declares_upstream_gameplay_exclusions(self):
         conflicts = pw.individual_conflicts("story-mode")
@@ -369,9 +500,7 @@ class PerfectWorksConverterTests(unittest.TestCase):
         serialized = parsed["patch"][0]
         self.assertEqual(serialized["disc_sha256"], "1" * 64)
         self.assertFalse(serialized["when_features"][0]["enabled"])
-        reparsed = pw.feature_conditions_from_manifest(
-            serialized["when_features"]
-        )
+        reparsed = pw.feature_conditions_from_manifest(serialized["when_features"])
         self.assertEqual(reparsed, (condition,))
 
     def test_composition_variant_claims_all_participant_resources(self):
@@ -421,9 +550,7 @@ class PerfectWorksConverterTests(unittest.TestCase):
                     ),
                     encoding="utf-8",
                 )
-                (package_root / "PORTING_REPORT.txt").write_text(
-                    "", encoding="utf-8"
-                )
+                (package_root / "PORTING_REPORT.txt").write_text("", encoding="utf-8")
                 (package_root / "PORTING_INDEX.tsv").write_text(
                     "disc\tlisted_index\tlogical_index\tpayload\tbytes\texpected_sha256\tpayload_sha256\tsources\n",
                     encoding="utf-8",
@@ -451,11 +578,7 @@ class PerfectWorksConverterTests(unittest.TestCase):
                 "retranslation",
                 "script-with-bug-suppressed",
                 pw.PatchOptions(script=True),
-                (
-                    pw.FeatureCondition(
-                        pw.individual_package_id("bug-fixes")
-                    ),
-                ),
+                (pw.FeatureCondition(pw.individual_package_id("bug-fixes")),),
                 suppressed=("bug-fixes",),
             )
             count = pw.add_composition_variant(
@@ -482,9 +605,11 @@ class PerfectWorksConverterTests(unittest.TestCase):
                 },
             )
             self.assertEqual(
-                len((owner_root / "PORTING_INDEX.tsv").read_text(
-                    encoding="utf-8"
-                ).splitlines()),
+                len(
+                    (owner_root / "PORTING_INDEX.tsv")
+                    .read_text(encoding="utf-8")
+                    .splitlines()
+                ),
                 3,
             )
 
@@ -493,9 +618,7 @@ class PerfectWorksConverterTests(unittest.TestCase):
         identical = {"disc:one:index:7": {"xenogears:stock:payload"}}
         different = {"disc:one:index:7": {"xenogears:stock:other"}}
         self.assertEqual(pw.incompatible_claims(first, identical), set())
-        self.assertEqual(
-            pw.incompatible_claims(first, different), {"disc:one:index:7"}
-        )
+        self.assertEqual(pw.incompatible_claims(first, different), {"disc:one:index:7"})
 
     def test_batch_catalog_emits_separate_archives(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -503,9 +626,7 @@ class PerfectWorksConverterTests(unittest.TestCase):
             output = root / "individual"
             edition = root / "edition"
             edition.mkdir()
-            (edition / "README.md").write_text(
-                "### Version 0.11.2\n", encoding="utf-8"
-            )
+            (edition / "README.md").write_text("### Version 0.11.2\n", encoding="utf-8")
 
             def fake_build(*args, **kwargs):
                 package = args[4]
@@ -588,7 +709,6 @@ class PerfectWorksConverterTests(unittest.TestCase):
                     {1: "1" * 64, 2: "2" * 64},
                     {1: "3" * 64, 2: "4" * 64},
                     output,
-                    "auto",
                 )
             packages = sorted(output.glob("*.psxmod"))
             self.assertEqual(len(packages), len(pw.INDIVIDUAL_MODS))
@@ -596,9 +716,9 @@ class PerfectWorksConverterTests(unittest.TestCase):
             self.assertIn("Incompatible package pairs: 8", report)
             self.assertTrue((output / "CATALOG.tsv").is_file())
             self.assertTrue((output / "CONFLICTS.tsv").is_file())
-            conflicts = (output / "CONFLICTS.tsv").read_text(
-                encoding="utf-8"
-            ).splitlines()
+            conflicts = (
+                (output / "CONFLICTS.tsv").read_text(encoding="utf-8").splitlines()
+            )
             self.assertEqual(len(conflicts), 9)
             self.assertEqual(conflicts[0], "first\tsecond\treason")
 
@@ -615,9 +735,7 @@ class PerfectWorksConverterTests(unittest.TestCase):
             path.write_bytes(data)
             stage = pw.StagingArea(1, root)
             stage.files[2618] = pw.StagedFile(2618, 2618, path)
-            pw.apply_exp_gold(
-                stage, pw.PatchOptions(exp_factor="1.5", gold_factor="2")
-            )
+            pw.apply_exp_gold(stage, pw.PatchOptions(exp_factor="1.5", gold_factor="2"))
             result = path.read_bytes()
             self.assertEqual(int.from_bytes(result[offset : offset + 4], "little"), 3)
             self.assertEqual(
@@ -713,9 +831,7 @@ class PerfectWorksConverterTests(unittest.TestCase):
             root = Path(temporary)
             edition = root / "edition"
             edition.mkdir()
-            (edition / "README.md").write_text(
-                "### Version 0.11.2\n", encoding="utf-8"
-            )
+            (edition / "README.md").write_text("### Version 0.11.2\n", encoding="utf-8")
             for relative, name, payload in (
                 ("bug_fix1", "0038", b"disc1-bug"),
                 ("bug_fix2", "0038", b"disc2-bug"),
@@ -745,7 +861,6 @@ class PerfectWorksConverterTests(unittest.TestCase):
                 profile=profile,
                 package_id="test.perfect-works",
                 package_name="Test Perfect Works",
-                tool_mode="auto",
                 verify_edition=False,
             )
             pw.build_package(output=first, **common)
@@ -755,8 +870,12 @@ class PerfectWorksConverterTests(unittest.TestCase):
                 manifest = tomllib.loads(archive.read("manifest.toml").decode())
                 self.assertEqual(len(manifest["target"]), 2)
                 indexed = manifest["indexed_file"]
-                self.assertEqual({item["disc_sha256"] for item in indexed}, {"1" * 64, "2" * 64})
-                self.assertEqual({item["index"] for item in indexed}, {33, 38, 1582, 1587})
+                self.assertEqual(
+                    {item["disc_sha256"] for item in indexed}, {"1" * 64, "2" * 64}
+                )
+                self.assertEqual(
+                    {item["index"] for item in indexed}, {33, 38, 1582, 1587}
+                )
                 self.assertIn("PORTING_REPORT.txt", archive.namelist())
                 self.assertIn("PORTING_INDEX.tsv", archive.namelist())
 

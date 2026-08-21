@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import bisect
 import csv
 import hashlib
 import json
@@ -11,15 +12,15 @@ import os
 import re
 import shutil
 import struct
-import subprocess
 import sys
 import tempfile
 import tomllib
 import zipfile
+import zlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable
 
 
 RAW_SECTOR_SIZE = 2352
@@ -35,6 +36,9 @@ MAX_ACTIVE_PAYLOAD = 512 * 1024 * 1024
 MAX_EXPANDED_ARCHIVE = 256 * 1024 * 1024
 MAX_ARCHIVE_FILES = 4096
 MAX_VIRTUAL_SECTORS = 256 * 1024
+MAX_VCDIFF_WINDOW = 64 * 1024 * 1024
+MAX_VCDIFF_SOURCE_SEGMENT = 128 * 1024 * 1024
+MAX_VCDIFF_APP_HEADER = 1024 * 1024
 SUPPORTED_PWB_VERSION = "0.11.2"
 STORY_MODE_INCOMPATIBLE_KEYS = (
     "half-encounters",
@@ -56,6 +60,10 @@ DISC_CANONICAL_SHA256 = {
     2: "b5fce68b407e9f4ae7474b3487a3d9a35ccd2c98e8b377374dd1fc1060450e30",
 }
 DISC_EXECUTABLE_INDEX = {1: 22, 2: 17}
+FMV_PATCHED_BIN_SHA256 = {
+    1: "4a1f3fe2a1273765a6e5b292aa07faa0e437588d1b1e64a133f1e11d670c636c",
+    2: "e6152d9e41aec3f7c130c3e28be70ee293fb9b12322cda8bcb72f374ac934919",
+}
 
 # SHA-256 over sorted "relative-path\0size\0file-sha256\n" rows from the
 # published Xenogears_Perfect_Works_Edition.0.11.2.7z extraction.
@@ -115,9 +123,6 @@ EDITION_DIRECTORY_SHA256 = {
 }
 EDITION_FILE_SHA256 = {
     "README.md": "7d2b3f87a6a30eff35b4e78921178e8a9a59bd47f3664b611bc0a40fc296f0a9",
-    "Tools/xenocomp.exe": "738e8dd4f1e46af13af026bd17d7af2138a0bba0c6f8197ae7ef01b97f446933",
-    "Tools/xenopack.exe": "6a20de13c87e5439d9ad4072e64398965e3c8f65a13775ffe4059590ae9f2623",
-    "Tools/xdelta3-3.0.11-i686.exe": "9bf8d067de9448e521afe1f8108caa0f85b4b7c7933641efd44bc43533920565",
     "patches/cd1_fmvs.xdelta": "38caa79f4e9cd305e0d12b2cc85ed45cd8baff716e840b4447fc809fafe8891f",
     "patches/cd2_fmvs.xdelta": "80117837b223deba60a688f8dc7d4d26aa53192ee40721ca2859214363135538",
 }
@@ -459,9 +464,7 @@ INDIVIDUAL_MODS = (
         option_label="Text speed",
         choices=(
             IndividualChoice("fast", "Fast", PatchOptions(text_speed="fast")),
-            IndividualChoice(
-                "instant", "Instant", PatchOptions(text_speed="instant")
-            ),
+            IndividualChoice("instant", "Instant", PatchOptions(text_speed="instant")),
         ),
     ),
     IndividualMod(
@@ -740,9 +743,8 @@ def required_edition_paths(
         for relative in selected_directories(disc, options, implicit_patches)
     }
     files = {"README.md"}
-    music_insertion = (
-        options.music_changes
-        and (options.script or options.text_speed == "fast" or options.arena != "normal")
+    music_insertion = options.music_changes and (
+        options.script or options.text_speed == "fast" or options.arena != "normal"
     )
     if music_insertion:
         directories.update(
@@ -750,10 +752,6 @@ def required_edition_paths(
         )
     if options.jpn_controls:
         directories.update({"gamefiles/jpn_ctrl_subfiles", "data/controls"})
-    if options.no_battle_flashes or options.no_damage_cap or options.jpn_controls:
-        files.add("Tools/xenocomp.exe")
-    if options.no_deathblow_levels or options.jpn_controls:
-        files.add("Tools/xenopack.exe")
     if options.jpn_controls or options.text_speed != "normal":
         directories.update(
             {
@@ -772,7 +770,6 @@ def required_edition_paths(
         )
         files.update(
             {
-                "Tools/xdelta3-3.0.11-i686.exe",
                 "patches/cd1_fmvs.xdelta",
                 "patches/cd2_fmvs.xdelta",
             }
@@ -897,14 +894,18 @@ def read_iso_files(image_path: Path) -> list[IsoFile]:
                     offset = ((offset // USER_SECTOR_SIZE) + 1) * USER_SECTOR_SIZE
                     continue
                 if offset + length > len(data) or length < 34:
-                    raise RuntimeError(f"invalid ISO9660 directory record in {image_path}")
+                    raise RuntimeError(
+                        f"invalid ISO9660 directory record in {image_path}"
+                    )
                 record = data[offset : offset + length]
                 extent = int.from_bytes(record[2:6], "little")
                 data_size = int.from_bytes(record[10:14], "little")
                 flags = record[25]
                 name_length = record[32]
                 if 33 + name_length > len(record):
-                    raise RuntimeError(f"invalid ISO9660 filename record in {image_path}")
+                    raise RuntimeError(
+                        f"invalid ISO9660 filename record in {image_path}"
+                    )
                 raw_name = record[33 : 33 + name_length]
                 offset += length
                 if raw_name in (b"\x00", b"\x01"):
@@ -986,55 +987,426 @@ class StagingArea:
         )
 
 
-class UpstreamToolRunner:
-    def __init__(self, edition_root: Path, mode: str):
-        self.tools = edition_root / "Tools"
-        if mode == "auto":
-            mode = "native" if os.name == "nt" else "wine"
-        self.mode = mode
+def lzss_decompress(data: bytes, offset: int = 0) -> tuple[bytes, int]:
+    if offset < 0 or offset + 4 > len(data):
+        raise RuntimeError("Xenogears LZSS stream has no size header")
+    target_size = int.from_bytes(data[offset : offset + 4], "little")
+    if target_size > MAX_EXPANDED_ARCHIVE:
+        raise RuntimeError("Xenogears LZSS stream exceeds the expanded-size limit")
 
-    def path_argument(self, path: Path) -> str:
-        resolved = path.resolve()
-        if self.mode != "wine":
-            return str(resolved)
-        result = subprocess.run(
-            ["winepath", "-w", str(resolved)],
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        if result.returncode != 0 or not result.stdout.strip():
-            raise RuntimeError(f"winepath failed for {resolved}")
-        return result.stdout.strip()
+    cursor = offset + 4
+    window = bytearray(4096)
+    window_at = 0xFEE
+    output = bytearray()
+    control = 0
 
-    def run(self, executable: str, arguments: Iterable[str], cwd: Path) -> None:
-        tool = self.tools / executable
-        if not tool.is_file():
-            raise RuntimeError(f"missing Perfect Works helper: {tool}")
-        command = [str(tool), *arguments]
-        env = os.environ.copy()
-        if self.mode == "wine":
-            if shutil.which("wine") is None:
-                raise RuntimeError(
-                    f"Wine is required to run Perfect Works helper {executable}"
+    def read_or(fallback: int) -> int:
+        nonlocal cursor
+        if cursor >= len(data):
+            return fallback
+        value = data[cursor]
+        cursor += 1
+        return value
+
+    def emit(value: int) -> None:
+        nonlocal window_at
+        output.append(value)
+        window[window_at] = value
+        window_at = (window_at + 1) & 0xFFF
+
+    while len(output) < target_size:
+        control = read_or(control)
+        for bit in range(8):
+            if control & (1 << bit):
+                low = read_or(0)
+                high_length = read_or(low)
+                distance = low | ((high_length & 0x0F) << 8)
+                length = (high_length >> 4) + 3
+                for _ in range(length):
+                    emit(window[(window_at - distance) & 0xFFF])
+            else:
+                emit(read_or(0))
+    return bytes(output), cursor
+
+
+def lzss_compress(data: bytes, max_distance: int = 0xFEE) -> bytes:
+    if not 1 <= max_distance < 4096:
+        raise ValueError("invalid Xenogears LZSS search distance")
+
+    positions: dict[int, list[int]] = {}
+    for position in range(max(0, len(data) - 2)):
+        key = data[position] | (data[position + 1] << 8) | (data[position + 2] << 16)
+        positions.setdefault(key, []).append(position)
+
+    output = bytearray(4)
+    source_at = 0
+    final_token_count = 0
+    first_group = True
+    while first_group or source_at < len(data):
+        first_group = False
+        control_at = len(output)
+        output.append(0)
+        token_count = 0
+        while token_count < 8 and source_at < len(data):
+            maximum = min(18, len(data) - source_at)
+            best_position = -1
+            best_length = 2
+            if maximum >= 3:
+                key = (
+                    data[source_at]
+                    | (data[source_at + 1] << 8)
+                    | (data[source_at + 2] << 16)
                 )
-            command.insert(0, "wine")
-            env.setdefault("WINEDEBUG", "-all")
-        result = subprocess.run(
-            command,
-            cwd=cwd,
-            env=env,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-        accepted_codes = {0, 1} if executable in {"xenocomp.exe", "xenopack.exe"} else {0}
-        if result.returncode not in accepted_codes:
-            detail = result.stdout.strip()
-            raise RuntimeError(
-                f"{executable} failed with exit code {result.returncode}"
-                + (f": {detail}" if detail else "")
-            )
+                candidates = positions.get(key, ())
+                first = bisect.bisect_left(candidates, max(0, source_at - max_distance))
+                end = bisect.bisect_left(candidates, source_at, first)
+                for candidate in candidates[first:end]:
+                    length = 3
+                    while (
+                        length < maximum
+                        and data[candidate + length] == data[source_at + length]
+                    ):
+                        length += 1
+                    if length > best_length:
+                        best_position = candidate
+                        best_length = length
+                        if length == maximum:
+                            break
+
+            if best_position < 0:
+                output.append(data[source_at])
+                source_at += 1
+            else:
+                distance = source_at - best_position
+                output[control_at] |= 1 << token_count
+                output.extend(
+                    (
+                        distance & 0xFF,
+                        ((distance >> 8) & 0x0F) | ((best_length - 3) << 4),
+                    )
+                )
+                source_at += best_length
+            token_count += 1
+        final_token_count = token_count
+
+    declared_size = len(data) + 8 - final_token_count
+    output[0:4] = declared_size.to_bytes(4, "little")
+    return bytes(output)
+
+
+def packet_unpack(data: bytes) -> list[bytearray]:
+    if len(data) < 12:
+        raise RuntimeError("Xenogears packet archive is truncated")
+    count = int.from_bytes(data[:4], "little")
+    header_size = 4 * count + 8
+    if count == 0 or count > MAX_ARCHIVE_FILES or header_size > len(data):
+        raise RuntimeError("Xenogears packet archive has an invalid file count")
+    offsets = [
+        int.from_bytes(data[4 + index * 4 : 8 + index * 4], "little")
+        for index in range(count + 1)
+    ]
+    if (
+        offsets[0] != header_size
+        or offsets[-1] != len(data)
+        or any(offset < header_size or offset > len(data) for offset in offsets)
+        or any(left > right for left, right in zip(offsets, offsets[1:]))
+    ):
+        raise RuntimeError("Xenogears packet archive has invalid offsets")
+
+    files = []
+    for entry_offset in offsets[:-1]:
+        # PWB's unpacker deliberately decodes against the remaining packet,
+        # allowing an incomplete final token group to read alignment bytes.
+        payload, _ = lzss_decompress(data, entry_offset)
+        files.append(bytearray(payload))
+    return files
+
+
+def packet_pack(files: list[bytearray]) -> bytes:
+    if not files or len(files) > MAX_ARCHIVE_FILES:
+        raise RuntimeError("Xenogears packet archive has an invalid file count")
+    output = bytearray(4 * len(files) + 8)
+    output[:4] = len(files).to_bytes(4, "little")
+    for index, payload in enumerate(files):
+        output[4 + index * 4 : 8 + index * 4] = len(output).to_bytes(4, "little")
+        output.extend(lzss_compress(bytes(payload), 0xFEB))
+        output.extend(b"\x00" * (-len(output) & 3))
+    output[4 + len(files) * 4 : 8 + len(files) * 4] = len(output).to_bytes(4, "little")
+    return bytes(output)
+
+
+def _read_vcdiff_integer(
+    read_byte: Callable[[], int], label: str, maximum: int
+) -> int:
+    value = 0
+    for _ in range(10):
+        byte = read_byte()
+        if value > (maximum >> 7):
+            raise RuntimeError(f"VCDIFF {label} exceeds its limit")
+        value = (value << 7) | (byte & 0x7F)
+        if value > maximum:
+            raise RuntimeError(f"VCDIFF {label} exceeds its limit")
+        if not byte & 0x80:
+            return value
+    raise RuntimeError(f"VCDIFF {label} integer is too long")
+
+
+def _vcdiff_opcode(code: int) -> tuple[tuple[int, int, int], ...]:
+    # Operations are (type, size, copy mode): 0=RUN, 1=ADD, 2=COPY.
+    if code == 0:
+        return ((0, 0, 0),)
+    if code <= 18:
+        return ((1, code - 1, 0),)
+    if code <= 162:
+        offset = code - 19
+        mode, encoded_size = divmod(offset, 16)
+        return ((2, encoded_size + 3 if encoded_size else 0, mode),)
+    if code <= 234:
+        mode, sizes = divmod(code - 163, 12)
+        add_size, copy_size = divmod(sizes, 3)
+        return ((1, add_size + 1, 0), (2, copy_size + 4, mode))
+    if code <= 246:
+        mode, add_size = divmod(code - 235, 4)
+        return ((1, add_size + 1, 0), (2, 4, mode + 6))
+    return ((2, 4, code - 247), (1, 1, 0))
+
+
+def decode_vcdiff(
+    source_path: Path,
+    patch_path: Path,
+    output_path: Path,
+    max_output_size: int,
+) -> None:
+    if max_output_size < 0:
+        raise ValueError("VCDIFF output limit cannot be negative")
+
+    source_size = source_path.stat().st_size
+    patch_size = patch_path.stat().st_size
+    patch_position = 0
+    try:
+        output_file = output_path.open("xb")
+    except FileExistsError as exc:
+        raise RuntimeError(f"VCDIFF output already exists: {output_path}") from exc
+
+    try:
+        with (
+            source_path.open("rb") as source,
+            patch_path.open("rb") as patch,
+            output_file as output,
+        ):
+            def read_exact(size: int, label: str) -> bytes:
+                nonlocal patch_position
+                if size < 0 or size > patch_size - patch_position:
+                    raise RuntimeError(f"VCDIFF {label} is truncated")
+                data = patch.read(size)
+                if len(data) != size:
+                    raise RuntimeError(f"VCDIFF {label} is truncated")
+                patch_position += size
+                return data
+
+            def read_byte(label: str) -> int:
+                return read_exact(1, label)[0]
+
+            def read_integer(label: str, maximum: int) -> int:
+                return _read_vcdiff_integer(lambda: read_byte(label), label, maximum)
+
+            if read_exact(4, "header") != b"\xd6\xc3\xc4\x00":
+                raise RuntimeError("input is not a supported VCDIFF stream")
+            header_indicator = read_byte("header indicator")
+            if header_indicator & ~0x07:
+                raise RuntimeError("VCDIFF header has unknown indicator bits")
+
+            if header_indicator & 0x01:
+                raise RuntimeError("VCDIFF secondary compression is not supported")
+            if header_indicator & 0x02:
+                raise RuntimeError("VCDIFF custom code tables are not supported")
+            if header_indicator & 0x04:
+                app_size = read_integer(
+                    "application header size", MAX_VCDIFF_APP_HEADER
+                )
+                read_exact(app_size, "application header")
+
+            total_output = 0
+            window_count = 0
+            while patch_position < patch_size:
+                window_indicator = read_byte("window indicator")
+                if window_indicator & ~0x07:
+                    raise RuntimeError("VCDIFF window has unknown indicator bits")
+                if window_indicator & 0x02:
+                    raise RuntimeError("VCDIFF target-source windows are not supported")
+
+                source_length = 0
+                source_position = 0
+                if window_indicator & 0x01:
+                    source_length = read_integer(
+                        "source segment size",
+                        min(source_size, MAX_VCDIFF_SOURCE_SEGMENT),
+                    )
+                    source_position = read_integer(
+                        "source segment position", source_size
+                    )
+                    if source_length > source_size - source_position:
+                        raise RuntimeError("VCDIFF source segment is out of bounds")
+
+                encoding_length = read_integer(
+                    "delta encoding size", 3 * MAX_VCDIFF_WINDOW + 64
+                )
+                encoding_start = patch_position
+                target_length = read_integer("target window size", MAX_VCDIFF_WINDOW)
+                if target_length > max_output_size - total_output:
+                    raise RuntimeError("VCDIFF output exceeds its size limit")
+
+                delta_indicator = read_byte("delta indicator")
+                if delta_indicator & ~0x07:
+                    raise RuntimeError("VCDIFF delta has unknown indicator bits")
+                if delta_indicator:
+                    raise RuntimeError("VCDIFF compressed sections are not supported")
+                section_lengths = [
+                    read_integer(f"{label} section size", MAX_VCDIFF_WINDOW)
+                    for label in ("data", "instruction", "address")
+                ]
+                checksum = None
+                if window_indicator & 0x04:
+                    checksum = int.from_bytes(read_exact(4, "Adler-32"), "big")
+                sections = [
+                    read_exact(size, f"{label} section")
+                    for size, label in zip(
+                        section_lengths, ("data", "instruction", "address")
+                    )
+                ]
+                if patch_position - encoding_start != encoding_length:
+                    raise RuntimeError("VCDIFF delta encoding length is inconsistent")
+
+                source.seek(source_position)
+                source_segment = source.read(source_length)
+                if len(source_segment) != source_length:
+                    raise RuntimeError("VCDIFF source segment is truncated")
+
+                data_section, instruction_section, address_section = sections
+                data_position = 0
+                instruction_position = 0
+                address_position = 0
+                near_cache = [0] * 4
+                same_cache = [0] * (3 * 256)
+                next_near_slot = 0
+                target = bytearray()
+
+                def read_instruction_byte() -> int:
+                    nonlocal instruction_position
+                    if instruction_position == len(instruction_section):
+                        raise RuntimeError("VCDIFF instruction section is truncated")
+                    byte = instruction_section[instruction_position]
+                    instruction_position += 1
+                    return byte
+
+                def read_address_byte() -> int:
+                    nonlocal address_position
+                    if address_position == len(address_section):
+                        raise RuntimeError("VCDIFF address section is truncated")
+                    byte = address_section[address_position]
+                    address_position += 1
+                    return byte
+
+                while instruction_position < len(instruction_section):
+                    code = read_instruction_byte()
+                    for operation, encoded_size, mode in _vcdiff_opcode(code):
+                        size = encoded_size or _read_vcdiff_integer(
+                            read_instruction_byte,
+                            "instruction size",
+                            target_length,
+                        )
+                        if size > target_length - len(target):
+                            raise RuntimeError("VCDIFF instruction exceeds target window")
+
+                        if operation == 0:
+                            if data_position == len(data_section):
+                                raise RuntimeError("VCDIFF RUN data is missing")
+                            target.extend(
+                                data_section[data_position : data_position + 1] * size
+                            )
+                            data_position += 1
+                            continue
+                        if operation == 1:
+                            if size > len(data_section) - data_position:
+                                raise RuntimeError("VCDIFF ADD data is truncated")
+                            target.extend(
+                                data_section[data_position : data_position + size]
+                            )
+                            data_position += size
+                            continue
+
+                        here = source_length + len(target)
+                        if mode == 0:
+                            address = _read_vcdiff_integer(
+                                read_address_byte, "COPY address", here
+                            )
+                        elif mode == 1:
+                            distance = _read_vcdiff_integer(
+                                read_address_byte, "COPY distance", here
+                            )
+                            address = here - distance
+                        elif mode < 6:
+                            offset = _read_vcdiff_integer(
+                                read_address_byte, "COPY near offset", here
+                            )
+                            address = near_cache[mode - 2] + offset
+                        else:
+                            address = same_cache[
+                                (mode - 6) * 256 + read_address_byte()
+                            ]
+                        if address >= here:
+                            raise RuntimeError("VCDIFF COPY address is out of bounds")
+
+                        near_cache[next_near_slot] = address
+                        next_near_slot = (next_near_slot + 1) % len(near_cache)
+                        same_cache[address % len(same_cache)] = address
+
+                        if address < source_length:
+                            if size > source_length - address:
+                                raise RuntimeError(
+                                    "VCDIFF COPY crosses the source segment boundary"
+                                )
+                            target.extend(source_segment[address : address + size])
+                            continue
+
+                        target_address = address - source_length
+                        available = len(target) - target_address
+                        if available <= 0:
+                            raise RuntimeError(
+                                "VCDIFF target COPY address is out of bounds"
+                            )
+                        if size <= available:
+                            target.extend(
+                                target[target_address : target_address + size]
+                            )
+                            continue
+                        pattern = target[target_address:]
+                        repeats, remainder = divmod(size, available)
+                        target.extend(pattern * repeats)
+                        target.extend(pattern[:remainder])
+
+                if len(target) != target_length:
+                    raise RuntimeError("VCDIFF target window has the wrong size")
+                if data_position != len(data_section):
+                    raise RuntimeError("VCDIFF data section has trailing bytes")
+                if address_position != len(address_section):
+                    raise RuntimeError("VCDIFF address section has trailing bytes")
+                if checksum is not None and zlib.adler32(target) != checksum:
+                    raise RuntimeError("VCDIFF target window checksum mismatch")
+
+                output.write(target)
+                total_output += len(target)
+                window_count += 1
+
+            if window_count == 0:
+                raise RuntimeError("VCDIFF stream contains no windows")
+    except Exception:
+        output_path.unlink(missing_ok=True)
+        raise
+
+
+def run_xdelta_decode(source: Path, patch: Path, output: Path) -> None:
+    decode_vcdiff(source, patch, output, source.stat().st_size)
 
 
 def validate_options(options: PatchOptions) -> None:
@@ -1060,7 +1432,9 @@ def validate_options(options: PatchOptions) -> None:
             or options.arena != "normal"
         )
         if gameplay:
-            raise ValueError("story mode is incompatible with gameplay and arena patches")
+            raise ValueError(
+                "story mode is incompatible with gameplay and arena patches"
+            )
 
 
 def selected_directories(
@@ -1136,9 +1510,13 @@ def selected_directories(
     if options.title_screen or implicit_patches:
         selected.append("title_screen")
     if options.pw_roni:
-        selected.append("roni_pw/resized" if options.face_fix == "resize" else "roni_pw/default")
+        selected.append(
+            "roni_pw/resized" if options.face_fix == "resize" else "roni_pw/default"
+        )
     if options.emeralda_cafe_fix and disc == 1:
-        selected.append("emeralda_fix/new_script" if script else "emeralda_fix/og_script")
+        selected.append(
+            "emeralda_fix/new_script" if script else "emeralda_fix/og_script"
+        )
     if options.no_deathblow_levels:
         selected.append("exp_data")
     return selected
@@ -1170,7 +1548,11 @@ def seed_stock_dependencies(
             index = table_index(stage.disc, listed_index)
             if index in stage.files:
                 continue
-            if index <= xa_children or index >= len(entries) or entries[index].size <= 0:
+            if (
+                index <= xa_children
+                or index >= len(entries)
+                or entries[index].size <= 0
+            ):
                 raise RuntimeError(
                     f"Disc {stage.disc} stock dependency {listed_index:04d} "
                     "is not a replaceable ordinary file"
@@ -1226,41 +1608,27 @@ def apply_exp_gold(stage: StagingArea, options: PatchOptions) -> None:
                 result = scaled(value, options.gold_factor) & 0xFFFF
                 write_at(data, offset, result.to_bytes(2, "little"), "gold")
         staged.path.write_bytes(data)
-        staged.transforms.append(
-            f"exp={options.exp_factor},gold={options.gold_factor}"
-        )
+        staged.transforms.append(f"exp={options.exp_factor},gold={options.gold_factor}")
 
 
-def clean_unpack_files(directory: Path) -> None:
-    for path in directory.glob("file*"):
-        if path.is_file():
-            path.unlink()
-
-
-def unpack_edit_repack(
+def edit_packet(
     staged: StagedFile,
-    runner: UpstreamToolRunner,
-    editor,
+    editor: Callable[[list[bytearray]], None],
     transform: str,
 ) -> None:
-    clean_unpack_files(staged.path.parent)
-    runner.run("xenopack.exe", ["-u", staged.path.name], staged.path.parent)
-    editor(staged.path.parent)
-    runner.run("xenopack.exe", ["-p", staged.path.name], staged.path.parent)
-    if not staged.path.is_file() or staged.path.stat().st_size == 0:
-        raise RuntimeError(f"xenopack did not rebuild {staged.path.name}")
-    clean_unpack_files(staged.path.parent)
+    files = packet_unpack(staged.path.read_bytes())
+    editor(files)
+    staged.path.write_bytes(packet_pack(files))
     staged.transforms.append(transform)
 
 
-def apply_deathblow_levels(stage: StagingArea, runner: UpstreamToolRunner) -> None:
+def apply_deathblow_levels(stage: StagingArea) -> None:
     staged = stage.logical(2607)
 
-    def edit(directory: Path) -> None:
-        path = directory / "file0"
-        if not path.is_file():
-            raise RuntimeError("xenopack did not extract Deathblow file0")
-        data = bytearray(path.read_bytes())
+    def edit(files: list[bytearray]) -> None:
+        if not files:
+            raise RuntimeError("Deathblow packet has no file0")
+        data = files[0]
         for start in (0x100, 0x210, 0x320, 0x430, 0x540, 0x650, 0x760, 0xA90, 0xBA0):
             if start >= len(data):
                 raise RuntimeError("Deathblow table offset is outside file0")
@@ -1272,9 +1640,8 @@ def apply_deathblow_levels(stage: StagingArea, runner: UpstreamToolRunner) -> No
                 position += 1
             if position >= len(data):
                 raise RuntimeError("unterminated Deathblow level table")
-        path.write_bytes(data)
 
-    unpack_edit_repack(staged, runner, edit, "no-deathblow-levels")
+    edit_packet(staged, edit, "no-deathblow-levels")
 
 
 def read_csv_edits(path: Path) -> list[tuple[int, int]]:
@@ -1292,7 +1659,6 @@ def read_csv_edits(path: Path) -> list[tuple[int, int]]:
 def apply_battle_edits(
     stage: StagingArea,
     edition_root: Path,
-    runner: UpstreamToolRunner,
     options: PatchOptions,
 ) -> None:
     if not (options.no_battle_flashes or options.no_damage_cap or options.jpn_controls):
@@ -1300,29 +1666,9 @@ def apply_battle_edits(
     staged = stage.logical(38)
 
     def round_trip(editor, transform: str) -> None:
-        decompressed = staged.path.with_name(staged.path.name + ".dec")
-        decompressed.unlink(missing_ok=True)
-        runner.run(
-            "xenocomp.exe",
-            ["-d", staged.path.name, decompressed.name],
-            staged.path.parent,
-        )
-        if not decompressed.is_file():
-            raise RuntimeError(
-                "xenocomp did not produce the decompressed battle executable"
-            )
-        data = bytearray(decompressed.read_bytes())
+        data = bytearray(lzss_decompress(staged.path.read_bytes())[0])
         editor(data)
-        decompressed.write_bytes(data)
-        staged.path.unlink()
-        runner.run(
-            "xenocomp.exe",
-            ["-c", decompressed.name, staged.path.name],
-            staged.path.parent,
-        )
-        decompressed.unlink(missing_ok=True)
-        if not staged.path.is_file() or staged.path.stat().st_size == 0:
-            raise RuntimeError("xenocomp did not rebuild the battle executable")
+        staged.path.write_bytes(lzss_compress(bytes(data)))
         staged.transforms.append(transform)
 
     if options.no_battle_flashes:
@@ -1331,6 +1677,7 @@ def apply_battle_edits(
             "no-battle-flashes",
         )
     if options.no_damage_cap:
+
         def remove_damage_cap(data: bytearray) -> None:
             write_at(data, 154460, b"\x00" * 4, "character damage cap")
             write_at(data, 186400, b"\x00" * 4, "Gear damage cap")
@@ -1378,30 +1725,32 @@ def apply_music(stage: StagingArea, edition_root: Path, options: PatchOptions) -
         staged.transforms.append("music-placement")
 
 
-def apply_jpn_control_images(
-    stage: StagingArea, edition_root: Path, runner: UpstreamToolRunner
-) -> None:
+def apply_jpn_control_images(stage: StagingArea, edition_root: Path) -> None:
     common = edition_root / "gamefiles/jpn_ctrl_subfiles"
     for listed in (2593, 3958):
         staged = stage.logical(listed)
 
-        def edit_image(directory: Path, source=common / "2593_3958/file1") -> None:
-            if not source.is_file() or not (directory / "file1").is_file():
+        def edit_image(
+            files: list[bytearray], source=common / "2593_3958/file1"
+        ) -> None:
+            if not source.is_file() or len(files) < 2:
                 raise RuntimeError("missing JPN control image input")
-            shutil.copyfile(source, directory / "file1")
+            files[1] = bytearray(source.read_bytes())
 
-        unpack_edit_repack(staged, runner, edit_image, "jpn-control-image")
+        edit_packet(staged, edit_image, "jpn-control-image")
 
     staged = stage.logical(2614)
 
-    def edit_battle_images(directory: Path) -> None:
+    def edit_battle_images(files: list[bytearray]) -> None:
+        if len(files) < 2:
+            raise RuntimeError("missing JPN battle control image input")
         for name in ("file0", "file1"):
             source = common / "2614" / name
-            if not source.is_file() or not (directory / name).is_file():
+            if not source.is_file():
                 raise RuntimeError("missing JPN battle control image input")
-            shutil.copyfile(source, directory / name)
+            files[int(name[-1])] = bytearray(source.read_bytes())
 
-    unpack_edit_repack(staged, runner, edit_battle_images, "jpn-battle-images")
+    edit_packet(staged, edit_battle_images, "jpn-battle-images")
 
 
 def exe_offset_to_address(executable: bytes, offset: int) -> int:
@@ -1444,9 +1793,7 @@ def guarded_executable_patches(
             source, results[disc_number]
         ):
             address = exe_offset_to_address(source, offset)
-            grouped.setdefault((address, expected, replacement), set()).add(
-                disc_number
-            )
+            grouped.setdefault((address, expected, replacement), set()).add(disc_number)
     patches: list[ExePatch] = []
     for (address, expected, replacement), discs in sorted(
         grouped.items(), key=lambda item: (item[0][0], item[0][1], item[0][2])
@@ -1496,9 +1843,7 @@ def build_exe_patches(
         variants.append(
             (
                 executables,
-                (FeatureCondition(fmv_package, enabled=False),)
-                if toggle_aware
-                else (),
+                (FeatureCondition(fmv_package, enabled=False),) if toggle_aware else (),
             )
         )
     if toggle_aware or options.fmv_undub:
@@ -1515,9 +1860,7 @@ def build_exe_patches(
         variants.append(
             (
                 softsub_executables,
-                (FeatureCondition(fmv_package, enabled=True),)
-                if toggle_aware
-                else (),
+                (FeatureCondition(fmv_package, enabled=True),) if toggle_aware else (),
             )
         )
 
@@ -1530,9 +1873,7 @@ def build_exe_patches(
         )
         jpn_edits = [
             edit
-            for edit in read_csv_edits(
-                edition_root / "data" / "controls" / "0022.csv"
-            )
+            for edit in read_csv_edits(edition_root / "data" / "controls" / "0022.csv")
             if edit[0] >= embedded_table_end
         ]
     text_edits: list[tuple[int, bytes]] = []
@@ -1548,7 +1889,9 @@ def build_exe_patches(
                 result = bytearray(source)
                 for offset, value in jpn_edits:
                     if value < 0 or value > 0xFFFF:
-                        raise RuntimeError("Japanese control executable value exceeds 16 bits")
+                        raise RuntimeError(
+                            "Japanese control executable value exceeds 16 bits"
+                        )
                     write_at(
                         result,
                         offset,
@@ -1587,16 +1930,15 @@ def build_exe_patches(
 def mutate_stage(
     stage: StagingArea,
     edition_root: Path,
-    runner: UpstreamToolRunner,
     options: PatchOptions,
 ) -> None:
-    apply_battle_edits(stage, edition_root, runner, options)
+    apply_battle_edits(stage, edition_root, options)
     apply_exp_gold(stage, options)
     if options.no_deathblow_levels:
-        apply_deathblow_levels(stage, runner)
+        apply_deathblow_levels(stage)
     apply_music(stage, edition_root, options)
     if options.jpn_controls:
-        apply_jpn_control_images(stage, edition_root, runner)
+        apply_jpn_control_images(stage, edition_root)
 
 
 def collect_operations(
@@ -1614,14 +1956,19 @@ def collect_operations(
     virtual_sectors = 0
     with image_path.open("rb") as image:
         for index, staged in sorted(stage.files.items()):
-            if index <= xa_children or index >= len(entries) or entries[index].size <= 0:
+            if (
+                index <= xa_children
+                or index >= len(entries)
+                or entries[index].size <= 0
+            ):
                 raise RuntimeError(
                     f"Disc {disc} index {index} is not a replaceable ordinary file"
                 )
             indexed_begin = entries[index].lba
-            indexed_end = indexed_begin + (
-                entries[index].size + USER_SECTOR_SIZE - 1
-            ) // USER_SECTOR_SIZE
+            indexed_end = (
+                indexed_begin
+                + (entries[index].size + USER_SECTOR_SIZE - 1) // USER_SECTOR_SIZE
+            )
             visible = next(
                 (
                     item
@@ -1683,20 +2030,13 @@ def build_fmv_operation(
     entries: list[TableEntry],
     edition_root: Path,
     package_root: Path,
-    runner: UpstreamToolRunner,
     temporary_root: Path,
 ) -> tuple[IndexedOperation, dict[str, int]]:
     patched_image = temporary_root / f"fmv-audio-disc{disc}.bin"
-    runner.run(
-        "xdelta3-3.0.11-i686.exe",
-        [
-            "-d",
-            "-s",
-            runner.path_argument(image_path),
-            runner.path_argument(edition_root / "patches" / f"cd{disc}_fmvs.xdelta"),
-            runner.path_argument(patched_image),
-        ],
-        temporary_root,
+    run_xdelta_decode(
+        image_path,
+        edition_root / "patches" / f"cd{disc}_fmvs.xdelta",
+        patched_image,
     )
     if (
         not patched_image.is_file()
@@ -1705,6 +2045,7 @@ def build_fmv_operation(
         raise RuntimeError(f"Perfect Works Disc {disc} FMV xdelta output is invalid")
 
     raw_records: list[tuple[int, bytes, bytes]] = []
+    patched_hash = hashlib.sha256()
     with image_path.open("rb") as stock, patched_image.open("rb") as patched:
         lba = 0
         while True:
@@ -1712,8 +2053,12 @@ def build_fmv_operation(
             patched_sector = patched.read(RAW_SECTOR_SIZE)
             if not stock_sector and not patched_sector:
                 break
-            if len(stock_sector) != RAW_SECTOR_SIZE or len(patched_sector) != RAW_SECTOR_SIZE:
+            if (
+                len(stock_sector) != RAW_SECTOR_SIZE
+                or len(patched_sector) != RAW_SECTOR_SIZE
+            ):
                 raise RuntimeError(f"Disc {disc} FMV xdelta output is sector-truncated")
+            patched_hash.update(patched_sector)
             if stock_sector != patched_sector:
                 if (
                     stock_sector[:USER_OFFSET] != patched_sector[:USER_OFFSET]
@@ -1728,6 +2073,8 @@ def build_fmv_operation(
                     (lba, hashlib.sha256(stock_sector).digest(), patched_sector)
                 )
             lba += 1
+    if patched_hash.hexdigest() != FMV_PATCHED_BIN_SHA256[disc]:
+        raise RuntimeError(f"Perfect Works Disc {disc} FMV VCDIFF output hash disagrees")
     patched_image.unlink()
     if not raw_records:
         raise RuntimeError(f"Disc {disc} FMV xdelta changed no sectors")
@@ -1736,7 +2083,9 @@ def build_fmv_operation(
     stream_source = edition_root / "gamefiles" / f"fmv{disc}" / "4161.bin"
     with image_path.open("rb") as image:
         if stream_source.read_bytes() != read_entry(image, entries[stream_index]):
-            raise RuntimeError(f"Disc {disc} Perfect Works FMV stream is not the stock stream")
+            raise RuntimeError(
+                f"Disc {disc} Perfect Works FMV stream is not the stock stream"
+            )
 
     subtitle_paths = sorted(
         (edition_root / "gamefiles" / f"fmv{disc}").glob("*.str"),
@@ -1746,23 +2095,19 @@ def build_fmv_operation(
         (table_index(disc, source_index(path)), path.read_bytes())
         for path in subtitle_paths
     ]
-    expected_indices = (
-        list(range(4150, 4158)) if disc == 1 else list(range(4153, 4156))
-    )
+    expected_indices = list(range(4150, 4158)) if disc == 1 else list(range(4153, 4156))
     if [index for index, _payload in subtitles] != expected_indices:
         raise RuntimeError(f"Disc {disc} Perfect Works FMV subtitle indices disagree")
 
     executable_name = "SLUS_006.64" if disc == 1 else "SLUS_006.69"
     executable = (
-        edition_root
-        / "gamefiles"
-        / "sub_executable"
-        / f"disc{disc}"
-        / executable_name
+        edition_root / "gamefiles" / "sub_executable" / f"disc{disc}" / executable_name
     ).read_bytes()
     executable_index = DISC_EXECUTABLE_INDEX[disc]
     if len(executable) != entries[executable_index].size:
-        raise RuntimeError(f"Disc {disc} Perfect Works soft-sub executable size disagrees")
+        raise RuntimeError(
+            f"Disc {disc} Perfect Works soft-sub executable size disagrees"
+        )
 
     bundle = bytearray(b"XGFMV112")
     bundle.extend(
@@ -1823,9 +2168,11 @@ def toml_condition(values: tuple[tuple[str, str], ...]) -> str:
     for key, _value in values:
         if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", key):
             raise ValueError(f"invalid option id in condition: {key}")
-    return "{ " + ", ".join(
-        f"{key} = {toml_string(value)}" for key, value in values
-    ) + " }"
+    return (
+        "{ "
+        + ", ".join(f"{key} = {toml_string(value)}" for key, value in values)
+        + " }"
+    )
 
 
 def toml_feature_conditions(values: tuple[FeatureCondition, ...]) -> str:
@@ -1847,7 +2194,9 @@ def toml_feature_conditions(values: tuple[FeatureCondition, ...]) -> str:
     return "[" + ", ".join(conditions) + "]"
 
 
-def feature_conditions_from_manifest(values: list[dict]) -> tuple[FeatureCondition, ...]:
+def feature_conditions_from_manifest(
+    values: list[dict],
+) -> tuple[FeatureCondition, ...]:
     return tuple(
         FeatureCondition(
             value["package"],
@@ -1928,7 +2277,7 @@ def make_manifest(
         f"source_name = {toml_string(f'Perfect Works Build {SUPPORTED_PWB_VERSION}')}",
         f"source_url = {toml_string('https://github.com/PWBuild-Team/Perfect_Works_Build/releases/tag/' + SUPPORTED_PWB_VERSION)}",
         'resolver = "declarative"',
-        f'save_compatibility = {toml_string("isolated" if isolated_saves else "shared")}',
+        f"save_compatibility = {toml_string('isolated' if isolated_saves else 'shared')}",
         "",
         "[[author_link]]",
         'name = "Perfect Works Build Team"',
@@ -2078,7 +2427,9 @@ def make_report(
         "Selected options:",
     ]
     for key, value in asdict(options).items():
-        lines.append(f"- {key}: {str(value).lower() if isinstance(value, bool) else value}")
+        lines.append(
+            f"- {key}: {str(value).lower() if isinstance(value, bool) else value}"
+        )
     lines.extend(["", "Coverage:"])
     if notes:
         lines.extend(f"- PARTIAL: {note}" for note in notes)
@@ -2113,7 +2464,9 @@ def make_index_report(operations: list[IndexedOperation]) -> str:
         "disc\tlisted_index\ttable_index\tpayload_bytes\tpayload_sha256\t"
         "expected_sha256\tsources\ttransforms"
     ]
-    for item in sorted(operations, key=lambda operation: (operation.disc, operation.index)):
+    for item in sorted(
+        operations, key=lambda operation: (operation.disc, operation.index)
+    ):
         lines.append(
             "\t".join(
                 (
@@ -2142,7 +2495,9 @@ def pack_archive(source: Path, output: Path) -> None:
     temporary = output.with_name(output.name + ".tmp")
     temporary.unlink(missing_ok=True)
     try:
-        with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        with zipfile.ZipFile(
+            temporary, "w", zipfile.ZIP_DEFLATED, compresslevel=9
+        ) as archive:
             for path in files:
                 info = zipfile.ZipInfo(path.relative_to(source).as_posix())
                 info.date_time = (1980, 1, 1, 0, 0, 0)
@@ -2173,7 +2528,9 @@ def ensure_safe_outputs(
         if source_output.exists():
             raise RuntimeError(f"source output already exists: {source_output}")
         if source_output == temporary_output:
-            raise RuntimeError("--source-output collides with the archive temporary path")
+            raise RuntimeError(
+                "--source-output collides with the archive temporary path"
+            )
         candidates.add(source_output)
         if output.is_relative_to(source_output):
             raise RuntimeError("package output must not be inside --source-output")
@@ -2181,7 +2538,9 @@ def ensure_safe_outputs(
         if candidate in protected:
             raise RuntimeError(f"output path aliases a read-only input: {candidate}")
         if candidate.is_relative_to(edition_root):
-            raise RuntimeError(f"output path must not be inside the edition tree: {candidate}")
+            raise RuntimeError(
+                f"output path must not be inside the edition tree: {candidate}"
+            )
 
 
 def write_utf8(path: Path, text: str) -> None:
@@ -2213,9 +2572,7 @@ def prepare_stock_inputs(
         iso_files[disc] = read_iso_files(path)
         entries, _ = tables[disc]
         with path.open("rb") as image:
-            executables[disc] = read_entry(
-                image, entries[DISC_EXECUTABLE_INDEX[disc]]
-            )
+            executables[disc] = read_entry(image, entries[DISC_EXECUTABLE_INDEX[disc]])
     return PreparedInputs(raw_hashes, tables, iso_files, executables)
 
 
@@ -2229,7 +2586,6 @@ def build_package(
     profile: Profile,
     package_id: str,
     package_name: str,
-    tool_mode: str,
     oracle_paths: dict[int, Path] | None = None,
     source_output: Path | None = None,
     progress: Callable[[str], None] | None = None,
@@ -2248,13 +2604,9 @@ def build_package(
     gamefiles = edition_root / "gamefiles"
     if not gamefiles.is_dir():
         raise RuntimeError(f"edition root has no gamefiles directory: {edition_root}")
-    ensure_safe_outputs(
-        edition_root, disc_paths, output, source_output, oracle_paths
-    )
+    ensure_safe_outputs(edition_root, disc_paths, output, source_output, oracle_paths)
     if verify_edition:
-        notify(
-            f"Authenticating Perfect Works Build {SUPPORTED_PWB_VERSION} inputs..."
-        )
+        notify(f"Authenticating Perfect Works Build {SUPPORTED_PWB_VERSION} inputs...")
         authenticate_edition(
             edition_root,
             options,
@@ -2270,7 +2622,6 @@ def build_package(
     iso_files = prepared.iso_files
     executables = prepared.executables
 
-    runner = UpstreamToolRunner(edition_root, tool_mode)
     notes = coverage_notes(options)
     final_name = package_name
     final_description = profile.description
@@ -2300,7 +2651,7 @@ def build_package(
                 xa_children,
                 options,
             )
-            mutate_stage(stage, edition_root, runner, options)
+            mutate_stage(stage, edition_root, options)
             stages[disc] = stage
             operations, disc_stats = collect_operations(
                 disc,
@@ -2319,7 +2670,6 @@ def build_package(
                     entries,
                     edition_root,
                     package_root,
-                    runner,
                     temporary_root,
                 )
                 operations.append(fmv_operation)
@@ -2367,7 +2717,9 @@ def build_package(
         )
         write_utf8(package_root / "manifest.toml", manifest)
         write_utf8(package_root / "PORTING_REPORT.txt", report)
-        write_utf8(package_root / "PORTING_INDEX.tsv", make_index_report(all_operations))
+        write_utf8(
+            package_root / "PORTING_INDEX.tsv", make_index_report(all_operations)
+        )
         if source_output is not None:
             if source_output.exists():
                 raise RuntimeError(f"source output already exists: {source_output}")
@@ -2381,9 +2733,15 @@ def build_package(
 def individual_choices(individual: IndividualMod) -> tuple[IndividualChoice, ...]:
     if individual.options is not None:
         if individual.choices or individual.option_id or individual.option_label:
-            raise RuntimeError(f"invalid mixed individual mod definition: {individual.key}")
+            raise RuntimeError(
+                f"invalid mixed individual mod definition: {individual.key}"
+            )
         return (IndividualChoice("", "", individual.options),)
-    if not individual.choices or not individual.option_id or not individual.option_label:
+    if (
+        not individual.choices
+        or not individual.option_id
+        or not individual.option_label
+    ):
         raise RuntimeError(f"incomplete selector definition: {individual.key}")
     values = [choice.value for choice in individual.choices]
     if len(values) != len(set(values)):
@@ -2398,14 +2756,17 @@ def build_selector_package(
     disc_hashes: dict[int, str],
     expected_bin_hashes: dict[int, str],
     output: Path,
-    tool_mode: str,
     prepared_inputs: PreparedInputs,
     authentication_cache: dict[tuple[str, str], str],
     source_output: Path | None = None,
     pack_output: bool = True,
 ) -> list[str]:
     choices = individual_choices(individual)
-    if len(choices) < 2 or individual.option_id is None or individual.option_label is None:
+    if (
+        len(choices) < 2
+        or individual.option_id is None
+        or individual.option_label is None
+    ):
         raise RuntimeError(f"{individual.key} is not a selector mod")
     reverse_disc_hashes = {digest: disc for disc, digest in disc_hashes.items()}
     combined_operations: list[IndexedOperation] = []
@@ -2440,7 +2801,6 @@ def build_selector_package(
                 variant_profile,
                 f"org.perfectworksbuild.variant.{individual.key}.{choice.value}",
                 variant_profile.name,
-                tool_mode,
                 source_output=source_root,
                 progress=None,
                 implicit_patches=False,
@@ -2495,14 +2855,14 @@ def build_selector_package(
                         condition,
                     )
                 )
-            variant_index = (source_root / "PORTING_INDEX.tsv").read_text(
-                encoding="utf-8"
-            ).splitlines()
+            variant_index = (
+                (source_root / "PORTING_INDEX.tsv")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            )
             if not index_lines:
                 index_lines.append("choice\t" + variant_index[0])
-            index_lines.extend(
-                f"{choice.value}\t{line}" for line in variant_index[1:]
-            )
+            index_lines.extend(f"{choice.value}\t{line}" for line in variant_index[1:])
 
         choice_option = ChoiceOption(
             individual.option_id,
@@ -2524,7 +2884,9 @@ def build_selector_package(
         try:
             tomllib.loads(manifest)
         except tomllib.TOMLDecodeError as exc:
-            raise RuntimeError(f"generated selector manifest is invalid TOML: {exc}") from exc
+            raise RuntimeError(
+                f"generated selector manifest is invalid TOML: {exc}"
+            ) from exc
         selector_report = (
             f"Perfect Works Build {SUPPORTED_PWB_VERSION} individual selector mod\n\n"
             f"Mod: {individual.key}\n"
@@ -2600,9 +2962,7 @@ def add_composition_variant(
 ) -> int:
     owner_root = source_roots[variant.owner]
     owner_manifest_path = owner_root / "manifest.toml"
-    owner_manifest = tomllib.loads(
-        owner_manifest_path.read_text(encoding="utf-8")
-    )
+    owner_manifest = tomllib.loads(owner_manifest_path.read_text(encoding="utf-8"))
     combined_manifest = tomllib.loads(
         (combined_root / "manifest.toml").read_text(encoding="utf-8")
     )
@@ -2631,15 +2991,17 @@ def add_composition_variant(
             if operation.get("when_features") or operation.get("supersedes"):
                 continue
             local_when = operation.get("when", {})
-            if any(selected.get(option) != value
-                   for option, value in local_when.items()):
+            if any(
+                selected.get(option) != value for option, value in local_when.items()
+            ):
                 continue
             disc = disc_by_hash[operation["disc_sha256"]]
             resource = (disc, operation["index"])
             previous = participant_resources.get(resource, [])
-            if previous and previous[0][1]["expected_sha256"] != operation[
-                "expected_sha256"
-            ]:
+            if (
+                previous
+                and previous[0][1]["expected_sha256"] != operation["expected_sha256"]
+            ):
                 raise RuntimeError(
                     f"compatibility participants disagree on the stock guard for {resource}"
                 )
@@ -2690,19 +3052,12 @@ def add_composition_variant(
             )
         )
     }
-    stock_streams = {
-        disc: disc_paths[disc].open("rb") for disc in (1, 2)
-    }
+    stock_streams = {disc: disc_paths[disc].open("rb") for disc in (1, 2)}
     try:
-        for (disc, index), participants in sorted(
-            participant_resources.items()
-        ):
+        for (disc, index), participants in sorted(participant_resources.items()):
             combined = combined_resources.get((disc, index))
             expected_sha256 = participants[0][1]["expected_sha256"]
-            if (
-                combined is not None
-                and combined["expected_sha256"] != expected_sha256
-            ):
+            if combined is not None and combined["expected_sha256"] != expected_sha256:
                 raise RuntimeError(
                     f"combined compatibility guard disagrees for {(disc, index)}"
                 )
@@ -2728,8 +3083,7 @@ def add_composition_variant(
                 if (
                     len(positive) > 1
                     and any(key == "jpn-controls" for key, _ in positive)
-                    and index
-                    in {33, 38, 2588, 2593, 2609, 2614, 3953, 3958}
+                    and index in {33, 38, 2588, 2593, 2609, 2614, 3953, 3958}
                 ):
                     direct_sha256 = ""
             else:
@@ -2827,7 +3181,6 @@ def add_compatibility_variants(
     disc_paths: dict[int, Path],
     disc_hashes: dict[int, str],
     expected_bin_hashes: dict[int, str],
-    tool_mode: str,
     prepared: PreparedInputs,
     authentication_cache: dict[tuple[str, str], str],
     jobs: int = 1,
@@ -2855,7 +3208,6 @@ def add_compatibility_variants(
             profile,
             f"org.perfectworksbuild.composition.{number}",
             profile.name,
-            tool_mode,
             source_output=combined_root,
             progress=None,
             implicit_patches=False,
@@ -2877,8 +3229,7 @@ def add_compatibility_variants(
             combined_roots[number] = future.result()
             completed += 1
             notify(
-                f"Compatibility composition {completed}/{len(variants)}: "
-                f"{variant.name}"
+                f"Compatibility composition {completed}/{len(variants)}: {variant.name}"
             )
 
     for number, variant in enumerate(variants):
@@ -2899,7 +3250,6 @@ def build_individual_catalog(
     disc_hashes: dict[int, str],
     expected_bin_hashes: dict[int, str],
     output_directory: Path,
-    tool_mode: str,
     progress: Callable[[str], None] | None = None,
     jobs: int = 1,
 ) -> str:
@@ -2925,12 +3275,11 @@ def build_individual_catalog(
         catalog_root.mkdir()
         source_roots: dict[str, Path] = {}
         pending_rows: list[tuple[IndividualMod, Path, list[str]]] = []
+
         def build_individual(
             number: int, individual: IndividualMod
         ) -> tuple[IndividualMod, Path, Path, list[str]]:
-            filename = (
-                f"perfect-works-{individual.key}-{SUPPORTED_PWB_VERSION}.psxmod"
-            )
+            filename = f"perfect-works-{individual.key}-{SUPPORTED_PWB_VERSION}.psxmod"
             package = catalog_root / filename
             source_root = Path(temporary) / f"package-{individual.key}"
             choices = individual_choices(individual)
@@ -2942,7 +3291,6 @@ def build_individual_catalog(
                     disc_hashes,
                     expected_bin_hashes,
                     package,
-                    tool_mode,
                     prepared,
                     authentication_cache,
                     source_output=source_root,
@@ -2965,7 +3313,6 @@ def build_individual_catalog(
                     profile,
                     individual_package_id(individual.key),
                     individual.name,
-                    tool_mode,
                     source_output=source_root,
                     progress=None,
                     implicit_patches=False,
@@ -2990,9 +3337,7 @@ def build_individual_catalog(
                 individual = result[0]
                 built[individual.key] = result
                 completed += 1
-                notify(
-                    f"[{completed}/{len(INDIVIDUAL_MODS)}] Built {individual.name}"
-                )
+                notify(f"[{completed}/{len(INDIVIDUAL_MODS)}] Built {individual.name}")
         for individual in INDIVIDUAL_MODS:
             _item, package, source_root, notes = built[individual.key]
             source_roots[individual.key] = source_root
@@ -3006,7 +3351,6 @@ def build_individual_catalog(
             disc_paths,
             disc_hashes,
             expected_bin_hashes,
-            tool_mode,
             prepared,
             authentication_cache,
             jobs,
@@ -3015,9 +3359,7 @@ def build_individual_catalog(
         notify("Packing deterministic individual psxmod archives...")
         for individual, package, notes in pending_rows:
             pack_archive(source_roots[individual.key], package)
-            rows.append(
-                (individual, package, sha256_file(package), notes)
-            )
+            rows.append((individual, package, sha256_file(package), notes))
 
         catalog_lines = ["key\tfile\tsha256\tcoverage\tname"]
         for individual, package, digest, notes in rows:
@@ -3093,17 +3435,25 @@ def add_custom_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--script", action="store_true")
     parser.add_argument("--half-encounters", action="store_true")
     parser.add_argument("--exp-factor", choices=("off", "1", "1.5", "2"), default="off")
-    parser.add_argument("--gold-factor", choices=("off", "1", "1.5", "2"), default="off")
+    parser.add_argument(
+        "--gold-factor", choices=("off", "1", "1.5", "2"), default="off"
+    )
     parser.add_argument("--rebalanced-items", action="store_true")
     parser.add_argument("--rebalanced-enemies", action="store_true")
     parser.add_argument("--no-deathblow-levels", action="store_true")
     parser.add_argument("--no-damage-cap", action="store_true")
-    parser.add_argument("--arena", choices=("normal", "basic", "expert"), default="normal")
-    parser.add_argument("--face-fix", choices=("none", "normal", "resize"), default="none")
+    parser.add_argument(
+        "--arena", choices=("normal", "basic", "expert"), default="normal"
+    )
+    parser.add_argument(
+        "--face-fix", choices=("none", "normal", "resize"), default="none"
+    )
     parser.add_argument("--no-battle-flashes", action="store_true")
     parser.add_argument("--pw-roni", action="store_true")
     parser.add_argument("--emeralda-cafe-fix", action="store_true")
-    parser.add_argument("--text-speed", choices=("normal", "fast", "instant"), default="normal")
+    parser.add_argument(
+        "--text-speed", choices=("normal", "fast", "instant"), default="normal"
+    )
     parser.add_argument("--battle-undub", action="store_true")
     parser.add_argument("--music-changes", action="store_true")
     parser.add_argument("--story-mode", action="store_true")
@@ -3120,8 +3470,12 @@ def main(argv: list[str] | None = None) -> int:
         )
     )
     parser.add_argument("--edition-root", type=Path, required=True)
-    parser.add_argument("--disc1", type=Path, required=True, help="clean raw MODE2/2352 Disc 1 BIN")
-    parser.add_argument("--disc2", type=Path, required=True, help="clean raw MODE2/2352 Disc 2 BIN")
+    parser.add_argument(
+        "--disc1", type=Path, required=True, help="clean raw MODE2/2352 Disc 1 BIN"
+    )
+    parser.add_argument(
+        "--disc2", type=Path, required=True, help="clean raw MODE2/2352 Disc 2 BIN"
+    )
     outputs = parser.add_mutually_exclusive_group(required=True)
     outputs.add_argument("--output", type=Path)
     outputs.add_argument(
@@ -3139,7 +3493,6 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="do not add the patcher's implicit bug-fix and title-screen payloads",
     )
-    parser.add_argument("--tool-mode", choices=("auto", "native", "wine"), default="auto")
     parser.add_argument(
         "--jobs",
         type=int,
@@ -3169,6 +3522,7 @@ def main(argv: list[str] | None = None) -> int:
         disc_paths = {1: args.disc1.resolve(), 2: args.disc2.resolve()}
         edition_root = args.edition_root.resolve()
         custom_options = options_from_args(args)
+
         def progress(message: str) -> None:
             print(message, file=sys.stderr, flush=True)
 
@@ -3198,7 +3552,6 @@ def main(argv: list[str] | None = None) -> int:
                 disc_hashes,
                 expected_bin_hashes,
                 args.individual_output,
-                args.tool_mode,
                 progress,
                 args.jobs,
             )
@@ -3217,7 +3570,9 @@ def main(argv: list[str] | None = None) -> int:
             )
         else:
             if custom_options != PatchOptions():
-                parser.error("individual patch options may only be used with --profile custom")
+                parser.error(
+                    "individual patch options may only be used with --profile custom"
+                )
             profile = PROFILES[profile_key]
         if (args.oracle_disc1 is None) != (args.oracle_disc2 is None):
             parser.error("both oracle discs must be supplied together")
@@ -3240,9 +3595,11 @@ def main(argv: list[str] | None = None) -> int:
             profile,
             package_id,
             package_name,
-            args.tool_mode,
-            ({1: args.oracle_disc1.resolve(), 2: args.oracle_disc2.resolve()}
-             if args.oracle_disc1 else None),
+            (
+                {1: args.oracle_disc1.resolve(), 2: args.oracle_disc2.resolve()}
+                if args.oracle_disc1
+                else None
+            ),
             args.source_output.resolve() if args.source_output else None,
             progress,
             implicit_patches=(

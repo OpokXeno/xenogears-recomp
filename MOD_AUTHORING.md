@@ -553,19 +553,10 @@ python tools/perfect_works_to_psxmod.py \
 
 The inputs must be clean raw MODE2/2352 USA BINs and an unmodified extraction of
 the published 0.11.2 edition. The converter authenticates every selected source
-directory and helper, validates both discs, reads the discs only to derive stock
+directory and patch, validates both discs, reads the discs only to derive stock
 guards, reproduces the released 0.11.2 copy precedence and binary edits, and
 creates deterministic multidisc packages. Use `--profile custom --help` to see
-the composition controls. Options that use `xenocomp.exe` or
-`xenopack.exe` run those authenticated helpers directly on Windows and through
-Wine on other platforms; profiles that do not use them do not require Wine.
-
-The package's `PORTING_REPORT.txt` records selected options and coverage. FMV
-undubbing is reported but omitted because it rebuilds raw stream tables and an
-ISO-visible executable, which cannot coexist with an indexed-file plan. The
-disc-specific JPN-control executable edits are also omitted from multidisc
-packages because `main_exe` patches do not have a per-disc condition; the field,
-image, and battle-control portions remain included. No omission is silent.
+the composition controls.
 
 ## Dependencies and conflicts
 
