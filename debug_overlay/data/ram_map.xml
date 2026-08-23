@@ -50,7 +50,8 @@
   </region>
 
   <region name="Native debug menu">
-    <watch name="nativeDebugMenuEnable" addr="0x80059178" type="u8"    size="1"   note="nonzero enables Kernel debug menu list at boot"/>
+    <watch name="developmentModeWord" addr="0x80010000" type="u32"   size="4"   note="0 enables native Field/Battle debug overlays; requires 8 MiB RAM"/>
+    <watch name="nativeDebugMenuEnable" addr="0x80059178" type="u8"    size="1"   note="module 5 MenuMain debug selector; not Kernel Menu / PC-HDD mode"/>
     <watch name="nativeDebugMenuSel"  addr="0x80059460" type="u8"      size="1"   note="selected menu index out"/>
   </region>
 

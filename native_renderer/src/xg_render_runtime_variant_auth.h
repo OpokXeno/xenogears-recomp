@@ -62,6 +62,9 @@ bool xg_render_runtime_variant_native_cutover_lookup(
     uint32_t pc, uint32_t instruction_word,
     XgRenderRuntimeVariantCutoverHandler *out_handler,
     uint32_t *out_continuation);
+bool xg_render_runtime_variant_native_cutover_contract_lookup(
+    uint32_t pc, uint32_t instruction_word,
+    XgRenderRuntimeVariantCutover *out_cutover);
 bool xg_render_runtime_variant_hook_relevant(uint32_t hook, uint32_t pc);
 
 #endif

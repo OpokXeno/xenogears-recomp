@@ -28,7 +28,7 @@ static-inline no-op.
 |---|---|
 | GPU state | live renderer/interp/widescreen state reads |
 | RAM inspector | address read/watch over the address space |
-| Toggles | runtime enhancement toggles (texfilter, native_wide, aspect, bd_stretch) + launcher settings (supersampling, antialiasing, screen model, turbo loads, HQ SPU) |
+| Toggles | runtime enhancement toggles, launcher settings, Controller 1/2 routing, independent 8 MiB Developer Mode, and native Kernel Menu actions |
 | Rings | dump event/latency/starv ring buffers |
 | Map Teleport | field jump via the engine's own field-change poll recipe |
 | Party | party editor (kernel master slots) + unlock bitfield + roster viewer |

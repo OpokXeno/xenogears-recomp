@@ -23,7 +23,7 @@ set(XG_RENDER_OVERLAY_RANGES
     "${CMAKE_CURRENT_SOURCE_DIR}/native_renderer/xg_render_overlay_ranges.toml"
     CACHE FILEPATH "Identity-bound overlay cutover and source-observation manifest")
 set(XG_RENDER_RUNTIME_ARTIFACT
-    "${CMAKE_CURRENT_SOURCE_DIR}/overlays/field_runtime.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/overlays/field5_runtime.bin"
     CACHE FILEPATH "Private game runtime variant artifact")
 set(XG_RENDER_MANIFEST_TOOL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest.py"
@@ -326,6 +326,7 @@ if(BUILD_TESTING)
         native_renderer/src/xg_render_ir.c
         native_renderer/tests/xg_render_runtime_variant_test_table.c
         ${PSXRECOMP_ROOT}/runtime/src/input_replay.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/psx_sha256.c
         ${PSXRECOMP_ROOT}/runtime/src/guest_render_native_stream.c
         ${PSXRECOMP_ROOT}/runtime/src/native_render_baseline.c
         ${PSXRECOMP_ROOT}/runtime/src/host_input_snapshot.cpp

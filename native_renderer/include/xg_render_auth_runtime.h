@@ -294,6 +294,7 @@ typedef struct PsxXgRenderProjectedLifecycleSnapshot {
     uint64_t initializer_registration_count;
     uint64_t cutover_attempt_count;
     uint64_t cutover_success_count;
+    uint64_t cutover_rejection_count;
     uint64_t primitive_count;
     uint64_t source_miss_count;
     uint64_t source_blocked_count;
@@ -315,6 +316,7 @@ typedef struct PsxXgRenderProjectedLifecycleSnapshot {
     uint32_t last_registered_object;
     uint32_t last_source_success_object;
     uint32_t last_source_miss_object;
+    uint32_t last_rejection_blocker;
 } PsxXgRenderProjectedLifecycleSnapshot;
 
 typedef struct PsxXgRenderFt4PayloadMismatch {
@@ -718,6 +720,9 @@ void psx_xg_render_auth_set_exec_phase_exchange(
 void psx_xg_render_auth_cold_enable(bool enabled);
 void psx_xg_render_auth_scene_boundary(void);
 void psx_xg_render_auth_before_gpu_submission(void);
+void psx_xg_render_auth_note_gpu_semantic_current(
+    const GpuRenderSemantic *semantic);
+void psx_xg_render_auth_complete_gpu_source_frame(void);
 /* Called by DMA2 immediately before an OT walk. When an authenticated field
  * DrawOTag site was just observed, stages exact packet-level Native semantics
  * for the unbound UI packets in that OT walk. */

@@ -11,15 +11,15 @@ static_callee = "0x8004b54c"
 return_site = "0x800781c4"
 
 [artifact]
-file = "field_runtime.bin"
-full_sha256 = "bc283d19e750f41c5dde5f3293805c37757c46ffe262ad55e82d107e0cf34b8a"
-full_crc32 = "b7ce1120"
+file = "field5_runtime.bin"
+full_sha256 = "705f38a6094a85f16079542743e2c48234d2932da05f3c0078f46d97711afd51"
+full_crc32 = "d5c65eb2"
 full_size = 282628
 base_address = "0x8006f000"
 range_offset = 0
 range_size = 282628
-range_sha256 = "bc283d19e750f41c5dde5f3293805c37757c46ffe262ad55e82d107e0cf34b8a"
-range_crc32 = "b7ce1120"
+range_sha256 = "705f38a6094a85f16079542743e2c48234d2932da05f3c0078f46d97711afd51"
+range_crc32 = "d5c65eb2"
 
 [[variants]]
 id = "field-runtime-code-v1"
@@ -45,17 +45,24 @@ model_dispatch_instructions = [
   "0x8c450008", "0x24c640d0", "0x0c00b1c0", "0x00000000",
 ]
 native_cutovers = [
-  { pc = "0x800765dc", instruction = "0xafa00028", transfer = "local", continuation = "0x80076a28", handler = "actor", code_range_start = "0x800765dc", code_range_size = 4, code_range_sha256 = "39844e72dbd5d8c634cb22eb1fc80c71cdfa1ee7a9fffba1d47df2afec822cf5" },
-  { pc = "0x8007ab6c", instruction = "0x27bdffb8", transfer = "return", continuation = "0x00000000", handler = "compass-world", code_range_start = "0x8007ab6c", code_range_size = 4, code_range_sha256 = "e9403f604a23ff980028565163866c8828886dd33194d6684567616b88324c3a" },
-  { pc = "0x8007ac58", instruction = "0x27bdffb8", transfer = "return", continuation = "0x00000000", handler = "compass-screen", code_range_start = "0x8007ac58", code_range_size = 4, code_range_sha256 = "4eaa1c5cdaabce43a8e1c12e33b0f8251d5dc827c2877c3fc0c8351ef1588f32" },
-  { pc = "0x800a5600", instruction = "0x00003021", transfer = "observe", continuation = "0x00000000", handler = "zoom-rgb-begin", code_range_start = "0x800a5600", code_range_size = 168, code_range_sha256 = "3621a3e972e85e6bfe895f82a17ea3da768d4baeec59a4699d63f69d875902db" },
-  { pc = "0x800a5694", instruction = "0x28c20005", transfer = "observe", continuation = "0x00000000", handler = "zoom-rgb-commit", code_range_start = "0x800a5600", code_range_size = 168, code_range_sha256 = "3621a3e972e85e6bfe895f82a17ea3da768d4baeec59a4699d63f69d875902db" },
-  { pc = "0x800a6408", instruction = "0x27bdff78", transfer = "observe", continuation = "0x00000000", handler = "zoom-entry", code_range_start = "0x800a6408", code_range_size = 564, code_range_sha256 = "7cd464bfb45604321e0407eee495d5d0c830dc88b40550d7e7ff37094786a734" },
-  { pc = "0x800a6490", instruction = "0xafa2004c", transfer = "local", continuation = "0x800a6608", handler = "zoom-native", code_range_start = "0x800a6408", code_range_size = 564, code_range_sha256 = "7cd464bfb45604321e0407eee495d5d0c830dc88b40550d7e7ff37094786a734" },
-  { pc = "0x800a663c", instruction = "0x27bdff98", transfer = "observe", continuation = "0x00000000", handler = "zoom-initializer-begin", code_range_start = "0x800a663c", code_range_size = 744, code_range_sha256 = "7083788112ee22465e448615c8597b80b24c4185bb0a4ea810204af78fec08b9" },
-  { pc = "0x800a68f0", instruction = "0x8fbf0064", transfer = "observe", continuation = "0x00000000", handler = "zoom-initializer-commit", code_range_start = "0x800a663c", code_range_size = 744, code_range_sha256 = "7083788112ee22465e448615c8597b80b24c4185bb0a4ea810204af78fec08b9" },
-  { pc = "0x800a8eac", instruction = "0x27bdff68", transfer = "observe", continuation = "0x00000000", handler = "particle-initializer", code_range_start = "0x800a8eac", code_range_size = 520, code_range_sha256 = "8afda2c5c6628ef1b0b6758e9f56f310233e9dd25109d955662432c637d62ebd" },
-  { pc = "0x800a9b54", instruction = "0x27bdff38", transfer = "return", continuation = "0x00000000", handler = "particle-native", code_range_start = "0x800a9b54", code_range_size = 964, code_range_sha256 = "bdf7b62ab52f063ee676f1c74a9525629a2be443492e2623116ef3bf45b72f69" },
+  { pc = "0x800765dc", instruction = "0xafa00028", transfer = "local", continuation = "0x80076a28", handler = "actor", code_range_start = "0x800765dc", code_range_size = 4, code_range_sha256 = "c94d35e5771f7c7ac4e25697eb3b4e0e522e561148767f52e163aaf91d20fa16" },
+  { pc = "0x8007ab6c", instruction = "0x27bdffb8", transfer = "return", continuation = "0x00000000", handler = "compass-world", code_range_start = "0x8007ab6c", code_range_size = 4, code_range_sha256 = "a2430e78a89e88f2d475c43448bca3854cf639cf3a0e2a2033aa54c959904659" },
+  { pc = "0x8007ac58", instruction = "0x27bdffb8", transfer = "return", continuation = "0x00000000", handler = "compass-screen", code_range_start = "0x8007ac58", code_range_size = 4, code_range_sha256 = "a2430e78a89e88f2d475c43448bca3854cf639cf3a0e2a2033aa54c959904659" },
+  { pc = "0x8007a7f4", instruction = "0x27bdff30", transfer = "observe", continuation = "0x00000000", handler = "resource-initializer-begin", code_range_start = "0x8007a7f4", code_range_size = 592, code_range_sha256 = "d0d4a597137994f605d3e563d169d9914dda337b5c1a1abaa9cab5a69011b969" },
+  { pc = "0x8007a9f4", instruction = "0xacc30004", transfer = "observe", continuation = "0x00000000", handler = "resource-initializer-writer", code_range_start = "0x8007a7f4", code_range_size = 592, code_range_sha256 = "d0d4a597137994f605d3e563d169d9914dda337b5c1a1abaa9cab5a69011b969" },
+  { pc = "0x8007aa3c", instruction = "0x03e00008", transfer = "observe", continuation = "0x00000000", handler = "resource-initializer-commit", code_range_start = "0x8007a7f4", code_range_size = 592, code_range_sha256 = "d0d4a597137994f605d3e563d169d9914dda337b5c1a1abaa9cab5a69011b969" },
+  { pc = "0x8007aa44", instruction = "0x27bdffe0", transfer = "observe", continuation = "0x00000000", handler = "resource-initializer-begin", code_range_start = "0x8007aa44", code_range_size = 296, code_range_sha256 = "44df384a0a9c129c3b9a35387542d97398ff38855728915c0e787bdb45514802" },
+  { pc = "0x8007ab2c", instruction = "0xacc30004", transfer = "observe", continuation = "0x00000000", handler = "resource-initializer-writer", code_range_start = "0x8007aa44", code_range_size = 296, code_range_sha256 = "44df384a0a9c129c3b9a35387542d97398ff38855728915c0e787bdb45514802" },
+  { pc = "0x8007ab64", instruction = "0x03e00008", transfer = "observe", continuation = "0x00000000", handler = "resource-initializer-commit", code_range_start = "0x8007aa44", code_range_size = 296, code_range_sha256 = "44df384a0a9c129c3b9a35387542d97398ff38855728915c0e787bdb45514802" },
+  { pc = "0x800a5600", instruction = "0x00003021", transfer = "observe", continuation = "0x00000000", handler = "zoom-rgb-begin", code_range_start = "0x800a5600", code_range_size = 168, code_range_sha256 = "a5a9f75fc8efc8ac400e4ea9338b5a24947ee1c343cf26924d99fc6a96113d9f" },
+  { pc = "0x800a5694", instruction = "0x28c20005", transfer = "observe", continuation = "0x00000000", handler = "zoom-rgb-commit", code_range_start = "0x800a5600", code_range_size = 168, code_range_sha256 = "a5a9f75fc8efc8ac400e4ea9338b5a24947ee1c343cf26924d99fc6a96113d9f" },
+  { pc = "0x800a6408", instruction = "0x27bdff78", transfer = "observe", continuation = "0x00000000", handler = "zoom-entry", code_range_start = "0x800a6408", code_range_size = 564, code_range_sha256 = "0b4121d7052c477ca9b326e15be6df641afa7a6f2e2b330f42c799badda3192c" },
+  { pc = "0x800a6490", instruction = "0xafa2004c", transfer = "local", continuation = "0x800a6608", handler = "zoom-native", code_range_start = "0x800a6408", code_range_size = 564, code_range_sha256 = "0b4121d7052c477ca9b326e15be6df641afa7a6f2e2b330f42c799badda3192c" },
+  { pc = "0x800a663c", instruction = "0x27bdff98", transfer = "observe", continuation = "0x00000000", handler = "zoom-initializer-begin", code_range_start = "0x800a663c", code_range_size = 744, code_range_sha256 = "4849f522ebf8f1f5f2099c77be2006d9b210ff00f64df6718168322222ab93cb" },
+  { pc = "0x800a6884", instruction = "0xae430004", transfer = "observe", continuation = "0x00000000", handler = "zoom-initializer-writer", code_range_start = "0x800a663c", code_range_size = 744, code_range_sha256 = "4849f522ebf8f1f5f2099c77be2006d9b210ff00f64df6718168322222ab93cb" },
+  { pc = "0x800a68f0", instruction = "0x8fbf0064", transfer = "observe", continuation = "0x00000000", handler = "zoom-initializer-commit", code_range_start = "0x800a663c", code_range_size = 744, code_range_sha256 = "4849f522ebf8f1f5f2099c77be2006d9b210ff00f64df6718168322222ab93cb" },
+  { pc = "0x800a8eac", instruction = "0x27bdff68", transfer = "observe", continuation = "0x00000000", handler = "particle-initializer", code_range_start = "0x800a8eac", code_range_size = 520, code_range_sha256 = "7fa217a406233868cd5c85d076009e48f522c4476a290ec87954a2bd63e5b203" },
+  { pc = "0x800a9b54", instruction = "0x27bdff38", transfer = "return", continuation = "0x00000000", handler = "particle-native", code_range_start = "0x800a9b54", code_range_size = 964, code_range_sha256 = "d1272f8027d3f58fc692d437bdcd7e701f58d23fbfeeeeb41f46ae7016c1df38" },
 ]
 source_sites = [
   { pc = "0x80076858", instruction = "0xe8590000", operation = "swc2", width = 4, auxiliary = "effective-address" },

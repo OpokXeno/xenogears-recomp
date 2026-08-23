@@ -395,6 +395,7 @@ if(BUILD_TESTING)
         src/xg_render_ir.c
         tests/xg_render_runtime_variant_test_table.c
         "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/src/gte_attribution.cpp"
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/src/psx_sha256.c"
         "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/src/guest_render_transaction.c"
         "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/src/guest_render_native_stream.c"
         "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/src/guest_render_bridge.c")

@@ -206,6 +206,58 @@ static bool descriptor_cutovers_are_valid(
                              cutover->continuation, 4u)))
             return false;
     }
+    for (uint32_t index = 0u; index < descriptor->cutover_count; ++index) {
+        const XgRenderRuntimeVariantCutover *group =
+            &descriptor->cutovers[index];
+        const bool resource_group =
+            group->handler ==
+                XG_RENDER_RUNTIME_VARIANT_CUTOVER_RESOURCE_INITIALIZER_BEGIN ||
+            group->handler ==
+                XG_RENDER_RUNTIME_VARIANT_CUTOVER_RESOURCE_INITIALIZER_WRITER ||
+            group->handler ==
+                XG_RENDER_RUNTIME_VARIANT_CUTOVER_RESOURCE_INITIALIZER_COMMIT;
+        const bool zoom_group =
+            group->handler ==
+                XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_INITIALIZER_BEGIN ||
+            group->handler ==
+                XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_INITIALIZER_WRITER ||
+            group->handler ==
+                XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_INITIALIZER_COMMIT;
+        uint32_t begin_count = 0u;
+        uint32_t writer_count = 0u;
+        uint32_t commit_count = 0u;
+
+        if (!resource_group && !zoom_group) continue;
+        for (uint32_t peer_index = 0u;
+             peer_index < descriptor->cutover_count; ++peer_index) {
+            const XgRenderRuntimeVariantCutover *peer =
+                &descriptor->cutovers[peer_index];
+
+            if (!physical_address_equals(peer->code_range_start,
+                                         group->code_range_start) ||
+                peer->code_range_size != group->code_range_size ||
+                memcmp(peer->code_range_identity, group->code_range_identity,
+                       sizeof(group->code_range_identity)) != 0)
+                continue;
+            if (resource_group) {
+                begin_count += peer->handler ==
+                    XG_RENDER_RUNTIME_VARIANT_CUTOVER_RESOURCE_INITIALIZER_BEGIN;
+                writer_count += peer->handler ==
+                    XG_RENDER_RUNTIME_VARIANT_CUTOVER_RESOURCE_INITIALIZER_WRITER;
+                commit_count += peer->handler ==
+                    XG_RENDER_RUNTIME_VARIANT_CUTOVER_RESOURCE_INITIALIZER_COMMIT;
+            } else {
+                begin_count += peer->handler ==
+                    XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_INITIALIZER_BEGIN;
+                writer_count += peer->handler ==
+                    XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_INITIALIZER_WRITER;
+                commit_count += peer->handler ==
+                    XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_INITIALIZER_COMMIT;
+            }
+        }
+        if (begin_count != 1u || writer_count != 1u || commit_count != 1u)
+            return false;
+    }
     return true;
 }
 
@@ -338,7 +390,21 @@ bool xg_render_runtime_variant_native_cutover_lookup(
     uint32_t pc, uint32_t instruction_word,
     XgRenderRuntimeVariantCutoverHandler *out_handler,
     uint32_t *out_continuation) {
+    XgRenderRuntimeVariantCutover cutover;
+
     if (out_handler == NULL || out_continuation == NULL) return false;
+    if (!xg_render_runtime_variant_native_cutover_contract_lookup(
+            pc, instruction_word, &cutover))
+        return false;
+    *out_handler = (XgRenderRuntimeVariantCutoverHandler)cutover.handler;
+    *out_continuation = cutover.continuation;
+    return true;
+}
+
+bool xg_render_runtime_variant_native_cutover_contract_lookup(
+    uint32_t pc, uint32_t instruction_word,
+    XgRenderRuntimeVariantCutover *out_cutover) {
+    if (out_cutover == NULL) return false;
     for (uint32_t descriptor_index = 0u;
          descriptor_index < xg_render_runtime_variant_descriptor_count;
          ++descriptor_index) {
@@ -360,9 +426,7 @@ bool xg_render_runtime_variant_native_cutover_lookup(
                      (state.phase != XG_RENDER_RUNTIME_VARIANT_EXPECT_CAPTURE &&
                       state.phase != XG_RENDER_RUNTIME_VARIANT_EXPECT_RETURN)))
                     return false;
-                *out_handler =
-                    (XgRenderRuntimeVariantCutoverHandler)cutover->handler;
-                *out_continuation = cutover->continuation;
+                *out_cutover = *cutover;
                 return true;
             }
         }
@@ -1140,6 +1204,13 @@ XgRenderRuntimeVariantEvent xg_render_runtime_variant_observe(
             state.phase = XG_RENDER_RUNTIME_VARIANT_EXPECT_CAPTURE;
             return XG_RENDER_RUNTIME_VARIANT_ENTRY;
         }
+        if (state.phase == XG_RENDER_RUNTIME_VARIANT_EXPECT_ENTRY &&
+            (hook == PSX_XG_RENDER_AUTH_HOOK_ENTRY ||
+             hook == PSX_XG_RENDER_AUTH_HOOK_CAPTURE ||
+             hook == PSX_XG_RENDER_AUTH_HOOK_RETURN) &&
+            !range_contains(descriptor->artifact_range_start,
+                            descriptor->artifact_range_size, pc, 1u))
+            return XG_RENDER_RUNTIME_VARIANT_CONSUMED;
         if (state.phase == XG_RENDER_RUNTIME_VARIANT_EXPECT_CAPTURE) {
             if (physical_address_equals(pc, descriptor->capture_site)) {
                 if (hook == PSX_XG_RENDER_AUTH_HOOK_ENTRY)

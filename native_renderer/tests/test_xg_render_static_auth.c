@@ -541,7 +541,47 @@ static bool zoom_xy_address(uint32_t address) {
     return false;
 }
 
+static bool local_producer_test_code_corrupt;
+
+static bool local_producer_test_code_word(uint32_t address,
+                                          uint32_t *out_word) {
+    uint32_t word = 0u;
+
+    if (address >= UINT32_C(0x8007a7f4) &&
+        address < UINT32_C(0x8007a7f4) + 592u) {
+        if (address == UINT32_C(0x8007a7f4)) word = UINT32_C(0x27bdff30);
+        else if (address == UINT32_C(0x8007a9f4))
+            word = UINT32_C(0xacc30004);
+        else if (address == UINT32_C(0x8007aa3c))
+            word = UINT32_C(0x03e00008);
+    } else if (address >= UINT32_C(0x8007aa44) &&
+               address < UINT32_C(0x8007aa44) + 296u) {
+        if (address == UINT32_C(0x8007aa44)) word = UINT32_C(0x27bdffe0);
+        else if (address == UINT32_C(0x8007ab2c))
+            word = UINT32_C(0xacc30004);
+        else if (address == UINT32_C(0x8007ab64))
+            word = UINT32_C(0x03e00008);
+    } else if (address >= UINT32_C(0x800a663c) &&
+               address < UINT32_C(0x800a663c) + 744u) {
+        if (address == UINT32_C(0x800a663c)) word = UINT32_C(0x27bdff98);
+        else if (address == UINT32_C(0x800a6884))
+            word = UINT32_C(0xae430004);
+        else if (address == UINT32_C(0x800a68f0))
+            word = UINT32_C(0x8fbf0064);
+    } else {
+        return false;
+    }
+    *out_word = local_producer_test_code_corrupt &&
+        (address == UINT32_C(0x8007a7f4) ||
+         address == UINT32_C(0x8007aa44) ||
+         address == UINT32_C(0x800a663c)) ? word ^ 4u : word;
+    return true;
+}
+
 static uint32_t zoom_read_word(uint32_t address) {
+    uint32_t code_word;
+
+    if (local_producer_test_code_word(address, &code_word)) return code_word;
     if (zoom_field_identity && address == PRODUCER_ENTRY)
         return UINT32_C(0x27bdff18);
     if (zoom_field_identity && address == CALLER_SITE)
@@ -643,7 +683,8 @@ static void record_render_code_watch(uint32_t address, uint32_t size) {
     if (address <= UINT32_C(0x0001e86c) &&
         UINT32_C(0x0001e870) <= address + size)
         sprite_ft4_watch_registered = true;
-    if (address <= UINT32_C(0x0009e200) &&
+    if (address <= UINT32_C(0x0009e204) &&
+        UINT32_C(0x0009e204) <= address &&
         UINT32_C(0x0009e228) <= address + size)
         sidecar_packet_watch_registered = true;
     if (address <= UINT32_C(0x00062104) &&
@@ -1451,8 +1492,41 @@ static const uint32_t model_shadow_resident_caller_instructions[] = {
     UINT32_C(0x8c65002c), UINT32_C(0x0c00b1c0),
     UINT32_C(0x30e70004),
 };
+static const uint32_t field_polyline_contract_entry_instructions[] = {
+    UINT32_C(0x3c038006), UINT32_C(0x8c6325a0),
+    UINT32_C(0x27bdffb8), UINT32_C(0xafbf0040),
+    UINT32_C(0xafb5003c), UINT32_C(0xafb40038),
+    UINT32_C(0xafb30034), UINT32_C(0xafb20030),
+    UINT32_C(0xafb1002c), UINT32_C(0xafb00028),
+    UINT32_C(0x906204d8),
+};
+static const uint32_t field_polyline_contract_core_instructions[] = {
+    UINT32_C(0xa0400086), UINT32_C(0x26040100),
+    UINT32_C(0x3c038006), UINT32_C(0x8c6325a0),
+    UINT32_C(0x26050108), UINT32_C(0x8c620308),
+    UINT32_C(0x26060118), UINT32_C(0x00023840),
+    UINT32_C(0x00e23821), UINT32_C(0x000738c0),
+    UINT32_C(0x24e70050), UINT32_C(0x02073821),
+    UINT32_C(0x24e2000c), UINT32_C(0xafa20010),
+    UINT32_C(0x8c630308), UINT32_C(0x24e70008),
+    UINT32_C(0xafb50018), UINT32_C(0xafb4001c),
+    UINT32_C(0x00031040), UINT32_C(0x00431021),
+    UINT32_C(0x000210c0), UINT32_C(0x00501021),
+    UINT32_C(0x24420060), UINT32_C(0x0c01299f),
+    UINT32_C(0xafa20014),
+};
+static const uint32_t field_polyline_contract_finish_instructions[] = {
+    UINT32_C(0x8fbf0040), UINT32_C(0x8fb5003c),
+    UINT32_C(0x8fb40038), UINT32_C(0x8fb30034),
+    UINT32_C(0x8fb20030), UINT32_C(0x8fb1002c),
+    UINT32_C(0x8fb00028), UINT32_C(0x27bd0048),
+    UINT32_C(0x03e00008), UINT32_C(0x00000000),
+};
 
 static uint32_t model_shadow_read_word(uint32_t address) {
+    uint32_t code_word;
+
+    if (local_producer_test_code_word(address, &code_word)) return code_word;
     if (model_shadow_tracked_payload != 0u &&
         address >= model_shadow_tracked_payload &&
         address < model_shadow_tracked_payload + 40u)
@@ -1495,6 +1569,32 @@ static void model_shadow_store_word(uint32_t address, uint32_t value) {
              address + 4u <= MODEL_SHADOW_STACK_BASE + MODEL_SHADOW_STACK_SIZE)
         particle_store_u32(
             &model_shadow_stack[address - MODEL_SHADOW_STACK_BASE], value);
+}
+
+static void install_field_polyline_contract(uint32_t entry) {
+    for (uint32_t index = 0u;
+         index < sizeof(field_polyline_contract_entry_instructions) /
+             sizeof(field_polyline_contract_entry_instructions[0]);
+         ++index)
+        model_shadow_store_word(
+            entry + index * 4u,
+            field_polyline_contract_entry_instructions[index]);
+    model_shadow_store_word(entry + 0x17cu, UINT32_C(0xa0400056));
+    model_shadow_store_word(entry + 0x248u, UINT32_C(0xa0400056));
+    for (uint32_t index = 0u;
+         index < sizeof(field_polyline_contract_core_instructions) /
+             sizeof(field_polyline_contract_core_instructions[0]);
+         ++index)
+        model_shadow_store_word(
+            entry + 0x2c0u + index * 4u,
+            field_polyline_contract_core_instructions[index]);
+    for (uint32_t index = 0u;
+         index < sizeof(field_polyline_contract_finish_instructions) /
+             sizeof(field_polyline_contract_finish_instructions[0]);
+         ++index)
+        model_shadow_store_word(
+            entry + 0x3f4u + index * 4u,
+            field_polyline_contract_finish_instructions[index]);
 }
 
 static void configure_model_ft4_shadow_cpu(CPUState *cpu) {
@@ -3004,6 +3104,11 @@ static int test_runtime_rejects_incomplete_or_mutated_runtime_variant_chain(void
 static int test_runtime_warm_runtime_variant_candidate_validation(void) {
     XgRenderAuth *auth = NULL;
     XgRenderAuthSnapshot snapshot = {0};
+    PsxXgRenderAuthCompletedProofReceipt cold_after_idle_mismatch = {0};
+    PsxXgRenderAuthCompletedProofReceipt first = {0};
+    PsxXgRenderAuthCompletedProofReceipt second = {0};
+    PsxXgRenderAuthCandidate canonical_artifact_candidate =
+        matching_runtime_variant_candidate();
     const PsxXgRenderAuthCandidate short_range_candidate = {
         RUNTIME_VARIANT_PRODUCER_ENTRY & 0x1fffffffu, 0x0006f000u, 16u,
         RUNTIME_VARIANT_PRODUCER_ENTRY & 0x1fffffffu,
@@ -3013,6 +3118,47 @@ static int test_runtime_warm_runtime_variant_candidate_validation(void) {
     CHECK(xg_render_auth_process_owner(&auth) == XG_RENDER_AUTH_OK);
 
     psx_xg_render_auth_scene_boundary();
+    psx_xg_render_auth_loader_mismatch(PRODUCER_ENTRY);
+    psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_ENTRY,
+                                 PRODUCER_ENTRY, 0u, 0u);
+    psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
+                                 CALLER_SITE, JAL_INSTRUCTION, 0u);
+    psx_xg_render_auth_cold_hook(PSX_XG_RENDER_AUTH_HOOK_RETURN,
+                                 RETURN_SITE, 0u, 0u);
+    psx_xg_render_auth_completed_proof_snapshot(&cold_after_idle_mismatch);
+    CHECK(completed_proof_is(&cold_after_idle_mismatch,
+                             XG_RENDER_AUTH_TIER_COLD_INTERPRETER, 0, 0));
+
+    canonical_artifact_candidate.producer_entry = PRODUCER_ENTRY;
+    canonical_artifact_candidate.dispatch_pc = PRODUCER_ENTRY;
+    psx_xg_render_auth_scene_boundary();
+    psx_xg_render_auth_note_candidate_dispatch(&canonical_artifact_candidate);
+    psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
+                                 PRODUCER_ENTRY, 0u, 0u);
+    CHECK(runtime_has_no_authenticated_observations());
+    CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
+    CHECK(snapshot.reject_reason == XG_RENDER_AUTH_REJECT_NONE);
+
+    psx_xg_render_auth_scene_boundary();
+    note_matching_runtime_variant_candidate();
+    psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
+                                 RUNTIME_VARIANT_ACTIVATION_SITE,
+                                 RUNTIME_VARIANT_ACTIVATION_JAL,
+                                 RUNTIME_VARIANT_ACTIVATION_DELAY);
+    psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
+                                 0x00000c80u, 0u, 0u);
+    psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_ENTRY,
+                                 RUNTIME_VARIANT_PRODUCER_ENTRY, 0u, 0u);
+    psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
+                                 RUNTIME_VARIANT_CAPTURE_SITE, JAL_INSTRUCTION,
+                                 RUNTIME_VARIANT_CAPTURE_DELAY);
+    psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_RETURN,
+                                 RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
+    CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
+    CHECK(!snapshot.native_use_permitted);
+    psx_xg_render_auth_completed_proof_snapshot(&first);
+    CHECK(completed_proof_is(&first, XG_RENDER_AUTH_TIER_WARM_NATIVE, 1, 1));
+
     note_matching_runtime_variant_candidate();
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_CAPTURE,
                                  RUNTIME_VARIANT_ACTIVATION_SITE,
@@ -3025,8 +3171,9 @@ static int test_runtime_warm_runtime_variant_candidate_validation(void) {
                                  RUNTIME_VARIANT_CAPTURE_DELAY);
     psx_xg_render_auth_warm_hook(NULL, PSX_XG_RENDER_AUTH_HOOK_RETURN,
                                  RUNTIME_VARIANT_RETURN_SITE, 0u, 0u);
-    CHECK(xg_render_auth_snapshot(auth, &snapshot) == XG_RENDER_AUTH_OK);
-    CHECK(!snapshot.native_use_permitted);
+    psx_xg_render_auth_completed_proof_snapshot(&second);
+    CHECK(completed_proof_is(&second, XG_RENDER_AUTH_TIER_WARM_NATIVE, 1, 1));
+    CHECK(second.return_event_sequence > first.return_event_sequence);
 
     psx_xg_render_auth_scene_boundary();
     psx_xg_render_auth_note_candidate_dispatch(&short_range_candidate);
@@ -4194,6 +4341,8 @@ static int test_native_particle_sidecar_and_cutover(void) {
     CHECK(particle_ot_word == UINT32_C(0xaa016078));
     CHECK(psx_xg_render_auth_particle_test_primitive(&particle_primitive));
     CHECK(particle_primitive.triangles[0].vertices[0].x == 189 * 65536);
+    psx_xg_render_auth_before_gpu_submission();
+    psx_xg_render_auth_complete_gpu_source_frame();
 
     particle_store_u32(&particle_memory[0x10], 0u);
     particle_buffer_index = 0u;
@@ -4201,6 +4350,9 @@ static int test_native_particle_sidecar_and_cutover(void) {
     cpu.gpr[7] = 1u;
     CHECK(psx_xg_render_auth_native_ft4_bypass(
         &cpu, UINT32_C(0x800a9b54), UINT32_C(0x27bdff38)));
+    CHECK(temporal_candidate_count == 0u);
+    psx_xg_render_auth_before_gpu_submission();
+    psx_xg_render_auth_complete_gpu_source_frame();
     CHECK(temporal_candidate_count == 1u);
     CHECK(temporal_policies[0].flags == GPU_RENDER_TEMPORAL_CULL_DEPTH);
     CHECK(temporal_policies[0].depth_min_inclusive == 1);
@@ -4933,6 +5085,7 @@ static int test_sidecar_rejects_address_reuse_across_scene_and_stale_packet(void
     miss.visual_id = stream_snapshot.visual_id;
     CHECK(guest_render_native_stream_activate_visual(miss.visual_id) ==
           GUEST_RENDER_NATIVE_STREAM_OK);
+    psx_xg_render_auth_note_code_write(1u, 2u, PACKET, 4u);
     miss.command_id = KUSEG_ADDRESS(PACKET);
     CHECK(!guest_render_native_stream_resolve_miss(&miss, &first));
     miss.command_id = KUSEG_ADDRESS(PACKET + 4u);
@@ -5084,12 +5237,18 @@ static int test_field_sprite_identity_normalizes_packet_buffer(void) {
     const uint32_t packet_base = UINT32_C(0x8009e200);
     const uint32_t stack_address = UINT32_C(0x801f8100);
     CPUState cpu = {0};
+    PsxXgRenderAuthCandidate overlay_candidate = {
+        UINT32_C(0x801c93a8), UINT32_C(0x801c93a8), 2084u,
+        UINT32_C(0x801c93a8),
+    };
     GpuRenderSemantic placeholder = {
         .topology = GPU_RENDER_SEMANTIC_TRIANGLES,
         .triangle_count = 1u,
         .triangles = {{ .split_count = 1u }},
     };
     GpuRenderSemantic resolved[2] = {{0}};
+    GpuRenderSemantic transformed = {0};
+    GpuRenderSemantic retained = {0};
     const GpuRenderTransactionId visual_id = {2u, 1u};
     GuestRenderNativeStreamMissContext miss = {
         .visual_id = {2u, 1u},
@@ -5101,6 +5260,15 @@ static int test_field_sprite_identity_normalizes_packet_buffer(void) {
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
     note_matching_runtime_variant_candidate();
+    set_candidate_provenance(&overlay_candidate, UINT32_C(0x801c5000),
+                             0x7004u, UINT32_C(0x99dd690a));
+    CHECK(xg_render_authoritative_overlay_artifact_candidate_matches(
+        &overlay_candidate));
+    CHECK(xg_render_authoritative_overlay_artifact_candidate_authorizes_pc(
+        &overlay_candidate, UINT32_C(0x801c9984)));
+    CHECK(xg_render_authoritative_overlay_artifact_candidate_authorizes_pc(
+        &overlay_candidate, UINT32_C(0x801c9b80)));
+    psx_xg_render_auth_note_artifact_candidate(&overlay_candidate);
     guest_render_native_stream_set_enabled(true);
     CHECK(guest_render_native_stream_stage_exact(
               visual_id, UINT32_C(0x100), &placeholder) ==
@@ -5163,6 +5331,43 @@ static int test_field_sprite_identity_normalizes_packet_buffer(void) {
     CHECK(resolved[0].interpolation_identity.producer_id ==
           (packet_base & UINT32_C(0x1fffffff)));
     CHECK(resolved[0].interpolation_identity.primitive_id == 0u);
+    CHECK(psx_xg_render_auth_native_cutover_pc_relevant(
+        UINT32_C(0x801c9984)));
+    CHECK(psx_xg_render_auth_native_cutover_pc_relevant(
+        UINT32_C(0x801c9b80)));
+    cpu.gpr[3] = packet_base + 0x28u;
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x801c9984), UINT32_C(0xa4620008)));
+    model_shadow_store_word(cpu.gpr[3] + 8u, pack_s16(20, 30));
+    model_shadow_store_word(cpu.gpr[3] + 16u, pack_s16(40, 30));
+    model_shadow_store_word(cpu.gpr[3] + 24u, pack_s16(20, 50));
+    model_shadow_store_word(cpu.gpr[3] + 32u, pack_s16(40, 50));
+    psx_xg_render_auth_note_code_write(
+        1u, 2u, cpu.gpr[3] + 8u, 0x1cu);
+    CHECK(!guest_render_native_stream_resolve_miss(&miss, &transformed));
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x801c9b80), UINT32_C(0x02801021)));
+    CHECK(guest_render_native_stream_resolve_miss(&miss, &transformed));
+    CHECK(transformed.triangles[0].vertices[0].x == 20 * INT32_C(65536));
+    CHECK(transformed.triangles[0].vertices[0].y == 30 * INT32_C(65536));
+    CHECK(transformed.triangles[1].vertices[2].x == 40 * INT32_C(65536));
+    CHECK(transformed.triangles[1].vertices[2].y == 50 * INT32_C(65536));
+    CHECK(transformed.interpolation_identity.producer_id ==
+          resolved[1].interpolation_identity.producer_id);
+    CHECK(transformed.interpolation_identity.primitive_id ==
+          resolved[1].interpolation_identity.primitive_id);
+    psx_xg_render_auth_scene_boundary();
+    CHECK(guest_render_native_stream_stage_exact(
+              visual_id, UINT32_C(0x100), &placeholder) ==
+          GUEST_RENDER_NATIVE_STREAM_OK);
+    CHECK(guest_render_native_stream_activate_visual(visual_id) ==
+          GUEST_RENDER_NATIVE_STREAM_OK);
+    CHECK(guest_render_native_stream_resolve_miss(&miss, &retained));
+    CHECK(retained.interpolation_identity.valid);
+    CHECK(retained.interpolation_identity.producer_id ==
+          resolved[1].interpolation_identity.producer_id);
+    CHECK(retained.interpolation_identity.primitive_id ==
+          resolved[1].interpolation_identity.primitive_id);
     psx_xg_render_auth_scene_boundary();
     guest_render_native_stream_set_enabled(false);
     return 1;
@@ -5668,7 +5873,10 @@ static int test_native_projected_screen_reject_submits_temporal_strips(void) {
 
     CHECK(psx_xg_render_auth_native_ft4_bypass(
         &cpu, UINT32_C(0x800273c4), UINT32_C(0x27bdff80)));
-    CHECK(temporal_candidate_count > 0u);
+    CHECK(temporal_candidate_count == 0u);
+    psx_xg_render_auth_before_gpu_submission();
+    psx_xg_render_auth_complete_gpu_source_frame();
+    CHECK(temporal_candidate_count == 3u);
     CHECK(temporal_policies[0].flags == GPU_RENDER_TEMPORAL_CULL_SCREEN);
     CHECK(temporal_policies[0].screen_left == 0);
     CHECK(temporal_policies[0].screen_right_exclusive == 320 * 65536);
@@ -5686,7 +5894,7 @@ static int test_native_projected_screen_reject_submits_temporal_strips(void) {
     return 1;
 }
 
-static int test_native_view_preserves_guest_projected_background_path(void) {
+static int test_native_view_uses_resident_projected_background(void) {
     CPUState cpu;
     XgRenderIrNativePrimitive primitives[11];
     uint32_t initial_ot;
@@ -5699,12 +5907,19 @@ static int test_native_view_preserves_guest_projected_background_path(void) {
     configure_projected_cpu_at_cutover(&cpu);
     initial_ot = projected_read_word(PROJECTED_OT);
 
-    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+    CHECK(psx_xg_render_auth_native_ft4_bypass(
         &cpu, UINT32_C(0x800273c4), UINT32_C(0x27bdff80)));
-    CHECK(projected_read_word(PROJECTED_OT) == initial_ot);
-    CHECK(projected_packet_write_count == 0u);
-    CHECK(projected_ot_write_count == 0u);
-    CHECK(psx_xg_render_auth_projected_test_primitives(primitives, 11u) == 0u);
+    CHECK(projected_read_word(PROJECTED_OT) != initial_ot);
+    CHECK(projected_packet_write_count != 0u);
+    CHECK(projected_ot_write_count == 6u);
+    CHECK(psx_xg_render_auth_projected_test_primitives(primitives, 11u) == 6u);
+    CHECK(primitives[3].triangles[0].vertices[0].x == 0);
+    CHECK(primitives[3].triangles[0].vertices[0].native_view_position);
+    CHECK(primitives[3].triangles[0].vertices[0].native_view_x == 0);
+    CHECK(primitives[3].triangles[0].vertices[1].x == 320 * 65536);
+    CHECK(primitives[3].triangles[0].vertices[1].native_view_position);
+    CHECK(primitives[3].triangles[0].vertices[1].native_view_x ==
+          426 * 65536);
     CHECK(psx_xg_render_auth_configure_native_view(false, 4u, 3u, 320u, 240u));
     psx_xg_render_auth_scene_boundary();
     return 1;
@@ -6028,6 +6243,9 @@ static int test_native_world_effects_screen_reject_is_temporal_only(void) {
     CHECK(cpu.pc == UINT32_C(0x80071aa8));
     CHECK(world_effects_packet_write_count == 0u);
     CHECK(world_ot_write_count == 0u);
+    CHECK(temporal_candidate_count == 0u);
+    psx_xg_render_auth_before_gpu_submission();
+    psx_xg_render_auth_complete_gpu_source_frame();
     CHECK(temporal_candidate_count == 1u);
     CHECK(temporal_policies[0].flags ==
           (GPU_RENDER_TEMPORAL_CULL_SCREEN |
@@ -7893,9 +8111,80 @@ static int test_overlay_model_dispatch_rejects_mutated_caller(void) {
     CHECK(!psx_xg_render_auth_native_ft4_bypass(
         &cpu, UINT32_C(0x8002c700), UINT32_C(0x27bdffd0)));
     psx_xg_render_auth_model_ft4_shadow_snapshot(&snapshot);
-    CHECK(snapshot.dispatch_begin_count == 0u);
+    CHECK(snapshot.dispatch_begin_count == 1u);
+    CHECK(snapshot.dispatch_caller_reject_count == 1u);
     CHECK(!snapshot.pending);
     CHECK(!snapshot.blocked);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_relocated_resident_model_dispatch_needs_no_overlay_identity(void) {
+    CPUState cpu;
+    PsxXgRenderModelFt4ShadowSnapshot snapshot = {0};
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    configure_model_ft4_shadow_cpu(&cpu);
+    for (uint32_t index = 0u;
+         index < sizeof(model_shadow_resident_caller_instructions) /
+             sizeof(model_shadow_resident_caller_instructions[0]);
+         ++index) {
+        model_shadow_store_word(
+            UINT32_C(0x80075170) + index * 4u,
+            model_shadow_resident_caller_instructions[index]);
+    }
+    cpu.gpr[31] = UINT32_C(0x8007519c);
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8002c700), UINT32_C(0x27bdffd0)));
+    cpu.gpr[4] = MODEL_SHADOW_TOPOLOGY + 4u;
+    cpu.gpr[5] = 1u;
+    cpu.gpr[31] = UINT32_C(0x8002c86c);
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8002e268), UINT32_C(0x34190008)));
+    psx_xg_render_auth_model_ft4_shadow_snapshot(&snapshot);
+    CHECK(snapshot.dispatch_begin_count == 1u);
+    CHECK(snapshot.dispatch_caller_reject_count == 0u);
+    CHECK(snapshot.pending);
+    CHECK(!snapshot.blocked);
+    CHECK(snapshot.prepare_failure_detail == 0u);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_relocated_field_polyline_contract_needs_no_overlay_identity(void) {
+    const uint32_t entry = UINT32_C(0x800a1000);
+    CPUState cpu = {0};
+    PsxXgRenderFieldPolylineSnapshot snapshot = {0};
+    uint64_t begin_count;
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    psx_xg_render_auth_field_polyline_snapshot(&snapshot);
+    begin_count = snapshot.begin_count;
+    memset(model_shadow_memory, 0, sizeof(model_shadow_memory));
+    install_field_polyline_contract(entry);
+    cpu.read_word = model_shadow_read_word;
+    cpu.read_half = model_shadow_read_half;
+    cpu.read_byte = model_shadow_read_byte;
+    CHECK(!psx_xg_render_auth_runtime_test_artifact_active());
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, entry, field_polyline_contract_entry_instructions[0]));
+    psx_xg_render_auth_field_polyline_snapshot(&snapshot);
+    CHECK(snapshot.begin_count == begin_count + 1u);
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    psx_xg_render_auth_field_polyline_snapshot(&snapshot);
+    begin_count = snapshot.begin_count;
+    memset(model_shadow_memory, 0, sizeof(model_shadow_memory));
+    install_field_polyline_contract(entry);
+    model_shadow_store_word(
+        entry + 0x2c0u,
+        field_polyline_contract_core_instructions[0] ^ UINT32_C(1));
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, entry, field_polyline_contract_entry_instructions[0]));
+    psx_xg_render_auth_field_polyline_snapshot(&snapshot);
+    CHECK(snapshot.begin_count == begin_count);
     psx_xg_render_auth_scene_boundary();
     return 1;
 }
@@ -7940,6 +8229,7 @@ static int test_model_ft4_unsupported_invocation_does_not_poison_shadow(void) {
 static int test_model_ft4_native_accepts_runtime_observed_group_size(void) {
     enum { RUNTIME_OBSERVED_PRIMITIVE_COUNT = 411u };
     const uint32_t material_base = UINT32_C(0x80062000);
+    const uint32_t instance_address = MODEL_SHADOW_MODEL + 0x100u;
     const uint32_t rejected_packet = MODEL_SHADOW_PACKET +
         (RUNTIME_OBSERVED_PRIMITIVE_COUNT - 1u) * 0x28u;
     PsxXgRenderAuthCandidate replacement_artifact =
@@ -7975,6 +8265,7 @@ static int test_model_ft4_native_accepts_runtime_observed_group_size(void) {
     CHECK(guest_render_native_stream_activate_visual(visual_id) ==
           GUEST_RENDER_NATIVE_STREAM_OK);
     configure_model_ft4_shadow_cpu(&cpu);
+    cpu.gpr[16] = instance_address;
     model_shadow_store_word(MODEL_SHADOW_MODEL + 0x14u, material_base);
     model_shadow_store_word(
         MODEL_SHADOW_TOPOLOGY,
@@ -8140,14 +8431,14 @@ static int test_model_ft4_native_accepts_runtime_observed_group_size(void) {
     CHECK(guest_render_native_stream_resolve_miss(&miss, &resolved));
     CHECK(resolved.interpolation_identity.valid);
     CHECK(resolved.interpolation_identity.producer_id ==
-          (MODEL_SHADOW_MODEL & UINT32_C(0x1fffffff)));
+          (instance_address & UINT32_C(0x1fffffff)));
     CHECK(resolved.interpolation_identity.primitive_id ==
           (((material_base + 8u) & UINT32_C(0x1fffffff)) |
            ((uint32_t)XG_MODEL_FT4_RAW_DISPATCH_FARTHEST << 29u)));
     CHECK(resolved.triangles[0].vertices[0]
               .interpolation_vertex_identity_valid);
     CHECK(resolved.triangles[0].vertices[0].interpolation_group_id ==
-          (MODEL_SHADOW_MODEL & UINT32_C(0x1fffffff)));
+          (instance_address & UINT32_C(0x1fffffff)));
     CHECK(resolved.triangles[0].vertices[0].interpolation_vertex_id == 0u);
     CHECK(resolved.triangles[0].vertices[1].interpolation_vertex_id == 1u);
     CHECK(resolved.triangles[0].vertices[2].interpolation_vertex_id == 2u);
@@ -8218,6 +8509,7 @@ static int test_model_ft4_native_accepts_runtime_observed_group_size(void) {
 
 static int test_model_ft3_native_decodes_descriptor_and_publishes_after_finish(
         void) {
+    const uint32_t instance_address = MODEL_SHADOW_MODEL + 0x100u;
     CPUState cpu;
     GpuRenderSemantic placeholder = {
         .topology = GPU_RENDER_SEMANTIC_TRIANGLES,
@@ -8253,6 +8545,7 @@ static int test_model_ft3_native_decodes_descriptor_and_publishes_after_finish(
     CHECK(guest_render_native_stream_activate_visual(visual_id) ==
           GUEST_RENDER_NATIVE_STREAM_OK);
     configure_model_ft4_shadow_cpu(&cpu);
+    cpu.gpr[16] = instance_address;
     model_shadow_store_word(MODEL_SHADOW_TOPOLOGY,
                             UINT32_C(0x00010005));
     model_shadow_store_word(MODEL_SHADOW_MATERIAL + 8u,
@@ -8324,7 +8617,7 @@ static int test_model_ft3_native_decodes_descriptor_and_publishes_after_finish(
     }
     CHECK(resolved.interpolation_identity.valid);
     CHECK(resolved.interpolation_identity.producer_id ==
-          (MODEL_SHADOW_MODEL & UINT32_C(0x1fffffff)));
+          (instance_address & UINT32_C(0x1fffffff)));
     CHECK(resolved.interpolation_identity.primitive_id ==
           (((MODEL_SHADOW_MATERIAL + 8u) & UINT32_C(0x1fffffff)) |
            UINT32_C(1)));
@@ -8332,7 +8625,7 @@ static int test_model_ft3_native_decodes_descriptor_and_publishes_after_finish(
         CHECK(resolved.triangles[0].vertices[vertex]
                   .interpolation_vertex_identity_valid);
         CHECK(resolved.triangles[0].vertices[vertex].interpolation_group_id ==
-              (MODEL_SHADOW_MODEL & UINT32_C(0x1fffffff)));
+              (instance_address & UINT32_C(0x1fffffff)));
         CHECK(resolved.triangles[0].vertices[vertex].interpolation_vertex_id ==
               vertex);
     }
@@ -8436,6 +8729,558 @@ static int test_model_ft3_native_decodes_descriptor_and_publishes_after_finish(
     miss.container_id = KUSEG_ADDRESS(MODEL_SHADOW_PACKET);
     miss.command_id = KUSEG_ADDRESS(MODEL_SHADOW_PACKET + 4u);
     CHECK(!guest_render_native_stream_resolve_miss(&miss, &resolved));
+    guest_render_native_stream_set_enabled(false);
+    return 1;
+}
+
+static int test_model_ft3_material_source_survives_packet_copy(void) {
+    const uint32_t source_packet = MODEL_SHADOW_PACKET;
+    const uint32_t destination_packet = MODEL_SHADOW_PACKET + 0x200u;
+    const uint32_t descriptor = MODEL_SHADOW_MATERIAL + 8u;
+    const GpuRenderTransactionId visual_id = { 1u, 1u };
+    CPUState cpu;
+    GpuRenderSemantic placeholder = {
+        .topology = GPU_RENDER_SEMANTIC_TRIANGLES,
+        .triangle_count = 1u,
+        .triangles = {{ .split_count = 1u }},
+    };
+    GpuRenderSemantic resolved = { 0 };
+    GuestRenderNativeStreamMissContext miss = {
+        .visual_id = { 1u, 1u },
+        .container_id = KUSEG_ADDRESS(destination_packet),
+        .command_id = KUSEG_ADDRESS(destination_packet + 4u),
+        .source_kind = GUEST_RENDER_NATIVE_STREAM_SOURCE_DMA_LINKED_LIST,
+        .opcode = 0x25u,
+        .word_count = 7u,
+    };
+    PsxXgRenderModelFt3ShadowSnapshot snapshot = { 0 };
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    note_matching_runtime_variant_candidate();
+    guest_render_native_stream_set_enabled(true);
+    CHECK(guest_render_native_stream_stage_exact(
+              visual_id, UINT32_C(0x100), &placeholder) ==
+          GUEST_RENDER_NATIVE_STREAM_OK);
+    CHECK(guest_render_native_stream_activate_visual(visual_id) ==
+          GUEST_RENDER_NATIVE_STREAM_OK);
+    configure_model_ft4_shadow_cpu(&cpu);
+    model_shadow_store_word(source_packet, UINT32_C(0x07123456));
+    model_shadow_store_word(source_packet + 4u, UINT32_C(0x25808080));
+    model_shadow_store_word(source_packet + 8u, UINT32_C(0x00580080));
+    model_shadow_store_word(source_packet + 12u, UINT32_C(0x00420000));
+    model_shadow_store_word(source_packet + 16u, UINT32_C(0x005800c0));
+    model_shadow_store_word(source_packet + 20u, UINT32_C(0x01232010));
+    model_shadow_store_word(source_packet + 24u, UINT32_C(0x00980080));
+    model_shadow_store_word(source_packet + 28u, UINT32_C(0x00008080));
+
+    cpu.gpr[4] = source_packet;
+    cpu.gpr[16] = descriptor;
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8002da00), UINT32_C(0x8fbf0014)));
+    psx_xg_render_auth_model_ft3_shadow_snapshot(&snapshot);
+    CHECK(snapshot.source_count == 1u);
+    CHECK(!guest_render_native_stream_resolve_miss(&miss, &resolved));
+
+    cpu.gpr[4] = destination_packet;
+    cpu.gpr[5] = source_packet;
+    cpu.gpr[6] = 0x20u;
+    cpu.gpr[31] = UINT32_C(0x800714dc);
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8003f968), UINT32_C(0x1080000a)));
+    for (uint32_t word = 0u; word < 8u; ++word)
+        model_shadow_store_word(
+            destination_packet + word * 4u,
+            model_shadow_read_word(source_packet + word * 4u));
+    cpu.gpr[2] = destination_packet;
+    cpu.gpr[4] = destination_packet + 0x20u;
+    cpu.gpr[5] = source_packet + 0x20u;
+    cpu.gpr[6] = 0u;
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8003f994), UINT32_C(0x03e00008)));
+    psx_xg_render_auth_model_ft3_shadow_snapshot(&snapshot);
+    CHECK(snapshot.source_count == 2u);
+    CHECK(guest_render_native_stream_resolve_miss(&miss, &resolved));
+    CHECK(resolved.material.raw_texture);
+    psx_xg_render_auth_note_code_write(
+        1u, 2u, destination_packet + 8u, 4u);
+    CHECK(!guest_render_native_stream_resolve_miss(&miss, &resolved));
+    cpu.gpr[9] = UINT32_C(0x00580080);
+    cpu.gpr[10] = UINT32_C(0x005800c0);
+    cpu.gpr[11] = UINT32_C(0x00980080);
+    cpu.gpr[19] = destination_packet;
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8002e1c8), UINT32_C(0x480d3800)));
+    CHECK(guest_render_native_stream_resolve_miss(&miss, &resolved));
+    psx_xg_render_auth_note_code_write(1u, 2u, destination_packet, 4u);
+    CHECK(guest_render_native_stream_resolve_miss(&miss, &resolved));
+    cpu.gpr[13] = 1u;
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8002e0fc), UINT32_C(0x4a280030)));
+    CHECK(guest_render_native_stream_resolve_miss(&miss, &resolved));
+    psx_xg_render_auth_note_code_write(
+        1u, 2u, destination_packet, 4u);
+    CHECK(guest_render_native_stream_resolve_miss(&miss, &resolved));
+    psx_xg_render_auth_scene_boundary();
+    guest_render_native_stream_set_enabled(false);
+    return 1;
+}
+
+static void configure_local_ft4_packet(uint32_t packet, uint8_t opcode) {
+    model_shadow_store_word(packet, UINT32_C(0x09123456));
+    model_shadow_store_word(
+        packet + 4u, ((uint32_t)opcode << 24u) | UINT32_C(0x00332211));
+    model_shadow_store_word(packet + 8u, UINT32_C(0x00200010));
+    model_shadow_store_word(packet + 12u, UINT32_C(0x00420000));
+    model_shadow_store_word(packet + 16u, UINT32_C(0x00200030));
+    model_shadow_store_word(packet + 20u, UINT32_C(0x01232010));
+    model_shadow_store_word(packet + 24u, UINT32_C(0x00400010));
+    model_shadow_store_word(packet + 28u, UINT32_C(0x00004000));
+    model_shadow_store_word(packet + 32u, UINT32_C(0x00400030));
+    model_shadow_store_word(packet + 36u, UINT32_C(0x00004010));
+}
+
+static void observe_local_ft4_entry(CPUState *cpu, uint32_t entry,
+                                    uint32_t instruction,
+                                    uint32_t packet, uint32_t return_address) {
+    cpu->gpr[4] = packet - 0x48u;
+    cpu->gpr[29] = MODEL_SHADOW_SP;
+    cpu->gpr[31] = return_address;
+    (void)psx_xg_render_auth_native_ft4_bypass(
+        cpu, entry, instruction);
+}
+
+static void observe_local_ft4_writer(CPUState *cpu, uint32_t writer,
+                                     uint32_t frame_size,
+                                     uint32_t packet, uint32_t ordinal) {
+    cpu->gpr[6] = packet + ordinal * 0x10u;
+    cpu->gpr[29] = MODEL_SHADOW_SP - frame_size;
+    (void)psx_xg_render_auth_native_ft4_bypass(
+        cpu, writer, UINT32_C(0xacc30004));
+}
+
+static int test_local_ft4_initializer_lifecycle_is_producer_bound(void) {
+    static const struct {
+        uint32_t entry;
+        uint32_t entry_instruction;
+        uint32_t writer;
+        uint32_t commit;
+        uint32_t frame_size;
+        uint8_t opcode;
+    } contracts[] = {
+        {UINT32_C(0x8007a7f4), UINT32_C(0x27bdff30),
+         UINT32_C(0x8007a9f4), UINT32_C(0x8007aa3c), 0xd0u, 0x2cu},
+        {UINT32_C(0x8007aa44), UINT32_C(0x27bdffe0),
+         UINT32_C(0x8007ab2c), UINT32_C(0x8007ab64), 0x20u, 0x2eu},
+    };
+
+    for (uint32_t index = 0u;
+         index < sizeof(contracts) / sizeof(contracts[0]); ++index) {
+        const uint32_t packet = MODEL_SHADOW_PACKET + index * 0x40u;
+        const uint32_t return_address = UINT32_C(0x80071234) + index * 4u;
+        CPUState cpu;
+        PsxXgRenderOverlayFt4Snapshot snapshot = {0};
+
+        CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+        set_matching_runtime_identity();
+        configure_model_ft4_shadow_cpu(&cpu);
+        configure_local_ft4_packet(packet, contracts[index].opcode);
+        observe_local_ft4_entry(
+            &cpu, contracts[index].entry, contracts[index].entry_instruction,
+            packet, return_address);
+        observe_local_ft4_writer(
+            &cpu, contracts[index].writer, contracts[index].frame_size,
+            packet, 0u);
+        observe_local_ft4_writer(
+            &cpu, contracts[index].writer, contracts[index].frame_size,
+            packet, 1u);
+        cpu.gpr[29] = MODEL_SHADOW_SP;
+        cpu.gpr[31] = return_address;
+        CHECK(!psx_xg_render_auth_native_ft4_bypass(
+            &cpu, contracts[index].commit, UINT32_C(0x03e00008)));
+        psx_xg_render_auth_overlay_ft4_snapshot(&snapshot);
+        CHECK(snapshot.field_source_template_count == 1u);
+        CHECK(psx_xg_render_auth_runtime_test_resource_write_may_overlap(
+            packet, 0x28u));
+
+        cpu.gpr[4] = MODEL_SHADOW_OT;
+        cpu.gpr[5] = packet;
+        CHECK(!psx_xg_render_auth_native_ft4_bypass(
+            &cpu, UINT32_C(0x80043b48), UINT32_C(0x3c0600ff)));
+        psx_xg_render_auth_overlay_ft4_snapshot(&snapshot);
+        CHECK(snapshot.field_add_prim_count == 1u);
+        CHECK(snapshot.field_native_count == 1u);
+
+        psx_xg_render_auth_note_code_write(
+            1u, 2u, contracts[index].entry, 4u);
+        CHECK(!psx_xg_render_auth_native_ft4_bypass(
+            &cpu, UINT32_C(0x80043b48), UINT32_C(0x3c0600ff)));
+        psx_xg_render_auth_overlay_ft4_snapshot(&snapshot);
+        CHECK(snapshot.field_native_count == 1u);
+        psx_xg_render_auth_scene_boundary();
+    }
+    return 1;
+}
+
+static int test_local_ft4_initializer_lifecycle_rejects_incomplete_proof(void) {
+    const uint32_t packet = MODEL_SHADOW_PACKET;
+    const uint32_t return_address = UINT32_C(0x80071234);
+    CPUState cpu;
+    PsxXgRenderOverlayFt4Snapshot snapshot = {0};
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    configure_model_ft4_shadow_cpu(&cpu);
+    configure_local_ft4_packet(packet, 0x2cu);
+    observe_local_ft4_entry(
+        &cpu, UINT32_C(0x8007a7f4), UINT32_C(0x27bdff30),
+        packet, return_address);
+    observe_local_ft4_writer(
+        &cpu, UINT32_C(0x8007a9f4), 0xd0u, packet, 0u);
+    cpu.gpr[29] = MODEL_SHADOW_SP;
+    cpu.gpr[31] = return_address;
+    (void)psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8007aa3c), UINT32_C(0x03e00008));
+    psx_xg_render_auth_overlay_ft4_snapshot(&snapshot);
+    CHECK(snapshot.field_source_template_count == 0u);
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    configure_model_ft4_shadow_cpu(&cpu);
+    configure_local_ft4_packet(packet, 0x2cu);
+    observe_local_ft4_entry(
+        &cpu, UINT32_C(0x8007a7f4), UINT32_C(0x27bdff30),
+        packet, return_address);
+    cpu.gpr[29] = MODEL_SHADOW_SP - 0xccu;
+    cpu.gpr[6] = packet;
+    (void)psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8007a9f4), UINT32_C(0xacc30004));
+    observe_local_ft4_writer(
+        &cpu, UINT32_C(0x8007a9f4), 0xd0u, packet, 0u);
+    observe_local_ft4_writer(
+        &cpu, UINT32_C(0x8007a9f4), 0xd0u, packet, 1u);
+    cpu.gpr[29] = MODEL_SHADOW_SP;
+    cpu.gpr[31] = return_address;
+    (void)psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8007aa3c), UINT32_C(0x03e00008));
+    psx_xg_render_auth_overlay_ft4_snapshot(&snapshot);
+    CHECK(snapshot.field_source_template_count == 0u);
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    configure_model_ft4_shadow_cpu(&cpu);
+    configure_local_ft4_packet(packet, 0x2cu);
+    observe_local_ft4_entry(
+        &cpu, UINT32_C(0x8007a7f4), UINT32_C(0x27bdff30),
+        packet, return_address);
+    observe_local_ft4_writer(
+        &cpu, UINT32_C(0x8007a9f4), 0xd0u, packet, 0u);
+    observe_local_ft4_writer(
+        &cpu, UINT32_C(0x8007a9f4), 0xd0u, packet, 1u);
+    cpu.gpr[29] = MODEL_SHADOW_SP;
+    cpu.gpr[31] = return_address ^ 4u;
+    (void)psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8007aa3c), UINT32_C(0x03e00008));
+    psx_xg_render_auth_overlay_ft4_snapshot(&snapshot);
+    CHECK(snapshot.field_source_template_count == 0u);
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    configure_model_ft4_shadow_cpu(&cpu);
+    local_producer_test_code_corrupt = true;
+    observe_local_ft4_entry(
+        &cpu, UINT32_C(0x8007a7f4), UINT32_C(0x27bdff30),
+        packet, return_address);
+    local_producer_test_code_corrupt = false;
+    observe_local_ft4_writer(
+        &cpu, UINT32_C(0x8007a9f4), 0xd0u, packet, 0u);
+    observe_local_ft4_writer(
+        &cpu, UINT32_C(0x8007a9f4), 0xd0u, packet, 1u);
+    cpu.gpr[29] = MODEL_SHADOW_SP;
+    cpu.gpr[31] = return_address;
+    (void)psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8007aa3c), UINT32_C(0x03e00008));
+    psx_xg_render_auth_overlay_ft4_snapshot(&snapshot);
+    CHECK(snapshot.field_source_template_count == 0u);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_local_zoom_initializer_lifecycle_is_producer_bound(void) {
+    CPUState cpu;
+    PsxXgRenderZoomTemplateContractSnapshot snapshot = {0};
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    configure_zoom_memory();
+    memset(&cpu, 0, sizeof(cpu));
+    cpu.read_word = zoom_read_word;
+    cpu.write_word = zoom_write_word;
+    cpu.gpr[4] = 1u;
+    cpu.gpr[5] = 1u;
+    cpu.gpr[29] = ZOOM_INIT_ENTRY_SP;
+    cpu.gpr[31] = UINT32_C(0x800a5898);
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x800a663c), UINT32_C(0x27bdff98)));
+    cpu.gpr[29] = ZOOM_INIT_ENTRY_SP - 0x68u;
+    for (uint32_t writer = 0u; writer < 10u; ++writer) {
+        cpu.gpr[18] = UINT32_C(0x800b129c) +
+            (writer / 2u) * 0x50u + (writer & 1u) * 0x10u;
+        CHECK(!psx_xg_render_auth_native_ft4_bypass(
+            &cpu, UINT32_C(0x800a6884), UINT32_C(0xae430004)));
+    }
+    zoom_store_word(cpu.gpr[29] + 0x64u, UINT32_C(0x800a5898));
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x800a68f0), UINT32_C(0x8fbf0064)));
+    psx_xg_render_auth_zoom_template_contract_snapshot(&snapshot);
+    CHECK(snapshot.authenticated);
+    CHECK(snapshot.initializer_commit_count == 1u);
+    CHECK(psx_xg_render_auth_runtime_test_resource_write_may_overlap(
+        UINT32_C(0x800b1274), 0x28u));
+    psx_xg_render_auth_note_code_write(
+        1u, 2u, UINT32_C(0x800a663c), 4u);
+    psx_xg_render_auth_zoom_template_contract_snapshot(&snapshot);
+    CHECK(!snapshot.authenticated);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_writer_ft4_2c_resolver_requires_exact_producer(void) {
+    static const GuestRenderNativeSourceWriter writers[] = {
+        { UINT32_C(0x801e92b4), 0u, UINT32_C(0x801e92a8) },
+        { UINT32_C(0x8007a8e4), 0u, UINT32_C(0x8007a830) },
+        { UINT32_C(0x8007a9f4), 0u, UINT32_C(0x8007a9d4) },
+    };
+
+    for (uint32_t writer = 0u;
+         writer < sizeof(writers) / sizeof(writers[0]); ++writer) {
+        const uint32_t packet = MODEL_SHADOW_PACKET + writer * 0x40u;
+        const GpuRenderTransactionId visual_id = { 1u, 1u };
+        CPUState cpu;
+        GpuRenderSemantic placeholder = {
+            .topology = GPU_RENDER_SEMANTIC_TRIANGLES,
+            .triangle_count = 1u,
+            .triangles = {{ .split_count = 1u }},
+        };
+        GpuRenderSemantic resolved = {0};
+        GuestRenderNativeStreamMissContext miss = {
+            .visual_id = { 1u, 1u },
+            .container_id = KUSEG_ADDRESS(packet),
+            .command_id = KUSEG_ADDRESS(packet + 4u),
+            .command_writer = writers[writer],
+            .source_kind =
+                GUEST_RENDER_NATIVE_STREAM_SOURCE_DMA_LINKED_LIST,
+            .opcode = 0x2cu,
+            .word_count = 9u,
+            .command_writer_valid = true,
+        };
+
+        CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+        set_matching_runtime_identity();
+        note_matching_runtime_variant_candidate();
+        guest_render_native_stream_set_enabled(true);
+        CHECK(guest_render_native_stream_stage_exact(
+                  visual_id, UINT32_C(0x100), &placeholder) ==
+              GUEST_RENDER_NATIVE_STREAM_OK);
+        CHECK(guest_render_native_stream_activate_visual(visual_id) ==
+              GUEST_RENDER_NATIVE_STREAM_OK);
+        configure_model_ft4_shadow_cpu(&cpu);
+        model_shadow_store_word(packet, UINT32_C(0x09123456));
+        model_shadow_store_word(packet + 4u, UINT32_C(0x2c332211));
+        model_shadow_store_word(packet + 8u, UINT32_C(0x00200010));
+        model_shadow_store_word(packet + 12u, UINT32_C(0x00420000));
+        model_shadow_store_word(packet + 16u, UINT32_C(0x00200030));
+        model_shadow_store_word(packet + 20u, UINT32_C(0x01232010));
+        model_shadow_store_word(packet + 24u, UINT32_C(0x00400010));
+        model_shadow_store_word(packet + 28u, UINT32_C(0x00004000));
+        model_shadow_store_word(packet + 32u, UINT32_C(0x00400030));
+        model_shadow_store_word(packet + 36u, UINT32_C(0x00004010));
+        CHECK(!psx_xg_render_auth_native_ft4_bypass(&cpu, 0u, 0u));
+        CHECK(guest_render_native_stream_resolve_miss(&miss, &resolved));
+        CHECK(resolved.material.textured);
+        CHECK(resolved.triangles[0].vertices[0].r == 0x11u);
+        CHECK(resolved.triangles[0].vertices[0].g == 0x22u);
+        CHECK(resolved.triangles[0].vertices[0].b == 0x33u);
+        miss.command_writer.return_address ^= 4u;
+        CHECK(!guest_render_native_stream_resolve_miss(&miss, &resolved));
+        psx_xg_render_auth_scene_boundary();
+        guest_render_native_stream_set_enabled(false);
+    }
+    return 1;
+}
+
+static int test_writer_f4_28_resolver_requires_exact_producer(void) {
+    static const GuestRenderNativeSourceWriter writers[] = {
+        { UINT32_C(0x8003f984), 0u, UINT32_C(0x800714dc) },
+        { UINT32_C(0x8002d0d8), 0u, UINT32_C(0x8002ca9c) },
+        { UINT32_C(0x80027370), 0u, UINT32_C(0x80027338) },
+        { UINT32_C(0x801caf74), 0u, UINT32_C(0x801caef4) },
+        { UINT32_C(0x801cb14c), 0u, UINT32_C(0x801cb738) },
+    };
+
+    for (uint32_t writer = 0u;
+         writer < sizeof(writers) / sizeof(writers[0]); ++writer) {
+        const uint32_t packet = MODEL_SHADOW_PACKET + writer * 0x20u;
+        const GpuRenderTransactionId visual_id = { 1u, 1u };
+        CPUState cpu;
+        GpuRenderSemantic placeholder = {
+            .topology = GPU_RENDER_SEMANTIC_TRIANGLES,
+            .triangle_count = 1u,
+            .triangles = {{ .split_count = 1u }},
+        };
+        GpuRenderSemantic resolved = {0};
+        GuestRenderNativeStreamMissContext miss = {
+            .visual_id = { 1u, 1u },
+            .container_id = KUSEG_ADDRESS(packet),
+            .command_id = KUSEG_ADDRESS(packet + 4u),
+            .command_writer = writers[writer],
+            .source_kind =
+                GUEST_RENDER_NATIVE_STREAM_SOURCE_DMA_LINKED_LIST,
+            .opcode = 0x28u,
+            .word_count = 5u,
+            .command_writer_valid = true,
+        };
+
+        CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+        set_matching_runtime_identity();
+        note_matching_runtime_variant_candidate();
+        guest_render_native_stream_set_enabled(true);
+        CHECK(guest_render_native_stream_stage_exact(
+                  visual_id, UINT32_C(0x100), &placeholder) ==
+              GUEST_RENDER_NATIVE_STREAM_OK);
+        CHECK(guest_render_native_stream_activate_visual(visual_id) ==
+              GUEST_RENDER_NATIVE_STREAM_OK);
+        configure_model_ft4_shadow_cpu(&cpu);
+        model_shadow_store_word(packet, UINT32_C(0x05123456));
+        model_shadow_store_word(packet + 4u, UINT32_C(0x28332211));
+        model_shadow_store_word(packet + 8u, UINT32_C(0x00200010));
+        model_shadow_store_word(packet + 12u, UINT32_C(0x00200030));
+        model_shadow_store_word(packet + 16u, UINT32_C(0x00400010));
+        model_shadow_store_word(packet + 20u, UINT32_C(0x00400030));
+        CHECK(!psx_xg_render_auth_native_ft4_bypass(&cpu, 0u, 0u));
+        CHECK(guest_render_native_stream_resolve_miss(&miss, &resolved));
+        CHECK(!resolved.material.textured);
+        CHECK(resolved.triangles[0].vertices[0].r == 0x11u);
+        miss.command_writer.return_address ^= 4u;
+        CHECK(!guest_render_native_stream_resolve_miss(&miss, &resolved));
+        psx_xg_render_auth_scene_boundary();
+        guest_render_native_stream_set_enabled(false);
+    }
+    return 1;
+}
+
+static int test_writer_ft4_2e_resolver_requires_exact_producer(void) {
+    static const GuestRenderNativeSourceWriter writers[] = {
+        { UINT32_C(0x80043c20), 0u, UINT32_C(0x800a6828) },
+        { UINT32_C(0x801cef58), 0u, UINT32_C(0x801cee8c) },
+        { UINT32_C(0x801e91f4), 0u, UINT32_C(0x801e91e8) },
+        { UINT32_C(0x8007ab2c), 0u, UINT32_C(0x8007aae0) },
+        { UINT32_C(0x80043c20), 0u, UINT32_C(0x8007aae0) },
+        { UINT32_C(0x800a5690), 0u, UINT32_C(0x8007919c) },
+        { UINT32_C(0x801ceddc), 0u, UINT32_C(0x801ced10) },
+        { UINT32_C(0x800a6884), 0u, UINT32_C(0x800a6864) },
+        { UINT32_C(0x80043c20), 0u, UINT32_C(0x8007a728) },
+        { UINT32_C(0x8007a774), 0u, UINT32_C(0x8007a74c) },
+        { UINT32_C(0x80043c20), 0u, UINT32_C(0x800a6170) },
+    };
+
+    for (uint32_t writer = 0u;
+         writer < sizeof(writers) / sizeof(writers[0]); ++writer) {
+        const uint32_t packet = MODEL_SHADOW_PACKET + writer * 0x40u;
+        const GpuRenderTransactionId visual_id = { 1u, 1u };
+        CPUState cpu;
+        GpuRenderSemantic placeholder = {
+            .topology = GPU_RENDER_SEMANTIC_TRIANGLES,
+            .triangle_count = 1u,
+            .triangles = {{ .split_count = 1u }},
+        };
+        GpuRenderSemantic resolved = {0};
+        GuestRenderNativeStreamMissContext miss = {
+            .visual_id = { 1u, 1u },
+            .container_id = KUSEG_ADDRESS(packet),
+            .command_id = KUSEG_ADDRESS(packet + 4u),
+            .command_writer = writers[writer],
+            .source_kind =
+                GUEST_RENDER_NATIVE_STREAM_SOURCE_DMA_LINKED_LIST,
+            .opcode = 0x2eu,
+            .word_count = 9u,
+            .command_writer_valid = true,
+        };
+
+        CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+        set_matching_runtime_identity();
+        note_matching_runtime_variant_candidate();
+        guest_render_native_stream_set_enabled(true);
+        CHECK(guest_render_native_stream_stage_exact(
+                  visual_id, UINT32_C(0x100), &placeholder) ==
+              GUEST_RENDER_NATIVE_STREAM_OK);
+        CHECK(guest_render_native_stream_activate_visual(visual_id) ==
+              GUEST_RENDER_NATIVE_STREAM_OK);
+        configure_model_ft4_shadow_cpu(&cpu);
+        model_shadow_store_word(packet, UINT32_C(0x09123456));
+        model_shadow_store_word(packet + 4u, UINT32_C(0x2e332211));
+        model_shadow_store_word(packet + 8u, UINT32_C(0x00200010));
+        model_shadow_store_word(packet + 12u, UINT32_C(0x00420000));
+        model_shadow_store_word(packet + 16u, UINT32_C(0x00200030));
+        model_shadow_store_word(packet + 20u, UINT32_C(0x01232010));
+        model_shadow_store_word(packet + 24u, UINT32_C(0x00400010));
+        model_shadow_store_word(packet + 28u, UINT32_C(0x00004000));
+        model_shadow_store_word(packet + 32u, UINT32_C(0x00400030));
+        model_shadow_store_word(packet + 36u, UINT32_C(0x00004010));
+        CHECK(!psx_xg_render_auth_native_ft4_bypass(&cpu, 0u, 0u));
+        CHECK(guest_render_native_stream_resolve_miss(&miss, &resolved));
+        CHECK(resolved.material.textured);
+        CHECK(resolved.material.semi_transparent);
+        miss.command_writer.return_address ^= 4u;
+        CHECK(!guest_render_native_stream_resolve_miss(&miss, &resolved));
+        psx_xg_render_auth_scene_boundary();
+        guest_render_native_stream_set_enabled(false);
+    }
+    return 1;
+}
+
+static int test_writer_packet_resolver_rejects_unstable_identity(void) {
+    const GpuRenderTransactionId visual_id = { 1u, 1u };
+    GpuRenderSemantic packet = {
+        .topology = GPU_RENDER_SEMANTIC_TRIANGLES,
+        .triangle_count = 1u,
+        .triangles = {{ .split_count = 1u }},
+    };
+    GpuRenderSemantic resolved = {0};
+    GuestRenderNativeStreamMissContext miss = {
+        .visual_id = { 1u, 1u },
+        .container_id = KUSEG_ADDRESS(MODEL_SHADOW_PACKET),
+        .command_id = KUSEG_ADDRESS(MODEL_SHADOW_PACKET + 4u),
+        .packet_semantic = &packet,
+        .command_writer = {
+            UINT32_C(0x800b6fe0), 0u, UINT32_C(0x800b6fe0),
+        },
+        .source_kind = GUEST_RENDER_NATIVE_STREAM_SOURCE_DMA_LINKED_LIST,
+        .opcode = 0x24u,
+        .word_count = 7u,
+        .command_writer_valid = true,
+    };
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    note_matching_runtime_variant_candidate();
+    guest_render_native_stream_set_enabled(true);
+    CHECK(guest_render_native_stream_stage_exact(
+              visual_id, UINT32_C(0x100), &packet) ==
+          GUEST_RENDER_NATIVE_STREAM_OK);
+    CHECK(guest_render_native_stream_activate_visual(visual_id) ==
+          GUEST_RENDER_NATIVE_STREAM_OK);
+    CHECK(guest_render_native_stream_resolve_miss(&miss, &resolved));
+    CHECK(!resolved.interpolation_identity.valid);
+
+    miss.opcode = 0x25u;
+    miss.command_writer.pc = UINT32_C(0x8002d9f8);
+    miss.command_writer.return_address = UINT32_C(0x8002d998);
+    CHECK(guest_render_native_stream_resolve_miss(&miss, &resolved));
+    CHECK(resolved.interpolation_identity.valid);
+    miss.command_writer.return_address ^= 4u;
+    CHECK(!guest_render_native_stream_resolve_miss(&miss, &resolved));
+    psx_xg_render_auth_scene_boundary();
     guest_render_native_stream_set_enabled(false);
     return 1;
 }
@@ -9530,7 +10375,7 @@ int main(void) {
     ok &= test_native_zoom_requires_authenticated_initializer();
     ok &= test_native_projected_effect_is_resident_and_packet_free();
     ok &= test_native_projected_screen_reject_submits_temporal_strips();
-    ok &= test_native_view_preserves_guest_projected_background_path();
+    ok &= test_native_view_uses_resident_projected_background();
     ok &= test_native_projected_effect_fails_closed_without_source_or_tag();
     ok &= test_native_projected_effect_resolves_field_ot_bucket();
     ok &= test_native_projected_field_reject_queues_temporal_strips();
@@ -9566,10 +10411,16 @@ int main(void) {
     ok &= test_resident_model_uses_completed_proof_after_artifact_retirement();
     ok &= test_overlay_model_dispatch_uses_exact_descriptor_contract();
     ok &= test_overlay_model_dispatch_rejects_mutated_caller();
+    ok &= test_relocated_resident_model_dispatch_needs_no_overlay_identity();
+    ok &= test_relocated_field_polyline_contract_needs_no_overlay_identity();
     ok &= test_model_ft4_unsupported_invocation_does_not_poison_shadow();
     ok &= test_model_ft4_native_accepts_runtime_observed_group_size();
     ok &= test_model_ft3_native_cull_uses_wide_margin();
     ok &= test_model_ft3_native_decodes_descriptor_and_publishes_after_finish();
+    ok &= test_model_ft3_material_source_survives_packet_copy();
+    ok &= test_local_ft4_initializer_lifecycle_is_producer_bound();
+    ok &= test_local_ft4_initializer_lifecycle_rejects_incomplete_proof();
+    ok &= test_local_zoom_initializer_lifecycle_is_producer_bound();
     ok &= test_battle_sprite_ft4_shadow_uses_descriptor_source();
     ok &= test_battle_sprite_ft4_shadow_reports_descriptor_blocker();
     ok &= test_battle_sprite_ft4_shadow_skips_empty_callers();

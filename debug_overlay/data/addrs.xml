@@ -102,15 +102,30 @@
         desc="Pointer to the field actor array."/>
 
   <!-- ======================= native debug menu ======================= -->
+  <addr name="developmentModeWord" value="0x80010000" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static+runtime-observation" date="2026-08-21"
+        evidence="SLUS FieldMain tests the word against -1, then loads file 0xAD to 0x80280000 when development mode is active"
+        desc="Retail is 0xFFFFFFFF. Zero enables the Field/Battle development paths and requires the runtime's 8 MiB developer RAM profile."/>
+
   <addr name="nativeDebugMenuEnable" value="0x80059178" type="u8" size="1" status="verified"
         verifiedBy="ghidra-static" date="2026-07-24"
         evidence="FUN_8001c1a8 gates the Menu=(%d)%s debug menu list on DAT_80059178 != 0"
-        desc="Nonzero enables the game's native Kernel debug menu list at boot."/>
+        desc="Nonzero enables the debug selector inside module 5 MenuMain. This is not the module 0 XENOGEARS Kernel MENU or the PC/HDD development-mode word."/>
 
   <addr name="moduleSwitchFn" value="0x8001996C" type="code" size="0" status="verified"
         verifiedBy="ghidra-static" date="2026-07-24"
         evidence="jal 0x8001996c in boot dispatcher; a0=module id (1=Field,2=Battle,3=Worldmap,4=Battling,5=Menu,6=Movie)"
-        desc="module_switch(int module_id) - informational."/>
+        desc="ChangeGameState(unsigned state); state 0 selects the native Kernel Menu through MainLoop."/>
+
+  <addr name="mainLoopFn" value="0x80019ACC" type="code" size="0" status="verified"
+        verifiedBy="ghidra-static+xenogears-decomp" date="2026-08-21"
+        evidence="MainLoop dispatches g_MainGameStates[state].pFnMain; the state-0 table entry at 0x8001808C points to KernelMenuMain"
+        desc="MainLoop(int errorCode); the developer-mode action resumes here with state 0 after leaving the interrupted module."/>
+
+  <addr name="kernelMenuMainFn" value="0x8001A4B4" type="code" size="0" status="verified"
+        verifiedBy="ghidra-static+xenogears-decomp" date="2026-08-21"
+        evidence="KernelMenuMain and the SLUS table pointer at 0x8001808C"
+        desc="Native XENOGEARS Kernel MENU main function."/>
 
   <!-- ======================= teleport mechanism (LIVE-VERIFIED 2026-07-24) ======================= -->
   <!-- Full recipe, user-confirmed on a real Lahan(1) -> Blackmoon(22) transition:

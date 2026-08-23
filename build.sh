@@ -32,6 +32,12 @@ BUILD_DIR="${1:-build}"
 BUILD_TYPE="${2:-Release}"
 GENERATOR="${CMAKE_GENERATOR:-Ninja}"
 
+# Compiler intermediates can be large; avoid depending on the shared /tmp.
+if [[ -z "${TMPDIR:-}" ]]; then
+    export TMPDIR="$ROOT/$BUILD_DIR/tmp"
+fi
+mkdir -p "$TMPDIR"
+
 RUNTIME_BUILD_TYPE="$BUILD_TYPE"
 RUNTIME_CMAKE_ARGS=(
     "-DBUILD_TESTING=OFF"

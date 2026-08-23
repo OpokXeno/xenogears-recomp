@@ -23,7 +23,7 @@ CANONICAL_MANIFEST = REPOSITORY / "native_renderer" / "xg_render_manifest.toml"
 GAME = REPOSITORY / "game" / "slus_006.64"
 OVERLAYS = REPOSITORY / "overlays"
 COMPANION = REPOSITORY / "native_renderer" / "xg_render_runtime_variants.toml"
-ARTIFACT = REPOSITORY / "overlays" / "field_runtime.bin"
+ARTIFACT = REPOSITORY / "overlays" / "field5_runtime.bin"
 
 
 class NativeRenderRuntimeVariantsTests(unittest.TestCase):
@@ -125,7 +125,7 @@ class NativeRenderRuntimeVariantsTests(unittest.TestCase):
 
             self.assertIn("canonical game", result.stderr.lower())
             manifest.write_text(COMPANION.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
-            artifact = root / "field_runtime.bin"
+            artifact = root / ARTIFACT.name
             artifact.write_bytes(ARTIFACT.read_bytes()[:-1] + b"X")
             result = self.run_tool("validate", str(manifest), "--artifact", str(artifact), expect=1)
             self.assertIn("artifact identity", result.stderr.lower())
@@ -152,6 +152,14 @@ class NativeRenderRuntimeVariantsTests(unittest.TestCase):
             result = self.run_tool("validate", str(manifest), "--artifact", str(ARTIFACT), expect=1)
 
             self.assertIn("duplicate normalized", result.stderr.lower())
+            zoom_writer = next(
+                line for line in original.splitlines(keepends=True)
+                if 'handler = "zoom-initializer-writer"' in line)
+            manifest.write_text(
+                original.replace(zoom_writer, ""), encoding="utf-8", newline="\n")
+            result = self.run_tool(
+                "validate", str(manifest), "--artifact", str(ARTIFACT), expect=1)
+            self.assertIn("initializer lifecycle", result.stderr.lower())
 
     def test_rejects_malformed_input_before_private_artifact_access(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

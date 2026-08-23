@@ -57,6 +57,17 @@ producer_callers = [
 ]
 
 [[variants]]
+id = "field-sprite-xy-override-v1"
+base_address = "0x801c5000"
+required_ranges = [
+  { start = "0x801c93a8", size = 2084, sha256 = "ea5ce2d39eb6086053103582c85b3f3f715baf14e7e6200d4dcd73027500fa2c" },
+]
+cutovers = [
+  { pc = "0x801c9984", instruction = "0xa4620008", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801c9b80", instruction = "0x02801021", transfer = "observe", continuation = "0x00000000" },
+]
+
+[[variants]]
 id = "ft4-2e-projected-v1"
 base_address = "0x801b2000"
 artifact_size = 270340

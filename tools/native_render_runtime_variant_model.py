@@ -197,6 +197,27 @@ def parse_variant(raw: ManifestValue) -> RuntimeVariant:
     cutovers = tuple(parse_native_cutover(item) for item in cutovers_raw)
     if len({(item.pc & 0x1fffffff, item.instruction) for item in cutovers}) != len(cutovers):
         fail("duplicate normalized runtime native cutovers are forbidden")
+    lifecycle_groups: dict[tuple[int, int, Digest32], list[str]] = {}
+    lifecycle_handlers = {
+        "resource-initializer-begin", "resource-initializer-writer",
+        "resource-initializer-commit", "zoom-initializer-begin",
+        "zoom-initializer-writer", "zoom-initializer-commit",
+    }
+    for cutover in cutovers:
+        if cutover.handler in lifecycle_handlers:
+            lifecycle_groups.setdefault((
+                cutover.code_range_start, cutover.code_range_size,
+                cutover.code_range_identity), []).append(cutover.handler)
+    for handlers in lifecycle_groups.values():
+        expected = (
+            {"resource-initializer-begin", "resource-initializer-writer",
+             "resource-initializer-commit"}
+            if any(handler.startswith("resource-") for handler in handlers)
+            else {"zoom-initializer-begin", "zoom-initializer-writer",
+                  "zoom-initializer-commit"}
+        )
+        if len(handlers) != len(expected) or set(handlers) != expected:
+            fail("runtime initializer lifecycle must contain exact begin/writer/commit")
     model_dispatch_raw = value["model_dispatch_instructions"]
     if (not isinstance(model_dispatch_raw, list) or not model_dispatch_raw or
             len(model_dispatch_raw) > MODEL_DISPATCH_CAP):
@@ -246,6 +267,10 @@ def parse_native_cutover(raw: ManifestValue) -> NativeCutover:
         "zoom-initializer-commit": "observe",
         "particle-initializer": "observe",
         "particle-native": "return",
+        "resource-initializer-begin": "observe",
+        "resource-initializer-writer": "observe",
+        "resource-initializer-commit": "observe",
+        "zoom-initializer-writer": "observe",
     }
     if handler_transfers.get(handler) != transfer:
         fail("runtime native cutover handler disagrees with transfer")

@@ -103,6 +103,7 @@ def test_world_contract_has_independent_family_authority() -> None:
     assert identifiers == {
         "ft4-2c-callers-v1",
         "ft4-2e-projected-v1",
+        "field-sprite-xy-override-v1",
         "field-target-polylines-v1",
         "world-full-sky-v1",
         "world-full-terrain-water-v1",
@@ -136,6 +137,19 @@ def test_world_contract_has_independent_family_authority() -> None:
     }
     assert all(caller.semantic_source == "caller-state"
                for caller in ft4.producer_callers)
+    xy_override = next(variant for variant in variants
+                       if variant.identifier == "field-sprite-xy-override-v1")
+    assert xy_override.artifact_size is None
+    assert {(required.start, required.size, required.sha256.hex())
+            for required in xy_override.required_ranges} == {
+        (0x801C93A8, 2084,
+         "ea5ce2d39eb6086053103582c85b3f3f715baf14e7e6200d4dcd73027500fa2c"),
+    }
+    assert [(cutover.pc, cutover.instruction, cutover.transfer)
+            for cutover in xy_override.cutovers] == [
+        (0x801C9984, 0xA4620008, "observe"),
+        (0x801C9B80, 0x02801021, "observe"),
+    ]
     projected = next(variant for variant in variants
                      if variant.identifier == "ft4-2e-projected-v1")
     assert projected.artifact_size == 270340

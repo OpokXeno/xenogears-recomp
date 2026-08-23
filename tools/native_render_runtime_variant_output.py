@@ -61,7 +61,7 @@ def render_c(verified: VerifiedRuntimeVariants) -> bytes:
                f"UINT32_C(0x{cutover.code_range_start:08x}), {cutover.code_range_size}u, "
                f"{{{bytes_initializer(cutover.code_range_identity)}}}, "
                f"{ {'observe': 0, 'local': 1, 'return': 2}[cutover.transfer] }u, "
-               f"{ {'actor': 0, 'compass-world': 1, 'compass-screen': 2, 'zoom-rgb-begin': 3, 'zoom-rgb-commit': 4, 'zoom-entry': 5, 'zoom-native': 6, 'zoom-initializer-begin': 7, 'zoom-initializer-commit': 8, 'particle-initializer': 9, 'particle-native': 10}[cutover.handler] }u}}," for cutover in variant.native_cutovers),
+               f"{ {'actor': 0, 'compass-world': 1, 'compass-screen': 2, 'zoom-rgb-begin': 3, 'zoom-rgb-commit': 4, 'zoom-entry': 5, 'zoom-native': 6, 'zoom-initializer-begin': 7, 'zoom-initializer-commit': 8, 'particle-initializer': 9, 'particle-native': 10, 'resource-initializer-begin': 11, 'resource-initializer-writer': 12, 'resource-initializer-commit': 13, 'zoom-initializer-writer': 14}[cutover.handler] }u}}," for cutover in variant.native_cutovers),
             "        },",
             "    },",
         ))
