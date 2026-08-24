@@ -609,6 +609,48 @@ static XgWorldModelsNativeResult capture_dispatch_primitives(
     return XG_WORLD_MODELS_NATIVE_OK;
 }
 
+static XgWorldModelsNativeResult capture_anchor_sources(
+    NativeAccess *access, const XgWorldModelsRecordSource *record_sources,
+    const XgWorldModelsRecordOutput *records, uint32_t record_count,
+    XgWorldModelsNativeAnchorSource *anchor_sources,
+    uint32_t anchor_capacity, uint32_t *anchor_count) {
+    uint32_t count = 0u;
+
+    for (uint32_t source_index = 0u; source_index < record_count;
+         ++source_index) {
+        XgWorldModelsNativeModelSource model;
+        XgWorldModelsNativeResult result;
+
+        if (records[source_index].disposition == XG_WORLD_MODELS_INACTIVE)
+            continue;
+        result = read_model_header(
+            access, record_sources[source_index].model_header_address, &model);
+        if (result != XG_WORLD_MODELS_NATIVE_OK) return result;
+        if (model.vertex_count > anchor_capacity - count ||
+            (model.vertex_count != 0u && anchor_sources == NULL))
+            return XG_WORLD_MODELS_NATIVE_CAPACITY_EXCEEDED;
+        for (uint32_t vertex_index = 0u;
+             vertex_index < model.vertex_count; ++vertex_index) {
+            XgWorldModelsNativeAnchorSource *source = &anchor_sources[count++];
+            uint32_t vertex_address;
+
+            if (vertex_index > (UINT32_MAX - model.vertex_base) / 8u)
+                return XG_WORLD_MODELS_NATIVE_SOURCE_MISMATCH;
+            vertex_address = model.vertex_base + vertex_index * 8u;
+            result = capture_vector(
+                access, XG_WORLD_MODELS_NATIVE_RANGE_VERTEX,
+                vertex_address, &source->vertex);
+            if (result != XG_WORLD_MODELS_NATIVE_OK) return result;
+            source->projection = records[source_index].projection;
+            source->model_header_address = model.model_header_address;
+            source->source_index = source_index;
+            source->vertex_index = (uint16_t)vertex_index;
+        }
+    }
+    *anchor_count = count;
+    return XG_WORLD_MODELS_NATIVE_OK;
+}
+
 XgWorldModelsNativeResult xg_world_models_native_prepare(
     const XgWorldModelsNativeRequest *request,
     const XgWorldModelsNativeAuthenticatedReader *reader,
@@ -619,6 +661,8 @@ XgWorldModelsNativeResult xg_world_models_native_prepare(
     XgWorldModelsNativeDispatch *dispatches, uint32_t dispatch_capacity,
     XgWorldModelsNativePrimitiveSource *primitives,
     uint32_t primitive_capacity,
+    XgWorldModelsNativeAnchorSource *anchor_sources,
+    uint32_t anchor_capacity,
     XgWorldModelsNativePreparation *out_preparation) {
     XgWorldModelsNativePreparation preparation = {0};
     XgWorldModelsSource source = {0};
@@ -796,6 +840,10 @@ XgWorldModelsNativeResult xg_world_models_native_prepare(
     if (result != XG_WORLD_MODELS_NATIVE_OK) return result;
     preparation.record_count = preparation.world.record_count;
     preparation.transform_node_count = preparation.world.node_side_effect_count;
+    result = capture_anchor_sources(
+        &access, workspace->record_sources, records, preparation.record_count,
+        anchor_sources, anchor_capacity, &preparation.anchor_count);
+    if (result != XG_WORLD_MODELS_NATIVE_OK) return result;
 
     if (preparation.world.resident_dispatch_count != 0u) {
         if (dispatches == NULL ||
@@ -864,8 +912,10 @@ XgWorldModelsNativeResult xg_world_models_native_prepare(
     preparation.raster = request->raster;
     preparation.sealed_dispatches = dispatches;
     preparation.sealed_primitives = primitives;
+    preparation.sealed_anchor_sources = anchor_sources;
     preparation.dispatch_digest = digest_offset;
     preparation.primitive_digest = digest_offset;
+    preparation.anchor_digest = digest_offset;
     for (index = 0u;
          index < preparation.dispatch_count * sizeof(dispatches[0]); ++index) {
         preparation.dispatch_digest ^=
@@ -878,6 +928,12 @@ XgWorldModelsNativeResult xg_world_models_native_prepare(
             ((const uint8_t *)primitives)[index];
         preparation.primitive_digest *= UINT64_C(1099511628211);
     }
+    for (index = 0u;
+         index < preparation.anchor_count * sizeof(anchor_sources[0]); ++index) {
+        preparation.anchor_digest ^=
+            ((const uint8_t *)anchor_sources)[index];
+        preparation.anchor_digest *= UINT64_C(1099511628211);
+    }
     preparation.authentication_generation = request->authentication_generation;
     preparation.continuation_pc = request->caller_return;
     preparation.authenticated_read_count = access.read_count;
@@ -885,6 +941,75 @@ XgWorldModelsNativeResult xg_world_models_native_prepare(
     preparation.authenticated = true;
     preparation.sealed = true;
     *out_preparation = preparation;
+    return XG_WORLD_MODELS_NATIVE_OK;
+}
+
+XgWorldModelsNativeResult xg_world_models_native_build_anchor_vertex(
+    XgWorldModelsNativePreparation *preparation,
+    uint64_t authentication_generation,
+    const XgWorldModelsNativeAnchorSource *source,
+    XgRenderIrVertex *out_vertex) {
+    XgHost3dProjectedVertex projected;
+    uint32_t flags;
+
+    if (out_vertex == NULL)
+        return XG_WORLD_MODELS_NATIVE_INVALID_ARGUMENT;
+    memset(out_vertex, 0, sizeof(*out_vertex));
+    if (preparation == NULL || source == NULL ||
+        authentication_generation == 0u || !preparation->authenticated ||
+        !preparation->sealed || preparation->consumed ||
+        preparation->authentication_generation != authentication_generation ||
+        preparation->sealed_anchor_sources == NULL ||
+        (uintptr_t)source < (uintptr_t)preparation->sealed_anchor_sources ||
+        (uintptr_t)source >=
+            (uintptr_t)preparation->sealed_anchor_sources +
+                preparation->anchor_count *
+                    sizeof(preparation->sealed_anchor_sources[0]) ||
+        ((uintptr_t)source -
+         (uintptr_t)preparation->sealed_anchor_sources) %
+                sizeof(preparation->sealed_anchor_sources[0]) != 0u ||
+        source->source_index >= preparation->record_count)
+        return XG_WORLD_MODELS_NATIVE_INVALID_ARGUMENT;
+    if (!preparation->anchor_digest_validated) {
+        uint64_t digest = UINT64_C(1469598103934665603);
+
+        for (uint32_t byte = 0u;
+             byte < preparation->anchor_count *
+                 sizeof(preparation->sealed_anchor_sources[0]); ++byte) {
+            digest ^= ((const uint8_t *)preparation->sealed_anchor_sources)[byte];
+            digest *= UINT64_C(1099511628211);
+        }
+        if (digest != preparation->anchor_digest)
+            return XG_WORLD_MODELS_NATIVE_UNAUTHENTICATED;
+        preparation->anchor_digest_validated = true;
+    }
+    if (!xg_host_3d_rtps(
+            &source->projection, &source->vertex, &projected, &flags))
+        return XG_WORLD_MODELS_NATIVE_BUILD_FAILED;
+    (void)flags;
+    *out_vertex = (XgRenderIrVertex){
+        .x = (int32_t)projected.x * 65536,
+        .y = (int32_t)projected.y * 65536,
+        .native_view_x = projected.native_view_x_16_16,
+        .native_view_y = projected.native_view_y_16_16,
+        .native_view_position = projected.native_view_position != 0u,
+        .projective_view_x = projected.projective_view_x,
+        .projective_view_y = projected.projective_view_y,
+        .projective_view_z = projected.projective_view_z,
+        .projective_offset_x = projected.projective_offset_x_16_16,
+        .projective_offset_y = projected.projective_offset_y_16_16,
+        .projective_native_offset_x =
+            projected.projective_native_offset_x_16_16,
+        .projective_native_offset_y =
+            projected.projective_native_offset_y_16_16,
+        .projective_distance = projected.projective_distance,
+        .projective_position = projected.projective_position != 0u,
+        .interpolation_group_id = UINT32_C(0x64000000) |
+            (source->model_header_address & UINT32_C(0x001fffff)),
+        .interpolation_vertex_id =
+            (source->source_index << 16u) | source->vertex_index,
+        .interpolation_vertex_identity_valid = true,
+    };
     return XG_WORLD_MODELS_NATIVE_OK;
 }
 
@@ -1564,6 +1689,7 @@ XgWorldModelsNativeResult xg_world_models_native_finalize(
     XgWorldModelsNativeCommit commit = {0};
     uint64_t dispatch_digest = UINT64_C(1469598103934665603);
     uint64_t primitive_digest = UINT64_C(1469598103934665603);
+    uint64_t anchor_digest = UINT64_C(1469598103934665603);
     uint32_t primitive_index = 0u;
     uint32_t byte;
     uint32_t index;
@@ -1580,6 +1706,8 @@ XgWorldModelsNativeResult xg_world_models_native_finalize(
         primitives != preparation->sealed_primitives ||
         dispatch_output_count != preparation->dispatch_count ||
         primitive_output_count != preparation->primitive_count ||
+        (preparation->anchor_count != 0u &&
+         preparation->sealed_anchor_sources == NULL) ||
         (dispatch_output_count != 0u &&
          (dispatches == NULL || dispatch_outputs == NULL)) ||
         (primitive_output_count != 0u &&
@@ -1596,8 +1724,19 @@ XgWorldModelsNativeResult xg_world_models_native_finalize(
         primitive_digest ^= ((const uint8_t *)primitives)[byte];
         primitive_digest *= UINT64_C(1099511628211);
     }
+    if (preparation->anchor_count != 0u) {
+        for (byte = 0u;
+             byte < preparation->anchor_count *
+                 sizeof(preparation->sealed_anchor_sources[0]); ++byte) {
+            anchor_digest ^=
+                ((const uint8_t *)preparation->sealed_anchor_sources)[byte];
+            anchor_digest *= UINT64_C(1099511628211);
+        }
+    }
     if (dispatch_digest != preparation->dispatch_digest ||
-        primitive_digest != preparation->primitive_digest)
+        primitive_digest != preparation->primitive_digest ||
+        (preparation->anchor_count != 0u &&
+         anchor_digest != preparation->anchor_digest))
         return XG_WORLD_MODELS_NATIVE_UNAUTHENTICATED;
     commit.entry_side_effects = preparation->world.entry_side_effects;
     for (index = 0u; index < dispatch_output_count; ++index) {

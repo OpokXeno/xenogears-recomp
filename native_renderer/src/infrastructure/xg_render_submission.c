@@ -186,7 +186,8 @@ GuestRenderTransactionStatus xg_render_submission_stage_exact(
     }
 }
 
-static bool record_interpolation_anchors(const GpuRenderSemantic *semantic) {
+bool xg_render_submission_record_interpolation_anchors(
+        const GpuRenderSemantic *semantic) {
     GpuRenderInterpolationVertexAnchor anchors[
         GPU_RENDER_SEMANTIC_TRIANGLE_CAPACITY * 3u];
     size_t anchor_count = 0u;
@@ -209,6 +210,7 @@ static bool record_interpolation_anchors(const GpuRenderSemantic *semantic) {
             anchors[anchor_count++] = (GpuRenderInterpolationVertexAnchor){
                 .scene_id = semantic->interpolation_identity.scene_id,
                 .producer_id = semantic->interpolation_identity.producer_id,
+                .primitive_id = semantic->interpolation_identity.primitive_id,
                 .material = semantic->material,
                 .vertex = *candidate,
             };
@@ -243,7 +245,7 @@ bool xg_render_submission_pre_scene_flush(void) {
                 record->interpolation_producer_id,
                 record->interpolation_primitive_id);
         if (record->interpolation_identity_valid &&
-            !record_interpolation_anchors(&semantic)) {
+            !xg_render_submission_record_interpolation_anchors(&semantic)) {
             pre_scene.blocker = 8u;
             return false;
         }
@@ -494,6 +496,12 @@ static bool stage_standalone_semantic(
         (packet_address & UINT32_C(0x001ffffc)) + 4u, semantic);
     if (stage_status != GUEST_RENDER_TRANSACTION_OK) {
         standalone_stage_failure_detail = 200u + (uint32_t)stage_status;
+        xg_render_submission_standalone_abort();
+        return false;
+    }
+    if (semantic->interpolation_identity.valid &&
+        !xg_render_submission_record_interpolation_anchors(semantic)) {
+        standalone_stage_failure_detail = 400u;
         xg_render_submission_standalone_abort();
         return false;
     }

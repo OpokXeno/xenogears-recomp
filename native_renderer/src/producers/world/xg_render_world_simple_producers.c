@@ -65,6 +65,7 @@ typedef struct XgRenderWorldDecorationsState {
     XgWorldDecorationsRecord records[XG_WORLD_DECORATIONS_PACKET_CAPACITY];
     XgWorldDecorationsRecord temporal_records[
         XG_WORLD_DECORATIONS_TEMPORAL_CAPACITY];
+    GpuRenderInterpolationVertexAnchor anchors[256];
     uint32_t ot_heads[XG_WORLD_DECORATIONS_NATIVE_OT_BUCKET_COUNT];
     uint32_t simulated_ot_heads[XG_WORLD_DECORATIONS_NATIVE_OT_BUCKET_COUNT];
     bool ot_touched[XG_WORLD_DECORATIONS_NATIVE_OT_BUCKET_COUNT];
@@ -844,6 +845,61 @@ bool xg_render_world_entity_shadows_cutover(
     return true;
 }
 
+static bool publish_decoration_anchors(
+        const XgWorldDecorationsRecord *records, uint32_t record_count,
+        uint64_t scene_id, uint32_t *in_out_anchor_count) {
+    uint32_t anchor_count = *in_out_anchor_count;
+
+    for (uint32_t index = 0u; index < record_count; ++index) {
+        GpuRenderSemantic semantic;
+
+        if (xg_render_backend_translate_primitive(
+                &records[index].primitive, &semantic) != XG_RENDER_BACKEND_OK)
+            return false;
+        xg_render_semantic_set_corner_identities(
+            &semantic, XG_WORLD_DECORATIONS_NATIVE_ENTRY_PC,
+            records[index].semantic_id);
+        for (uint32_t triangle = 0u; triangle < semantic.triangle_count;
+             ++triangle) {
+            for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
+                const GpuRenderSemanticVertex *candidate =
+                    &semantic.triangles[triangle].vertices[vertex];
+                bool duplicate = false;
+
+                for (uint32_t prior = 0u; prior < anchor_count; ++prior)
+                    duplicate |= decorations.anchors[prior].vertex
+                            .interpolation_group_id ==
+                            candidate->interpolation_group_id &&
+                        decorations.anchors[prior].vertex
+                            .interpolation_vertex_id ==
+                            candidate->interpolation_vertex_id;
+                if (duplicate) continue;
+                if (anchor_count ==
+                        sizeof(decorations.anchors) /
+                            sizeof(decorations.anchors[0])) {
+                    if (gr_record_interpolation_anchors(
+                            decorations.anchors, anchor_count) !=
+                            GPU_RENDER_TRANSACTION_OK)
+                        return false;
+                    anchor_count = 0u;
+                }
+                decorations.anchors[anchor_count++] =
+                    (GpuRenderInterpolationVertexAnchor){
+                        .scene_id = scene_id,
+                        .producer_id =
+                            XG_WORLD_DECORATIONS_NATIVE_ENTRY_PC,
+                        .primitive_id =
+                            semantic.interpolation_identity.primitive_id,
+                        .material = semantic.material,
+                        .vertex = *candidate,
+                    };
+            }
+        }
+    }
+    *in_out_anchor_count = anchor_count;
+    return true;
+}
+
 bool xg_render_world_decorations_cutover(
         CPUState *cpu, const XgRenderWorldSimpleServices *services) {
     XgWorldDecorationsNativePreparation preparation;
@@ -853,6 +909,8 @@ bool xg_render_world_decorations_cutover(
     XgWorldDecorationsShadowSnapshot shadow_snapshot;
     GpuDrawState draw = {0};
     uint64_t generation;
+    uint64_t scene_id;
+    uint32_t anchor_count = 0u;
     uint32_t shared_count_before;
     uint32_t native_count = 0u;
 
@@ -865,6 +923,7 @@ bool xg_render_world_decorations_cutover(
         !services->authentication_generation(&generation))
         return false;
     gpu_get_draw_state(&draw);
+    scene_id = services->interpolation_scene_generation();
     request = (XgWorldDecorationsNativeRequest){
         .authentication_generation = generation,
         .entry_pc = XG_WORLD_DECORATIONS_NATIVE_ENTRY_PC,
@@ -1005,6 +1064,19 @@ bool xg_render_world_decorations_cutover(
         }
     }
     if (!xg_world_decorations_shadow_record_native_cutover(native_count)) {
+        services->abort_submission();
+        return false;
+    }
+    if (!publish_decoration_anchors(
+            decorations.records, preparation.record_count, scene_id,
+            &anchor_count) ||
+        !publish_decoration_anchors(
+            decorations.temporal_records, preparation.temporal_record_count,
+            scene_id, &anchor_count) ||
+        (anchor_count != 0u &&
+         gr_record_interpolation_anchors(
+             decorations.anchors, anchor_count) !=
+             GPU_RENDER_TRANSACTION_OK)) {
         services->abort_submission();
         return false;
     }

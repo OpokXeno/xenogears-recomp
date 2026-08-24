@@ -14,7 +14,8 @@ target_include_directories(xg_visual_state PUBLIC include)
 target_compile_features(xg_visual_state PUBLIC c_std_11)
 
 add_library(xg_host_3d STATIC src/core/xg_host_3d.c)
-target_include_directories(xg_host_3d PUBLIC include)
+target_include_directories(xg_host_3d PUBLIC include PRIVATE
+    "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
 target_compile_features(xg_host_3d PUBLIC c_std_11)
 
 add_library(xg_native_view STATIC src/core/xg_native_view.c)

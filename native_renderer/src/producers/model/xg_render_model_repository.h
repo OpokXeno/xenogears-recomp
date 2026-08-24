@@ -57,6 +57,7 @@ typedef struct XgRenderModelSubmissionCallbacks {
     void (*register_ft3_replay_source)(uint32_t source_id);
     void (*register_ft4_replay_source)(uint32_t source_id);
     uint64_t (*interpolation_scene)(void);
+    bool (*record_interpolation_anchors)(const GpuRenderSemantic *semantic);
 } XgRenderModelSubmissionCallbacks;
 
 typedef struct XgRenderModelResourceCallbacks {
@@ -116,6 +117,11 @@ bool xg_render_model_repository_store_ft4_sources(
     const XgRenderModelRepositoryServices *services);
 const XgRenderModelFt3SourceRecord *xg_render_model_repository_find_ft3_source(
     uint32_t source_id);
+bool xg_render_model_repository_record_resolved_producer_anchors(
+    uint64_t command_id, const GpuRenderSemantic *resolved,
+    const XgRenderModelRepositoryServices *services);
+bool xg_render_model_repository_record_active_producer_anchors(
+    const XgRenderModelRepositoryServices *services);
 void xg_render_model_repository_finish_ft3_link(
     uint32_t source_id, bool linked,
     const XgRenderModelSourcePublication *publication,

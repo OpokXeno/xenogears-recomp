@@ -13,6 +13,7 @@
 #define XG_RENDER_MODEL_FT3_SOURCE_CAPACITY 16384u
 #define XG_RENDER_MODEL_FT4_SOURCE_CAPACITY XG_RENDER_IR_ITEM_CAPACITY
 #define XG_RENDER_MODEL_FT4_TEMPLATE_CAPACITY 4096u
+#define XG_RENDER_MODEL_ANCHOR_CONTEXT_CAPACITY 4096u
 
 typedef struct XgRenderModelFt4TemplateEntry {
     XgRenderModelFt4Template material;
@@ -27,6 +28,12 @@ typedef struct XgRenderModelPacketCopy {
     uint32_t size;
     bool active;
 } XgRenderModelPacketCopy;
+
+typedef struct XgRenderModelAnchorContext {
+    GpuRenderMaterial material;
+    uint64_t scene_id;
+    uint32_t producer_id;
+} XgRenderModelAnchorContext;
 
 static XgRenderModelFt3SourceRecord ft3_sources[
     XG_RENDER_MODEL_FT3_SOURCE_CAPACITY];
@@ -56,6 +63,9 @@ static uint32_t template_table_epoch = 1u;
 static uint32_t packet_template_count;
 static uint32_t descriptor_template_count;
 static XgRenderModelPacketCopy packet_copy;
+static XgRenderModelAnchorContext anchor_contexts[
+    XG_RENDER_MODEL_ANCHOR_CONTEXT_CAPACITY];
+static uint32_t anchor_context_count;
 
 static const GuestRenderNativeSourceWriter ft4_2c_writers[] = {
     { UINT32_C(0x801e92b4), 0u, UINT32_C(0x801e92a8) },
@@ -212,6 +222,190 @@ const XgRenderModelFt3SourceRecord *xg_render_model_repository_find_ft3_source(
     return ft3_source_find(source_id);
 }
 
+static bool material_position_matches_context(
+        const XgRenderIrMaterialState *material,
+        const XgRenderModelAnchorContext *context) {
+    return material->draw_area_left == context->material.draw_area_left &&
+        material->draw_area_top == context->material.draw_area_top &&
+        material->draw_area_right == context->material.draw_area_right &&
+        material->draw_area_bottom == context->material.draw_area_bottom &&
+        material->draw_offset_x == context->material.draw_offset_x &&
+        material->draw_offset_y == context->material.draw_offset_y;
+}
+
+static bool semantic_material_position_matches_context(
+        const GpuRenderMaterial *material,
+        const XgRenderModelAnchorContext *context) {
+    return material->draw_area_left == context->material.draw_area_left &&
+        material->draw_area_top == context->material.draw_area_top &&
+        material->draw_area_right == context->material.draw_area_right &&
+        material->draw_area_bottom == context->material.draw_area_bottom &&
+        material->draw_offset_x == context->material.draw_offset_x &&
+        material->draw_offset_y == context->material.draw_offset_y;
+}
+
+static bool source_identity_matches(
+        uint32_t producer_id, uint32_t primitive_id,
+        const GpuRenderSemantic *resolved) {
+    return resolved->interpolation_identity.valid &&
+        resolved->interpolation_identity.producer_id == producer_id &&
+        resolved->interpolation_identity.primitive_id == primitive_id;
+}
+
+static bool record_producer_anchor(
+        const XgRenderIrNativePrimitive *primitive, uint64_t scene_id,
+        uint32_t producer_id, uint32_t primitive_id,
+        const XgRenderModelRepositoryServices *services) {
+    GpuRenderSemantic semantic;
+
+    if (xg_render_backend_translate_primitive(primitive, &semantic) !=
+            XG_RENDER_BACKEND_OK)
+        return false;
+    xg_render_semantic_set_interpolation_identity(
+        &semantic, scene_id, producer_id, primitive_id);
+    return services->submission.record_interpolation_anchors(&semantic);
+}
+
+static bool lifecycle_is_current(
+        const XgRenderProducerLifecycle *lifecycle,
+        const XgRenderModelRepositoryServices *services) {
+    return services->lifecycle != NULL &&
+        services->lifecycle->matches != NULL &&
+        services->lifecycle->matches(lifecycle);
+}
+
+static bool record_anchor_context(
+        const XgRenderModelAnchorContext *context, uint32_t skipped_primitive_id,
+        bool skip_primitive,
+        const XgRenderModelRepositoryServices *services) {
+    for (uint32_t index = 0u; index < ft3_source_count; ++index) {
+        const XgRenderModelFt3SourceRecord *record = &ft3_sources[index];
+
+        if (!record->valid || !record->geometry_ready ||
+            !record->interpolation_identity_valid ||
+            record->interpolation_producer_id != context->producer_id ||
+            (skip_primitive && record->interpolation_primitive_id ==
+                skipped_primitive_id) ||
+            !material_position_matches_context(
+                &record->primitive.material, context) ||
+            !lifecycle_is_current(&record->lifecycle, services))
+            continue;
+        if (!record_producer_anchor(
+                &record->primitive, context->scene_id,
+                record->interpolation_producer_id,
+                record->interpolation_primitive_id, services))
+            return false;
+    }
+    for (uint32_t index = 0u; index < ft4_source_count; ++index) {
+        const XgRenderModelFt4SourceRecord *record = &ft4_sources[index];
+
+        if (!record->valid || !record->interpolation_identity_valid ||
+            record->interpolation_producer_id != context->producer_id ||
+            (skip_primitive && record->interpolation_primitive_id ==
+                skipped_primitive_id) ||
+            !material_position_matches_context(
+                &record->primitive.material, context) ||
+            !lifecycle_is_current(&record->lifecycle, services))
+            continue;
+        if (!record_producer_anchor(
+                &record->primitive, context->scene_id,
+                record->interpolation_producer_id,
+                record->interpolation_primitive_id, services))
+            return false;
+    }
+    return true;
+}
+
+static XgRenderModelAnchorContext *observe_anchor_context(
+        const GpuRenderSemantic *resolved) {
+    XgRenderModelAnchorContext *context = NULL;
+
+    for (uint32_t index = 0u; index < anchor_context_count; ++index) {
+        if (anchor_contexts[index].producer_id ==
+                resolved->interpolation_identity.producer_id &&
+            semantic_material_position_matches_context(
+                &resolved->material, &anchor_contexts[index])) {
+            context = &anchor_contexts[index];
+            break;
+        }
+    }
+    if (context == NULL) {
+        if (anchor_context_count == XG_RENDER_MODEL_ANCHOR_CONTEXT_CAPACITY)
+            return NULL;
+        context = &anchor_contexts[anchor_context_count++];
+        memset(context, 0, sizeof(*context));
+        context->producer_id = resolved->interpolation_identity.producer_id;
+    }
+    if (context->scene_id != resolved->interpolation_identity.scene_id) {
+        context->scene_id = resolved->interpolation_identity.scene_id;
+        context->material = resolved->material;
+    }
+    return context;
+}
+
+bool xg_render_model_repository_record_resolved_producer_anchors(
+        uint64_t command_id, const GpuRenderSemantic *resolved,
+        const XgRenderModelRepositoryServices *services) {
+    bool model_source = false;
+    XgRenderModelAnchorContext *context;
+
+    if (command_id > UINT32_MAX || resolved == NULL ||
+        !resolved->interpolation_identity.valid)
+        return true;
+    for (uint32_t index = 0u; index < ft3_source_count; ++index) {
+        const XgRenderModelFt3SourceRecord *record = &ft3_sources[index];
+
+        if (record->valid && record->geometry_ready &&
+            physical_address_equals(
+                record->source_id, (uint32_t)command_id) &&
+            record->interpolation_identity_valid &&
+            source_identity_matches(
+                record->interpolation_producer_id,
+                record->interpolation_primitive_id, resolved)) {
+            model_source = true;
+            break;
+        }
+    }
+    if (!model_source) {
+        const uint32_t indexed = xg_render_lookup_find(
+            ft4_source_lookup, ft4_source_lookup_epoch,
+            (uint32_t)command_id, ft4_source_count);
+        const XgRenderModelFt4SourceRecord *record = indexed != UINT32_MAX
+            ? &ft4_sources[indexed] : NULL;
+
+        model_source = record != NULL && record->valid &&
+            record->interpolation_identity_valid &&
+            source_identity_matches(
+                record->interpolation_producer_id,
+                record->interpolation_primitive_id, resolved);
+    }
+    if (!model_source) return true;
+    if (services == NULL ||
+        services->submission.record_interpolation_anchors == NULL)
+        return false;
+    context = observe_anchor_context(resolved);
+    return context != NULL && record_anchor_context(
+        context, resolved->interpolation_identity.primitive_id, true, services);
+}
+
+bool xg_render_model_repository_record_active_producer_anchors(
+        const XgRenderModelRepositoryServices *services) {
+    const uint64_t scene_id = services != NULL &&
+            services->submission.interpolation_scene != NULL
+        ? services->submission.interpolation_scene() : 0u;
+    bool recorded = true;
+
+    if (scene_id == 0u || services->submission.record_interpolation_anchors == NULL)
+        return anchor_context_count == 0u;
+    for (uint32_t index = 0u; index < anchor_context_count; ++index) {
+        XgRenderModelAnchorContext *context = &anchor_contexts[index];
+
+        if (recorded && context->scene_id == scene_id)
+            recorded = record_anchor_context(context, 0u, false, services);
+    }
+    return recorded;
+}
+
 static void publish_resource(
         uint32_t source_id, bool ft4,
         const XgRenderModelSourcePublication *publication,
@@ -338,6 +532,7 @@ void xg_render_model_repository_clear_ft3_sources(
 
 void xg_render_model_repository_clear_ft4_sources(void) {
     ft4_source_count = 0u;
+    anchor_context_count = 0u;
     xg_render_lookup_reset(ft4_source_lookup, &ft4_source_lookup_epoch);
 }
 

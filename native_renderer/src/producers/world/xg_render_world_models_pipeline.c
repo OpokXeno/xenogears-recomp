@@ -66,11 +66,12 @@ typedef struct XgRenderWorldModelsNativeState {
         dispatch_outputs[XG_RENDER_WORLD_MODEL_DISPATCH_CAPACITY];
     XgWorldModelsNativePrimitiveSource
         primitives[XG_RENDER_WORLD_MODEL_PRIMITIVE_CAPACITY];
+    XgWorldModelsNativeAnchorSource
+        anchor_sources[XG_RENDER_WORLD_MODEL_ANCHOR_CAPACITY];
     XgWorldModelsNativePrimitiveOutput
         outputs[XG_RENDER_WORLD_MODEL_PRIMITIVE_CAPACITY];
     GpuRenderInterpolationVertexAnchor
         anchors[XG_RENDER_WORLD_MODEL_ANCHOR_CAPACITY];
-    uint32_t anchor_seen[UINT16_MAX / 32u + 1u];
     const XgRenderWorldModelTemplate
         *templates[XG_RENDER_WORLD_MODEL_PRIMITIVE_CAPACITY];
     XgWorldModelsNativePreparation preparation;
@@ -224,95 +225,70 @@ static bool stage_primitive(
         source->source_index * 4096u + source->primitive_index);
 }
 
-static const XgRenderIrVertex *source_vertex(
-        const XgWorldModelsNativePrimitiveOutput *output,
-        uint32_t source_vertex_index) {
-    if (output == NULL || source_vertex_index >= XG_HOST_3D_VERTEX_COUNT ||
-        output->primitive.triangle_count == 0u)
-        return NULL;
-    if (source_vertex_index < 3u)
-        return &output->primitive.triangles[0].vertices[source_vertex_index];
-    if (output->primitive.triangle_count < 2u) return NULL;
-    return &output->primitive.triangles[1].vertices[2];
-}
-
 static bool collect_interpolation_anchors(
         XgRenderWorldModelsNativeState *workspace, uint64_t scene_id,
         uint32_t *out_anchor_count, uint32_t *out_failure_detail) {
-    uint32_t anchor_count = 0u;
+    XgRenderIrMaterialState material;
 
     if (out_failure_detail != NULL) *out_failure_detail = 0u;
     if (workspace == NULL || scene_id == 0u || out_anchor_count == NULL ||
         out_failure_detail == NULL)
         return false;
     *out_anchor_count = 0u;
-    for (uint32_t dispatch_index = 0u;
-         dispatch_index < workspace->preparation.dispatch_count;
-         ++dispatch_index) {
-        const XgWorldModelsNativeDispatch *dispatch =
-            &workspace->dispatches[dispatch_index];
+    if (workspace->preparation.anchor_count >
+        XG_RENDER_WORLD_MODEL_ANCHOR_CAPACITY) {
+        *out_failure_detail = 1u;
+        return false;
+    }
+    material = (XgRenderIrMaterialState){
+        .draw_area_left = workspace->preparation.raster.draw_area_left,
+        .draw_area_top = workspace->preparation.raster.draw_area_top,
+        .draw_area_right = workspace->preparation.raster.draw_area_right,
+        .draw_area_bottom = workspace->preparation.raster.draw_area_bottom,
+        .draw_offset_x = workspace->preparation.raster.draw_offset_x,
+        .draw_offset_y = workspace->preparation.raster.draw_offset_y,
+        .texture_window_mask_x =
+            workspace->preparation.raster.texture_window_mask_x,
+        .texture_window_mask_y =
+            workspace->preparation.raster.texture_window_mask_y,
+        .texture_window_offset_x =
+            workspace->preparation.raster.texture_window_offset_x,
+        .texture_window_offset_y =
+            workspace->preparation.raster.texture_window_offset_y,
+        .texture_depth = XG_RENDER_IR_TEXTURE_4_BIT,
+        .shading = XG_RENDER_IR_SHADING_FLAT,
+        .blend_mode = XG_RENDER_IR_BLEND_AVERAGE,
+        .dither = workspace->preparation.raster.dither,
+        .mask_set = workspace->preparation.raster.mask_set,
+        .mask_check = workspace->preparation.raster.mask_check,
+    };
+    for (uint32_t index = 0u; index < workspace->preparation.anchor_count;
+         ++index) {
+        const XgWorldModelsNativeAnchorSource *source =
+            &workspace->anchor_sources[index];
+        XgRenderIrVertex vertex;
+        XgWorldModelsNativeResult native_result =
+            xg_world_models_native_build_anchor_vertex(
+                &workspace->preparation, workspace->authentication_generation,
+                source, &vertex);
 
-        if (dispatch->primitive_start > workspace->preparation.primitive_count ||
-            dispatch->primitive_count >
-                workspace->preparation.primitive_count -
-                    dispatch->primitive_start) {
-            *out_failure_detail = 1u;
+        if (native_result != XG_WORLD_MODELS_NATIVE_OK) {
+            *out_anchor_count = index;
+            *out_failure_detail = UINT32_C(0x100) + (uint32_t)native_result;
             return false;
         }
-        memset(workspace->anchor_seen, 0, sizeof(workspace->anchor_seen));
-        for (uint32_t primitive_offset = 0u;
-             primitive_offset < dispatch->primitive_count;
-             ++primitive_offset) {
-            const uint32_t primitive_index =
-                dispatch->primitive_start + primitive_offset;
-            const XgWorldModelsNativePrimitiveSource *source =
-                &workspace->primitives[primitive_index];
-            const XgWorldModelsNativePrimitiveOutput *output =
-                &workspace->outputs[primitive_index];
-
-            if (source->dispatch_index != dispatch_index) {
-                *out_failure_detail = 2u;
-                return false;
-            }
-            for (uint32_t source_vertex_index = 0u;
-                 source_vertex_index < source->vertex_count;
-                 ++source_vertex_index) {
-                const uint32_t topology_vertex =
-                    source->topology[source_vertex_index];
-                const uint32_t word = topology_vertex / 32u;
-                const uint32_t mask =
-                    UINT32_C(1) << (topology_vertex % 32u);
-
-                if ((workspace->anchor_seen[word] & mask) != 0u) continue;
-                if (anchor_count == XG_RENDER_WORLD_MODEL_ANCHOR_CAPACITY) {
-                    *out_anchor_count = anchor_count;
-                    *out_failure_detail = 3u;
-                    return false;
-                }
-                const XgRenderIrVertex *vertex =
-                    source_vertex(output, source_vertex_index);
-                if (vertex == NULL) {
-                    *out_anchor_count = anchor_count;
-                    *out_failure_detail = 4u;
-                    return false;
-                }
-                const XgRenderBackendStatus status =
-                    xg_render_backend_translate_anchor(
-                        &output->primitive.material, vertex, scene_id,
-                        source->model_header_address & UINT32_C(0x1fffffff),
-                        &workspace->anchors[anchor_count]);
-                if (status != XG_RENDER_BACKEND_OK) {
-                    *out_anchor_count = anchor_count;
-                    *out_failure_detail =
-                        UINT32_C(0x100) + (uint32_t)status;
-                    return false;
-                }
-                workspace->anchor_seen[word] |= mask;
-                ++anchor_count;
-            }
+        const XgRenderBackendStatus status =
+            xg_render_backend_translate_anchor(
+                &material, &vertex, scene_id,
+                source->model_header_address & UINT32_C(0x1fffffff),
+                &workspace->anchors[index]);
+        if (status != XG_RENDER_BACKEND_OK) {
+            *out_anchor_count = index;
+            *out_failure_detail = UINT32_C(0x200) + (uint32_t)status;
+            return false;
         }
     }
-    *out_anchor_count = anchor_count;
+    *out_anchor_count = workspace->preparation.anchor_count;
     return true;
 }
 
@@ -428,7 +404,8 @@ bool xg_render_world_models_prepare(
         XG_RENDER_WORLD_MODEL_RECORD_CAPACITY, workspace->node_side_effects,
         XG_RENDER_WORLD_MODEL_NODE_CAPACITY, workspace->dispatches,
         XG_RENDER_WORLD_MODEL_DISPATCH_CAPACITY, workspace->primitives,
-        XG_RENDER_WORLD_MODEL_PRIMITIVE_CAPACITY, &preparation);
+        XG_RENDER_WORLD_MODEL_PRIMITIVE_CAPACITY, workspace->anchor_sources,
+        XG_RENDER_WORLD_MODEL_ANCHOR_CAPACITY, &preparation);
     if (native_result != XG_WORLD_MODELS_NATIVE_OK) {
         const uint32_t template_failure =
             xg_render_world_model_repository_template_read_failure();
@@ -446,6 +423,7 @@ bool xg_render_world_models_prepare(
         preparation.transform_node_count > XG_RENDER_WORLD_MODEL_NODE_CAPACITY ||
         preparation.dispatch_count > XG_RENDER_WORLD_MODEL_DISPATCH_CAPACITY ||
         preparation.primitive_count > XG_RENDER_WORLD_MODEL_PRIMITIVE_CAPACITY ||
+        preparation.anchor_count > XG_RENDER_WORLD_MODEL_ANCHOR_CAPACITY ||
         !physical_address_equals(preparation.continuation_pc, cpu->gpr[31]))
         goto fail;
 

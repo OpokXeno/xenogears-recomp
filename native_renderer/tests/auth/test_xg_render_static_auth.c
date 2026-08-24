@@ -7552,6 +7552,60 @@ static int test_world_models_all_family_sidecar_cutover(void) {
     return 1;
 }
 
+static int run_world_models_culled_anchor_case(bool coarse_cull) {
+    CPUState cpu;
+    PsxXgRenderWorldNativeSnapshot models = {0};
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    recorded_anchor_count = 0u;
+    recorded_anchor_calls = 0u;
+    (void)configure_all_family_world_models_native_cpu(&cpu);
+    world_native_put_u16(MODEL + 4u, 5u);
+    world_native_put_u32(VERTICES + 4u * 8u, pack_s16(0, 0));
+    world_native_put_u32(VERTICES + 4u * 8u + 4u, 0u);
+    if (coarse_cull) {
+        world_native_put_u32(
+            RECORD + XG_WORLD_MODELS_RECORD_STORED_Z_OFFSET,
+            (uint32_t)-8192);
+    } else {
+        world_native_put_u32(MODEL + 0x20u, pack_s16(30000, -32));
+        world_native_put_u32(MODEL + 0x24u, 0u);
+        world_native_put_u32(MODEL + 0x28u, pack_s16(30000, 32));
+        world_native_put_u32(MODEL + 0x2cu, 0u);
+    }
+
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, XG_WORLD_MODELS_PRODUCER_ENTRY, UINT32_C(0x24020800)));
+    CHECK(psx_xg_render_auth_runtime_test_materialize_world_models_original(
+        &cpu));
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80084cd0), UINT32_C(0x8fbf0038)));
+    CHECK(recorded_anchor_calls == 1u);
+    CHECK(recorded_anchor_count == 5u);
+    for (uint32_t vertex = 0u; vertex < 5u; ++vertex) {
+        CHECK(recorded_anchors[vertex].producer_id ==
+              (MODEL & UINT32_C(0x1fffffff)));
+        CHECK(recorded_anchors[vertex].vertex.interpolation_group_id ==
+              UINT32_C(0x64012100));
+        CHECK(recorded_anchors[vertex].vertex.interpolation_vertex_id ==
+              vertex);
+    }
+    psx_xg_render_auth_world_models_native_snapshot(&models);
+    CHECK(models.native_cutover_count == 1u);
+    CHECK(models.native_primitive_count == 0u);
+    CHECK(models.native_failure_count == 0u);
+    CHECK(models.last_anchor_count == 5u);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_world_models_active_culled_models_publish_complete_anchors(void) {
+    CHECK(run_world_models_culled_anchor_case(true));
+    CHECK(run_world_models_culled_anchor_case(false));
+    return 1;
+}
+
 static int test_world_model_reinitialization_preserves_other_packet_buffer(void) {
     static const uint32_t initializer_functions[
         XG_WORLD_MODELS_PRIMITIVE_FAMILY_COUNT] = {
@@ -9387,6 +9441,177 @@ static const XgRenderProducerLifecycleServices writer_resolver_lifecycle = {
     .guest_data_range_is_valid = writer_resolver_data_range_is_valid,
 };
 
+static uint32_t recorded_model_anchor_primitive_ids[8];
+static size_t recorded_model_anchor_count;
+
+static bool record_model_anchor(const GpuRenderSemantic *semantic) {
+    if (semantic == NULL || !semantic->interpolation_identity.valid ||
+        recorded_model_anchor_count ==
+            sizeof(recorded_model_anchor_primitive_ids) /
+                sizeof(recorded_model_anchor_primitive_ids[0]))
+        return false;
+    recorded_model_anchor_primitive_ids[recorded_model_anchor_count++] =
+        semantic->interpolation_identity.primitive_id;
+    return true;
+}
+
+static XgRenderIrNativePrimitive model_anchor_primitive(
+        uint32_t vertex_id, int16_t draw_offset_y) {
+    XgRenderIrNativePrimitive primitive = {
+        .material = {
+            .draw_area_right = 319u,
+            .draw_area_bottom = 239u,
+            .draw_offset_y = draw_offset_y,
+        },
+        .triangle_count = 1u,
+        .triangles = {{ .split_count = 1u }},
+    };
+
+    for (uint32_t index = 0u; index < 3u; ++index) {
+        primitive.triangles[0].vertices[index].interpolation_group_id = 7u;
+        primitive.triangles[0].vertices[index].interpolation_vertex_id =
+            vertex_id + index;
+        primitive.triangles[0].vertices[index]
+            .interpolation_vertex_identity_valid = true;
+    }
+    return primitive;
+}
+
+static int test_model_repository_records_complete_resolved_producer(void) {
+    const XgRenderModelRepositoryServices services = {
+        .lifecycle = &writer_resolver_lifecycle,
+        .submission = {
+            .interpolation_scene = writer_resolver_scene_generation,
+            .record_interpolation_anchors = record_model_anchor,
+        },
+    };
+    const XgRenderProducerLifecycle lifecycle = {
+        .resource_generation = 1u,
+        .scene_generation = 2u,
+        .producer_pc = UINT32_C(0x8002c700),
+        .scene_resource = 2u,
+    };
+    XgRenderModelFt4SourceRecord ft4_sources_to_store[] = {
+        {
+            .primitive = model_anchor_primitive(10u, 0),
+            .lifecycle = lifecycle,
+            .source_id = UINT32_C(0x1204),
+            .interpolation_producer_id = UINT32_C(0x120c40),
+            .interpolation_primitive_id = UINT32_C(0x4010ab68),
+            .interpolation_identity_valid = true,
+            .valid = true,
+        },
+        {
+            .primitive = model_anchor_primitive(20u, 0),
+            .lifecycle = lifecycle,
+            .source_id = UINT32_C(0x122c),
+            .interpolation_producer_id = UINT32_C(0x120c40),
+            .interpolation_primitive_id = UINT32_C(0x4010ab6c),
+            .interpolation_identity_valid = true,
+            .valid = true,
+        },
+        {
+            .primitive = model_anchor_primitive(30u, 256),
+            .lifecycle = lifecycle,
+            .source_id = UINT32_C(0x1254),
+            .interpolation_producer_id = UINT32_C(0x120c40),
+            .interpolation_primitive_id = UINT32_C(0x4010ab70),
+            .interpolation_identity_valid = true,
+            .valid = true,
+        },
+        {
+            .primitive = model_anchor_primitive(40u, 0),
+            .lifecycle = lifecycle,
+            .source_id = UINT32_C(0x127c),
+            .interpolation_producer_id = UINT32_C(0x120c44),
+            .interpolation_primitive_id = UINT32_C(0x4010ab74),
+            .interpolation_identity_valid = true,
+            .valid = true,
+        },
+    };
+    XgRenderModelFt3SourceRecord ft3_sources_to_store[] = {
+        {
+            .primitive = model_anchor_primitive(50u, 0),
+            .lifecycle = lifecycle,
+            .source_id = UINT32_C(0x1304),
+            .interpolation_producer_id = UINT32_C(0x120c50),
+            .interpolation_primitive_id = UINT32_C(0x4010ab69),
+            .interpolation_identity_valid = true,
+            .geometry_ready = true,
+            .valid = true,
+        },
+        {
+            .primitive = model_anchor_primitive(60u, 0),
+            .lifecycle = lifecycle,
+            .source_id = UINT32_C(0x1324),
+            .interpolation_producer_id = UINT32_C(0x120c50),
+            .interpolation_primitive_id = UINT32_C(0x4010ab6d),
+            .interpolation_identity_valid = true,
+            .geometry_ready = true,
+            .valid = true,
+        },
+    };
+    GpuRenderSemantic resolved = {0};
+
+    xg_render_model_repository_clear_ft4_sources();
+    xg_render_model_repository_clear_ft3_sources(&services);
+    for (size_t index = 0u;
+         index < sizeof(ft4_sources_to_store) / sizeof(ft4_sources_to_store[0]);
+         ++index)
+        CHECK(xg_render_model_repository_store_ft4_source(
+            &ft4_sources_to_store[index], NULL, &services));
+    for (size_t index = 0u;
+         index < sizeof(ft3_sources_to_store) / sizeof(ft3_sources_to_store[0]);
+         ++index)
+        CHECK(xg_render_model_repository_store_ft3_source(
+            &ft3_sources_to_store[index], NULL, &services));
+
+    resolved.interpolation_identity = (GpuRenderInterpolationIdentity){
+        .scene_id = 1u,
+        .producer_id = UINT32_C(0x120c40),
+        .primitive_id = UINT32_C(0x4010ab68),
+        .valid = true,
+    };
+    recorded_model_anchor_count = 0u;
+    CHECK(xg_render_model_repository_record_resolved_producer_anchors(
+        UINT32_C(0x1204), &resolved, &services));
+    CHECK(recorded_model_anchor_count == 1u);
+    CHECK(recorded_model_anchor_primitive_ids[0] == UINT32_C(0x4010ab6c));
+
+    resolved.interpolation_identity.producer_id = UINT32_C(0x120c50);
+    resolved.interpolation_identity.primitive_id = UINT32_C(0x4010ab69);
+    recorded_model_anchor_count = 0u;
+    CHECK(xg_render_model_repository_record_resolved_producer_anchors(
+        UINT32_C(0x80001304), &resolved, &services));
+    CHECK(recorded_model_anchor_count == 1u);
+    CHECK(recorded_model_anchor_primitive_ids[0] == UINT32_C(0x4010ab6d));
+
+    resolved.interpolation_identity.producer_id = UINT32_C(0x120c40);
+    resolved.interpolation_identity.primitive_id = UINT32_C(0x4010ab70);
+    resolved.material.draw_offset_y = 256;
+    recorded_model_anchor_count = 0u;
+    CHECK(xg_render_model_repository_record_resolved_producer_anchors(
+        UINT32_C(0x1254), &resolved, &services));
+    CHECK(recorded_model_anchor_count == 0u);
+
+    recorded_model_anchor_count = 0u;
+    CHECK(xg_render_model_repository_record_active_producer_anchors(&services));
+    CHECK(recorded_model_anchor_count == 5u);
+    CHECK(recorded_model_anchor_primitive_ids[0] == UINT32_C(0x4010ab68));
+    CHECK(recorded_model_anchor_primitive_ids[1] == UINT32_C(0x4010ab6c));
+    CHECK(recorded_model_anchor_primitive_ids[2] == UINT32_C(0x4010ab69));
+    CHECK(recorded_model_anchor_primitive_ids[3] == UINT32_C(0x4010ab6d));
+    CHECK(recorded_model_anchor_primitive_ids[4] == UINT32_C(0x4010ab70));
+
+    recorded_model_anchor_count = 0u;
+    CHECK(xg_render_model_repository_record_active_producer_anchors(&services));
+    CHECK(recorded_model_anchor_count == 5u);
+
+    xg_render_model_repository_clear_ft4_sources();
+    xg_render_model_repository_clear_ft3_sources(&services);
+    return 1;
+}
+
 static int test_model_ft4_resolver_rejects_unauthorized_writer(void) {
     const uint32_t packet = MODEL_SHADOW_PACKET;
     const XgRenderModelRepositoryServices services = {
@@ -10781,6 +11006,7 @@ int main(void) {
     ok &= test_remaining_world_native_cutovers_reject_wrong_callers();
     ok &= test_remaining_world_native_nonempty_cutovers_are_atomic();
     ok &= test_world_models_all_family_sidecar_cutover();
+    ok &= test_world_models_active_culled_models_publish_complete_anchors();
     ok &= test_world_model_reinitialization_preserves_other_packet_buffer();
     ok &= test_world_model_templates_only_track_model_code();
     ok &= test_world_actor_native_seam_is_context_bound_and_atomic();
@@ -10805,6 +11031,7 @@ int main(void) {
     ok &= test_local_ft4_initializer_lifecycle_is_producer_bound();
     ok &= test_local_ft4_initializer_lifecycle_rejects_incomplete_proof();
     ok &= test_local_zoom_initializer_lifecycle_is_producer_bound();
+    ok &= test_model_repository_records_complete_resolved_producer();
     ok &= test_model_ft4_resolver_rejects_unauthorized_writer();
     ok &= test_f4_resolver_rejects_unauthorized_writer();
     ok &= test_writer_ft4_2c_resolver_requires_exact_producer();

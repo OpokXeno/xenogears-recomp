@@ -103,6 +103,8 @@ bool xg_render_submission_pre_scene_item_copy(
     uint32_t index, XgRenderPreScenePrimitive *out_record);
 bool xg_render_submission_pre_scene_stage(
     const XgRenderPreScenePrimitive *record);
+bool xg_render_submission_record_interpolation_anchors(
+    const GpuRenderSemantic *semantic);
 bool xg_render_submission_pre_scene_flush(void);
 bool xg_render_submission_validate_authenticated_ir(
     const XgRenderAuthenticatedIrAccess *access);

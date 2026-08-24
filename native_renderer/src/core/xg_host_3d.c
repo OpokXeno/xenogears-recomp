@@ -1,4 +1,5 @@
 #include "xg_host_3d.h"
+#include "psx_gte_divide.h"
 
 #include <limits.h>
 #include <stddef.h>
@@ -40,8 +41,6 @@ _Static_assert(offsetof(XgHost3dMatrix, translation) == 20u,
 _Static_assert(sizeof(XgHost3dMatrix) == 32u,
                "XgHost3dMatrix must match the PsyQ MATRIX size");
 
-static uint8_t division_table[0x101];
-static int division_table_ready;
 static int native_view_enabled;
 static int32_t native_view_center_offset_x_16_16;
 static uint32_t native_view_cull_margin;
@@ -144,65 +143,12 @@ static unsigned count_leading_zeroes32(uint32_t value) {
     return count;
 }
 
-static void initialize_division_table(void) {
-    uint32_t divisor;
-
-    if (division_table_ready) return;
-    for (divisor = 0x8000u; divisor < 0x10000u; divisor += 0x80u) {
-        uint32_t approximation = 512u;
-        unsigned iteration;
-
-        for (iteration = 1u; iteration < 5u; ++iteration)
-            approximation =
-                (approximation *
-                 (1024u * 512u - ((divisor >> 7u) * approximation))) >>
-                18u;
-        division_table[(divisor >> 7u) & 0xffu] =
-            (uint8_t)(((approximation + 1u) >> 1u) - 0x101u);
-    }
-    division_table[0x100] = division_table[0xff];
-    division_table_ready = 1;
-}
-
-static unsigned count_leading_zeroes16(uint16_t value) {
-    unsigned count = 0u;
-    int bit;
-
-    for (bit = 15; bit >= 0; --bit) {
-        if ((value & (uint16_t)(1u << bit)) != 0u) break;
-        ++count;
-    }
-    return count;
-}
-
-static int32_t reciprocal(uint16_t divisor) {
-    const int32_t x =
-        0x101 + division_table[(((divisor & 0x7fffu) + 0x40u) >> 7u)];
-    const int32_t first = ((int32_t)divisor * -x + 0x80) >> 8;
-
-    return (x * (131072 + first) + 0x80) >> 8;
-}
-
 static int32_t perspective_divide(uint16_t h, uint16_t z, uint32_t *flags) {
-    unsigned shift;
-    uint32_t dividend;
-    uint32_t divisor;
-    uint32_t result;
+    int overflow;
+    const int32_t result = psx_gte_divide(h, z, &overflow);
 
-    initialize_division_table();
-    if ((uint32_t)z * 2u <= (uint32_t)h) {
-        *flags |= FLAG_DIV_OVF;
-        return 0x1ffff;
-    }
-    shift = count_leading_zeroes16(z);
-    dividend = (uint32_t)h << shift;
-    divisor = (uint32_t)z << shift;
-    result = (uint32_t)(((uint64_t)dividend *
-                         (uint32_t)reciprocal((uint16_t)(divisor | 0x8000u)) +
-                         32768u) >>
-                        16u);
-    if (result > 0x1ffffu) result = 0x1ffffu;
-    return (int32_t)result;
+    if (overflow) *flags |= FLAG_DIV_OVF;
+    return result;
 }
 
 static void note_mac123_overflow(int64_t value, unsigned component,

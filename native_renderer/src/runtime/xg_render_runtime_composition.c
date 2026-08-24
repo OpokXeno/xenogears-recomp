@@ -267,6 +267,8 @@ static const XgRenderModelRepositoryServices *model_repository_services(void) {
             .register_ft3_replay_source = register_model_ft3_source,
             .register_ft4_replay_source = register_model_ft4_source,
             .interpolation_scene = interpolation_scene_generation,
+            .record_interpolation_anchors =
+                xg_render_submission_record_interpolation_anchors,
         },
         .resources = {
             .watch = watch_resource,
@@ -756,6 +758,12 @@ static bool world_authorize_direct_dispatch(void) {
 
 static const XgNativeView *current_native_view(void) { return &native_view; }
 
+static bool finalize_temporal_with_model_anchors(void) {
+    return xg_render_model_repository_record_active_producer_anchors(
+               model_repository_services()) &&
+        xg_render_submission_finalize_temporal();
+}
+
 static const XgRenderWorldCoordinatorPolicy *world_policy(void) {
     static const XgRenderWorldCoordinatorPolicy policy = {
         .readiness_blocker = world_readiness_blocker,
@@ -774,7 +782,7 @@ static const XgRenderWorldCoordinatorPolicy *world_policy(void) {
             xg_render_submission_stage_temporal_primitive_identified,
         .abort_submission = xg_render_submission_standalone_abort,
         .finalize_submission = xg_render_submission_standalone_finalize,
-        .finalize_temporal = xg_render_submission_finalize_temporal,
+        .finalize_temporal = finalize_temporal_with_model_anchors,
     };
     return &policy;
 }
@@ -1060,6 +1068,13 @@ static const XgRenderResolverRegistryServices *resolver_services(void) {
     return &services;
 }
 
+static bool record_resolved_semantic_anchors(
+        uint64_t command_id, const GpuRenderSemantic *semantic) {
+    return xg_render_submission_record_interpolation_anchors(semantic) &&
+        xg_render_model_repository_record_resolved_producer_anchors(
+            command_id, semantic, model_repository_services());
+}
+
 static XgRenderInvalidationServices invalidation_services(void) {
     return (XgRenderInvalidationServices){
         .field_sprite = field_sprite_services(),
@@ -1073,6 +1088,9 @@ static void configure_native_stream(
     guest_render_native_stream_set_miss_resolver(
         state->render_mode == GUEST_RENDER_RENDER_NATIVE
             ? xg_render_resolver_registry_resolve : NULL);
+    guest_render_native_stream_set_resolved_semantic_observer(
+        state->render_mode == GUEST_RENDER_RENDER_NATIVE
+            ? record_resolved_semantic_anchors : NULL);
     guest_render_native_stream_set_shared_packet_bindings(
         xg_render_runtime_variant_no_gates_enabled());
 }

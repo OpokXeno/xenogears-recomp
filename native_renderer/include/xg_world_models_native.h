@@ -159,20 +159,31 @@ typedef struct XgWorldModelsNativePrimitiveSource {
     uint8_t packet_word_count;
 } XgWorldModelsNativePrimitiveSource;
 
+typedef struct XgWorldModelsNativeAnchorSource {
+    XgHost3dProjection projection;
+    XgHost3dVector vertex;
+    uint32_t model_header_address;
+    uint32_t source_index;
+    uint16_t vertex_index;
+} XgWorldModelsNativeAnchorSource;
+
 typedef struct XgWorldModelsNativePreparation {
     XgWorldModelsBuildSummary world;
     XgWorldModelsGteState gte;
     XgWorldModelsNativeRasterState raster;
     const XgWorldModelsNativeDispatch *sealed_dispatches;
     const XgWorldModelsNativePrimitiveSource *sealed_primitives;
+    const XgWorldModelsNativeAnchorSource *sealed_anchor_sources;
     uint64_t dispatch_digest;
     uint64_t primitive_digest;
+    uint64_t anchor_digest;
     uint64_t authentication_generation;
     uint32_t continuation_pc;
     uint32_t record_count;
     uint32_t transform_node_count;
     uint32_t dispatch_count;
     uint32_t primitive_count;
+    uint32_t anchor_count;
     uint32_t primitive_family_mask;
     uint32_t dispatch_mode_mask;
     uint32_t ordering_shift;
@@ -183,6 +194,7 @@ typedef struct XgWorldModelsNativePreparation {
     uint32_t authenticated_read_count;
     uint32_t authenticated_read_bytes;
     bool primitive_digest_validated;
+    bool anchor_digest_validated;
     bool authenticated;
     bool sealed;
     bool consumed;
@@ -269,6 +281,8 @@ XgWorldModelsNativeResult xg_world_models_native_prepare(
     XgWorldModelsNativeDispatch *dispatches, uint32_t dispatch_capacity,
     XgWorldModelsNativePrimitiveSource *primitives,
     uint32_t primitive_capacity,
+    XgWorldModelsNativeAnchorSource *anchor_sources,
+    uint32_t anchor_capacity,
     XgWorldModelsNativePreparation *out_preparation);
 
 XgWorldModelsNativeResult xg_world_models_native_build_primitive(
@@ -276,6 +290,12 @@ XgWorldModelsNativeResult xg_world_models_native_build_primitive(
     uint64_t authentication_generation,
     const XgWorldModelsNativePrimitiveSource *source,
     XgWorldModelsNativePrimitiveOutput *out_primitive);
+
+XgWorldModelsNativeResult xg_world_models_native_build_anchor_vertex(
+    XgWorldModelsNativePreparation *preparation,
+    uint64_t authentication_generation,
+    const XgWorldModelsNativeAnchorSource *source,
+    XgRenderIrVertex *out_vertex);
 
 /* Seals guest-visible outputs only after every prepared dispatch and packet
  * write mask has been authenticated, then every accepted semantic primitive
