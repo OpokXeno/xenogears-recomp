@@ -1,0 +1,28 @@
+# image-id: gear-helper-overlay
+# annotated_functions/total_functions: 19/79
+# Total basis: union of Ghidra functions and recovered callbacks/entries.
+# sha256: 14395a9f54c124fed016f07906cc882b2a9256d5ade2d10eef99e10fe9366523
+# load-address: 0x801dc000
+# identity-source: native_renderer/xg_render_manifest.toml
+# source-record-id: gear-helper-image
+# format: address, note
+
+0x801DC22C, function start — GearHelperInitializeMesh; initializes model mesh state.
+0x801DC2D0, function start — GearHelperInitializeSkeleton; initializes model skeleton state.
+0x801DC5C0, function start — GearHelperUpdateSkeletonTransforms; propagates parent joint transforms and dirty state.
+0x801DCC34, function start — GearHelperNoOpCallback; intentional empty callback.
+0x801DCD8C, function start — GearHelperFreeModelSkeleton; frees skeleton nodes and their array.
+0x801DCE18, function start — GearHelperFreeModelMesh; frees model mesh state.
+0x801DF5F4, function start — GearHelperObjectPoolInitialize; initializes the helper object pool.
+0x801DF668, function start — GearHelperObjectPoolFree; frees the helper object pool.
+0x801DF6A8, function start — GearHelperObjectPoolReset; resets object-pool allocation state.
+0x801DF7A8, function start — GearHelperObjectPoolRelease; releases one pooled object.
+0x801E0064, function start — GearHelperInitializeVertexBuffer; initializes a model vertex buffer.
+0x801E00DC, function start — GearHelperFreeVertexBuffer; frees a model vertex buffer.
+0x801E011C, function start — GearHelperInitializeVertices; initializes model vertices.
+0x801E0248, function start — GearHelperVertexAllocate; allocates one helper vertex record.
+0x801E0354, function start — GearHelperVertexRelease; releases one helper vertex record.
+0x801E0398, function start — GearHelperVertexUpdateAndRender; updates and renders helper vertices.
+0x801E72CC, function start — GearHelperGetModelJointMatrix; resolves a model joint matrix.
+0x801E738C, function start — GearHelperInitialize; initializes the shared Gear model helper.
+0x801E8510, function start — GearHelperInitializeModelAuxObjects; initializes model auxiliary objects.

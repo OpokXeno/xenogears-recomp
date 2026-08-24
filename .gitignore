@@ -14,7 +14,7 @@ assets/boxart.tga
 # Recompiled C source — derived from the copyrighted game binary
 generated/
 # Captured overlay binaries — verbatim game code snapshots
-overlays/
+/overlays/
 # Overlay capture store — contains verbatim game code
 overlay_captures.json
 # ---- Build directories ---------------------------------
@@ -97,6 +97,7 @@ tools/*
 !tools/native_render_runtime_variants.py
 !tools/native_render_overlay_codegen.py
 !tools/native_render_overlay_ranges.py
+!tools/validate_overlay_annotations.py
 !tools/native_render_field_character_shadow_schema.py
 !tools/native_render_producer_family_schema.py
 !tools/native_render_producer_family_scratch.py
@@ -109,3 +110,4 @@ tools/*
 !tools/test_native_render_replay.py
 !tools/test_native_render_replay_evidence.py
 !tools/test_native_render_3d_certify.py
+!tools/test_overlay_annotations.py

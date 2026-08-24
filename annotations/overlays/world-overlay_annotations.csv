@@ -1,0 +1,256 @@
+# image-id: world-overlay
+# annotated_functions/total_functions: 193/207
+# Total basis: union of Ghidra functions and recovered callbacks/entries.
+# sha256: 4c15fd32b3a03d7cd5ea4403dcaabc70abaf99b6aaca65d63d6866803edaac70
+# load-address: 0x8006faf0
+# identity-source: native_renderer/xg_render_manifest.toml
+# source-record-id: world-image
+# format: address, note
+
+0x800712D0, function start — WorldMapUpdateControllerAndFrameState; updates controller and per-frame World Map state.
+0x80071A50, function start — WorldMapGroundTaskInit; initializes the central ground-render task.
+0x80071A58, function start — WorldMapGroundTaskUpdate; runs the authenticated World Map producer dispatcher.
+0x80071AA0, call site — invokes the main World Map effects renderer.
+0x80071AA8, call site — resumes from effects and invokes the actor-sprite producer.
+0x80071AB0, call site — resumes from actor sprites and invokes the decorations producer.
+0x80071AB8, call site — resumes from decorations and invokes the entity-shadow producer.
+0x80071AC0, call site — resumes from entity shadows and invokes the world-model producer.
+0x80071B14, call site — invokes terrain visibility preparation.
+0x80071B1C, return site — resumes after terrain visibility preparation.
+0x80071B30, call site — invokes the terrain and water grid producer.
+0x80071B38, return site — resumes after terrain and water rendering.
+0x80071B50, call site — invokes the World Map horizon renderer.
+0x80071B58, call site — resumes from the horizon and invokes the sky renderer.
+0x80071B60, call site — resumes from the sky and invokes the cloud renderer.
+0x80071B68, return site — resumes after cloud rendering.
+0x80071B7C, call site — invokes the World Map minimap renderer.
+0x80071B84, return site — resumes after minimap rendering.
+0x80071B9C, function start — WorldMapApplyModeParameterTable; applies the selected World Map mode parameters.
+0x80071EF0, function start — WorldMapMode0LoadPartyResources; queues player and Gear sprite bundles.
+0x80071FEC, function start — WorldMapQueueFiles25And26; queues two common World Map resource files.
+0x80072090, function start — WorldMapQueueModeResourceFiles; queues resources selected by World Map mode.
+0x800721E4, function start — WorldMapReadResourceFile; reads one World Map resource file.
+0x80072BB0, function start — WorldMapInitializeGraphics; initializes display contexts, fog, colors, and projection.
+0x80072DB4, function start — WorldMapFadeTransition; performs a blocking full-screen transition fade.
+0x80073300, function start — WorldMapSetupTravelMode; derives foot, Gear, or Yggdrasil travel state.
+0x80073398, function start — WorldMapSetupPositionFromField; selects initial position and heading from saved Field state.
+0x80073448, function start — WorldMapSetupPositionFromFileData; resolves an indexed initial position with fallback.
+0x80073530, function start — WorldMapFinalizeFile1Loading; relocates primary resources and establishes table pointers.
+0x8007369C, function start — WorldMapAllocateSkyBuffers; allocates the World Map sky packet buffers.
+0x800736DC, function start — WorldMapInitializeSky; initializes sky packet templates and colors.
+0x800737EC, function start — WorldMapRenderSky; renders the authenticated World Map sky producer.
+0x800739B8, function start — WorldMapInitializeHorizon; initializes horizon and texture-window packets.
+0x80073B04, function start — WorldMapRenderHorizon; renders the authenticated World Map horizon.
+0x80073E0C, instruction site — completes the authenticated horizon shadow path.
+0x80073E30, function start — WorldMapInitializeMinimap; initializes radar, POI, texture, and background packets.
+0x800740B8, function start — WorldMapRenderMinimap; renders radar, POIs, and minimap background.
+0x8007412C, instruction site — enters the local native minimap cutover path.
+0x80074564, instruction site — completes the authenticated minimap shadow path.
+0x80074594, function start — WorldMapInitializeEffectMarkers; initializes the queued world-position marker renderer.
+0x8007474C, function start — WorldMapFreeEffectMarkers; frees marker queue and packet buffers.
+0x80074794, function start — WorldMapQueueEntityShadowMarker; queues a wrapped entity-shadow marker.
+0x800747DC, function start — WorldMapRenderEntityShadows; projects and renders queued entity shadows.
+0x80074C84, instruction site — observes the entity-shadow transform anchor.
+0x80074E24, instruction site — completes the authenticated entity-shadow path.
+0x80074E58, function start — WorldMapInitializeAnimatedTextureSet1; initializes the first animated texture set.
+0x80074F04, function start — WorldMapFreeAnimatedTextureSet1; frees the first animated texture set.
+0x80074F2C, function start — WorldMapUpdateAnimatedTextureSet1; advances the first animated texture set.
+0x80075030, function start — WorldMapInitializeAnimatedTextureSet2; initializes the second animated texture set.
+0x800750DC, function start — WorldMapFreeAnimatedTextureSet2; frees the second animated texture set.
+0x80075104, function start — WorldMapUpdateAnimatedTextureSet2; advances the second animated texture set.
+0x80075228, function start — WorldMapInitializeAmbientEventSchedule; initializes randomized ambient event countdowns.
+0x8007528C, function start — WorldMapUpdateAmbientEventSchedule; advances and reports expired ambient events.
+0x80075460, function start — WorldMapSaveRuntimeState; saves transient World Map state.
+0x8007565C, function start — WorldMapRestoreRuntimeState; restores transient World Map state.
+0x80075D4C, function start — WorldMapReconcilePartyGearState; reconciles party and Gear availability state.
+0x80075E7C, function start — WorldMapSelectRandomEncounter; selects a World Map random encounter.
+0x800762FC, function start — WorldMapFlushCacheAndSync; synchronizes drawing around cache flushing.
+0x8007634C, function start — WorldMapPauseUntilStartPressed; runs the pause loop until Start is pressed.
+0x80076594, function start — WorldMapPauseUntilControllerConnected; waits for a usable controller.
+0x800767D4, function start — WorldMapSwitchMusic; replaces and starts the active World Map sequence.
+0x80076858, function start — WorldMapQuadraticPathInterpolate; evaluates a fixed-point quadratic path.
+0x80076954, function start — WorldMapDecompressAndRelocateSecondaryResources; installs secondary World Map resources.
+0x80076A74, call site — alternate World Map path invokes the world-model producer.
+0x80076A7C, return site — resumes after alternate world-model production.
+0x80076AC8, call site — alternate World Map path prepares terrain visibility.
+0x80076AD0, return site — resumes after alternate terrain visibility preparation.
+0x80076AE4, call site — alternate World Map path invokes terrain and water rendering.
+0x80076AEC, return site — resumes after alternate terrain and water rendering.
+0x80076B14, call site — alternate World Map path invokes cloud rendering.
+0x80076B1C, return site — resumes after alternate cloud rendering.
+0x80076DA4, function start — WorldMapSmoothPositionTowardTarget; smooths a position toward its destination.
+0x80076F54, function start — WorldMapSmoothCameraDistance; smooths camera distance toward its target.
+0x80076FA8, function start — WorldMapSmoothPositionAndStreamingOrigin; smooths a position and adjusts the streamed-grid origin.
+0x800771D8, function start — WorldMapStepValueTowardTarget; advances a fixed-point value toward its target.
+0x80077214, function start — WorldMapMode0Update; initializes and runs the complete ordinary World Map mode.
+0x80077480, function start — WorldMapMode0Free; tears down ordinary World Map mode resources.
+0x800779A4, call site — alternate World Map path invokes the world-model producer.
+0x800779AC, return site — resumes after alternate world-model production.
+0x800779F8, call site — alternate World Map path prepares terrain visibility.
+0x80077A00, return site — resumes after alternate terrain visibility preparation.
+0x80077A14, call site — alternate World Map path invokes terrain and water rendering.
+0x80077A1C, return site — resumes after alternate terrain and water rendering.
+0x80077A44, call site — alternate World Map path invokes cloud rendering.
+0x80077A4C, return site — resumes after alternate cloud rendering.
+0x800789A0, call site — alternate World Map path invokes the world-model producer.
+0x800789A8, return site — resumes after alternate world-model production.
+0x800789F4, call site — alternate World Map path prepares terrain visibility.
+0x800789FC, return site — resumes after alternate terrain visibility preparation.
+0x80078A10, call site — alternate World Map path invokes terrain and water rendering.
+0x80078A18, return site — resumes after alternate terrain and water rendering.
+0x80078A40, call site — alternate World Map path invokes cloud rendering.
+0x80078A48, return site — resumes after alternate cloud rendering.
+0x8008440C, function start — WorldMapLoadSharedTextureResources; uploads shared textures and generated palette ramps.
+0x80084580, function start — WorldMapInitializeModels; creates models, transforms, and collision meshes.
+0x80084770, call site — copies a World Map model packet template.
+0x80084778, return site — resumes after the authenticated model packet copy.
+0x80084818, function start — WorldMapFreeModels; frees per-model render buffers and model state.
+0x800848B4, function start — WorldMapAttachModel; assigns one World Map model as another's parent.
+0x800848F4, function start — WorldMapRenderModels; wraps, clips, transforms, and submits visible models.
+0x80084CD0, instruction site — commits the authenticated world-model producer.
+0x80084D00, function start — WorldMapCheckCollisionsAgainstModels; tests a position against collision-enabled models.
+0x80084DB8, function start — WorldMapCheckCollisionAgainstModel; tests transformed points against one collision mesh.
+0x80085158, function start — WorldMapCalculateModelCollisionPlane; calculates a model collision plane.
+0x80085418, function start — WorldMapTestPointAgainstModelPlane; tests a point against a model plane.
+0x80085760, function start — WorldMapClassifyPointAgainstCollisionTriangle; classifies a point against a collision triangle.
+0x80085CDC, function start — WorldMapDrawSpriteActors; wraps and renders World Map sprite actors.
+0x80085F38, instruction site — completes the authenticated actor-sprite producer.
+0x80085F58, function start — WorldMapRelocateSpriteActorResources; relocates loaded sprite actor resources.
+0x80085FE0, function start — WorldMapCreatePolyFT4Array3; allocates the third textured effect layer.
+0x80086124, function start — WorldMapFreePolyFT4Array3; frees the third textured effect layer.
+0x8008615C, function start — WorldMapRenderDecorations; emits auxiliary textured decoration packets.
+0x800863BC, instruction site — completes the authenticated decorations producer.
+0x800863E0, function start — WorldMapInitializeCloudState; allocates and initializes 80 cloud movement records.
+0x80086568, function start — WorldMapFreeCloudState; frees the World Map cloud state.
+0x800865A0, function start — WorldMapCreatePolyFT4Array2; initializes the second textured effect layer.
+0x800866C8, function start — WorldMapFreePolyFT4Array2; frees the second textured effect layer.
+0x80086700, function start — WorldMapUpdateCloudPositions; updates and wraps 80 cloud positions.
+0x80086798, function start — WorldMapRenderClouds; renders the authenticated World Map cloud layer.
+0x80086E3C, instruction site — observes the cloud shadow transform anchor.
+0x800876DC, instruction site — commits the authenticated cloud producer.
+0x80087B84, function start — WorldMapBuildBasisFromNormal; constructs an orientation basis from a surface normal.
+0x80087F60, function start — WorldMapAttachFourModelParts; attaches four configured child model parts.
+0x8008868C, function start — WorldMapAttachConfiguredModelPairs; attaches configured World Map model pairs.
+0x80088F64, function start — WorldMapInitializeEffectStatePools; initializes World Map effect state pools.
+0x80088FF4, function start — WorldMapFreeEffectStatePools; frees World Map effect state pools.
+0x8008901C, function start — WorldMapCreatePolyFT4Array1; allocates the primary effects packet buffers.
+0x80089128, function start — WorldMapFreePolyFT4Array1; frees the primary effects packet buffers.
+0x800894C8, function start — WorldMapClearEffectLayerForOwner; clears an owner's active effect layer.
+0x80089514, function start — WorldMapDeactivateOwnerEffects; deactivates all effects owned by an entity.
+0x80089580, function start — WorldMapUpdateEffectParticles; advances active World Map effect particles.
+0x80089748, function start — WorldMapUpdateEffects; updates and spawns World Map particle effects.
+0x80089C78, function start — WorldMapRenderEffects; renders the authenticated World Map effects layer.
+0x8008A294, instruction site — completes the authenticated effects shadow path.
+0x8008A2C8, function start — WorldMapPlayerTaskInit; creates the on-foot player and restores travel state.
+0x8008A72C, function start — WorldMapPlayerTaskUpdate; runs player movement, collisions, exits, animation, and following state.
+0x8008B2BC, function start — WorldMapPartyMember1TaskInit; initializes the first following party member.
+0x8008B644, function start — WorldMapPartyMemberTaskUpdate; updates both following party members.
+0x8008BB40, function start — WorldMapPartyMember2TaskInit; initializes the second following party member.
+0x8008BEC8, function start — WorldMapStepGearTowardTarget; advances a Gear toward wrapped target coordinates.
+0x8008BFD4, function start — WorldMapAddDynamicCollision; appends an entity cylinder to the collision ring.
+0x8008C040, function start — WorldMapProcessDynamicCollisions; tests a position against dynamic entity cylinders.
+0x8008C1DC, function start — WorldMapUpdateGearGroundEffect; updates a Gear's terrain-contact effect.
+0x8008C28C, function start — WorldMapCreateGearSpriteActor; creates and initializes a party Gear sprite.
+0x8008C364, function start — WorldMapCreateGear; resolves a party slot's Gear state and visibility.
+0x8008C530, function start — WorldMapPlayerGearTaskInit; initializes the leader's Gear and saved movement state.
+0x8008C844, function start — WorldMapPlayerGearTaskUpdate; runs leader Gear movement, boarding, collisions, and exits.
+0x8008D3F0, function start — WorldMapPartyGear1TaskInit; initializes the first following party Gear.
+0x8008D678, function start — WorldMapPartyGearTaskUpdate; updates both nonleader party Gears.
+0x8008DD6C, function start — WorldMapPartyGear2TaskInit; initializes the second following party Gear.
+0x8008DFF4, function start — WorldMapGetSavedVehiclePosition; expands the saved fixed-point vehicle position.
+0x8008E034, function start — WorldMapSetSavedVehiclePosition; stores the fixed-point vehicle position.
+0x8008E078, function start — WorldMapSetupYggdrasilInternalExit; selects an internal vehicle exit.
+0x8008E0F0, function start — WorldMapFindYggdrasilLandingDirection; finds the first valid landing heading.
+0x8008E190, function start — WorldMapYggdrasilTaskInit; restores vehicle flight, landing, model, and radar state.
+0x8008E76C, function start — WorldMapYggdrasilTaskUpdate; runs vehicle flight, landing, boarding, collision, and exit states.
+0x800906E0, function start — WorldMapYggdrasilSubModelsTaskInit; attaches and initializes vehicle engine submodels.
+0x800907F4, function start — WorldMapYggdrasilSubModelsTaskUpdate; updates vehicle engine rotations.
+0x80090A18, function start — WorldMapUpdateInputTransitionFlag; derives a one-frame input transition flag.
+0x80090A84, function start — WorldMapUpdatePlayerControls; converts input into player movement and actions.
+0x80090C68, function start — WorldMapUpdateGearControls; converts input into Gear movement and actions.
+0x80090E14, function start — WorldMapUpdateYggdrasilLandingControls; handles constrained landing controls.
+0x80090FB4, function start — WorldMapUpdateYggdrasilFlightControls; updates vehicle flight, orientation, and actions.
+0x80091430, function start — WorldMapWorldCameraTaskInit; initializes wrapped world-camera target and yaw state.
+0x800914D0, function start — WorldMapWorldCameraTaskUpdate; follows the wrapped target and updates streamed-grid movement.
+0x80091B54, function start — WorldMapCameraTaskInit; selects initial zoom, pitch, distance, and camera tables.
+0x80091C18, function start — WorldMapCameraTaskUpdate; interpolates camera mode, distance, pitch, and view vectors.
+0x80091FF8, function start — WorldMapSelectCameraZoomLevel; chooses a terrain-safe camera distance.
+0x80092234, function start — WorldMapMinimapYTaskInit; initializes minimap vertical transition state.
+0x800922AC, function start — WorldMapMinimapYTaskUpdate; animates minimap height during takeoff and landing.
+0x800923A8, function start — WorldMapFaderTaskInit; initializes the full-screen transition fade packets.
+0x800925A0, function start — WorldMapFaderTaskUpdate; renders and advances the active transition fade.
+0x80092BE4, function start — WorldMapExitTaskInit; initializes the active-exit prompt window.
+0x80092C70, function start — WorldMapExitTaskUpdate; updates and renders the changing exit prompt.
+0x80092DF8, function start — WorldMapDialogTaskInit; initializes the secondary World Map dialog task.
+0x80092FD8, function start — WorldMapDialogTaskUpdate; manages and renders the secondary dialog state.
+0x800931D8, function start — WorldMapTintTextureRamp; generates palette ramps toward a supplied color.
+0x80093354, function start — WorldMapWrapPosition; wraps fixed-point coordinates across world boundaries.
+0x80093484, function start — WorldMapWrapCameraRelativePosition; wraps camera-relative world deltas.
+0x80093534, function start — WorldMapWrapModelRelativePosition; wraps model-relative world deltas.
+0x800935DC, function start — WorldMapIntersectHeightPlane; solves terrain height from a plane normal.
+0x80093660, function start — WorldMapGetChunkForPosition; resolves coordinates to a loaded chunk cell.
+0x80093740, function start — WorldMapCalculateTerrainNormal; selects a triangle and computes its surface normal.
+0x80093978, function start — WorldMapGetAltitude; interpolates terrain altitude at a world position.
+0x80093A5C, function start — WorldMapGetElevationWithWater; resolves terrain or animated-water elevation.
+0x80093E8C, function start — WorldMapGetMaterial; reads the packed material word at a world position.
+0x80093F18, function start — WorldMapGetGroundType; returns the selected terrain triangle's ground type.
+0x80093FE4, function start — WorldMapGetMaterialShape; returns the terrain material shape nibble.
+0x80094028, function start — WorldMapGetTerrainAuxiliaryType; extracts an auxiliary terrain type.
+0x80094060, function start — WorldMapIsTerrainBlockedForTravelMode; tests travel permissions by ground type.
+0x80094088, function start — WorldMapChooseTerrainSlideVector; chooses a vector along a blocking edge.
+0x80094154, function start — WorldMapHorizontalDistance; computes wrapped horizontal distance.
+0x800941C4, function start — WorldMapSelectDirectionToTarget; computes heading and normalized target direction.
+0x80094238, function start — WorldMapSetupExits; activates exits valid at the current position.
+0x80094364, function start — WorldMapFindExitAtPositionByType; finds a containing exit of the requested type.
+0x800945C8, function start — WorldMapCheckNegativeXBoundaryCrossing; tests crossing the previous X cell edge.
+0x80094750, function start — WorldMapCheckPositiveZBoundaryCrossing; tests crossing the next Z cell edge.
+0x800948D8, function start — WorldMapCheckNegativeZBoundaryCrossing; tests crossing the previous Z cell edge.
+0x80094A5C, function start — WorldMapCheckTerrainTraversal; validates crossed terrain cells for the travel mode.
+0x800951A8, function start — WorldMapResolveTerrainCollision; accepts, blocks, or slides a terrain movement.
+0x800952B0, function start — WorldMapOrientSlideVector; orients a collision slide vector.
+0x80095324, function start — WorldMapDeriveSlideVectorFromNormal; derives a slide vector from a surface normal.
+0x80095414, function start — WorldMapCheckPosition; resolves ordinary actor terrain and model collisions.
+0x80095CD4, function start — WorldMapCheckYggdrasilPosition; resolves flying vehicle movement and collisions.
+0x800960BC, function start — WorldMapFreeStreamingData; frees active streaming command buffers.
+0x80096130, function start — WorldMapWaitForStreamingQueue; waits for a free streaming queue slot.
+0x8009623C, function start — WorldMapQueueCDCellRead; appends a CD cell read to the current batch.
+0x800962B0, function start — WorldMapQueuePCCellRead; appends a PC cell read to the current batch.
+0x80096328, function start — WorldMapFinalizeCDCellBatch; sorts and publishes a CD streaming batch.
+0x800963E4, function start — WorldMapSortCDStreamingEntries; sorts CD reads by sector.
+0x800964B0, function start — WorldMapSortPCStreamingEntries; sorts PC reads by file offset.
+0x800965A4, function start — WorldMapFinalizePCCellBatch; sorts and publishes a PC streaming batch.
+0x80096668, function start — WorldMapStreamingPendingCount; returns queued streaming batch count.
+0x80096694, function start — WorldMapWaitForStreamingCompletion; services streaming until completion.
+0x800966CC, function start — WorldMapExecutePCStreamingBatch; executes one sorted PC streaming batch.
+0x800967E4, function start — WorldMapServiceStreaming; services one queued CD or PC batch.
+0x800968E0, function start — WorldMapUpdateCDStreamingState; advances asynchronous CD streaming.
+0x8009699C, function start — WorldMapStartCDCellRead; initializes reads for a sorted CD cell batch.
+0x80096F18, function start — WorldMapComputeCameraVector; builds camera eye, target, and up vectors.
+0x80097070, function start — WorldMapExtractCameraAngles; extracts camera angles from view vectors.
+0x80097244, function start — WorldMapBuildLookAtViewMatrix; builds a complete translated look-at matrix.
+0x80097440, function start — WorldMapBuildViewMatrix; builds the rotated and translated view matrix.
+0x8009766C, function start — WorldMapAllocateState; allocates the 64-entry World Map task state.
+0x800976A0, function start — WorldMapFreeState; frees the World Map task state.
+0x800976C8, function start — WorldMapInitializeState; clears all task callbacks and sprite pointers.
+0x800976FC, function start — WorldMapAssignTaskInitCallback; resets a task and assigns its init callback.
+0x80097718, function start — WorldMapSetupTask; claims a task slot and assigns callbacks.
+0x80097770, function start — WorldMapChangeEntityState; queues an entity state command.
+0x80097800, function start — WorldMapDispatchTasks; initializes or updates all active tasks.
+0x800978FC, function start — WorldMapCreatePolyFT3Array; allocates terrain triangle packet buffers.
+0x800979C8, function start — WorldMapLoadGroundTextures; builds fogged palettes and uploads ground textures.
+0x80097BC0, function start — WorldMapSetupInitialGrid; initializes the streamed grid and water phase.
+0x80097CB8, function start — WorldMapResetStreamingGrid; resets streamed-grid pointers and indices.
+0x80097D64, function start — WorldMapFreeLoadedChunks; frees all loaded World Map chunks.
+0x80097DC0, function start — WorldMapTriggerInitialLoading; queues initial 3x3 and 9x9 cell loads.
+0x80098044, function start — WorldMapInitializeFrustumPlanes; computes tile visibility plane normals.
+0x800980D4, function start — WorldMapSetGridUpdateMask; records streamed-grid edge crossings.
+0x800981C8, function start — WorldMapUpdateGridIndices; rebuilds wrapped 9x9 cell indices.
+0x800983A0, function start — WorldMapPrepareTerrainVisibility; classifies visible megatiles and subtiles.
+0x800987AC, function start — WorldMapClassifyTileVisibility; classifies a tile against frustum planes.
+0x80098CC0, function start — WorldMapUpdateStreamingCells; frees departed cells and queues new cells.
+0x8009932C, function start — WorldMapDrawGround; dispatches visible terrain and water quadrants.
+0x800996D4, instruction site — completes the authenticated terrain and water shadow path.
+0x80099708, function start — WorldMapDrawGroundCell; builds a wrapped vertex grid with water heights.
+0x8009980C, function start — WorldMapEmitGroundCellTriangles; projects and emits terrain FT3 packets.
+0x80099BFC, function start — WorldMapRenderCellDecorationPackets; emits loaded-cell decoration quads.
+0x80099E78, instruction site — completes the authenticated decoration projection helper.

@@ -1,0 +1,53 @@
+# image-id: movie-overlay
+# annotated_functions/total_functions: 27/27
+# Total basis: union of Ghidra functions and recovered callbacks/entries.
+# sha256: 50e1a9d9e08b90eed0c2da1c289507e71cbf51749893a92f457ce79a59701f9a
+# load-address: 0x8006faf0
+# identity-source: native_renderer/xg_render_manifest.toml
+# source-record-id: movie-image
+# format: address, note
+
+0x800704E8, function start — MovieRunCdReadStressTestScreen; runs the interactive CD read and verification monitor.
+0x80070DCC, function start — MovieUpdateCdReadStressTest; polls and advances CD stress operations.
+0x800712C4, function start — MovieAdvanceCdReadVerification; verifies asynchronous readback data and records mismatches.
+0x80071BA0, function start — MovieQueueRandomSectorRead; allocates and queues a random-sector test read.
+0x80071C34, function start — MovieStartCdReadTestOperation; starts a selected CD stress operation.
+0x80072480, function start — MovieRunDiscChangeTest; runs the interactive disc-change diagnostic.
+0x8007293C, function start — MovieReinitializeCdAfterDiscChange; resets CD state after media replacement.
+0x800729A8, function start — MovieReadHostFile; reads a development host file into memory.
+0x80072A08, function start — MovieAdvanceDiscChangeValidation; validates PlayStation and Xenogears disc identity.
+0x80072D84, function start — MovieInitDarkAnimatedQuads; initializes dark double-buffered menu quads.
+0x80072F98, function start — MovieUpdateDarkAnimatedQuad; interpolates and submits one dark menu quad.
+0x80073328, function start — MovieInitBrightAnimatedQuads; initializes bright double-buffered menu quads.
+0x800734B8, function start — MovieUpdateBrightAnimatedQuad; interpolates and submits one bright menu quad.
+0x800737EC, function start — MovieModuleEntry; runs scripted playback or the fourteen-item debug menu.
+0x80073B00, instruction site — selects scripted playback or the Movie debug menu.
+0x80073B84, call site — scripted Movie path invokes MovieLaunchScriptedMovie.
+0x80073BD0, call site — initializes dark animated Movie menu quads.
+0x80073BEC, call site — initializes bright animated Movie menu quads.
+0x80073F6C, call site — resolves a selected STR start frame to a sector offset.
+0x8007407C, call site — determines the selected STR's final frame number.
+0x80074230, instruction site — dispatches the fourteen-way Movie debug menu.
+0x80074678, call site — launches debug-menu movie playback.
+0x800746B0, call site — launches the raw-sector monitor.
+0x800746DC, call site — launches the CD read stress test.
+0x80074708, call site — launches the FAT browser.
+0x80074734, call site — launches the disc-change test.
+0x800747AC, function start — MoviePollMenuInput; handles debounced menu navigation and adjustment.
+0x80074AF0, function start — MovieRandom; advances the deterministic Movie PRNG.
+0x80074B58, function start — MovieClearFramebuffer; clears the full 640x480 VRAM rectangle.
+0x80074BA4, function start — MovieFindStrFrameSector; finds the sector containing a requested STR frame.
+0x8007519C, function start — MovieFindLastStrFrameNumber; reads the final valid STR frame number.
+0x80075534, function start — MovieRunCdSectorMonitor; displays and navigates raw sector contents.
+0x80075D4C, function start — MovieGetFatEntrySize; decodes a filesystem entry size.
+0x80075D8C, function start — MovieRunFatBrowser; displays filesystem entries and paths.
+0x8007625C, function start — MovieLaunchDebugMovie; configures and launches debug-menu playback.
+0x800763BC, function start — MovieLaunchScriptedMovie; configures and launches scripted playback.
+0x80076488, function start — MovieRunPlayback; runs the core resident STR playback loop.
+0x80076588, call site — initializes the resident STR subsystem.
+0x800765F4, call site — configures resident STR display and decode parameters.
+0x80076668, instruction site — materializes MovieDecodeSliceCallback for the resident player.
+0x80076698, call site — starts resident STR playback with selected options.
+0x80076834, call site — shuts down the resident STR player.
+0x800768D8, function start — MovieDecodeSliceCallback; tracks decode progress and swaps frame state.
+0x800769A4, function start — MoviePollSkipInput; handles playback skip and audio fade countdown.

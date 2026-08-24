@@ -1,0 +1,188 @@
+schema = "xenogears-overlay-annotations/v1"
+
+[[images]]
+id = "field-overlay"
+subsystem = "field"
+logical_name = "field_module.exe"
+sha256 = "920a3e20ccc5d8aae32225c272066e819c427b566b2274df60b182e1265f04dd"
+crc32 = "4bba5a07"
+size = 284672
+load_address = "0x8006f000"
+image_format = "ps-x-exe"
+header_size = 2048
+loaded_size = 282624
+annotations = "annotations/overlays/field-overlay_annotations.csv"
+identity_source = "native_renderer/xg_render_manifest.toml"
+source_kind = "render-manifest-field"
+source_record_id = "field-image"
+artifact = "overlays/field_module.exe"
+
+[[images]]
+id = "world-overlay"
+subsystem = "world"
+logical_name = "worldmap.prg"
+sha256 = "4c15fd32b3a03d7cd5ea4403dcaabc70abaf99b6aaca65d63d6866803edaac70"
+crc32 = "082b6ba5"
+size = 180422
+load_address = "0x8006faf0"
+image_format = "raw"
+header_size = 0
+loaded_size = 180422
+annotations = "annotations/overlays/world-overlay_annotations.csv"
+identity_source = "native_renderer/xg_render_manifest.toml"
+source_kind = "render-manifest-world"
+source_record_id = "world-image"
+artifact = "overlays/worldmap_module.bin"
+
+[[images]]
+id = "battle-overlay"
+subsystem = "battle"
+logical_name = "battle.bin"
+sha256 = "1830b4ef1fe37129972fc310dfad534f8161d6c0b123e74254c3711334a3e291"
+crc32 = "0fb96498"
+size = 343936
+load_address = "0x8006faf0"
+image_format = "raw"
+header_size = 0
+loaded_size = 343936
+annotations = "annotations/overlays/battle-overlay_annotations.csv"
+identity_source = "native_renderer/xg_render_manifest.toml"
+source_kind = "render-manifest-battle"
+source_record_id = "battle-image"
+artifact = "overlays/battle_module.bin"
+
+[[images]]
+id = "battling-overlay"
+subsystem = "battling"
+logical_name = "battling.bin"
+sha256 = "3e6df915e9c7f05f5fb997cb331392f1333e867dfb2628cd65e5e1ea1575646e"
+crc32 = "a76dcf88"
+size = 142953
+load_address = "0x8006faf0"
+image_format = "raw"
+header_size = 0
+loaded_size = 142953
+annotations = "annotations/overlays/battling-overlay_annotations.csv"
+identity_source = "native_renderer/xg_render_manifest.toml"
+source_kind = "render-manifest-battling"
+source_record_id = "battling-image"
+artifact = "overlays/battling_module.bin"
+
+[[images]]
+id = "menu-overlay"
+subsystem = "menu"
+logical_name = "menu.bin"
+sha256 = "82f84a24ac1fd1979754e1cc9c861405fb59ce95dd78db00a76f00c8f1bd177d"
+crc32 = "4d16749c"
+size = 153864
+load_address = "0x801c5000"
+image_format = "raw"
+header_size = 0
+loaded_size = 153864
+annotations = "annotations/overlays/menu-overlay_annotations.csv"
+identity_source = "native_renderer/xg_render_manifest.toml"
+source_kind = "render-manifest-menu"
+source_record_id = "menu-image"
+artifact = "overlays/menu_module.bin"
+
+[[images]]
+id = "movie-overlay"
+subsystem = "movie"
+logical_name = "movie.bin"
+sha256 = "50e1a9d9e08b90eed0c2da1c289507e71cbf51749893a92f457ce79a59701f9a"
+crc32 = "0b5b82a1"
+size = 29779
+load_address = "0x8006faf0"
+image_format = "raw"
+header_size = 0
+loaded_size = 29779
+annotations = "annotations/overlays/movie-overlay_annotations.csv"
+identity_source = "native_renderer/xg_render_manifest.toml"
+source_kind = "render-manifest-movie"
+source_record_id = "movie-image"
+artifact = "overlays/movie_module.bin"
+
+[[images]]
+id = "member-change-menu-overlay"
+subsystem = "member-change-menu"
+logical_name = "member_change_menu.bin"
+sha256 = "3b9e2b890c27ae0de97fe343ac75cd35c05fe7f9605ae387d2166da0be78109c"
+crc32 = "aa61c9e7"
+size = 26624
+load_address = "0x801c5000"
+image_format = "raw"
+header_size = 0
+loaded_size = 26624
+annotations = "annotations/overlays/member-change-menu-overlay_annotations.csv"
+identity_source = "native_renderer/xg_render_manifest.toml"
+source_kind = "render-manifest-member-change-menu"
+source_record_id = "member-change-menu-image"
+artifact = "overlays/member_change_menu.bin"
+
+[[images]]
+id = "shop-menu-overlay"
+subsystem = "shop-menu"
+logical_name = "shop_menu.bin"
+sha256 = "7890e14bcabddcf85368de10783ecff8daa166dc5ac254e06db5e27959cab4cf"
+crc32 = "d558e06e"
+size = 55296
+load_address = "0x801c5000"
+image_format = "raw"
+header_size = 0
+loaded_size = 55296
+annotations = "annotations/overlays/shop-menu-overlay_annotations.csv"
+identity_source = "native_renderer/xg_render_manifest.toml"
+source_kind = "render-manifest-shop-menu"
+source_record_id = "shop-menu-image"
+artifact = "overlays/shop_menu.bin"
+
+[[images]]
+id = "gear-shop-menu-overlay"
+subsystem = "gear-shop-menu"
+logical_name = "gear_shop_menu.bin"
+sha256 = "c7a1982f0ea624c81fd0f85e1a1335c7517723f12ba3e2d08395842392423691"
+crc32 = "77c1d7e4"
+size = 83968
+load_address = "0x801c5000"
+image_format = "raw"
+header_size = 0
+loaded_size = 83968
+annotations = "annotations/overlays/gear-shop-menu-overlay_annotations.csv"
+identity_source = "native_renderer/xg_render_manifest.toml"
+source_kind = "render-manifest-gear-shop-menu"
+source_record_id = "gear-shop-menu-image"
+artifact = "overlays/gear_shop_menu.bin"
+
+[[images]]
+id = "gear-helper-overlay"
+subsystem = "gear-helper"
+logical_name = "gear_helper.bin"
+sha256 = "14395a9f54c124fed016f07906cc882b2a9256d5ade2d10eef99e10fe9366523"
+crc32 = "ec219bef"
+size = 51200
+load_address = "0x801dc000"
+image_format = "raw"
+header_size = 0
+loaded_size = 51200
+annotations = "annotations/overlays/gear-helper-overlay_annotations.csv"
+identity_source = "native_renderer/xg_render_manifest.toml"
+source_kind = "render-manifest-gear-helper"
+source_record_id = "gear-helper-image"
+artifact = "overlays/lib_gear.bin"
+
+[[images]]
+id = "battle-event-overlay"
+subsystem = "battle-event"
+logical_name = "battle_event.bin"
+sha256 = "1cac23da143e6dfc8f1f4b52ed5754392ea853ee58d6e62d65fd7fbfa86932cc"
+crc32 = "81aee074"
+size = 20480
+load_address = "0x801e5000"
+image_format = "raw"
+header_size = 0
+loaded_size = 20480
+annotations = "annotations/overlays/battle-event-overlay_annotations.csv"
+identity_source = "native_renderer/xg_render_manifest.toml"
+source_kind = "render-manifest-battle-event"
+source_record_id = "battle-event-image"
+artifact = "overlays/battle_event.bin"

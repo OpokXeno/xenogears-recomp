@@ -13,6 +13,8 @@ FIELD_ID: Final = "field-image"
 PRODUCER_ID: Final = "render-field-character-sprites"
 SITE_ID: Final = "field-vsync-call-0x800781bc"
 TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]*$")
+GENERIC_OVERLAY_TOKEN = re.compile(r"^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*$")
+FILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 Digest32 = NewType("Digest32", bytes)
 ManifestValue: TypeAlias = str | int | float | bool | list["ManifestValue"] | dict[str, "ManifestValue"]
 
@@ -62,6 +64,28 @@ class BlockedOverlay:
 
 
 @dataclass(frozen=True, slots=True)
+class SourceProvenance:
+    disc: int
+    directory: int
+    file: int
+    sector: int
+    stored_size: int
+
+
+@dataclass(frozen=True, slots=True)
+class AuthenticatedArtifactOverlay:
+    key: str
+    identifier: str
+    file: str
+    identity: FileIdentity
+    base_address: int
+    image_format: str
+    header_size: int
+    loaded_size: int
+    source: SourceProvenance | None
+
+
+@dataclass(frozen=True, slots=True)
 class FunctionSpec:
     identifier: str
     name: str
@@ -99,6 +123,7 @@ class BlockedSite:
 class ManifestContract:
     game: GameSpec
     field: AuthenticatedOverlay | BlockedOverlay
+    overlays: tuple[AuthenticatedArtifactOverlay, ...]
     functions: tuple[FunctionSpec, ...]
     producer: ProducerSpec
     site: AuthenticatedSite | BlockedSite
@@ -135,6 +160,12 @@ def closed(value: ManifestValue, keys: set[str], label: str) -> dict[str, Manife
 def text(value: ManifestValue, label: str) -> str:
     if not isinstance(value, str) or TOKEN.fullmatch(value) is None:
         fail(f"schema {label} must be a safe metadata token")
+    return value
+
+
+def overlay_token(value: ManifestValue, label: str) -> str:
+    if not isinstance(value, str) or GENERIC_OVERLAY_TOKEN.fullmatch(value) is None:
+        fail(f"schema {label} must be a safe generic overlay token")
     return value
 
 
@@ -182,11 +213,10 @@ def parse_game(raw: ManifestValue) -> GameSpec:
     return GameSpec(identity, hex_value(value["namespace_crc32"], "game.namespace_crc32", 8), address(value["base_address"], "game.base_address"), image_format, header_size, loaded_size)
 
 
-def parse_overlay(raw: ManifestValue) -> AuthenticatedOverlay | BlockedOverlay:
-    table = closed(raw, {"field"}, "overlay")
-    if not isinstance(table["field"], dict):
+def parse_field_overlay(raw: ManifestValue) -> AuthenticatedOverlay | BlockedOverlay:
+    if not isinstance(raw, dict):
         fail("schema overlay.field must be a table")
-    value = table["field"]
+    value = raw
     state = value.get("state")
     if state == "blocked":
         blocked = closed(value, {"id", "state", "base_address", "reason_code"}, "overlay.field")
@@ -225,6 +255,87 @@ def parse_overlay(raw: ManifestValue) -> AuthenticatedOverlay | BlockedOverlay:
     if base != 0x8006F000:
         fail("base mismatch: field-image must load at 0x8006f000")
     return AuthenticatedOverlay(file_name, identity, base, range_offset, range_size, hex_value(authenticated["range_crc32"], "overlay.field.range_crc32", 8), image_format, header_size, loaded_size)
+
+
+def parse_artifact_overlay(key: str, raw: ManifestValue) -> AuthenticatedArtifactOverlay:
+    label = f"overlay.{key}"
+    required = {
+        "id", "state", "file", "full_sha256", "full_crc32", "full_size",
+        "base_address", "image_format", "header_size", "loaded_size",
+    }
+    provenance = {
+        "source_disc", "source_directory", "source_file", "source_sector",
+    }
+    provenance_shapes = (
+        required | provenance | {"compressed_size"},
+        required | provenance | {"archive_size"},
+    )
+    if not isinstance(raw, dict) or set(raw) not in (required, *provenance_shapes):
+        fail(f"schema {label} fields are not closed")
+    value = raw
+    identifier = overlay_token(value["id"], f"{label}.id")
+    if value["state"] != "authenticated":
+        fail(f"optional overlay {identifier} must be authenticated")
+    file_name = value["file"]
+    if not isinstance(file_name, str) or FILE_NAME.fullmatch(file_name) is None:
+        fail(f"schema {label}.file must be a safe basename")
+    full_size = integer(value["full_size"], f"{label}.full_size", True)
+    image_format = text(value["image_format"], f"{label}.image_format")
+    header_size = integer(value["header_size"], f"{label}.header_size")
+    loaded_size = integer(value["loaded_size"], f"{label}.loaded_size", True)
+    if image_format == "raw":
+        if header_size != 0 or loaded_size != full_size:
+            fail(f"{label} raw mapping must cover a headerless full image")
+    elif image_format == "ps-x-exe":
+        if header_size != 0x800 or header_size + loaded_size > full_size:
+            fail(f"{label} mapping must describe a PS-X EXE payload")
+    else:
+        fail(f"{label} image format is unsupported")
+    base = address(value["base_address"], f"{label}.base_address")
+    if base + loaded_size > 0x100000000:
+        fail(f"{label} loaded range exceeds the 32-bit address space")
+    source = None
+    if provenance <= set(value):
+        size_field = "archive_size" if "archive_size" in value else "compressed_size"
+        source = SourceProvenance(
+            integer(value["source_disc"], f"{label}.source_disc", True),
+            integer(value["source_directory"], f"{label}.source_directory"),
+            integer(value["source_file"], f"{label}.source_file"),
+            integer(value["source_sector"], f"{label}.source_sector", True),
+            integer(value[size_field], f"{label}.{size_field}", True),
+        )
+        if source.disc != 1:
+            fail(f"{label} source provenance must identify Disc 1")
+        if source.stored_size > full_size:
+            fail(f"{label} source stored size exceeds the image size")
+    identity = FileIdentity(
+        digest(value["full_sha256"], f"{label}.full_sha256"),
+        hex_value(value["full_crc32"], f"{label}.full_crc32", 8),
+        full_size,
+    )
+    return AuthenticatedArtifactOverlay(
+        key, identifier, file_name, identity, base, image_format, header_size,
+        loaded_size, source)
+
+
+def parse_overlay(raw: ManifestValue) -> tuple[
+        AuthenticatedOverlay | BlockedOverlay,
+        tuple[AuthenticatedArtifactOverlay, ...]]:
+    if not isinstance(raw, dict) or "field" not in raw:
+        fail("required overlay.field table is missing")
+    for key in raw:
+        overlay_token(key, "overlay key")
+    field = parse_field_overlay(raw["field"])
+    overlays = tuple(
+        parse_artifact_overlay(key, value)
+        for key, value in raw.items()
+        if key != "field"
+    )
+    fixed_ids = {GAME_ID, FIELD_ID, PRODUCER_ID, SITE_ID, "draw-otag", "vsync"}
+    identifiers = [overlay.identifier for overlay in overlays]
+    if len(set(identifiers)) != len(identifiers) or fixed_ids.intersection(identifiers):
+        fail("duplicate manifest record id")
+    return field, overlays
 
 
 def parse_functions(raw: ManifestValue) -> tuple[FunctionSpec, ...]:
@@ -291,4 +402,5 @@ def load_contract(path: Path) -> ManifestContract:
     root = closed(raw, {"schema", "game", "overlay", "functions", "producers", "sites"}, "root")
     if root["schema"] != SCHEMA:
         fail("schema version is unsupported")
-    return ManifestContract(parse_game(root["game"]), parse_overlay(root["overlay"]), parse_functions(root["functions"]), parse_producer(root["producers"]), parse_site(root["sites"]))
+    field, overlays = parse_overlay(root["overlay"])
+    return ManifestContract(parse_game(root["game"]), field, overlays, parse_functions(root["functions"]), parse_producer(root["producers"]), parse_site(root["sites"]))

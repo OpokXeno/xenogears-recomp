@@ -1,0 +1,109 @@
+# image-id: shop-menu-overlay
+# annotated_functions/total_functions: 100/118
+# Total basis: union of Ghidra functions and recovered callbacks/entries.
+# sha256: 7890e14bcabddcf85368de10783ecff8daa166dc5ac254e06db5e27959cab4cf
+# load-address: 0x801c5000
+# identity-source: native_renderer/xg_render_manifest.toml
+# source-record-id: shop-menu-image
+# format: address, note
+
+0x801C5040, function start — ShopMenuSetFt4Rect; assigns matching XY and UV rectangles.
+0x801C50B0, function start — ShopMenuIsCharacterFlagSet; tests a character availability bit.
+0x801C50CC, function start — ShopMenuGetCharacterBitMask; returns a character bit mask.
+0x801C50E8, function start — ShopMenuParseNumberToString; converts a number to display digits.
+0x801C5194, function start — ShopMenuUnk32CManager; allocates or frees MenuUnk2.
+0x801C51F8, function start — ShopMenuSetManager; allocates or frees menu-manager state.
+0x801C525C, function start — ShopMenuSelectionMenuManager; allocates or frees selection state.
+0x801C52C0, function start — ShopMenuUnk354Manager; allocates or frees state at 0x354.
+0x801C5324, function start — ShopMenuDressingRoomManager; allocates or frees dressing-room state.
+0x801C5388, function start — ShopMenuUnk348Manager; allocates or frees background state.
+0x801C53EC, function start — ShopMenuUnk1E20Manager; allocates or frees extended state.
+0x801C5450, function start — ShopMenuShopManager; allocates or frees shop-specific state.
+0x801C54B4, function start — ShopMenuLoadResources; loads and decompresses shop resources.
+0x801C58F4, function start — ShopMenuInitialize; initializes characters and loads resources.
+0x801C5A6C, function start — ShopMenuResetRenderContext; resets double-buffer state.
+0x801C5F44, function start — ShopMenuInitializeWindowBorders; resolves border texture metadata.
+0x801C604C, function start — ShopMenuMovePointerCursor; moves the pointer and highlight panel.
+0x801C6430, function start — ShopMenuClearSelectionFlags; clears selection and render flags.
+0x801C6460, function start — ShopMenuInitializeShadedQuad; initializes a shaded POLY_G4.
+0x801C64DC, function start — ShopMenuInitializeBackgrounds; initializes selection and dimming primitives.
+0x801C6828, function start — ShopMenuLoadShopItemsData; loads or frees item definitions and descriptions.
+0x801C6A6C, function start — ShopMenuInitializeShopData; decodes inventory and initializes graphics.
+0x801C6E90, function start — ShopMenuSetVertices; builds screen-centered quad vertices.
+0x801C6EE8, function start — ShopMenuSetWindowBorderPrimitive; configures a border primitive.
+0x801C6F30, function start — ShopMenuUpdateScrollBarHandle; allocates or updates scroll-handle geometry.
+0x801C70B8, function start — ShopMenuFreeScrollBarHandle; frees scroll-handle state.
+0x801C70FC, function start — ShopMenuInitializeArrowCursor; allocates an arrow cursor.
+0x801C7178, function start — ShopMenuUpdateArrowCursor; positions and updates an arrow cursor.
+0x801C7314, function start — ShopMenuFreeArrowCursor; disables and frees an arrow cursor.
+0x801C7370, function start — ShopMenuInitializeWindowGraphics; initializes window graphics.
+0x801C768C, function start — ShopMenuInitializeScrollBar; initializes scroll-bar graphics.
+0x801C77F0, function start — ShopMenuInitializeWindowBorderCorners; initializes corner graphics.
+0x801C7A38, function start — ShopMenuSetWindowBorderTop; configures top-border geometry.
+0x801C7D7C, function start — ShopMenuSetWindowBorderBottom; configures bottom-border geometry.
+0x801C80C8, function start — ShopMenuSetWindowBorderLeft; configures left-border geometry.
+0x801C8410, function start — ShopMenuSetWindowBorderRight; configures right-border geometry.
+0x801C875C, function start — ShopMenuSetWindow; assembles and activates a window.
+0x801C88E0, function start — ShopMenuFreeWindow; deactivates and frees a window.
+0x801C896C, function start — ShopMenuInitializeWindow; allocates or configures a window.
+0x801C8AF0, function start — ShopMenuUpdateWindows; advances opening-window dimensions.
+0x801C8C3C, function start — ShopMenuRenderPolygons; projects and queues FT4 arrays.
+0x801C8D58, function start — ShopMenuRenderString; queues a string's glyph quads.
+0x801C8DDC, function start — ShopMenuRenderScrollBarHandle; renders the active scroll handle.
+0x801C8E28, function start — ShopMenuRenderSelectionPointer; queues selection draw mode and pointer.
+0x801C8EB8, function start — ShopMenuRenderTopWindowBorder; renders the top border.
+0x801C908C, function start — ShopMenuRenderBottomWindowBorder; renders the bottom border.
+0x801C9260, function start — ShopMenuRenderLeftWindowBorder; renders the left border.
+0x801C9434, function start — ShopMenuRenderRightWindowBorder; renders the right border.
+0x801C9608, function start — ShopMenuRenderWindowBackground; renders the window background.
+0x801C9744, function start — ShopMenuRenderWindowBorderCorners; renders border corners.
+0x801C9890, function start — ShopMenuRenderScrollBar; renders scroll-bar track and ends.
+0x801C9AB4, function start — ShopMenuRenderWindows; renders all active windows.
+0x801C9C2C, function start — ShopMenuRenderPointerCursors; positions and queues pointers.
+0x801C9F7C, function start — ShopMenuRenderAuxGroup4; queues enabled auxiliary primitives.
+0x801CA00C, function start — ShopMenuRenderAuxGroup8; queues enabled auxiliary primitives.
+0x801CA09C, function start — ShopMenuRenderAuxQuads; projects and queues auxiliary quads.
+0x801CA214, function start — ShopMenuNoOpCountdown; retains the original no-op countdown.
+0x801CA22C, function start — ShopMenuRenderConfirmationText; projects and queues confirmation text.
+0x801CA388, function start — ShopMenuRenderBackgroundDim; queues dimming and draw mode.
+0x801CA404, function start — ShopMenuRenderAuxiliaryGroups; dispatches auxiliary groups.
+0x801CA444, function start — ShopMenuRenderSelectionMenu; styles and renders mode choices.
+0x801CAB0C, function start — ShopMenuRenderAuxTextGroups; renders two optional string groups.
+0x801CAB80, function start — ShopMenuRenderArrowCursors; renders active arrow cursors.
+0x801CABF4, function start — ShopMenuRender; composes shop graphics and dimming.
+0x801CAC7C, function start — ShopMenuPlaySoundEffect; submits a shop sound effect.
+0x801CACC8, function start — ShopMenuPollInput; maps controller events to commands.
+0x801CAED4, function start — ShopMenuUpdateTransitionEffect; animates rotation and depth transitions.
+0x801CB014, function start — ShopMenuUpdateAndRender; updates input, transitions, rendering, and OT.
+0x801CB13C, function start — ShopMenuInitializePointerCursors; allocates and initializes pointers.
+0x801CB2FC, function start — ShopMenuFreePointerCursors; disables, flushes, and frees pointers.
+0x801CB340, function start — ShopMenuStartOpenMenuTransition; starts opening animation and sound.
+0x801CB370, function start — ShopMenuStartCloseMenuTransition; starts closing animation.
+0x801CB384, function start — ShopMenuConfirmationWindowInitialize; creates and displays confirmation text.
+0x801CB7F4, function start — ShopMenuConfirmationWindowFree; removes and frees confirmation state.
+0x801CB894, function start — ShopMenuConfirmationWindowGetChoice; runs yes/no or auto-advance input.
+0x801CBA50, function start — ShopMenuConfirmationWindow; executes one or two confirmation prompts.
+0x801CBB08, function start — ShopMenuFree; tears down resources and menu state.
+0x801CC024, function start — ShopMenuInitializeShopModeSelectionMenu; initializes buy, sell, and exit choices.
+0x801CC54C, function start — ShopMenuUpdateShopModeSelectionMenu; rebuilds mode cursors and text.
+0x801CC97C, function start — ShopMenuShopModeMenuHandleSelectedOption; dispatches buy, sell, or exit.
+0x801CCAD8, function start — ShopMenuShopModeMenuMain; runs the buy, sell, and exit menu.
+0x801CCD28, function start — ShopMenuMain; manages the complete shop submenu lifetime.
+0x801CD404, function start — ShopMenuSetStatChangeColor; colors increasing or decreasing stats.
+0x801CD5D0, function start — ShopMenuUpdateCharacterPortraits; rebuilds available portraits.
+0x801CD6F8, function start — ShopMenuUpdateBuyMenuExplanationGraphics; builds buy-screen labels.
+0x801CD7E4, function start — ShopMenuUpdateSellMenuExplanationGraphics; builds sell-screen labels.
+0x801CD8D0, function start — ShopMenuUpdateGoldGraphics; builds price, total, and resulting-gold digits.
+0x801CDBA0, function start — ShopMenuGetCharacterEquippedItemFlags; finds characters equipping an item.
+0x801CF2A0, function start — ShopMenuHandleBoughtItems; commits quantities and resulting gold.
+0x801CF678, function start — ShopMenuSetFinalPriceGraphics; builds final-price digits.
+0x801CF780, function start — ShopMenuBuyMenu; runs quantity selection and purchase confirmation.
+0x801D0C18, function start — ShopMenuHandleSoldItems; commits sold items and resulting gold.
+0x801D0E68, function start — ShopMenuSellMenu; runs the generic inventory sell loop.
+0x801D1658, function start — ShopMenuSellEquipmentMenu; runs the equipment sell flow.
+0x801D18A8, function start — ShopMenuSellAccessoriesMenu; sells accessories through the generic flow.
+0x801D18E8, function start — ShopMenuSellWeaponsMenu; sells weapons through the generic flow.
+0x801D1928, function start — ShopMenuSellItemsMenu; sells consumables through the generic flow.
+0x801D1968, function start — ShopMenuClearSellScreenState; clears sell-screen state and optional resources.
+0x801D1B18, function start — ShopMenuSellModeMenuHandleSelectedOption; dispatches a sell category.
+0x801D1CA4, function start — ShopMenuSellModeMenu; runs sell-category selection.

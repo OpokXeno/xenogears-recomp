@@ -1,6 +1,6 @@
 # Seeds for Slus 006 (SLUS-00664)
 # JAL targets: 589
-# Total seeds: 592
+# Total seeds: 644
 # Function-start seeds for the recompiler.
 # One 0x-prefixe address per line. Lines starting with # are ignored.
 # The recompiler also discovers functions dynamically from entry_pc, so this
@@ -123,6 +123,13 @@
 0x80025180
 0x800251C8
 0x80025224
+0x80025258
+0x8002541C
+0x80025544
+0x80025710
+0x80025718
+0x800257F0
+0x80026338
 0x8002675C
 0x800278F8
 0x8002804C
@@ -159,11 +166,27 @@
 0x8002C700
 0x8002C8CC
 0x8002CB54
+0x8002CBBC
 0x8002CC10
+0x8002CC74
 0x8002CCAC
 0x8002CCC8
 0x8002CD24
 0x8002CD64
+0x8002CDCC
+0x8002CF34
+0x8002CF58
+0x8002D0C0
+0x8002D0E4
+0x8002D180
+0x8002D244
+0x8002D530
+0x8002D6AC
+0x8002D77C
+0x8002D814
+0x8002D984
+0x8002DA14
+0x8002DAFC
 0x8002DB84
 0x8002DC9C
 0x8002DDE4
@@ -173,6 +196,7 @@
 0x800301C8
 0x80030228
 0x800302D4
+0x80030988
 0x80030EE8
 0x8003101C
 0x80031798
@@ -318,6 +342,23 @@
 0x8003C4C4
 0x8003C6E8
 0x8003CC84
+0x8003CD00
+0x8003CD30
+0x8003CD4C
+0x8003CD7C
+0x8003CD84
+0x8003CE04
+0x8003CE18
+0x8003CE38
+0x8003CE50
+0x8003CEC0
+0x8003CED4
+0x8003D208
+0x8003D328
+0x8003D340
+0x8003D358
+0x8003D4A4
+0x8003D4C4
 0x8003E290
 0x8003E3E0
 0x8003E5BC
@@ -610,3 +651,5 @@
 0x8003218C  # verified: decomp `HeapFreeBlocksWithFlag` (system/memory.c — heap sweep by content flag, module-transition teardown); bytes absent from generated C
 0x80032B64  # verified: decomp `HeapCalloc` (system/memory.c — zeroing allocator, public engine API called from game overlays); bytes absent from generated C
 0x8003BFA0  # verified: decomp `SoundSpuIRQHandler` (system/sound.c — installed via SpuSetIRQCallback, interrupt-context entry invisible to JAL walker); bytes absent from generated C
+0x8002E470  # verified: focused Ghidra audit `RenderFlatTriangleNearestMode`; indirect field-model handler entry initializes triangle packet stride/depth mode before shared body at 0x8002E490; no dispatch case before promotion
+0x8002E8DC  # verified: focused Ghidra audit `RenderFlatTriangleNearest`; indirect field-model handler entry initializes triangle packet stride/depth mode before shared body at 0x8002E8FC; no dispatch case before promotion

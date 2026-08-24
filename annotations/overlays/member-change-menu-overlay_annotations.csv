@@ -1,0 +1,73 @@
+# image-id: member-change-menu-overlay
+# annotated_functions/total_functions: 64/67
+# Total basis: union of Ghidra functions and recovered callbacks/entries.
+# sha256: 3b9e2b890c27ae0de97fe343ac75cd35c05fe7f9605ae387d2166da0be78109c
+# load-address: 0x801c5000
+# identity-source: native_renderer/xg_render_manifest.toml
+# source-record-id: member-change-menu-image
+# format: address, note
+
+0x801C5018, function start — MemberChangeMenuIsCharacterFlagSet; tests a character availability bit.
+0x801C5034, function start — MemberChangeMenuManageUnk2; allocates, clears, or frees MenuUnk2.
+0x801C5098, function start — MemberChangeMenuSetManager; allocates or frees the menu manager.
+0x801C50FC, function start — MemberChangeMenuSetSelectionMenu; allocates or frees selection state.
+0x801C5160, function start — MemberChangeMenuManageState354; allocates or frees auxiliary state at 0x354.
+0x801C51C4, function start — MemberChangeMenuDressingRoomManager; allocates or frees equipment and stat-preview state.
+0x801C5228, function start — MemberChangeMenuManageState348; allocates or frees auxiliary state at 0x348.
+0x801C528C, function start — MemberChangeMenuSetCharacters; allocates or frees active and benched records.
+0x801C5390, function start — MemberChangeMenuLoadResources; decompresses textures and initializes sound resources.
+0x801C559C, function start — MemberChangeMenuInitialize; initializes characters and loads resources.
+0x801C5714, function start — MemberChangeMenuResetRenderContext; resets double-buffer state.
+0x801C5724, function start — MemberChangeMenuUploadSmallVramImage; uploads an initialized 16x1 image.
+0x801C57A0, function start — MemberChangeMenuInitializeStringFt4Pair; initializes double-buffered string quads.
+0x801C5BEC, function start — MemberChangeMenuInitializeWindowBorders; resolves border texture metadata.
+0x801C5CF4, function start — MemberChangeMenuClearManagerFlags; clears manager render and selection flags.
+0x801C5D24, function start — MemberChangeMenuInitializeShadedQuad; initializes a vertical POLY_G4 gradient.
+0x801C5DA0, function start — MemberChangeMenuInitializeBackground; initializes cursor decoration and dimming.
+0x801C60EC, function start — MemberChangeMenuSetVertices; builds screen-centered quad vertices.
+0x801C6144, function start — MemberChangeMenuSetWindowBorderPrimitive; configures a translucent border primitive.
+0x801C618C, function start — MemberChangeMenuInitializeWindowGraphics; initializes one window's packet state.
+0x801C64A8, function start — MemberChangeMenuInitializeScrollBar; initializes scroll ornaments and track.
+0x801C660C, function start — MemberChangeMenuInitializeWindowBorderCorners; initializes four border corners.
+0x801C6854, function start — MemberChangeMenuSetWindowBorderTop; configures top-border UVs and geometry.
+0x801C6B98, function start — MemberChangeMenuSetWindowBorderBottom; configures bottom-border UVs and geometry.
+0x801C6EE4, function start — MemberChangeMenuSetWindowBorderLeft; configures left-border UVs and geometry.
+0x801C722C, function start — MemberChangeMenuSetWindowBorderRight; configures right-border UVs and geometry.
+0x801C7578, function start — MemberChangeMenuSetWindow; assembles and activates a complete window.
+0x801C76FC, function start — MemberChangeMenuFreeWindow; deactivates and frees a window.
+0x801C7788, function start — MemberChangeMenuInitializeWindow; allocates or configures a window.
+0x801C790C, function start — MemberChangeMenuUpdateWindows; advances window-opening dimensions.
+0x801C7A58, function start — MemberChangeMenuDrawCursors; positions and queues active cursors.
+0x801C7DA8, function start — MemberChangeMenuRenderAuxGroup4; queues up to four enabled auxiliary primitives.
+0x801C7E38, function start — MemberChangeMenuRenderAuxGroup8; queues up to eight enabled auxiliary primitives.
+0x801C7EC8, function start — MemberChangeMenuRenderAuxQuads; projects and queues up to six auxiliary quads.
+0x801C8040, function start — MemberChangeMenuRenderBackgroundDim; queues fullscreen dimming and draw mode.
+0x801C80BC, function start — MemberChangeMenuRenderCharacter; queues one portrait and statistic strings.
+0x801C83D0, function start — MemberChangeMenuRenderCharacters; renders active and benched records.
+0x801C846C, function start — MemberChangeMenuRenderAuxiliaryGroups; dispatches three auxiliary groups.
+0x801C849C, function start — MemberChangeMenuRenderTopWindowBorder; projects and queues the top border.
+0x801C8670, function start — MemberChangeMenuRenderBottomWindowBorder; projects and queues the bottom border.
+0x801C8844, function start — MemberChangeMenuRenderLeftWindowBorder; projects and queues the left border.
+0x801C8A18, function start — MemberChangeMenuRenderRightWindowBorder; projects and queues the right border.
+0x801C8BEC, function start — MemberChangeMenuRenderWindowBackground; projects and queues a background.
+0x801C8D28, function start — MemberChangeMenuRenderWindowBorderCorners; projects and queues four corners.
+0x801C8E74, function start — MemberChangeMenuRenderScrollBar; projects and queues scroll-bar packets.
+0x801C9098, function start — MemberChangeMenuRenderWindows; renders all active windows.
+0x801C9210, function start — MemberChangeMenuRender; composes the menu and dimming layer.
+0x801C9270, function start — MemberChangeMenuPlaySoundEffect; submits a menu sound effect.
+0x801C92AC, function start — MemberChangeMenuPollInput; maps controller events into commands.
+0x801C94A0, function start — MemberChangeMenuUpdateAndRender; updates input, buffers, rendering, and OT submission.
+0x801C969C, function start — MemberChangeMenuParseNumberToString; converts an integer to display digits.
+0x801C9748, function start — MemberChangeMenuFree; commits the party and tears down resources.
+0x801C9908, function start — MemberChangeMenuRebuildAvailableCharacters; rebuilds benched-character availability.
+0x801C9A08, function start — MemberChangeMenuBuildCharacterLabel; constructs portrait and name-strip packets.
+0x801C9F80, function start — MemberChangeMenuSetCharacterLevelStrings; builds level and secondary-stat digits.
+0x801CA24C, function start — MemberChangeMenuSetCharacterHpAndMpStrings; builds HP and MP digit groups.
+0x801CA5C0, function start — MemberChangeMenuUpdateCharacter; rebuilds one character display record.
+0x801CA690, function start — MemberChangeMenuUpdateCharacters; rebuilds visible active and benched records.
+0x801CA810, function start — MemberChangeMenuSetCursorToCharacter; positions a cursor over a character.
+0x801CA944, function start — MemberChangeMenuInitializeCursors; allocates and initializes pointer cursors.
+0x801CAB04, function start — MemberChangeMenuFreeCursors; disables, flushes, and frees cursors.
+0x801CAB48, function start — MemberChangeMenuSwapCharacters; swaps selected active and benched slots.
+0x801CAD14, function start — MemberChangeMenuMainLoop; runs selection, scrolling, and swapping.
+0x801CB0A8, function start — MemberChangeMenuMain; manages the complete submenu lifetime.

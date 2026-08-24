@@ -1,0 +1,167 @@
+# image-id: battling-overlay
+# annotated_functions/total_functions: 157/456
+# Total basis: complete Ghidra/callback/return-boundary reconciliation.
+# sha256: 3e6df915e9c7f05f5fb997cb331392f1333e867dfb2628cd65e5e1ea1575646e
+# load-address: 0x8006faf0
+# identity-source: native_renderer/xg_render_manifest.toml
+# source-record-id: battling-image
+# format: address, note
+
+0x800707A8, function start — BattlingTutorialReleaseOrTransition; schedules tutorial storage release and mode transition.
+0x8007107C, function start — BattlingTutorialScriptRun; interprets tutorial movement, animation, wait, and exit bytecode.
+0x80071794, function start — BattlingTutorialTextureLoad; uploads tutorial TIM resources and initializes packets.
+0x800718C0, function start — BattlingTutorialDialogInitialize; initializes tutorial dialog and window state.
+0x80071AD0, function start — BattlingTutorialUpdate; handles tutorial input, scripts, dialogs, and actors.
+0x800725A8, function start — BattlingNoOpCallback0; intentional empty callback.
+0x80072858, function start — BattlingWinnerStatusViewUpdate; renders winner level, matches, and opponent status.
+0x800730AC, function start — BattlingScaleVector0; scales a packed vector through the GTE.
+0x800730F4, function start — BattlingScaleVector12; scales a strided vector with 12-bit precision.
+0x800732CC, function start — BattlingCreateParticleEmitterType3; creates a type-3 particle emitter.
+0x800751C8, function start — BattlingBoutStateUpdate; detects knockout or draw and advances round state.
+0x8007570C, function start — BattlingComputeScaledActorDelta; computes a scaled actor-coordinate difference.
+0x80075738, function start — BattlingComputeActorDelta; returns an actor-coordinate difference.
+0x80075748, function start — BattlingNoOpCallback1; intentional empty callback.
+0x80076438, function start — BattlingPrintActorByteSequence; prints a bounded actor byte sequence.
+0x80079A8C, function start — BattlingEffectsInitialize; initializes emitters and shared effect state.
+0x80079B04, function start — BattlingNoOpCallback2; intentional empty effect callback.
+0x80079DE0, function start — BattlingClearEffectState; clears shared effect state.
+0x80079DF0, function start — BattlingBoutInitializeAndUpdate; initializes fighters, input, camera, resources, and bout state.
+0x8007A344, function start — BattlingReplayUpdate; updates recorded fighters and renders replay state.
+0x8007AE10, function start — BattlingResultsUpdate; displays victory, defeat, draw, and opponent results.
+0x8007E624, function start — BattlingGetMenuResource; returns the active menu resource.
+0x8007ECF0, function start — BattlingDrawMenuString; measures and emits a menu string.
+0x8007EEE8, function start — BattlingBuildGearRoster; builds available Gear and opponent choices.
+0x8007EFB4, function start — BattlingGearSelectionGridInitialize; initializes the 7x7 Gear grid.
+0x8007F258, function start — BattlingGearSelectionRender; animates cursors and renders Gear names.
+0x8007F854, function start — BattlingMenuEnterSelection; enters menu selection and resets input flags.
+0x8007F8E4, function start — BattlingMenuExitSelection; starts the mode or returns to prior menu state.
+0x8007F9A0, function start — BattlingDrawPrimaryOptions; draws primary options and values.
+0x8007FB0C, function start — BattlingDrawSecondaryOptions; draws secondary options and values.
+0x8007FBEC, function start — BattlingControllerOptionsRender; renders controller and vibration settings.
+0x8007FE48, function start — BattlingDrawModeSettings; draws mode-specific settings.
+0x8007FF70, function start — BattlingStepOptionValue; wraps or clamps an option value.
+0x80080054, function start — BattlingAdjustDifficultyOption; updates difficulty.
+0x80080090, function start — BattlingAdjustRoundCountOption; updates round count.
+0x800800CC, function start — BattlingAdjustTimeLimitOption; updates time limit.
+0x80080108, function start — BattlingAdjustOptionByte3; updates a one-bit option.
+0x80080144, function start — BattlingAdjustOptionByte4; updates a one-bit option.
+0x80080180, function start — BattlingAdjustPlayer1Control; updates player-one control.
+0x800801BC, function start — BattlingAdjustPlayer2Control; updates player-two control.
+0x800801F8, function start — BattlingAdjustModeOption; updates the three-value mode.
+0x80080234, function start — BattlingAdjustSideOption; updates a side-dependent option.
+0x80080268, function start — BattlingAdjustArenaOption; updates arena selection.
+0x800802A4, function start — BattlingUpdatePlayer1GearSelection; handles player-one Gear selection and reloads.
+0x8008040C, function start — BattlingUpdatePlayer2GearSelection; handles player-two Gear selection and reloads.
+0x80080570, function start — BattlingLoadSelectedGearResources; loads both selected fighter resources.
+0x80080644, function start — BattlingLoadSelectionPortraits; uploads both selected Gear portraits.
+0x80080780, function start — BattlingConfirmGearSelection; commits selection and enters the mode.
+0x800808F4, function start — BattlingMarkMenuResourceReload; marks menu resources for reload.
+0x80080920, function start — BattlingStartTutorialSelection; initializes fixed tutorial Gear selection.
+0x800809D8, function start — BattlingMenuStateReset; resets menu state and loads common resources.
+0x80080C48, function start — BattlingStartSelectedMode; starts versus or practice mode.
+0x80080F04, function start — BattlingMenuPrimitiveInitialize; initializes menu sprites and draw packets.
+0x800812BC, function start — BattlingMenuLayoutInitialize; measures labels and centers menu geometry.
+0x800814AC, function start — BattlingMenusInitialize; initializes menu descriptors and rendering state.
+0x8008151C, function start — BattlingMenuRender; renders enabled entries and optional callbacks.
+0x8008162C, function start — BattlingMenuInputUpdate; handles digital and analog menu input.
+0x80081ECC, function start — BattlingGraphicsResourcesInitialize; initializes arena UI, palettes, and textures.
+0x80082880, function start — BattlingSampleTextureHeight; performs signed indexed height lookup.
+0x80082C4C, function start — BattlingModelPacketPoolsInitialize; uploads model textures and builds packet buffers.
+0x80083B54, function start — BattlingCopySceneTransforms; copies both scene-transform records.
+0x80083C0C, function start — BattlingSetMode; changes mode and performs mode-specific setup.
+0x800840CC, function start — BattlingRenderArenaScene; renders fighters, arena geometry, effects, and OT.
+0x800846A0, function start — BattlingRenderArenaSceneAlternate; renders the alternate arena composition.
+0x80084C88, function start — BattlingGearActorInitialize; initializes a selected Gear actor and resources.
+0x80084FD0, function start — BattlingOptionalPostRenderEffect; invokes an optional post-render effect.
+0x80085014, function start — BattlingForceComMode; forces both participants to COM control.
+0x8008509C, function start — BattlingLoadGearArchive; replaces and loads one fighter Gear archive.
+0x80085134, function start — BattlingReleaseGearResource; synchronizes and frees one fighter resource.
+0x8008518C, function start — BattlingAllocateDecodedResource; allocates aligned decoded resource storage.
+0x800851D4, function start — BattlingExitToField; stops resources and requests Field state.
+0x80085264, function start — BattlingCanRunOptionalEffect; tests mode eligibility for an optional effect.
+0x800852C4, function start — BattlingGameTaskMain; initializes and runs the major Battling task.
+0x80085E34, function start — BattlingMapLeftUiPoint; maps a point to left-side coordinates.
+0x80085E60, function start — BattlingMapRightUiPoint; mirrors a point to right-side coordinates.
+0x80085E90, function start — BattlingMapSideX; maps X for a fighter side.
+0x80085EAC, function start — BattlingMapSideY; maps Y for a fighter side.
+0x80085EC8, function start — BattlingHudPacketsInitialize; builds mirrored HUD and cursor packets.
+0x800864B4, function start — BattlingBuildForwardFt4Pair; builds forward-facing mirrored quads.
+0x800866D4, function start — BattlingBuildReverseFt4Pair; builds reverse-facing mirrored quads.
+0x800868E0, function start — BattlingHudTexturesInitialize; uploads HUD textures and initializes gauges.
+0x800878DC, function start — BattlingActorTextureResourcesInitialize; uploads fighter and shared textures.
+0x80087E38, function start — BattlingQueueEffectVertex; appends a bounded effect vertex.
+0x80087EA0, function start — BattlingRenderQueuedEffectGeometry; transforms and emits queued effect geometry.
+0x8008820C, function start — BattlingEffectPrimitiveAllocate; acquires a primitive from the fixed pool.
+0x800882D4, function start — BattlingEffectPrimitiveAllocateWithLifetime; allocates a primitive with lifetime.
+0x80088308, function start — BattlingClearActorSlotState; clears per-slot actor state.
+0x8008832C, function start — BattlingEffectPrimitiveUpdateAndRender; updates lifetimes and emits primitives.
+0x800884E0, function start — BattlingNormalizeAndTransformVector; normalizes and transforms a vector.
+0x80088658, function start — BattlingNormalizeVector; normalizes a packed vector.
+0x80088908, function start — BattlingClearAllocationBit; clears an allocation bitmap bit.
+0x80088940, function start — BattlingSetAllocationHighFlag; sets the high allocation-state bit.
+0x80088AF8, function start — BattlingOptionsLoad; decodes persisted settings or restores defaults.
+0x80088C00, function start — BattlingVsyncCallback; samples VSync into frame timing.
+0x80088C28, function start — BattlingHeapDebugPageUpdate; changes and prints the heap-debug page.
+0x80088CBC, function start — BattlingDisplayBufferPacketInitialize; initializes a display-buffer sprite.
+0x80088D1C, function start — BattlingSystemInitialize; initializes callbacks, geometry, font, heap, and rendering.
+0x80088E90, function start — BattlingMain; runs the authenticated state-4 render and timing loop.
+0x80089000, call site — invokes the optional per-frame Battling callback.
+0x800891C0, function start — BattlingArchiveLoadAlloc; allocates and starts one archive load.
+0x800896C4, function start — BattlingApplyViewportAndCamera; configures viewport and camera transform.
+0x8008973C, function start — BattlingApplyCurrentCamera; applies current camera coordinates.
+0x800897AC, function start — BattlingInitializeScreenPrimitive; initializes screen coordinates and shading.
+0x80089CD8, function start — BattlingUnlinkResourceNode; removes a node from an intrusive list.
+0x80089E3C, function start — BattlingSetResourceState3; sets descriptor state 3.
+0x80089E48, function start — BattlingSetResourceState4; sets descriptor state 4.
+0x8008A0B4, function start — BattlingEnablePrimitiveColor; sets RGB and enables color processing.
+0x8008A0F4, function start — BattlingDisablePrimitiveColor; disables color processing.
+0x8008A298, function start — BattlingFreePrimitiveObject; releases a primitive allocation.
+0x8008A3A0, function start — BattlingNoOpPrimitiveCallback; intentional empty primitive callback.
+0x8008A618, function start — BattlingEnableDrawObject; enables shared draw-object state.
+0x8008A6F8, function start — BattlingApplyDrawEnvironment; installs the active draw environment.
+0x8008B070, function start — BattlingLoadAndParseAnimation; loads and parses animation data.
+0x8008B5DC, function start — BattlingAdvanceAnimationOnce; advances one animation step.
+0x8008BA2C, function start — BattlingTaskContextCreate; creates a saved-register task context.
+0x8008BAE0, function start — BattlingFreeTaskContext; frees a task context.
+0x8008BB00, function start — BattlingReadSavedTaskRegisters; copies saved registers to output.
+0x8008BB1C, function start — BattlingWriteSavedTaskRegisters; installs saved task registers.
+0x8008C7C0, function start — BattlingParticleType0AdvanceVertices; advances type-0 vertex history.
+0x8008C828, function start — BattlingParticleType0PacketInitialize; initializes a type-0 packet.
+0x8008C8B4, function start — BattlingParticleType0Render; transforms and emits a type-0 particle.
+0x8008C9B8, function start — BattlingParticleType1AdvanceVertices; advances type-1 vertex history.
+0x8008CA00, function start — BattlingParticleType1PacketInitialize; initializes a type-1 packet.
+0x8008CA84, function start — BattlingParticleType1Render; transforms and emits a type-1 particle.
+0x8008CC2C, function start — BattlingParticleType2AdvanceVertices; advances type-2 vertex history.
+0x8008CC54, function start — BattlingParticleType2PacketInitialize; initializes a type-2 packet.
+0x8008CCB0, function start — BattlingParticleType2Render; transforms and emits a type-2 particle.
+0x8008CD54, function start — BattlingParticleType3AdvanceVerticesNoOp; intentional type-3 no-op callback.
+0x8008CD5C, function start — BattlingParticleType3PacketInitialize; initializes a randomized type-3 packet.
+0x8008CE0C, function start — BattlingParticleType3Render; transforms and emits a type-3 particle.
+0x8008CED4, function start — BattlingParticleType4AdvanceVerticesNoOp; intentional type-4 no-op callback.
+0x8008CEDC, function start — BattlingParticleType4PacketInitialize; initializes a type-4 packet.
+0x8008CF30, function start — BattlingParticleType4Render; transforms and emits a type-4 particle.
+0x8008CF9C, function start — BattlingParticleCopyPosition; copies current particle position.
+0x8008CFC4, function start — BattlingParticleRandomDirectionInitialize; initializes randomized direction.
+0x8008D0A4, function start — BattlingParticleRandomPositionInitialize; initializes randomized position.
+0x8008D14C, function start — BattlingParticlePlanarRandomInitialize; initializes planar random position.
+0x8008D208, function start — BattlingParticleSphericalRandomInitialize; initializes spherical random position.
+0x8008D304, function start — BattlingParticleAngularRandomInitialize; initializes position from angle and spread.
+0x8008D3F4, function start — BattlingParticleEmitterCreate; creates an emitter and selects callbacks.
+0x8008D5C0, function start — BattlingParticleEmitterResize; reallocates emitter particle slots.
+0x8008D680, function start — BattlingParticleEmitterSpawn; generates and activates particle slots.
+0x8008D980, function start — BattlingParticleBounceUpdate; applies vertical motion and bounce damping.
+0x8008D9F0, function start — BattlingParticleSettleUpdate; damps and disables settled particles.
+0x8008DA48, function start — BattlingParticleEmitterUpdateAndRender; advances and renders particles.
+0x8008DBC0, function start — BattlingCopyParticleFrameData; copies one particle-frame transform.
+0x8008DC28, function start — BattlingCreateParticleEmitterType1; creates a type-1 emitter.
+0x8008DCB8, function start — BattlingParticleEmitterTransformAndRender; spawns, transforms, and renders an emitter.
+0x8008DDFC, function start — BattlingScaleVectorByGte; scales a vector using current GTE state.
+0x8008DE54, function start — BattlingTransformParticlePrimitive; transforms and depth-sorts a particle.
+0x8008DF30, function start — BattlingFluidBuffersReset; clears simulation buffer pointers.
+0x8008DF50, function start — BattlingFluidBuffersInitialize; allocates and clears simulation grids.
+0x8008E120, function start — BattlingFluidSimulationUpdate; applies impulses and neighbor averaging.
+0x8008EADC, function start — BattlingVibrationUpdate; updates four vibration channels.
+0x8008EB4C, function start — BattlingPlaySoundEffect; dispatches a nonzero sound effect.
+0x8008F280, function start — BattlingPracticeAiUpdate; dispatches selected practice AI behavior.
+0x8008F9B0, function start — BattlingActorOutOfBoundsOrDisabled; tests arena bounds and disabled state.
+0x80090E10, function start — BattlingComAiUpdate; dispatches COM strategy, movement, and actions.

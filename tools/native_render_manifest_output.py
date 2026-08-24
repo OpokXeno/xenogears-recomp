@@ -47,7 +47,7 @@ def byte_initializer(value: Digest32) -> str:
 
 
 def c_string(value: str) -> str:
-    if re.fullmatch(r"[A-Za-z0-9-]*", value) is None:
+    if re.fullmatch(r"(?:[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*)?", value) is None:
         fail("unsafe metadata string reached emission")
     return value
 
@@ -186,7 +186,7 @@ def evidence_payload(verified: VerifiedManifest) -> MetadataDocument:
     return {
         "schema": EVIDENCE_SCHEMA,
         "state": "pass",
-        "authenticated_records": [record.identifier for record in verified.records],
+        "authenticated_records": sorted(record.identifier for record in verified.records),
         "privacy": PRIVACY,
     }
 
@@ -204,7 +204,7 @@ def validate_evidence_payload(payload: MetadataDocument) -> None:
         fail("evidence state or privacy contract is invalid")
     if schema == EVIDENCE_SCHEMA:
         records = payload["authenticated_records"]
-        if not isinstance(records, list) or any(not isinstance(record, str) or re.fullmatch(r"[a-z0-9-]+", record) is None for record in records):
+        if not isinstance(records, list) or any(not isinstance(record, str) or re.fullmatch(r"[a-z0-9]+(?:[-_][a-z0-9]+)*", record) is None for record in records):
             fail("authenticated evidence records are invalid")
         if records != sorted(set(records)):
             fail("authenticated evidence records are invalid")

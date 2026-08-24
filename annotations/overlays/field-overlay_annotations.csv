@@ -1,0 +1,492 @@
+# field-overlay
+# annotated_functions/total_functions: 396/651
+# Total basis: union of Ghidra functions and recovered callbacks/entries.
+# image-id: field-overlay
+# sha256: 920a3e20ccc5d8aae32225c272066e819c427b566b2274df60b182e1265f04dd
+# load-address: 0x8006f000
+# identity-source: native_renderer/xg_render_manifest.toml
+# source-record-id: field-image
+# Semantic sources: Ghidra field_module.exe
+# Format: address, typed note
+
+0x8007008C, function start — FieldLZSSDecompress; Field overlay LZSS decompressor.
+0x800700B0, function start — FieldFree; releases Field overlay resources.
+0x80070340, function start — FieldLoadTIMWithClut; loads a Field TIM and its CLUT.
+0x80070594, function start — FieldMatrixInitializeIdentity; builds an identity transform matrix.
+0x80070CC8, function start — FieldLoad; Field overlay load helper.
+0x80071A64, function start — FieldFadeInitialize; initializes Field fade state.
+0x80071A8C, function start — FieldFadeUpdate; advances Field fade state.
+0x80071CB4, function start — FieldFadeUpdateAndDraw; advances and renders the Field fade.
+0x80071D08, function start — FieldFadeSetParameters; configures Field fade parameters.
+0x80071DCC, function start — FieldFadeToWhite; starts a white Field fade.
+0x80071E58, function start — FieldFadeToBlack; starts a black Field fade.
+0x80071EE8, function start — FieldInitializeControllersAndMouse; initializes Field input devices.
+0x80071F64, function start — FieldSetClipDimensions; configures the Field draw clip.
+0x80071FB0, function start — FieldInitializeRenderContexts; initializes Field render contexts.
+0x80072140, function start — FieldMatrixResetTranslation; clears matrix translation.
+0x80072150, function start — FieldComputeSceneMatrices; computes Field scene matrices.
+0x8007224C, instruction site — world-to-screen matrix computation complete; returns to the caller.
+0x800722F4, function start — FieldMatrixCreateWorldToScreen; creates the Field world-to-screen matrix.
+0x80072D74, function start — FieldCameraInterpolationUpdate; advances camera interpolation, depth, and shake.
+0x80073228, instruction site — camera interpolation and shake-offset update complete.
+0x80073684, function start — FieldRotateEyeAroundTargetBySceneAngle; rotates the camera eye around its target in XZ.
+0x80073750, function start — FieldMatrixLookAt; builds a Field look-at matrix.
+0x80073930, function start — FieldMathInterpolateAngle; interpolates a Field angle.
+0x80073988, function start — FieldMathUpdateAngle; advances a Field angle.
+0x80073AE4, call site — invokes the per-frame FieldCameraInterpolationUpdate.
+0x80073AEC, instruction site — camera interpolation returned; snapshots offset eye and target vectors.
+0x80073B94, call site — builds the look-at matrix on the alternate camera path.
+0x80073C3C, call site — builds the normal look-at matrix into the secondary camera matrix.
+0x80073C5C, call site — recomputes and installs the Field projection matrix.
+0x80073F50, function start — FieldClearAndSwapOTagInternal; internal Field OT clear/swap.
+0x80073FE0, function start — FieldClearAndSwapOTag; clears and swaps the Field ordering table.
+0x80074038, function start — FieldMatrixCopy; copies a Field matrix.
+0x80074078, function start — FieldMatrixCopyTranslation; copies matrix translation.
+0x8007409C, function start — FieldMatrixCopyTransform; copies matrix transform state.
+0x80074700, function start — FieldPollControllers; polls Field controller input.
+0x800748E8, function start — FieldRenderModels; renders the active Field model collection.
+0x80075414, call site — activates the physical RenderFieldCharacterSprites producer at 0x800764B4.
+0x80075458, function start — FieldAddPrimitives; adds the Field frame primitives.
+0x8007554C, function start — FieldPresentationPassA; Field presentation pass ending in DrawOTag.
+0x80075694, call site — VSync call to resident 0x8004B54C; returns at 0x8007569C.
+0x800758C8, call site — FieldPresentationPassA call to resident DrawOTag.
+0x80075910, function start — FieldPresentationPassB; alternate Field presentation pass.
+0x800759CC, call site — FieldPresentationPassB call to resident DrawOTag.
+0x80075B44, function start — RenderFieldCharacterSprites; canonical Field character-sprite producer.
+0x80075E84, instruction site — actor projection complete; begins screen-bounds culling.
+0x80075EA4, instruction site — Field actor visibility screen-bias adjustment.
+0x80075EA8, instruction site — Field actor visibility range comparison.
+0x80075ED4, instruction site — actor visibility resolved; begins shadow and render eligibility checks.
+0x800764B4, function start — RenderFieldCharacterSprites runtime-variant physical producer entry.
+0x800765DC, instruction site — native Field character actor substitution seam.
+0x80076858, instruction site — stores projected Field character SXY0 geometry.
+0x8007685C, instruction site — stores projected Field character SXY1 geometry.
+0x80076860, instruction site — stores projected Field character SXY2 geometry.
+0x800769C8, call site — Field character geometry call to resident RotAverage4.
+0x800769D4, instruction site — reads the Field character packet base.
+0x800769D8, instruction site — reads a Field character stack source.
+0x800769E4, instruction site — reads the Field character depth source.
+0x800769E8, instruction site — reads the Field character ordering-table cursor.
+0x800769EC, instruction site — computes the Field character ordering-table bucket.
+0x800769F8, instruction site — reads the Field character ordering-table head.
+0x80076A08, instruction site — writes the Field character packet cursor.
+0x80076A0C, instruction site — reloads the Field character ordering-table head.
+0x80076A10, instruction site — reads the Field character packet address.
+0x80076A24, instruction site — links the Field character packet into the ordering table.
+0x80076A74, function start — FieldActorSetAnimationEventFlagCallback; marks its owning actor's animation event flag.
+0x800771F8, function start — FieldLoadTIM; loads a Field TIM image.
+0x800775C0, function start — FieldInitializeControllers; initializes Field controllers.
+0x800775F8, function start — FieldRenderSync; synchronizes Field rendering.
+0x80077620, function start — FieldLoadUITextures; loads Field UI textures.
+0x8007781C, function start — FieldUpdateDeltaTime; updates Field frame timing.
+0x80077C88, function start — FieldPartyAllocateSkinDataBuffers; allocates party skin buffers.
+0x80077D2C, function start — FieldPartyFreeSkinDataBuffers; frees party skin buffers.
+0x80077E88, function start — FieldMain; main Field overlay scheduler and frame loop.
+0x800781BC, call site — canonical Field VSync call; returns at 0x800781C4.
+0x8007850C, instruction site — checks asynchronous CD activity before committing a Field transition.
+0x80078BC8, function start — FieldMainExitGate; Field main-loop transition gate.
+0x80078C5C, function start — FieldApplyVramImageMask; masks and restores a VRAM rectangle.
+0x800796FC, function start — FieldSwapRenderContext; swaps the active Field render context.
+0x80079784, function start — FieldDrawSolidColorFrame; presents a solid-color Field frame.
+0x8007995C, function start — FieldMoveImageAndSync; moves a VRAM image and synchronizes drawing.
+0x8007999C, function start — FieldRenderSyncAndFlush; synchronizes and flushes Field rendering.
+0x8007A44C, function start — FieldClampPolyFT4UVs; clamps POLY_FT4 texture coordinates.
+0x8007A7F4, function start — Field resource initializer; authenticated 592-byte body.
+0x8007A9F4, instruction site — resource-initializer output writer within function 0x8007A7F4.
+0x8007AA3C, return site — resource-initializer commit and return for function 0x8007A7F4.
+0x8007AA44, function start — Field resource initializer; authenticated 296-byte body.
+0x8007AB2C, instruction site — resource-initializer output writer within function 0x8007AA44.
+0x8007AB64, return site — resource-initializer commit and return for function 0x8007AA44.
+0x8007AB6C, function start — FieldRenderQuad; authenticated compass world-space quad renderer.
+0x8007AC58, function start — Field compass screen-space renderer.
+0x8007AD8C, function start — FieldSetControllerBuffers; assigns Field controller buffers.
+0x8007ADA4, function start — FieldSetScaledMouseDeltas; writes mouse deltas using configured speed.
+0x8007AE14, function start — FieldSetMouseSpeed; configures Field mouse speed.
+0x8007AE2C, function start — FieldSetMousePosition; updates the Field mouse position.
+0x8007C068, instruction site — rejects walkmesh traversal and forces an invalid triangle result.
+0x8007C12C, instruction site — dispatches from the computed triangle-edge collision mask.
+0x8007C284, instruction site — adjacent triangle and material flags have been selected.
+0x8007C344, instruction site — tests for an invalid triangle or walkmesh edge.
+0x8007C3E4, instruction site — resolves blocking edge endpoints from the collision mask.
+0x8007D93C, function start — FieldFadeInitializePrimitives; initializes Field fade packets.
+0x8007DA44, function start — FieldFadeDraw; renders Field fade packets.
+0x8007DCF8, function start — FieldTextBoxFinalize; finalizes an active Field text-box slot.
+0x8007DECC, function start — FieldTextBoxInitialize; initializes a Field text box.
+0x8007E114, function start — FieldTextBoxSetUnknownGeometryFields; assigns four unresolved text-box geometry fields.
+0x8007E1C0, function start — FieldTextBoxLinkPrimitives; links text-box, border, cursor, arrow, and portrait packets.
+0x8007EE0C, function start — FieldTextBoxInitializePrimitives; initializes Field text-box GPU packets.
+0x8007FFE8, function start — FieldTextBoxUpdateVisibleSlots; updates all four visible text-box slots.
+0x8008004C, function start — FieldTextBoxRender; renders the four active Field text-box slots.
+0x80080444, call site — FieldTextBoxRender call to resident SystemStringEntryRender.
+0x800805F4, function start — FieldPresentationSetup; shared setup for the Field presentation passes.
+0x800806E4, function start — FieldTextBoxFindTopSlot; finds the text box with display order zero.
+0x80080720, function start — FieldTextBoxHasFreeSlot; tests for an uninitialized text-box slot.
+0x80080760, function start — FieldTextBoxFindOldestSlot; finds the greatest active display order.
+0x800807B4, function start — FieldTextBoxAllocateSlot; claims a free text-box slot as order zero.
+0x8008083C, function start — FieldActorFreeResources; frees actor, shadow, sprite, and owned buffers.
+0x80080F3C, instruction site — actor script, walkmesh, normal, and elevation initialization complete.
+0x8008110C, function start — UpdateFieldObjects; advances Field object state.
+0x8008141C, instruction site — begins the secondary movement/altitude pass over non-player entities.
+0x800814AC, call site — secondary entity pass calls the movement/altitude resolver at 0x80084A40.
+0x800814E4, instruction site — clears jumping after the sprite animation reports completion.
+0x80081518, instruction site — non-player movement checks complete; proceeds to collision scripts and party following.
+0x80082620, function start — UpdateFieldObjectRenderPackets; updates Field object GPU packets.
+0x800826D4, instruction site — terrain movement delta computed; begins applying movement rules.
+0x80082BB8, function start — UpdateFieldObjectModelPackets; updates Field object model packets.
+0x80082CA8, instruction site — begins assembling the actor movement vector and mask.
+0x80082CB8, call site — per-entity movement update queries FieldEntityMovementIdlePredicate.
+0x80082D94, instruction site — stages the candidate step vector for movement-bound validation.
+0x80083120, instruction site — commits the resolved step and clears accumulated displacement.
+0x80083564, instruction site — begins collision-mesh primitive scanning after GTE transform setup.
+0x80083930, instruction site — tests the collision no-hit sentinel before committing altitude.
+0x800844B8, instruction site — accepts an actor collision after volume and vertical tests.
+0x80084520, instruction site — transfers moving-platform step vectors to the rider.
+0x8008467C, instruction site — classifies an above-actor collision and updates floor altitude.
+0x800846A8, instruction site — commits the actor-collision processed flag.
+0x80084854, instruction site — player contact resolution complete; gates the final walkmesh move check.
+0x80084890, call site — actor-collision pass calls the movement/altitude resolver at 0x80084A40.
+0x800848B8, instruction site — checks animation completion to clear jumping and reset input.
+0x800848F0, call site — releases the temporary collision scratch buffer.
+0x8008492C, function start — FieldEntityMovementIdlePredicate; tests whether movement/collision work is required.
+0x80084A40, function start — FieldEntityResolveMovementAndAltitude; resolves walkmesh altitude, gravity, falling, and position commits.
+0x80084B18, call site — movement/altitude resolver reuses FieldEntityMovementIdlePredicate.
+0x80084B44, instruction site — enters full walkmesh altitude and triangle resolution.
+0x8008509C, instruction site — begins gravity and falling resolution against walkmesh altitude.
+0x80085160, instruction site — begins vertical walkmesh-layer reconciliation.
+0x80085444, instruction site — commits resolved entity position to sprite and actor transforms.
+0x80085F30, function start — FieldSoundFinishWdsLoad; completes archive WDS loading.
+0x80085FB8, function start — FieldSoundBeginWdsLoad; allocates and starts WDS archive I/O.
+0x80086024, function start — FieldSoundUnloadWds; releases the active WDS entry.
+0x80086200, function start — FieldActorWorldToScreenPosition; projects a Field actor position.
+0x80086590, function start — FieldCameraTargetUpdate; derives the tracked target from eligible actors.
+0x80086900, instruction site — camera target aggregation complete; returns to the caller.
+0x80086908, function start — FieldCameraUpdate; selects the tracking source and updates Field camera tracking.
+0x800869A0, call site — Field camera tracking calls FieldCameraTargetUpdate.
+0x800869B8, function start — FieldScriptVM2Run; executes the secondary Field script VM.
+0x80086D8C, function start — FieldSetScreenDimensions; configures Field screen dimensions.
+0x80086DE0, function start — FieldScriptSetPauseDisabled; sets the Field pause-disable state.
+0x80086E1C, function start — FieldScriptConfigureDisplayMode; configures display/draw environments.
+0x80086F7C, function start — FieldScriptSetModelAnimation; assigns a model animation.
+0x80086FD0, function start — FieldScriptSpriteListCommand; dispatches sprite-list operations.
+0x80087420, function start — FieldScriptScaleTwoRatios; scales two script ratios and writes both results.
+0x8008752C, function start — FieldScriptSkipThreeByteInstruction; advances past a three-byte no-op instruction.
+0x8008754C, function start — FieldScriptSetGameStateFlag4000; sets game-state flag 0x4000.
+0x80087580, function start — FieldScriptCopyGear; copies Gear state from a Field script.
+0x80087800, function start — FieldScriptWriteGlobalByte80050622; writes the unresolved global byte to script memory.
+0x800879D0, function start — FieldScriptWriteGameState184EAnd1852; writes two game-state fields to script memory.
+0x80088360, function start — FieldScriptSetCharacterGear; assigns a character Gear.
+0x80088CF8, function start — FieldScriptSetParticleDirections0To3; sets particle directions 0 through 3.
+0x80088D18, function start — FieldScriptSetParticleDirections4To7; sets particle directions 4 through 7.
+0x80088D38, function start — FieldScriptSetParticleBankDirections; script particle-direction handler.
+0x80089004, function start — FieldScriptInitializeParticleBank; initializes a script particle bank.
+0x80089174, function start — FieldScriptSetParticleBankPosition; sets particle-bank position.
+0x80089374, function start — FieldScriptSetParticleBankPhysics; sets particle-bank physics.
+0x80089574, function start — FieldScriptSetParticleBankParameters; sets particle-bank parameters.
+0x800896D4, function start — FieldScriptSetParticleBankScale; sets particle-bank scale.
+0x80089880, function start — FieldScriptSetParticleBankColor; sets particle-bank color.
+0x80089A80, function start — FieldScriptParticlesInitialize; initializes script particles.
+0x80089AE4, function start — FieldScriptStopParticleActor; stops an actor particle effect.
+0x8008D380, function start — FieldActorCopyPlacement; copies Field actor placement.
+0x8008D684, function start — FieldScriptVariableSetIndexedBit; sets an indexed script-variable bit.
+0x8008D700, function start — FieldScriptVariableClearIndexedBit; clears an indexed script-variable bit.
+0x8008D780, function start — FieldScriptJumpIfIndexedBitClear; conditionally branches on an indexed bit.
+0x8008DB68, function start — FieldPartyMemberIncreaseGearHp; increases party Gear HP.
+0x8008DBF0, function start — FieldPartyMemberDecreaseGearHp; decreases party Gear HP.
+0x8008DC74, function start — FieldScriptVMHandlerIncreasePartyGearHp; VM Gear-HP increase handler.
+0x8008DD6C, function start — FieldScriptVMHandlerDecreasePartyGearHp; VM Gear-HP decrease handler.
+0x8008DE64, function start — FieldScriptSetParentActor; assigns an actor parent.
+0x8008DEBC, function start — FieldScriptWriteActorFlags1; writes actor flag group 1.
+0x8008DF44, function start — FieldScriptWriteActorFlags2; writes actor flag group 2.
+0x8008DFCC, function start — FieldScriptWriteActorFlags3; writes actor flag group 3.
+0x8008E054, function start — FieldScriptWriteActorFlags4; writes actor flag group 4.
+0x8008E0DC, function start — FieldScriptVMConditionalJump6; Field script conditional jump variant 6.
+0x8008E148, function start — FieldScriptVMConditionalJump5; Field script conditional jump variant 5.
+0x8008E1B4, function start — FieldScriptWriteActorDistance; writes actor-distance state.
+0x8008E718, function start — FieldEncounterInitializeTimers; initializes unique randomized encounter timers.
+0x8008E85C, function start — FieldScriptVMHandlerSetEncounterData; implements encounter opcode 0xF7.
+0x8008FA38, function start — FieldScriptWaitForCameraMovement; waits for camera movement.
+0x8008FABC, function start — FieldScriptSetSceneAngleY; assigns both scene Y-angle fields.
+0x8008FD40, function start — FieldScriptSetCameraInterpolationStep; sets camera interpolation step.
+0x8008FDD0, function start — FieldScriptResetCameraTargetMovement; resets camera-target movement.
+0x8008FE2C, function start — FieldScriptSetCameraTargetMovementFrom; sets camera-target origin.
+0x8008FF04, function start — FieldScriptSetCameraTargetMovementDestToActor; targets an actor.
+0x8008FF90, function start — FieldScriptSetCameraTargetMovementDest; sets camera-target destination.
+0x80090068, function start — FieldScriptResetCameraPosMovement; resets camera-position movement.
+0x800900C4, function start — FieldScriptSetCameraPosMovementFrom; sets camera-position origin.
+0x8009019C, function start — FieldScriptSetCameraPosMovementDestToActor; moves camera to an actor.
+0x80090228, function start — FieldScriptSetCameraPosMovementDest; sets camera-position destination.
+0x80090300, function start — FieldScriptResetCameraMovements; resets Field camera movements.
+0x800903BC, function start — FieldScriptStartCameraMovement; starts Field camera movement.
+0x80090A08, instruction site — camera interpolation opcode setup complete; returns to the Field VM.
+0x80090A10, function start — FieldScriptWriteCurCameraTarget; writes current camera target.
+0x80090A94, function start — FieldScriptWriteCurCameraPosition; writes current camera position.
+0x80090B18, function start — FieldScriptWriteCameraTweenTarget; writes tween camera target.
+0x80090B9C, function start — FieldScriptWriteCameraTweenPosition; writes tween camera position.
+0x80090E70, function start — FieldScriptWriteCameraOrbitParameters; writes yaw, pitch, and half-distance.
+0x80091318, function start — FieldScriptComputeCameraOrbitPoint; computes a rotated camera endpoint.
+0x800915C4, function start — FieldScriptWriteCameraMovementParameter; writes a camera parameter.
+0x80091720, function start — FieldScriptSetCameraMovementParameter; sets a camera parameter.
+0x80092628, function start — FieldScriptVMHandlerSetControllerBtnMask; sets controller mask.
+0x80093824, function start — FieldScriptRequestUnknownState3; requests unresolved Field state 3.
+0x800939A0, function start — FieldScriptRequestUnknownState4; requests unresolved Field state 4.
+0x80093A04, function start — FieldScriptRequestUnknownState5; requests unresolved Field state 5.
+0x80093A68, function start — FieldScriptClearSceneFlag8000; clears scene flag 0x8000.
+0x80093A98, function start — FieldScriptSetSceneFlag8000; sets scene flag 0x8000.
+0x80093AC8, function start — FieldScriptDisableEncountersAndCompass; disables encounter and compass state.
+0x80093B10, function start — FieldScriptEnableEncountersAndCompass; restores encounter and compass state.
+0x80093BB0, function start — FieldScriptEnableEncounterIndicator; enables the encounter indicator.
+0x80093BD4, function start — FieldScriptDisableEncounterIndicator; disables the encounter indicator.
+0x80093BFC, function start — FieldScriptEnableCompass; enables the Field compass.
+0x80093C20, function start — FieldScriptDisableCompass; disables the Field compass.
+0x80093C48, function start — FieldScriptVMHandlerDisableRandomEncounters; disables encounters.
+0x80093C6C, function start — FieldScriptEnableRandomEncounters; enables random encounters.
+0x80093CD0, function start — FieldScriptWriteScriptU8ToVariable; writes a script byte to a variable.
+0x80093D48, function start — FieldScriptWriteScriptS16ToVariable; writes a script halfword to a variable.
+0x80093E30, function start — FieldScriptRotateActorAndSetStateFlag; rotates an actor over 30 steps and sets its state flag.
+0x80093FC0, function start — FieldScriptRotateActorAndClearStateFlag; applies the inverse rotation and clears its state flag.
+0x80094158, function start — FieldScriptMoveActorAndSetStateFlag; moves an actor for a scripted step count and sets its state flag.
+0x800943AC, function start — FieldScriptMoveActorAndClearStateFlag; applies complementary movement and clears its state flag.
+0x800945D4, function start — FieldScriptInitializeUnknownPairAndPackArguments; resets an unresolved state pair and packs two arguments.
+0x80094650, function start — FieldScriptSetUnknownSelector; sets an unresolved Field selector.
+0x8009468C, function start — FieldScriptResetUnknownPair; resets two unresolved Field state values.
+0x800946BC, function start — FieldScriptSetUnknownMode1AndValue; selects unresolved mode 1 and stores its value.
+0x80094710, function start — FieldScriptSetUnknownMode2AndValue; selects unresolved mode 2 and stores its value.
+0x80094764, function start — FieldScriptSetUnknownMode3AndValue; selects unresolved mode 3 and stores its value.
+0x800947B0, function start — FieldScriptAdjustActorAxisRotation; adjusts a selected actor rotation axis.
+0x80094918, function start — FieldScriptSetCurrentActorAxisRotation; assigns one current-actor axis.
+0x80094A5C, function start — FieldScriptIncreaseCurrentActorRotationX; increments actor rotation X.
+0x80094ACC, function start — FieldScriptDecreaseCurrentActorRotationX; decrements actor rotation X.
+0x80094B3C, function start — FieldScriptIncreaseCurrentActorRotationY; increments actor rotation Y.
+0x80094BAC, function start — FieldScriptDecreaseCurrentActorRotationY; decrements actor rotation Y.
+0x80094C1C, function start — FieldScriptIncreaseCurrentActorRotationZ; increments actor rotation Z.
+0x80094C8C, function start — FieldScriptDecreaseCurrentActorRotationZ; decrements actor rotation Z.
+0x80095300, function start — FieldScriptSetControlUnknownAngle; stores a script value in the unresolved control angle.
+0x8009533C, function start — FieldScriptHandleTriggerZone2D; handles a 2D trigger zone.
+0x80095520, function start — FieldScriptHandleTriggerZone; handles a 3D trigger zone.
+0x80095734, function start — FieldScriptCheckTriggerZone2D; tests a 2D trigger zone.
+0x800958C0, function start — FieldScriptCheckTriggerZone; tests a 3D trigger zone.
+0x80095A7C, function start — FieldProjectActorOriginToScreen; projects an actor origin to screen space.
+0x80095B3C, function start — FieldActorInnerProximityPredicate; checks the near-screen actor range.
+0x80095C00, function start — FieldScriptCheckActorOnScreen; tests actor screen visibility.
+0x80095C68, instruction site — Field script on-screen bias adjustment.
+0x80095C6C, instruction site — Field script on-screen range comparison.
+0x80095E48, function start — FieldScriptCheckActorDistance; tests actor distance.
+0x80095F24, function start — FieldScriptCheckGoldAmount; tests the current gold amount.
+0x80095FB8, function start — FieldScriptIncreaseGold; increases party gold.
+0x8009601C, function start — FieldScriptDecreaseGold; decreases party gold.
+0x80096078, function start — FieldScriptVMCheckControllerInput; checks Field script controller input.
+0x800960E4, function start — FieldScriptCheckControllerInputExact; checks an exact controller mask.
+0x80096150, function start — FieldScriptVMCheckCurrentInputExact; conditionally branches on exact current input.
+0x80096178, function start — FieldScriptVMCheckAccumulatedInputExact; conditionally branches on exact accumulated input.
+0x800961A0, function start — FieldScriptVMCheckCurrentInputMask; conditionally branches when requested current input is absent.
+0x800964B0, function start — FieldScriptCheckPartyMember; tests party membership.
+0x80096644, function start — FieldScriptCheckScenarioFlagsLessThan; compares scenario flags.
+0x800966B4, function start — FieldScriptCheckScenarioFlagsGreaterThan; compares scenario flags.
+0x80096724, function start — FieldScriptCheckScenarioFlagsEqual; compares scenario flags.
+0x80096790, function start — FieldScriptSetScenarioFlags; writes scenario flags.
+0x800967E8, function start — FieldScriptGetScenarioFlags; reads scenario flags.
+0x80096844, function start — FieldPartyMemberIncreaseHp; increases party-member HP.
+0x800968CC, function start — FieldPartyMemberDecreaseHp; decreases party-member HP.
+0x80096920, function start — FieldPartyMemberIncreaseMp; increases party-member MP.
+0x800969A8, function start — FieldPartyMemberDecreaseMp; decreases party-member MP.
+0x800969FC, function start — FieldScriptVMHandlerDecreasePartyHp; VM party-HP decrease handler.
+0x80096B58, function start — FieldScriptVMHandlerWritePartyMemberHp; writes party-member HP.
+0x80096C40, function start — FieldScriptVMHandlerWritePartyMemberMp; writes party-member MP.
+0x80096D28, function start — FieldScriptVMHandlerSetPartyMemberHp; sets party-member HP.
+0x80096E20, function start — FieldScriptVMHandlerSetPartyMemberMp; sets party-member MP.
+0x80096F18, function start — FieldScriptVMHandlerIncreasePartyMp; increases party MP.
+0x80097010, function start — FieldScriptVMHandlerDecreasePartyMp; decreases party MP.
+0x80097200, function start — FieldScriptVMHandlerRestoreCharacterHpAndMp; restores HP and MP.
+0x80097264, function start — FieldScriptVMHandlerRestoreHp; restores HP.
+0x800972AC, function start — FieldScriptVMHandlerRestoreMp; restores MP.
+0x8009731C, function start — FieldScriptFadeOut; starts a script fade-out.
+0x80097364, function start — FieldScriptFadeIn; starts a script fade-in.
+0x800973A4, function start — FieldScriptWaitForArchiveFile; requests or waits for the selected archive file.
+0x8009744C, function start — FieldGetPlayerActorDirection; returns the player actor direction.
+0x800985BC, function start — FieldScriptVMHandlerDebugPrintFlagValue; implements extended opcode 0x74.
+0x80098C00, function start — FieldScriptMoveActorToPosition; initializes unrestricted interpolated actor movement.
+0x80098C3C, function start — FieldScriptMoveActorToPositionWithLimit; initializes bounded interpolated actor movement.
+0x80098CAC, function start — FieldScriptMoveActorToPositionImpl; executes interpolated movement toward script coordinates.
+0x80099980, function start — FieldScriptStartUnknownOperationFFFF; starts unresolved operation 0xFFFF and waits for completion.
+0x80099A04, function start — FieldGetVec3Magnitude; computes a 3D vector magnitude.
+0x80099A4C, function start — FieldGetVec2Magnitude; computes a 2D vector magnitude.
+0x80099A8C, function start — FieldGetVec1Magnitude; computes a scalar magnitude.
+0x80099EF8, function start — FieldScriptVMWriteCurCharacterID; writes current character ID.
+0x80099F48, function start — FieldScriptVMWritePartyLeaderCharacterID; writes leader ID.
+0x80099FC4, function start — FieldScriptVMHandlerGetActorDirection; gets actor direction.
+0x8009A024, function start — FieldScriptVMHandlerGetActorPosition; gets actor position.
+0x8009A130, function start — FieldScriptVMHandlerPlayAnimation; starts an actor animation.
+0x8009A514, function start — FieldGetCameraDirection; returns the Field camera direction.
+0x8009A534, function start — FieldScriptWriteCameraDirection; writes camera direction.
+0x8009A634, function start — FieldScriptSetDollySet; enables camera dolly state.
+0x8009A670, function start — FieldScriptSetDollyStop; stops camera dolly state.
+0x8009A6AC, function start — FieldScriptCos; Field script cosine helper.
+0x8009A768, function start — FieldScriptSin; Field script sine helper.
+0x8009A824, function start — FieldScriptAtan2; Field script atan2 helper.
+0x8009A8DC, function start — FieldScriptGetCurActorDirection; gets the current actor direction.
+0x8009A904, function start — FieldSetCurrentActorRotation; sets current actor rotation.
+0x8009A958, function start — FieldScriptSetActorRotation; script actor-rotation handler.
+0x8009AB08, function start — FieldScriptSetCameraRelativeActorRotation; applies an actor rotation relative to the camera.
+0x8009AB5C, function start — FieldScriptRotateActorClockwise; rotates actor clockwise.
+0x8009ABAC, function start — FieldScriptRotateActorCounterClockwise; rotates actor counter-clockwise.
+0x8009ABFC, function start — FieldScriptSetActorDirection; sets actor direction.
+0x8009AC7C, function start — FieldScriptVMHandlerSetCurActorRotation; sets current rotation.
+0x8009ACB4, function start — FieldScriptSetCameraRelativeActorDirection; maps a direction to camera-relative actor rotation.
+0x8009BB0C, function start — FieldScriptWaitForOwnedTextBox; waits for or conditionally closes the actor's text box.
+0x8009BE58, function start — FieldActorFacesCameraPredicate; compares actor and camera directions.
+0x8009BE9C, function start — FieldScriptResetDialogue; closes or resets actor dialogue state.
+0x8009BF8C, function start — FieldScriptCopyActorFaceId; copies another actor's portrait ID.
+0x8009C0B4, function start — FieldScriptRunTextBoxOperationMode0; runs text-box operation mode 0.
+0x8009C0DC, function start — FieldScriptRunTextBoxOperationMode1; runs text-box operation mode 1.
+0x8009C104, function start — FieldScriptRunTextBoxOperationMode2; runs text-box operation mode 2.
+0x8009C12C, function start — FieldScriptRunTextBoxOperationMode3; runs text-box operation mode 3.
+0x8009C538, function start — FieldTextBoxCheckPortraitAvailable; checks portrait-slot availability.
+0x8009CCF8, function start — FieldTextBoxSetSlotFlag; sets a text-box slot mask bit.
+0x8009CD18, function start — FieldTextBoxFindCurrentActorSlot; locates the current actor text box.
+0x8009CD7C, function start — FieldScriptResolveActorIndexOrDefault; resolves an actor index fallback.
+0x8009CDB4, function start — FieldScriptVMGetActorIndex; resolves a script actor index.
+0x8009CE48, function start — FieldScriptSetDialogueWindowImmediate; sets immediate dialogue geometry.
+0x8009CEE0, function start — FieldScriptSetDialogueWindow; sets resolved dialogue geometry and flags.
+0x8009CF78, function start — FieldScriptArgument1; reads Field script argument 1.
+0x8009CFBC, function start — FieldScriptArgument2; reads Field script argument 2.
+0x8009D000, function start — FieldScriptArgument3; reads Field script argument 3.
+0x8009D044, function start — FieldScriptArgument4; reads Field script argument 4.
+0x8009D088, function start — FieldScriptArgument5; reads Field script argument 5.
+0x8009D0CC, function start — FieldScriptArgument6; reads Field script argument 6.
+0x8009D110, function start — FieldScriptArgument7; reads Field script argument 7.
+0x8009D154, function start — FieldScriptArgument8; reads Field script argument 8.
+0x8009D198, function start — FieldScriptVMHandlerRandVariable; writes a random variable.
+0x8009D1F0, function start — FieldScriptVMHandlerMulVariableWithRand; multiplies by random.
+0x8009D260, function start — FieldScriptVMHandlerRShiftVariable; shifts a variable right.
+0x8009D2D0, function start — FieldScriptVMHandlerLShiftVariable; shifts a variable left.
+0x8009D340, function start — FieldScriptVMHandlerIncVariable; increments a variable.
+0x8009D3A4, function start — FieldScriptVMHandlerDecVariable; decrements a variable.
+0x8009D408, function start — FieldScriptVMHandlerVariableUnsetBit; clears a variable bit.
+0x8009D4A0, function start — FieldScriptVMHandlerVariableXOR; applies variable XOR.
+0x8009D52C, function start — FieldScriptVMHandlerVariableOR; applies variable OR.
+0x8009D5B8, function start — FieldScriptVMHandlerVariableAND; applies variable AND.
+0x8009D644, function start — FieldScriptVMHandlerVariableSetBit; sets a variable bit.
+0x8009D6D8, function start — FieldScriptVMHandlerVariableMul; multiplies a variable.
+0x8009D768, function start — FieldScriptVMHandlerVariableDiv; divides a variable.
+0x8009D804, function start — FieldScriptVMHandlerVariableSub; subtracts from a variable.
+0x8009D890, function start — FieldScriptVMHandlerVariableAdd; adds to a variable.
+0x8009D91C, function start — FieldScriptVMHandlerVariableSetFalse; clears a variable.
+0x8009D960, function start — FieldScriptVMHandlerVariableSetTrue; sets a variable true.
+0x8009D9A4, function start — FieldScriptVMHandlerVariableAssign; assigns a variable.
+0x8009DA1C, function start — FieldScriptVMHandlerDisableDialogActivation; disables dialog.
+0x8009DA44, function start — FieldScriptVMHandlerEnableDialogActivation; enables dialog.
+0x8009DA70, function start — FieldScriptSetActorFlag16; sets unresolved actor script flag 16.
+0x8009DA98, function start — FieldScriptClearActorFlag16; clears unresolved actor script flag 16.
+0x8009DAC4, function start — FieldScriptDisableAndHideActorVM; disables, hides, and closes actor dialogue.
+0x8009DBC8, function start — FieldScriptVMHandlerEnableActorVM; enables an actor VM.
+0x8009DC4C, function start — FieldScriptStopAndDisableActorVM; stops movement and disables actor VM state.
+0x8009DD34, function start — FieldScriptVMHandlerSleep; sleeps the Field script VM.
+0x8009DDEC, function start — FieldScriptVMHandlerShowActorById; shows an actor by ID.
+0x8009DE94, function start — FieldScriptVMHandlerHideActorById; hides an actor by ID.
+0x8009DF10, function start — FieldScriptVMHandlerShowActor; shows the current actor.
+0x8009DF78, function start — FieldScriptSetActorFlags02000800ById; sets actor flags 0x02000000 and 0x800 by ID.
+0x8009E014, function start — FieldScriptSetCurrentActorFlags02000800; sets flags 0x02000000 and 0x800 on the current actor.
+0x8009E040, function start — FieldScriptVMHandlerHideActor; hides the current actor.
+0x8009E094, function start — FieldScriptSetActorMoveSpeed; writes and propagates actor movement speed.
+0x8009E10C, function start — FieldScriptSetCurrentActorFlags; decodes a script mask into current-actor flags.
+0x8009E1A0, function start — FieldScriptSetActorLowFlagsFromPackedByte; replaces low actor flags from a packed byte.
+0x8009E208, function start — FieldScriptResetUnknownVerticalState; resets unresolved vertical state at the current Y position.
+0x8009E248, function start — FieldScriptApplyThreeImmediateCoordinates; applies three immediate actor coordinates.
+0x8009E2C8, function start — FieldScriptApplySingleCoordinate; applies one evaluated actor coordinate.
+0x8009E330, function start — FieldScriptReadS16Absolute; reads a script halfword at an absolute offset.
+0x8009E35C, function start — FieldScriptSetWalkmeshAndCoordinates; assigns walkmesh and evaluated actor coordinates.
+0x8009E428, function start — FieldScriptSetWalkmeshAtCurrentPosition; changes walkmesh at the actor's current position.
+0x8009E4BC, function start — FieldScriptSetCoordinatesAndClearMovementState; applies coordinates and clears movement state.
+0x8009E83C, function start — FieldScriptSetActorCollisionDimensions; sets actor collision bounds.
+0x8009E91C, function start — FieldScriptSetupMovementBoundingZone; allocates and loads four movement-boundary vertices.
+0x8009EB48, function start — FieldActorGetScriptStatus; returns actor script status.
+0x8009EB78, function start — FieldScriptStartActorScript; starts a target actor script without waiting.
+0x8009ED68, function start — FieldScriptStartActorScriptAndWait; starts and waits for actor script completion.
+0x8009F0A0, function start — FieldScriptStartActorScriptAndWaitExtended; extended start/wait state machine.
+0x8009F424, function start — FieldScriptRandomTurn; periodically selects a random turn.
+0x8009F4CC, function start — FieldScriptRandomTurnWithSpecialDirection; handles signed random turns.
+0x8009F5A8, function start — FieldScriptTriggerEncounterPreserveIP; triggers an encounter while preserving VM IP.
+0x8009FA00, function start — FieldCharacterIdToPartyId; maps character ID to party ID.
+0x8009FB98, function start — FieldScriptSwitchMapToGears; synchronizes assets and marks the Field map for Gear mode.
+0x8009FC10, function start — FieldActorIndexToPartySlot; maps an actor index to a party slot.
+0x8009FC48, function start — FieldScriptPartyMemberRideGear; mounts a party member in Gear.
+0x8009FCAC, function start — FieldScriptPartyMemberDisembarkGear; disembarks a party member.
+0x8009FD10, function start — FieldWritePartyMapState; writes a party member map-state triplet.
+0x800A0158, function start — FieldReadPartyMapState; reads a party member map-state triplet.
+0x800A0D3C, function start — FieldScriptInitializeActorSprite; creates and initializes actor sprite state.
+0x800A1730, function start — FieldScriptCallRelative5; pushes IP+5 and calls a relative script routine.
+0x800A17F4, function start — FieldScriptCallRelative3; pushes IP+3 and calls a relative script routine.
+0x800A18B8, function start — FieldScriptReturn; pops the Field script call stack.
+0x800A19B0, function start — FieldScriptInitializeActorScripts; resets all actor script slots.
+0x800A1A8C, function start — FieldScriptStopAndRedirectWaiters; redirects waiters before stopping.
+0x800A1B70, function start — FieldScriptStop; stops or yields the current Field script.
+0x800A1BD0, function start — FieldScriptVMHandlerConditionalJmp; conditional VM jump handler.
+0x800A1E74, function start — FieldScriptVMHandlerJmp; unconditional VM jump handler.
+0x800A1E9C, function start — FieldScriptYield32; adds 32 instructions to the VM budget and yields.
+0x800A1EC8, function start — FieldScriptVMRun; executes the Field script VM.
+0x800A1F68, instruction site — resolves the current opcode handler from the dispatch table.
+0x800A1F70, call site — Field script VM indirect opcode-handler dispatch through the base table.
+0x800A1F78, instruction site — resumes after opcode dispatch and checks script completion conditions.
+0x800A2250, call site — entity script scheduler invokes FieldScriptVMRun with an eight-cycle budget.
+0x800A2258, instruction site — resumes actor updating and persists the resulting VM program counter.
+0x800A22AC, function start — FieldRunEntryActorScript; runs an entry actor script with temporary reset state.
+0x800A2714, function start — FieldFinalizeActorAnimationLoads; attaches loaded animations and transforms.
+0x800A2FC0, function start — FieldScriptVMHandlerNop; Field script no-op handler.
+0x800A2FE0, function start — FieldScriptVMGetVariableSign; gets a script-variable sign.
+0x800A3018, function start — FieldScriptVMGetVariableValue; reads a Field script variable.
+0x800A3074, function start — FieldScriptMemoryWriteU16; writes a 16-bit script-memory value.
+0x800A3090, function start — FieldScriptGetBytecodeOffset; resolves a bytecode offset.
+0x800A30B4, function start — FieldScriptWritePartyMemberIDs; writes party IDs to script state.
+0x800A4748, function start — FieldMoveDisplayImageDefault; moves the display image to the default destination.
+0x800A476C, function start — FieldMoveDisplayImage; moves the 320x224 display image and synchronizes.
+0x800A47D4, function start — FieldDistortionFree; frees Field distortion resources.
+0x800A484C, function start — FieldDistortionInitialize; initializes Field distortion.
+0x800A4CC4, function start — FieldDistortionSetTarget; sets the Field distortion target.
+0x800A4DAC, function start — FieldDistortionDraw; renders Field distortion.
+0x800A5600, function start — FieldZoomSetNextContextColor; sets RGB on next-context zoom polygons.
+0x800A5694, instruction site — commits the authenticated Field zoom RGB update.
+0x800A56A8, function start — FieldFadeFromWhite; initializes a white fade with negative deltas.
+0x800A5710, function start — FieldFadeFromBlack; initializes a black fade with positive deltas.
+0x800A5774, function start — FieldSetVramStpBits; sets bit 15 across a VRAM strip.
+0x800A5884, function start — FieldPrepareZoomFadeImage; prepares zoom packets and VRAM strips.
+0x800A6408, function start — FieldZoomFadeEffectUpdate; updates and emits the Field zoom/fade effect.
+0x800A6490, instruction site — native Field zoom substitution seam within function 0x800A6408.
+0x800A663C, function start — FieldZoomFadeEffectInitialize; initializes Field zoom/fade packets.
+0x800A6884, instruction site — Field zoom template writer within initializer 0x800A663C.
+0x800A68F0, instruction site — Field zoom initializer commit/epilogue seam.
+0x800A6924, function start — FieldDisplay; finalizes Field display output.
+0x800A7744, function start — FieldImageConvert24BitColorTo15Bit; converts one color.
+0x800A77C4, function start — FieldImageConvert24BitTo15Bit; converts image pixels.
+0x800A8EAC, function start — FieldInitializeParticlePrimitive; initializes one particle primitive.
+0x800A915C, function start — FieldBackupVramRegion; lazily captures a fixed VRAM strip into a backup buffer.
+0x800A9274, function start — FieldInitializeParticles; initializes the Field particle system.
+0x800A92AC, function start — FieldParticlesFree; frees Field particles.
+0x800A9374, function start — FieldParticlesStop; stops Field particles.
+0x800A93CC, function start — FieldParticlesStopBanks; stops Field particle banks.
+0x800A9460, function start — FieldParticlesFreeAll; frees all Field particles.
+0x800A94A4, function start — FieldInitializeDefaultParticleBanks; initializes default particle banks.
+0x800A9688, function start — FieldParticlesTickAndRender; updates and renders Field particles.
+0x800A987C, function start — FieldParticlesRandRange; returns a particle random range value.
+0x800A98B4, function start — FieldParticlesFindFreeIndex; finds a free particle slot.
+0x800A98E8, function start — FieldParticleActorStop; stops an actor particle effect.
+0x800A99A8, function start — FieldInitializeParticleBanks; initializes particle banks.
+0x800A9B1C, function start — FieldParticleUpdateColor; updates particle color.
+0x800A9B54, function start — FieldParticleRender; renders a Field particle.
+0x800A9F18, function start — FieldParticleUpdateAndRender; updates and renders one particle.
+0x800AA6B4, function start — FieldParticleStart; starts a Field particle effect.
+0x800AAA74, function start — FieldObjectOcclusionCull; tests Field object screen visibility.
+0x800AAB64, instruction site — Field object occlusion top-edge test.
+0x800AAB74, instruction site — Field object occlusion bottom-edge test.
+0x800AAB90, instruction site — Field object occlusion right-edge bias.
+0x800AABA0, instruction site — Field object occlusion left-edge bias.
+0x800AABD8, function start — FieldScriptSpriteListFree; frees the script sprite list.
+0x800AAC08, function start — FieldScriptSpriteListInitialize; allocates and initializes script sprites.
+0x800AADC8, function start — FieldScriptSpriteSetColor; sets both sprite-context colors.
+0x800AAE4C, function start — FieldScriptSpriteDraw; positions and queues a script sprite.
+0x800AAF80, function start — FieldMapOverlayPrimitivesInitialize; initializes the general Field map-overlay UI primitives.
+0x800AB378, function start — FieldMapOverlayDraw; draws the general Field map-overlay UI.
+0x800ABD18, function start — FieldFullscreenStripPrimitivesInitialize; initializes fullscreen sprite strips.
+0x800ABEC8, function start — FieldFullscreenStripDraw; draws active fullscreen sprite strips.
+0x800ACD7C, function start — FieldScriptVMGetInstructionArgumentS16; reads a signed VM argument.
+0x800ACDB8, function start — FieldScriptVMGetInstructionArgument; reads a VM instruction argument.
+0x800ACDEC, function start — FieldScriptVMGetArgument; resolves a Field VM argument.

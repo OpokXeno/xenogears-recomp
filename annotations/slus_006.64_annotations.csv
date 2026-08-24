@@ -1,4 +1,6 @@
 # Xenogears (SLUS-00664, slus_006.64) — function annotations for PSXRecomp code generator
+# annotated_functions/total_functions: 802/1057
+# Total basis: functions recognized by Ghidra for slus_006.64.
 #
 # Format: address, note
 #   address: hex with 0x prefix (e.g. 0x8001dfd4)
@@ -8,17 +10,20 @@
 # The comment appears above the function signature in the generated C file
 # without ever having to read the whole file.
 #
-# Sources (2026-07-22 mass-annotation pass):
+# Initial sources (2026-07-22 mass-annotation pass):
 #   - Ghidra project XenogearsDisc1/slus_006.64 symbol DB (755 custom names incl. PsyQ SDK library map)
 #   - ladysilverberg/xenogears-decomp config/symbol_addrs.slus_006.64.txt + src/slus_006.64 module tree
 #     (binary SHA1 560bbdbeb9264c935294ecad5a3d4ab230a006a9 == local game/slus_006.64, addresses exact)
 #   - seeds/slus_00664_bios_thunks.txt (37 BIOS syscall stubs; vector:fn verified against binary bytes)
 #
+# Updates:
+#   - 2026-08-23: synchronized resident renderer names confirmed by subsequent Ghidra/static/runtime work.
+#
 # ─────────────────────────────────────────────────────────────────────────────
 
 # --- journal/Ghidra-confirmed core entries ---
 0x80019524, start — PS-X EXE entry-point stub (0x24 bytes, jumps into main init; Ghidra: `start`).
-0x8001996C, module_switch(int module_id) — game-module launcher called from the kernel debug menu (module ids: 1=Field 2=Battle 3=Worldmap 4=Battling 5=Menu 6=Movie; Ghidra xref from FUN_8001A344).
+0x8001996C, ChangeGameState(unsigned state) — requests the next main game state and releases a pending state resource when changing states; state 0 selects the native Kernel Menu, 1=Field, 2=Battle, 3=Worldmap, 4=Battling, 5=Menu, 6=Movie (Ghidra static analysis + runtime developer-menu path).
 0x8001A344, Kernel MENU — developer debug menu screen (Field/Battle/Worldmap/Battling/Menu/Movie selector; Ghidra decompile: prints " XENOGEARS Kernel MENU\n  %s %s MODE\n"). Cursor DAT_8004f2d8, pad DAT_800594a4/DAT_8005948c; selection calls FUN_8001996c(module_id+1).
 0x8004B54C, VSync(int mode) — PsyQ library vertical-retrace wait (Ghidra: `VSync`, body 0x8004B54C-0x8004B5CF). 
 
@@ -29,6 +34,49 @@
 0x8003218C, HeapFreeBlocksWithFlag(u_char targetFlag) — heap sweep freeing blocks matching a content flag (decomp: system/memory.c). Called from module transitions/overlays; bytes absent from generated C. Seed-promoted 2026-07-22.
 0x80032B64, HeapCalloc(u_int num, u_int size) — zeroing heap allocator (decomp: system/memory.c). Public engine API used by game modules (overlays call main-EXE APIs); bytes absent from generated C. Seed-promoted 2026-07-22.
 0x8003BFA0, SoundSpuIRQHandler — SPU IRQ handler: sets SOUND_CTL_FLAG_IRQ_HANDLER, bumps g_SoundSpuIRQCount, invokes g_SoundSpuIrqCallbackFn (decomp: system/sound.c). Installed via SpuSetIRQCallback — interrupt-context entry, invisible to JAL walker. Seed-promoted 2026-07-22.
+
+# --- Ghidra-confirmed 2026-08-24 ---
+0x8001AADC, InitKernelVariables — initializes resident Field, party-loading, music, compass, and rendering state globals.
+0x8001B484, FieldLoadNewBundle — reuses a matching Field bundle or frees the previous buffer and starts loading archive entry 0xB8 plus the field index.
+0x8001B53C, FieldLoadRawBundle — allocates and pins a buffer, then asynchronously reads a raw Field bundle from archive entry 0xB8 plus the field index.
+0x8001B5A8, FieldUnloadWdsIfLoaded — unloads the currently loaded World Map WDS object and clears its loaded flag.
+0x8001B5E8, FieldFinalizePendingMusic — starts the deferred music instance, releases it when required, and clears pending music state.
+0x8001B66C, FieldClearLoadedMusic — resolves deferred music/WDS cleanup, invalidates loaded music and wave IDs, and clears reset state.
+0x8001D2B0, SpriteQueueFrameTransfer — updates a sprite frame and queues the actor for shape transfer without duplicating an existing queue entry.
+0x80021BCC, SpriteSetTimeScale — writes the sprite animation-bytecode time scale used by Field movement-speed operations.
+0x800223B0, SpriteSetFacingAngle — updates sprite facing and direction-dependent animation state.
+0x80022660, SpriteExecuteBytecodeUntil — executes the sprite animation VM until the requested bytecode checkpoint or a stopping opcode is reached.
+0x800233A4, AnimTaskCreate — allocates an animation task with trailing data, registers timer and normal work-list tasks, and installs trigger/free callbacks.
+0x80026338, ResourceHelperGetTexCoords — resolves a resource texture entry and returns its count, texture page, CLUT, and adjusted coordinates.
+0x800263E4, SetupMenuResourcePolyFT4 — builds double-buffered scaled POLY_FT4 primitives for menu-resource textures.
+0x8002A498, ArchiveResetStreamChannel — records the active channel and reset flag; with debug streaming active, clears its bookkeeping and closes the host stream.
+0x8002C3D8, ArchiveGetDebugTable — returns the current archive debug-table pointer (resident archive/model boundary verified).
+0x8002C3E8, ModelResolvePointers — relocates relative pointers in a loaded model and marks the model resolved.
+0x8002C6E0, ModelSetNearColor — updates the model renderer's near/depth-cue color state.
+0x8002C700, ModelRenderPacket — dispatches a model packet to its renderer for transformation, clipping, and ordering-table submission (shared resident renderer used by multiple game modes).
+0x8002C8CC, ModelInitializePacket — initializes model primitive codes, lengths, lighting, UVs, texture pages, and CLUT state.
+0x8002CB54, ModelAllocatePacketBuffers — allocates the two model-packet buffers required for double buffering.
+0x8002CBBC, ModelPartFreeLightData — frees owned model-part lighting data and clears its ownership flag.
+0x8002CC10, ModelPacketSetBaseTexPage — derives and enables a base texture-page override from VRAM coordinates.
+0x8002CC54, ModelPacketSetTexPageOverride — installs a direct texture-page override and selects forced-page mode.
+0x8002CC74, ModelPacketSetBaseClut — derives and enables a base CLUT override from VRAM coordinates.
+0x8002CCAC, ModelPacketClearTextureOverrides — restores normal texture-page and CLUT handling.
+0x8002CCC8, ModelPacketSetTexPage — computes the active packet texture page with coordinate or forced-page overrides.
+0x8002CD24, ModelPacketSetClut — computes the active packet CLUT with the configured base override.
+0x8002CD64, ModelPacketSetTextureData — consumes model pseudo-primitives 0xC4/0xC8 to update texture-page or CLUT state.
+0x8002D354, ModelPacketInitPolyG4Variant — builds a lit POLY_G4 packet from four model normals and the primitive base color.
+0x8002D420, ModelPacketInitPolyGT4Variant — builds a lit textured POLY_GT4 packet with active CLUT and texture-page state.
+0x8002DB84, MathTriangleNormal — computes and normalizes a triangle face normal from two edge vectors.
+0x8002DC9C, MathGetLargestVectorComponent — returns the signed vector component with the largest absolute magnitude.
+0x80030988, PatchTextureUvStepCode — patches twelve halfword immediate fields with four repeated texture UV-step values.
+0x80031804, FontAddBackgroundTile — links one font/debug-text background tile primitive into an ordering table.
+0x80033B34, SystemDecodeStringCodes — maps input codes through system-data table 0x1B, emits one or two bytes per code, and NUL-terminates the destination.
+0x80039F18, SoundPlayEffect — starts a packed sound-effect ID with explicit volume and pan.
+0x8003A14C, SoundStopEffectById — stops active sound-effect instances matching a packed effect ID.
+0x8003A2E4, SoundEffectSetPanById — updates pan for active sound-effect events matching a packed ID and marks pan state dirty.
+0x8003A89C, SoundInstanceSetVolumeFade — sets an audio instance target volume immediately or over a timed fade and resumes it when required.
+0x8003E290, SoundComputeLfoStep — conditionally scales a signed LFO step from duration and mode parameters.
+0x8003E3E0, SoundLfoRestart — restores configured LFO phase/step state, clears its accumulator, and marks it active.
 
 # --- game code (decomp-confirmed; thanks to ladysilverberg/xenogears-decomp) ---
 0x80019560, ClearMemory — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
@@ -89,6 +137,9 @@
 0x80023210, AnimScriptTick — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp1.c)
 0x80024F64, GfxAllocateWorkBuffers — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp1.c)
 0x80024FE4, GfxSetCurrentOT — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp1.c)
+0x80025258, RenderFieldActorSprite — resident field actor sprite projection and OT submission dispatcher (Ghidra decompile confirmed 2026-08-23).
+0x8002675C, BuildFieldSpriteFt4Packets — builds scaled POLY_FT4 packets for field sprites (Ghidra static analysis + authenticated runtime producer work, 2026-08-23).
+0x8002709C, CreateFieldPanoramaPrimitiveSet — allocates and initializes the field panorama primitive set (Ghidra decompile confirmed 2026-08-23).
 0x80027D40, __builtin_delete — PsyQ libcard/libapi (Ghidra symbol DB, prior RE sessions)
 0x80027D64, GfxLineScrollInitialize — decomp module graphics/line_scroll.c (decomp: ladysilverberg/xenogears-decomp, graphics/line_scroll.c)
 0x80027EAC, GfxLineScrollUpdate — decomp module graphics/line_scroll.c (decomp: ladysilverberg/xenogears-decomp, graphics/line_scroll.c)
@@ -119,6 +170,37 @@
 0x8002A428, ArchiveCdSetMode — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/archive.c)
 0x8002A524, ArchiveStreamFreeQueueData — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/archive.c)
 0x8002A68C, ArchiveCdDriveCommandHandler — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/archive.c)
+
+# --- resident field-model packet builders/renderers (Ghidra-confirmed 2026-08-23) ---
+0x8002CDCC, BuildFlatTrianglePacketTemplate — builds a flat-triangle GPU packet template with optional lighting.
+0x8002CF34, BuildRawFlatTrianglePacketTemplate — builds an unlit flat-triangle GPU packet template.
+0x8002CF58, BuildFlatQuadPacketTemplate — builds a flat-quad GPU packet template with optional lighting.
+0x8002D0C0, BuildRawFlatQuadPacketTemplate — builds an unlit flat-quad GPU packet template.
+0x8002D0E4, BuildRawFT4PacketTemplate — builds an unlit POLY_FT4 packet template.
+0x8002D180, BuildGouraudQuadPacketTemplate — builds a lit Gouraud quad GPU packet template.
+0x8002D244, BuildGouraudTexturedQuadPacketTemplate — builds a lit Gouraud-textured quad GPU packet template.
+0x8002D530, BuildFlatTexturedQuadPacketTemplate — builds a flat-textured quad GPU packet template with optional lighting.
+0x8002D6AC, BuildGouraudTrianglePacketTemplate — builds a lit Gouraud triangle GPU packet template.
+0x8002D77C, BuildGouraudTrianglePacketTemplateNoLightCodeCache — builds a lit POLY_G3 packet without caching its primitive code in light data.
+0x8002D814, BuildFlatTexturedTrianglePacketTemplate — builds a flat-textured triangle GPU packet template with optional lighting.
+0x8002D984, BuildRawFlatTexturedTrianglePacketTemplate — builds a raw flat-textured triangle GPU packet template.
+0x8002DA14, BuildGouraudTexturedTrianglePacketTemplate — builds a lit Gouraud-textured triangle GPU packet template.
+0x8002DAFC, BuildEnvironmentMappedTrianglePacketTemplate — builds an environment-mapped POLY_FT3 packet template.
+0x8002E038, RenderFlatTriangleAverage — transforms and submits flat triangles using average depth.
+0x8002E054, RenderFlatQuadAverage — transforms and submits flat quads using average depth.
+0x8002E268, FieldModelFT4RawHandler — transforms, clips, and submits raw field-model POLY_FT4 packets.
+0x8002E470, RenderFlatTriangleNearestMode — transforms and submits flat triangles using nearest-depth mode.
+0x8002E688, RenderRawTexturedQuadFarthest — transforms and submits raw textured quads using farthest depth (Ghidra static analysis + authenticated runtime seam).
+0x8002E8DC, RenderFlatTriangleNearest — transforms and submits flat triangles using nearest depth.
+0x8002ED20, RenderFlatTriangleFarthest — transforms and submits flat triangles using farthest depth.
+0x8002EF0C, RenderFlatTexturedTriangleAverageDepthCue — submits flat-textured triangles using average depth and depth cueing.
+0x8002F0E4, RenderFlatTexturedTriangleNearestDepthCue — submits flat-textured triangles using nearest depth and depth cueing.
+0x8002F4B4, RenderFlatTexturedTriangleModeOne — submits flat-textured triangles through renderer mode one.
+0x8002F8D0, RenderFlatTexturedQuadModeOne — submits flat-textured quads through renderer mode one.
+0x8002FCFC, RenderFlatTexturedQuadAverageDepthCue — submits flat-textured quads using average depth and depth cueing.
+0x8002FF0C, RenderFlatTexturedQuadNearestDepthCue — submits flat-textured quads using nearest depth and depth cueing.
+0x80030750, RenderEnvironmentMappedTriangle — transforms and submits environment-mapped triangles.
+
 0x80031894, HeapGetNextBlockHeader — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
 0x800318A8, HeapGetBlockUser — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
 0x800318BC, HeapGetBlockSourceAddress — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
@@ -175,6 +257,7 @@
 0x800337E8, GetAccessoryName — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
 0x80033818, GetItemName — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
 0x80033848, GetWeaponName — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
+0x80034888, SystemStringEntryRender — renders and advances a system string entry, including glyph primitives and VRAM uploads (Ghidra static analysis + field text-box runtime census, 2026-08-23).
 0x80034EAC, SystemRenderStringEntry — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
 0x8003569C, ControllerGetButtonState — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)
 0x80035734, ControllerGetType — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)

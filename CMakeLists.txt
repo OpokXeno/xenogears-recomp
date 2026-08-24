@@ -60,6 +60,24 @@ option(XG_RENDER_NATIVE
 option(XG_RENDER_VALIDATE_OVERLAYS
     "Verify private native-render overlay artifacts during the build"
     OFF)
+if(BUILD_TESTING
+        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/field_module.exe"
+        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/worldmap_module.bin"
+        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/battle_module.bin"
+        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/battling_module.bin"
+        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/menu_module.bin"
+        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/movie_module.bin"
+        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/member_change_menu.bin"
+        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/shop_menu.bin"
+        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/gear_shop_menu.bin"
+        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/lib_gear.bin"
+        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/battle_event.bin")
+    add_test(NAME overlay_annotation_catalog
+        COMMAND "${Python3_EXECUTABLE}" -m pytest
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_overlay_annotations.py")
+    set_tests_properties(overlay_annotation_catalog PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+endif()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${XG_RENDER_MANIFEST}"
     "${XG_RENDER_RUNTIME_VARIANTS}"

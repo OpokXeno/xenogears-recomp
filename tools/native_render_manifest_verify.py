@@ -81,6 +81,7 @@ RECORD_IDS: Final = {
     "draw-otag": 5,
     "vsync": 6,
 }
+OPTIONAL_RECORD_ID_START: Final = 7
 
 
 def file_identity(path: Path) -> FileIdentity:
@@ -194,6 +195,17 @@ def verify(contract: ManifestContract, inputs: VerificationInputs) -> VerifiedMa
         fail("caller mismatch at authenticated 0x800781bc site")
     if site.framebuffer_context != contract.producer.framebuffer_context or site.ot_context != contract.producer.ot_context:
         fail("site and producer context mismatch")
+    overlay_actuals: list[FileIdentity] = []
+    for overlay in contract.overlays:
+        overlay_path = inputs.overlays / overlay.file
+        actual = file_identity(overlay_path)
+        if actual != overlay.identity:
+            fail(f"{overlay.identifier} full identity mismatch")
+        if overlay.image_format == "ps-x-exe":
+            verify_psx_exe_mapping(
+                overlay_path, overlay.header_size, overlay.base_address,
+                overlay.loaded_size, overlay.identifier)
+        overlay_actuals.append(actual)
     zero = Digest32(bytes(32))
     records = [
         MetadataRecord(RECORD_IDS[GAME_ID], GAME_ID, 1, contract.game.base_address, 0, game_actual.sha256, zero, "", ""),
@@ -202,6 +214,14 @@ def verify(contract: ManifestContract, inputs: VerificationInputs) -> VerifiedMa
         MetadataRecord(RECORD_IDS[SITE_ID], SITE_ID, 4, site.call_address, callee.entry_address, overlay_actual.sha256, site.window_sha256, site.framebuffer_context, site.ot_context),
     ]
     records.extend(MetadataRecord(RECORD_IDS[function.identifier], function.identifier, 5, function.entry_address, 0, game_actual.sha256, zero, "", "") for function in contract.functions)
+    records = sorted(records, key=lambda item: item.identifier)
+    records.extend(
+        MetadataRecord(
+            OPTIONAL_RECORD_ID_START + index, overlay.identifier, 2,
+            overlay.base_address, 0, actual.sha256, zero, "", "")
+        for index, (overlay, actual) in enumerate(
+            zip(contract.overlays, overlay_actuals, strict=True))
+    )
     validation = ManifestValidationMetadata(
         producer_record_id=RECORD_IDS[PRODUCER_ID],
         site_record_id=RECORD_IDS[SITE_ID],
@@ -222,7 +242,7 @@ def verify(contract: ManifestContract, inputs: VerificationInputs) -> VerifiedMa
         required_delay_slot_non_control_transfer=1,
     )
     manifest_identity = Digest32(hashlib.sha256(inputs.manifest.read_bytes()).digest())
-    return VerifiedManifest(game_actual.sha256, manifest_identity, contract.game.namespace_crc32, tuple(sorted(records, key=lambda item: item.identifier)), validation)
+    return VerifiedManifest(game_actual.sha256, manifest_identity, contract.game.namespace_crc32, tuple(records), validation)
 
 
 def declare(contract: ManifestContract, manifest: Path) -> VerifiedManifest:
@@ -251,6 +271,13 @@ def declare(contract: ManifestContract, manifest: Path) -> VerifiedManifest:
     records.extend(MetadataRecord(RECORD_IDS[function.identifier], function.identifier,
                    5, function.entry_address, 0, contract.game.identity.sha256, zero, "", "")
                    for function in contract.functions)
+    records = sorted(records, key=lambda item: item.identifier)
+    records.extend(
+        MetadataRecord(
+            OPTIONAL_RECORD_ID_START + index, overlay.identifier, 2,
+            overlay.base_address, 0, overlay.identity.sha256, zero, "", "")
+        for index, overlay in enumerate(contract.overlays)
+    )
     validation = ManifestValidationMetadata(
         RECORD_IDS[PRODUCER_ID], RECORD_IDS[SITE_ID], field.range_crc32,
         field.range_crc32, field.base_address + field.range_offset, field.range_size,
@@ -260,5 +287,5 @@ def declare(contract: ManifestContract, manifest: Path) -> VerifiedManifest:
     return VerifiedManifest(
         contract.game.identity.sha256,
         Digest32(hashlib.sha256(manifest.read_bytes()).digest()),
-        contract.game.namespace_crc32, tuple(sorted(records, key=lambda item: item.identifier)),
+        contract.game.namespace_crc32, tuple(records),
         validation)

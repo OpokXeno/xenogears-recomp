@@ -28,6 +28,176 @@ range_offset = 0
 range_size = 282624
 range_crc32 = "921c77f1"
 
+[overlay.world]
+id = "world-image"
+state = "authenticated"
+file = "worldmap_module.bin"
+full_sha256 = "4c15fd32b3a03d7cd5ea4403dcaabc70abaf99b6aaca65d63d6866803edaac70"
+full_crc32 = "082b6ba5"
+full_size = 180422
+base_address = "0x8006faf0"
+image_format = "raw"
+header_size = 0
+loaded_size = 180422
+source_disc = 1
+source_directory = 1
+source_file = 15
+source_sector = 108995
+compressed_size = 92180
+
+[overlay.battle]
+id = "battle-image"
+state = "authenticated"
+file = "battle_module.bin"
+full_sha256 = "1830b4ef1fe37129972fc310dfad534f8161d6c0b123e74254c3711334a3e291"
+full_crc32 = "0fb96498"
+full_size = 343936
+base_address = "0x8006faf0"
+image_format = "raw"
+header_size = 0
+loaded_size = 343936
+source_disc = 1
+source_directory = 1
+source_file = 16
+source_sector = 109041
+compressed_size = 166564
+
+[overlay.battling]
+id = "battling-image"
+state = "authenticated"
+file = "battling_module.bin"
+full_sha256 = "3e6df915e9c7f05f5fb997cb331392f1333e867dfb2628cd65e5e1ea1575646e"
+full_crc32 = "a76dcf88"
+full_size = 142953
+base_address = "0x8006faf0"
+image_format = "raw"
+header_size = 0
+loaded_size = 142953
+source_disc = 1
+source_directory = 1
+source_file = 13
+source_sector = 108893
+compressed_size = 80284
+
+[overlay.menu]
+id = "menu-image"
+state = "authenticated"
+file = "menu_module.bin"
+full_sha256 = "82f84a24ac1fd1979754e1cc9c861405fb59ce95dd78db00a76f00c8f1bd177d"
+full_crc32 = "4d16749c"
+full_size = 153864
+base_address = "0x801c5000"
+image_format = "raw"
+header_size = 0
+loaded_size = 153864
+source_disc = 1
+source_directory = 1
+source_file = 17
+source_sector = 109123
+compressed_size = 70944
+
+[overlay.movie]
+id = "movie-image"
+state = "authenticated"
+file = "movie_module.bin"
+full_sha256 = "50e1a9d9e08b90eed0c2da1c289507e71cbf51749893a92f457ce79a59701f9a"
+full_crc32 = "0b5b82a1"
+full_size = 29779
+base_address = "0x8006faf0"
+image_format = "raw"
+header_size = 0
+loaded_size = 29779
+source_disc = 1
+source_directory = 1
+source_file = 18
+source_sector = 109158
+compressed_size = 14360
+
+[overlay.member-change-menu]
+id = "member-change-menu-image"
+state = "authenticated"
+file = "member_change_menu.bin"
+full_sha256 = "3b9e2b890c27ae0de97fe343ac75cd35c05fe7f9605ae387d2166da0be78109c"
+full_crc32 = "aa61c9e7"
+full_size = 26624
+base_address = "0x801c5000"
+image_format = "raw"
+header_size = 0
+loaded_size = 26624
+source_disc = 1
+source_directory = 16
+source_file = 6
+source_sector = 239411
+archive_size = 26012
+
+[overlay.shop-menu]
+id = "shop-menu-image"
+state = "authenticated"
+file = "shop_menu.bin"
+full_sha256 = "7890e14bcabddcf85368de10783ecff8daa166dc5ac254e06db5e27959cab4cf"
+full_crc32 = "d558e06e"
+full_size = 55296
+base_address = "0x801c5000"
+image_format = "raw"
+header_size = 0
+loaded_size = 55296
+source_disc = 1
+source_directory = 16
+source_file = 9
+source_sector = 239515
+archive_size = 53860
+
+[overlay.gear-shop-menu]
+id = "gear-shop-menu-image"
+state = "authenticated"
+file = "gear_shop_menu.bin"
+full_sha256 = "c7a1982f0ea624c81fd0f85e1a1335c7517723f12ba3e2d08395842392423691"
+full_crc32 = "77c1d7e4"
+full_size = 83968
+base_address = "0x801c5000"
+image_format = "raw"
+header_size = 0
+loaded_size = 83968
+source_disc = 1
+source_directory = 16
+source_file = 10
+source_sector = 239542
+archive_size = 82080
+
+[overlay.gear-helper]
+id = "gear-helper-image"
+state = "authenticated"
+file = "lib_gear.bin"
+full_sha256 = "14395a9f54c124fed016f07906cc882b2a9256d5ade2d10eef99e10fe9366523"
+full_crc32 = "ec219bef"
+full_size = 51200
+base_address = "0x801dc000"
+image_format = "raw"
+header_size = 0
+loaded_size = 51200
+source_disc = 1
+source_directory = 16
+source_file = 12
+source_sector = 239659
+archive_size = 50868
+
+[overlay.battle-event]
+id = "battle-event-image"
+state = "authenticated"
+file = "battle_event.bin"
+full_sha256 = "1cac23da143e6dfc8f1f4b52ed5754392ea853ee58d6e62d65fd7fbfa86932cc"
+full_crc32 = "81aee074"
+full_size = 20480
+base_address = "0x801e5000"
+image_format = "raw"
+header_size = 0
+loaded_size = 20480
+source_disc = 1
+source_directory = 32
+source_file = 1
+source_sector = 257151
+archive_size = 19516
+
 [[functions]]
 id = "draw-otag"
 image = "main-disc1-exe"
