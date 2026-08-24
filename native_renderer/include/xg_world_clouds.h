@@ -3,6 +3,7 @@
 
 #include "xg_host_3d.h"
 #include "xg_render_ir.h"
+#include "xg_world_clouds_snapshot_types.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -25,12 +26,6 @@ enum {
         XG_WORLD_CLOUD_COUNT * XG_WORLD_CLOUD_NEAR_QUAD_COUNT,
 };
 
-typedef enum XgWorldCloudLod {
-    XG_WORLD_CLOUD_LOD_NEAR = 0,
-    XG_WORLD_CLOUD_LOD_MIDDLE = 1,
-    XG_WORLD_CLOUD_LOD_FAR = 2,
-} XgWorldCloudLod;
-
 typedef enum XgWorldCloudsResult {
     XG_WORLD_CLOUDS_OK = 0,
     XG_WORLD_CLOUDS_INVALID_ARGUMENT,
@@ -45,12 +40,6 @@ typedef enum XgWorldCloudCull {
     XG_WORLD_CLOUD_CULL_SCREEN,
     XG_WORLD_CLOUD_CULL_DEPTH,
 } XgWorldCloudCull;
-
-typedef struct XgWorldCloudPosition {
-    int32_t x;
-    int32_t y;
-    int32_t z;
-} XgWorldCloudPosition;
 
 typedef struct XgWorldCloudVelocity {
     int16_t x;
@@ -109,27 +98,6 @@ typedef struct XgWorldCloudRecord {
     XgWorldCloudCull cull;
     bool accepted;
 } XgWorldCloudRecord;
-
-typedef struct XgWorldCloudsBuildStats {
-    uint32_t clouds_entered;
-    uint32_t clouds_world_culled;
-    uint32_t clouds_anchor_culled;
-    uint32_t near_groups_culled;
-    uint32_t quad_attempt_count;
-    uint32_t quad_projection_culled;
-    uint32_t quad_screen_culled;
-    uint32_t far_preinsert_depth_stops;
-    uint32_t far_postinsert_depth_stops;
-    uint32_t first_world_accepted_source;
-    uint32_t first_anchor_flags;
-    int32_t first_anchor_translation_x;
-    int32_t first_anchor_translation_y;
-    int32_t first_anchor_translation_z;
-    int32_t first_world_relative_x;
-    int32_t first_world_relative_z;
-    bool has_world_accepted_source;
-    bool packet_entry_limit_stopped;
-} XgWorldCloudsBuildStats;
 
 XgWorldCloudsResult xg_world_clouds_step_positions(
     XgWorldCloudPosition positions[XG_WORLD_CLOUD_COUNT],

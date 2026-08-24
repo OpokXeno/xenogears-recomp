@@ -11,7 +11,7 @@ from native_render_field_character_shadow_schema import (
 from native_render_schema import ContractError, JsonValue
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-SUMMARY_HEADER = REPOSITORY_ROOT / "native_renderer" / "include" / "field_character_shadow.h"
+SUMMARY_HEADER = REPOSITORY_ROOT / "native_renderer" / "include" / "field_character_shadow_types.h"
 
 
 def shadow_summary() -> dict[str, JsonValue]:

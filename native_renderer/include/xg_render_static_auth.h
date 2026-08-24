@@ -1,7 +1,7 @@
 #ifndef XG_RENDER_STATIC_AUTH_H
 #define XG_RENDER_STATIC_AUTH_H
 
-#include "guest_render_bridge.h"
+#include "guest_render_types.h"
 
 #include <stdbool.h>
 #include <stddef.h>

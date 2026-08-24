@@ -83,9 +83,13 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${XG_RENDER_RUNTIME_VARIANTS}"
     "${XG_RENDER_OVERLAY_RANGES}"
     "${XG_RENDER_GAME_EXE}"
-    "${XG_RENDER_RUNTIME_ARTIFACT}"
     ${XG_RENDER_MANIFEST_TOOL_SOURCES}
     ${XG_OVERLAY_CODEGEN_INPUTS})
+if(XG_RENDER_NATIVE AND XG_RENDER_VALIDATE_OVERLAYS)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${XG_RENDER_OVERLAYS}"
+        "${XG_RENDER_RUNTIME_ARTIFACT}")
+endif()
 
 if(XG_RENDER_NATIVE)
 if(XG_RENDER_VALIDATE_OVERLAYS)
@@ -214,7 +218,7 @@ target_link_libraries(psx-runtime PRIVATE
     xg_render_static_auth
     xg_field_character_runtime)
 target_sources(psx-runtime PRIVATE
-        native_renderer/src/xg_native_render_baseline.c
+        native_renderer/src/core/xg_native_render_baseline.c
         src/mods/xenogears_indexed_disc.cpp)
 target_include_directories(psx-runtime PRIVATE
     native_renderer/include
@@ -229,7 +233,7 @@ if(TARGET psx-runtime-pgxp)
         xg_render_static_auth
         xg_field_character_runtime)
     target_sources(psx-runtime-pgxp PRIVATE
-        native_renderer/src/xg_native_render_baseline.c
+        native_renderer/src/core/xg_native_render_baseline.c
         src/mods/xenogears_indexed_disc.cpp)
     target_include_directories(psx-runtime-pgxp PRIVATE
         native_renderer/include
@@ -316,8 +320,8 @@ if(BUILD_TESTING)
         COMMAND native_fps_route_capture_overlay_provenance_test)
 
     add_executable(xg_input_replay
-        native_renderer/tests/test_input_replay.cpp
-        native_renderer/tests/native_render_baseline_runtime_stubs.c
+        native_renderer/tests/integration/test_input_replay.cpp
+        native_renderer/tests/integration/native_render_baseline_runtime_stubs.c
         ${PSXRECOMP_ROOT}/runtime/src/input_replay.cpp
         ${PSXRECOMP_ROOT}/runtime/src/guest_render_native_stream.c
         ${PSXRECOMP_ROOT}/runtime/src/native_render_baseline.c
@@ -330,19 +334,56 @@ if(BUILD_TESTING)
     add_test(NAME xg_input_replay COMMAND xg_input_replay)
 
     add_executable(xg_input_replay_auth_proof
-        native_renderer/tests/test_input_replay_auth_proof.cpp
-        native_renderer/tests/native_render_baseline_runtime_stubs.c
-        native_renderer/src/xg_render_static_auth.c
-        native_renderer/src/xg_render_static_auth_metadata.c
-        native_renderer/src/xg_render_auth_runtime.c
-        native_renderer/src/xg_field_particles.c
-        native_renderer/src/xg_field_zoom.c
-        native_renderer/src/xg_field_projected.c
-        native_renderer/src/xg_field_compass.c
-        native_renderer/src/xg_render_runtime_variant_auth.c
-        native_renderer/src/xg_render_auth.c
-        native_renderer/src/xg_render_ir.c
-        native_renderer/tests/xg_render_runtime_variant_test_table.c
+        native_renderer/tests/integration/test_input_replay_auth_proof.cpp
+        native_renderer/tests/integration/native_render_baseline_runtime_stubs.c
+        native_renderer/src/auth/xg_render_static_auth.c
+        native_renderer/src/auth/xg_render_static_auth_metadata.c
+        "${CMAKE_BINARY_DIR}/native_renderer/generated/xg_render_overlay_cutovers_generated.c"
+        native_renderer/src/runtime/xg_render_auth_runtime.c
+        native_renderer/src/runtime/xg_render_runtime_host_services.c
+        native_renderer/tests/auth/xg_render_auth_runtime_test_adapter.c
+        native_renderer/src/runtime/xg_render_runtime_composition.c
+        native_renderer/src/runtime/xg_render_cutover_dispatch.c
+        native_renderer/src/producers/world/xg_render_world_coordinator.c
+        native_renderer/src/producers/field/xg_render_field_character_pipeline.c
+        native_renderer/src/producers/field/xg_field_render_services.c
+        native_renderer/src/infrastructure/xg_render_address_lookup.c
+        native_renderer/src/producers/field/xg_render_f4_sources.c
+        native_renderer/src/producers/field/xg_render_field_polyline.c
+        native_renderer/src/producers/field/xg_render_field_sprite.c
+        native_renderer/src/infrastructure/xg_render_instrumentation.c
+        native_renderer/src/runtime/xg_render_invalidation_dispatch.c
+        native_renderer/src/runtime/xg_render_invalidation_modules.c
+        native_renderer/src/runtime/xg_render_mutation_classifier.c
+        native_renderer/src/auth/xg_render_local_producer_auth.c
+        native_renderer/src/producers/model/xg_render_model_repository.c
+        native_renderer/src/producers/model/xg_render_model_sprite_pipeline.c
+        native_renderer/src/producers/world/xg_render_world_model_repository.c
+        native_renderer/src/producers/world/xg_render_world_models_pipeline.c
+        native_renderer/src/producers/field/xg_render_overlay_ft4.c
+        native_renderer/src/infrastructure/xg_render_primitive_utils.c
+        native_renderer/src/producers/field/xg_render_residual.c
+        native_renderer/src/infrastructure/xg_render_resolver_registry.c
+        native_renderer/src/infrastructure/xg_render_shared_packet_resolver.c
+        native_renderer/src/infrastructure/xg_render_shared_packet_gpu_environment.c
+        native_renderer/src/producers/field/xg_render_resident_line_f2.c
+        native_renderer/src/infrastructure/xg_render_resource_watch.c
+        native_renderer/src/infrastructure/xg_render_submission.c
+        native_renderer/src/infrastructure/xg_render_temporal_submission.c
+        native_renderer/src/infrastructure/xg_render_ui_ot.c
+        native_renderer/src/producers/world/xg_render_world_simple_producers.c
+        native_renderer/src/producers/world/xg_render_world_actor_sprites.c
+        native_renderer/src/producers/world/xg_render_world_clouds.c
+        native_renderer/src/producers/world/xg_render_world_sky_producer.c
+        native_renderer/src/producers/world/xg_render_world_execution.c
+        native_renderer/src/producers/field/xg_field_particles.c
+        native_renderer/src/producers/field/xg_field_zoom.c
+        native_renderer/src/producers/field/xg_field_projected.c
+        native_renderer/src/producers/field/xg_field_compass.c
+        native_renderer/src/auth/xg_render_runtime_variant_auth.c
+        native_renderer/src/auth/xg_render_auth.c
+        native_renderer/src/core/xg_render_ir.c
+        native_renderer/tests/auth/xg_render_runtime_variant_test_table.c
         ${PSXRECOMP_ROOT}/runtime/src/input_replay.cpp
         ${PSXRECOMP_ROOT}/runtime/src/psx_sha256.c
         ${PSXRECOMP_ROOT}/runtime/src/guest_render_native_stream.c
@@ -351,6 +392,14 @@ if(BUILD_TESTING)
         ${PSXRECOMP_ROOT}/runtime/src/guest_render_bridge.c)
     target_include_directories(xg_input_replay_auth_proof PRIVATE
         native_renderer/include
+        native_renderer/src/auth
+        native_renderer/src/core
+        native_renderer/src/infrastructure
+        native_renderer/src/producers/field
+        native_renderer/src/producers/model
+        native_renderer/src/producers/world
+        native_renderer/src/runtime
+        native_renderer/tests/auth
         "${CMAKE_BINARY_DIR}/native_renderer/generated"
         ${PSXRECOMP_ROOT}/runtime/include
         ${PSX_SDL_INCLUDE_DIRS})
@@ -358,10 +407,10 @@ if(BUILD_TESTING)
         xg_render_overlay_cutovers_generated)
     target_compile_definitions(xg_input_replay_auth_proof PRIVATE
         GUEST_RENDER_BRIDGE_TESTING=1
-        PSX_INPUT_REPLAY_XG_AUTH_PROOF=1
-        PSX_XG_RENDER_AUTH_RUNTIME_TESTING=1)
+        PSX_INPUT_REPLAY_XG_AUTH_PROOF=1)
     target_link_libraries(xg_input_replay_auth_proof PRIVATE
-        xg_host_3d xg_field_character_shadow xg_field_character_runtime
+        xg_host_3d xg_native_view xg_field_character_shadow
+        xg_field_character_runtime
         xg_model_ft4_raw xg_sprite_ft4 xg_world_clouds xg_world_decorations
         xg_world_effects xg_world_entity_shadows xg_world_horizon
         xg_world_minimap xg_world_models xg_world_actor_sprites xg_world_sky
@@ -372,9 +421,9 @@ if(BUILD_TESTING)
         ENVIRONMENT "PSX_OVERLAY_NO_GATES=0")
 
     add_executable(xg_input_replay_baseline
-        native_renderer/tests/test_input_replay_baseline.cpp
-        native_renderer/tests/native_render_frame_count_stub.c
-        native_renderer/src/xg_native_render_baseline.c
+        native_renderer/tests/integration/test_input_replay_baseline.cpp
+        native_renderer/tests/integration/native_render_frame_count_stub.c
+        native_renderer/src/core/xg_native_render_baseline.c
         ${PSXRECOMP_ROOT}/runtime/src/input_replay.cpp
         ${PSXRECOMP_ROOT}/runtime/src/guest_render_native_stream.c
         ${PSXRECOMP_ROOT}/runtime/src/native_render_baseline.c
@@ -391,7 +440,7 @@ if(BUILD_TESTING)
 
     add_executable(xg_native_render_baseline
         psxrecomp/runtime/tests/test_native_render_baseline.c
-        native_renderer/tests/native_render_frame_count_stub.c
+        native_renderer/tests/integration/native_render_frame_count_stub.c
         ${PSXRECOMP_ROOT}/runtime/src/native_render_baseline.c
         ${PSXRECOMP_ROOT}/runtime/src/native_render_baseline_runtime.c
         ${PSXRECOMP_ROOT}/runtime/src/gte_attribution.cpp)
@@ -403,8 +452,8 @@ if(BUILD_TESTING)
     add_test(NAME xg_native_render_baseline COMMAND xg_native_render_baseline)
 
     add_executable(xg_input_record
-        native_renderer/tests/test_input_record.cpp
-        native_renderer/tests/native_render_baseline_runtime_stubs.c
+        native_renderer/tests/integration/test_input_record.cpp
+        native_renderer/tests/integration/native_render_baseline_runtime_stubs.c
         ${PSXRECOMP_ROOT}/runtime/src/input_replay.cpp
         ${PSXRECOMP_ROOT}/runtime/src/guest_render_native_stream.c
         ${PSXRECOMP_ROOT}/runtime/src/native_render_baseline.c
@@ -417,7 +466,7 @@ if(BUILD_TESTING)
     add_test(NAME xg_input_record COMMAND xg_input_record)
 
     add_executable(xg_host_input_mapping
-        native_renderer/tests/test_host_input_mapping.cpp
+        native_renderer/tests/integration/test_host_input_mapping.cpp
         ${PSXRECOMP_ROOT}/runtime/src/host_input_snapshot.cpp
         ${PSXRECOMP_ROOT}/runtime/src/host_input_mapping.cpp
         ${PSXRECOMP_ROOT}/runtime/src/psx_keybinds.c)
@@ -428,8 +477,8 @@ if(BUILD_TESTING)
     add_test(NAME xg_host_input_mapping COMMAND xg_host_input_mapping)
 
     add_executable(xg_input_parity
-        native_renderer/tests/test_input_parity.cpp
-        native_renderer/tests/native_render_baseline_runtime_stubs.c
+        native_renderer/tests/integration/test_input_parity.cpp
+        native_renderer/tests/integration/native_render_baseline_runtime_stubs.c
         ${PSXRECOMP_ROOT}/runtime/src/host_input_snapshot.cpp
         ${PSXRECOMP_ROOT}/runtime/src/host_input_mapping.cpp
         ${PSXRECOMP_ROOT}/runtime/src/input_replay.cpp
@@ -454,6 +503,7 @@ if(BUILD_TESTING)
 
     add_executable(gpu_gl_mask_order_test
         psxrecomp/runtime/tests/test_gpu_gl_mask_order.c
+        psxrecomp/runtime/tests/memory_profile_test_globals.c
         psxrecomp/runtime/tests/native_render_baseline_gpu_test_double.c
         ${PSXRECOMP_ROOT}/runtime/src/color_lut.c
         ${PSXRECOMP_ROOT}/runtime/src/gpu.c
@@ -465,6 +515,7 @@ if(BUILD_TESTING)
         ${PSXRECOMP_ROOT}/runtime/src/gpu_render.c
         ${PSXRECOMP_ROOT}/runtime/src/gpu_semantic_workload.c
         ${PSXRECOMP_ROOT}/runtime/src/pgxp.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/ram_provenance.c
         ${PSXRECOMP_ROOT}/runtime/src/ws_aspect_cone_math.c
         ${PSXRECOMP_ROOT}/runtime/src/ws_ui_group.c
         ${PSXRECOMP_ROOT}/runtime/src/gpu_gl_renderer.c)

@@ -3,6 +3,7 @@
 
 #include "xg_host_3d.h"
 #include "xg_render_ir.h"
+#include "xg_world_terrain_water_snapshot_types.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -107,27 +108,6 @@ typedef struct XgWorldTerrainWaterAnchor {
     XgRenderIrMaterialState material;
     XgRenderIrVertex vertex;
 } XgWorldTerrainWaterAnchor;
-
-typedef struct XgWorldTerrainWaterBuildDiagnostics {
-    uint32_t active_tiles;
-    uint32_t selected_quadrants;
-    uint32_t rejected_quadrants;
-    uint32_t considered_triangles;
-    uint32_t projective_vertices;
-    uint32_t projective_invalid_x;
-    uint32_t projective_invalid_y;
-    uint32_t projective_invalid_z;
-    uint32_t projective_invalid_near;
-    uint32_t emitted_projective_vertices;
-    uint32_t shared_duplicate_vertices;
-    uint32_t shared_raster_conflicts;
-    uint32_t projection_rejects;
-    uint32_t screen_rejects;
-    uint32_t backface_rejects;
-    uint32_t depth_rejects;
-    uint32_t emitted_triangles;
-    uint32_t packet_limit_stops;
-} XgWorldTerrainWaterBuildDiagnostics;
 
 XgWorldTerrainWaterResult xg_world_terrain_water_build(
     const XgWorldTerrainWaterSource *source,

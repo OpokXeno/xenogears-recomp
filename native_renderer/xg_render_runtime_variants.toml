@@ -2,7 +2,7 @@ schema = "xg-render-runtime-variants/v1"
 
 [canonical]
 game_sha256 = "dc0b2dd786203d4cce5927c5a3fc85a18f39a3f7406078860076ebb0bbae7119"
-manifest_sha256 = "25b53839e2546e95b2c43496dee8c8001294ac237916de7d7f0e7e8fee5760bb"
+manifest_sha256 = "8dc1984c78754d909617eabd6501aab7186555a65ef8fc4cf3f2dca497bf533a"
 producer_record_id = 3
 site_record_id = 4
 producer_entry = "0x80075b44"

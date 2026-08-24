@@ -1,7 +1,7 @@
 #ifndef XG_RENDER_IR_H
 #define XG_RENDER_IR_H
 
-#include "guest_render_bridge.h"
+#include "guest_render_types.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -232,13 +232,6 @@ XgRenderIrResult xg_render_ir_serialize_normalized(const XgRenderIr *ir,
                                                     size_t *out_size);
 size_t xg_render_ir_item_capacity(void);
 const char *xg_render_ir_reject_reason_name(uint32_t reason);
-
-#ifdef XG_RENDER_IR_TESTING
-void xg_render_ir_test_reset_process_owner(void);
-XgRenderIrResult xg_render_ir_test_stored_item_get(const XgRenderIr *ir,
-                                                    size_t index,
-                                                    XgRenderIrItem *out_item);
-#endif
 
 #ifdef __cplusplus
 }
