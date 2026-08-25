@@ -211,8 +211,11 @@ void xg_render_residual_handle_invalidation(
     } else if (event->kind == XG_RENDER_INVALIDATION_DISABLE ||
                event->kind == XG_RENDER_INVALIDATION_RESET) {
         xg_render_residual_reset();
-    } else if (event->kind == XG_RENDER_INVALIDATION_SCENE_BOUNDARY ||
-               event->kind == XG_RENDER_INVALIDATION_LOADER_MISMATCH ||
+    } else if (event->kind == XG_RENDER_INVALIDATION_SCENE_BOUNDARY) {
+        /* Full clear, not retain-resident: a field<->battle transition
+         * must not let templates survive across it. */
+        xg_render_residual_reset();
+    } else if (event->kind == XG_RENDER_INVALIDATION_LOADER_MISMATCH ||
                event->kind == XG_RENDER_INVALIDATION_RESOURCE_OVERLAP) {
         xg_render_residual_retain_resident();
     }

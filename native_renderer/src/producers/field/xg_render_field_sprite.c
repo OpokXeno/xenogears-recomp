@@ -917,8 +917,10 @@ void xg_render_field_sprite_handle_invalidation(
         xg_render_field_sprite_clear_builder(services->field_sprite);
         xg_render_field_sprite_clear_templates(services->field_sprite);
     } else if (event->kind == XG_RENDER_INVALIDATION_SCENE_BOUNDARY) {
+        /* Full clear, not retain-resident: a field<->battle transition
+         * must not let templates survive across it. */
         xg_render_field_sprite_clear_builder(services->field_sprite);
-        xg_render_field_sprite_retain_resident(services->field_sprite);
+        xg_render_field_sprite_clear_templates(services->field_sprite);
     } else if (event->kind == XG_RENDER_INVALIDATION_LOADER_MISMATCH ||
                event->kind == XG_RENDER_INVALIDATION_RESOURCE_OVERLAP) {
         xg_render_field_sprite_retain_resident(services->field_sprite);
