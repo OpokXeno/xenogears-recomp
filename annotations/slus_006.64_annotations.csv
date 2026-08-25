@@ -1,6 +1,6 @@
 # Xenogears (SLUS-00664, slus_006.64) — function annotations for PSXRecomp code generator
-# annotated_functions/total_functions: 802/1057
-# Total basis: functions recognized by Ghidra for slus_006.64.
+# annotated_functions/total_functions: 1219/1219
+# Total basis: data-cleaned 1,219-function main-executable set from the ladysilverberg/xenogears-decomp objdiff report; excludes four D_* data records. Nine supplementary resident roots are documented but excluded from the denominator.
 #
 # Format: address, note
 #   address: hex with 0x prefix (e.g. 0x8001dfd4)
@@ -78,11 +78,14 @@
 0x8003E290, SoundComputeLfoStep — conditionally scales a signed LFO step from duration and mode parameters.
 0x8003E3E0, SoundLfoRestart — restores configured LFO phase/step state, clears its accumulator, and marks it active.
 
-# --- game code (decomp-confirmed; thanks to ladysilverberg/xenogears-decomp) ---
+# --- game code (some are decomp-confirmed thanks to ladysilverberg/xenogears-decomp) ---
+0x80019548, RestoreResidentExecutionRegisters — restores SP and S8 to 0x80200000 and GP to 0x80059170.
 0x80019560, ClearMemory — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
+0x80019578, GameBootstrap — Initializes graphics input storage archives audio and core resources before entering the initial game state.
 0x80019964, printf — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
 0x800199CC, LoadGameStateOverlay — game core (decomp: ladysilverberg/xenogears-decomp, main/main_loop.c)
 0x80019ACC, MainLoop — game core (decomp: ladysilverberg/xenogears-decomp, main/main_loop.c)
+0x80019C2C, DumpMainRamToPc — Creates `c:\core` through the development PC interface and writes the first 2 MiB of RAM into it.
 0x80019C7C, HeapResetUser — game core (decomp: ladysilverberg/xenogears-decomp, main/main_loop.c)
 0x80019CA0, GameCheckAndHandleSoftReset — game core (decomp: ladysilverberg/xenogears-decomp, main/main_loop.c)
 0x80019CD0, GameSoftReset — game core (decomp: ladysilverberg/xenogears-decomp, main/main_loop.c)
@@ -91,7 +94,11 @@
 0x8001A1E4, KernelMenuInitializeCursor — kernel debug menu (decomp: ladysilverberg/xenogears-decomp, system/kernel_menu.c)
 0x8001A250, KernelMenuInitialize — kernel debug menu (decomp: ladysilverberg/xenogears-decomp, system/kernel_menu.c)
 0x8001A4B4, KernelMenuMain — kernel debug menu (decomp: ladysilverberg/xenogears-decomp, system/kernel_menu.c)
+0x8001A5CC, AllocateGridEffectBuffers — Allocates two 13440-byte primitive buffers and two 1120-byte occupancy maps then clears both maps.
+0x8001A684, IncrementWrappedGridCell — Wraps signed row and column coordinates across the grid boundaries and increments the selected occupancy byte.
+0x8001A6E8, UpdateAndDrawGridEffect — Emits tiles for occupied cells then clears the current map and advances twenty random walkers while marking each surrounding 3-by-3 neighborhood.
 0x8001AC94, GamePartySignalReinitialize — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp3.c)
+0x8001ACA4, BeginPartyResourceReload — Resets cached resource identifiers then selects field archive storage and queues current party skins plus the two shared field resources.
 0x8001ACF0, GameCharacterGetGearID — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp3.c)
 0x8001AD1C, GameWaitForCdData — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp3.c)
 0x8001AD4C, GamePartyCharactersInitializeSkins — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp3.c)
@@ -99,11 +106,23 @@
 0x8001B044, GamePartySyncSkinData — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp3.c)
 0x8001B158, GamePartyStreamLoadSkinData — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp3.c)
 0x8001B3A8, GamePartySyncStreamedData — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp3.c)
+0x8001B6BC, IdleGameState — Returns immediately without changing any state.
+0x8001B6C4, RunFieldGameState — Waits for pending reads then prepares field graphics and resources before running the field overlay and selecting the next game state from its exit status.
+0x8001B844, FieldInitializeGraphicsEnvironments — resets graphics state, initializes geometry projection, and creates two 320x224 field display and drawing environments.
+0x8001B94C, FieldConfigureDrawEnvironment — enables background clearing and dithering and sets the clear color to RGB(60,120,120).
+0x8001B970, InitializeNewGameState — Loads the initial game-state image then expands its encoded string records and clears transient progress values.
+0x8001BB0C, ApplyGameSoundSettings — Submits the current sound mode and volume state to the audio system.
+0x8001BB50, StartNewGame — Sets new-game defaults then initializes persistent game data and waits for all required archive transfers.
+0x8001BBAC, LoadCoreSoundResources — Allocates and streams the core sound files then registers the SEDS bank and initializes character-associated sound entries.
+0x8001BD40, RandomU8RangeInclusive — Returns an inclusive random byte between two bounds with explicit handling for fixed zero and `0xFF` sentinel bounds.
 0x8001BDDC, MenuInitializeGfxEnvironment — menu system (decomp: ladysilverberg/xenogears-decomp, system/menu.c)
 0x8001BE14, MenuInitializeGfxEnvironments — menu system (decomp: ladysilverberg/xenogears-decomp, system/menu.c)
+0x8001BEEC, MenuInitializeViewState — resets menu rotations, translations, camera state, and transition state while setting both Z distances to 0x800.
 0x8001BF38, MenuProcessControllerInput — menu system (decomp: ladysilverberg/xenogears-decomp, system/menu.c)
+0x8001C074, MenuDebugPresentFrame — polls menu input, swaps render environments, clears the active ordering table, runs enabled diagnostics, synchronizes drawing, and submits the frame.
 0x8001C1A8, MenuExecute — menu system (decomp: ladysilverberg/xenogears-decomp, system/menu.c)
 0x8001C634, MenuMain — menu system (decomp: ladysilverberg/xenogears-decomp, system/menu.c)
+0x8001C76C, MenuExecutionConstants — Maps menu operations to command identifiers transition parameters vectors and packed coefficients used during menu execution.
 0x8001C944, WorkListsReset — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
 0x8001C964, TimerWorkListUpdate — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
 0x8001CA58, WorkListAddTask — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
@@ -119,36 +138,147 @@
 0x8001CD88, WorkListTaskGetOnFreeCallback — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
 0x8001CD94, TimerWorkListRemoveTask — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
 0x8001CE44, TimerWorkListDeleteTask — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
+0x8001CE74, WorkListsRemoveOwnedTasks — removes matching-generation unprotected tasks owned by a target from both work lists and invokes each removed task’s free callback.
+0x8001D034, TimerWorkListClearFlaggedDependentLinks — finds matching-generation flagged timer tasks owned by a target and clears each associated sprite’s dependent link.
+0x8001D0A4, FindWorkTaskByOwnerGenerationAndCallback — Searches the regular work chain for an entry whose owner generation and trigger callback all match.
+0x8001D10C, FindWorkTaskByOwnerAndGeneration — Searches the regular work chain for an entry whose owner and masked generation match.
+0x8001D164, FindWorkTaskByCallback — Searches the regular work chain for the first entry using the requested trigger callback.
 0x8001D19C, WorkListsDeleteTasks — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
 0x8001D1D8, WorkListsAddTasks — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
+0x8001D298, ClearSpriteRenderChain — Clears the head of the pending sprite-render chain.
+0x8001D2A4, SpriteFrameTransferQueueClear — clears the pending sprite-frame transfer queue.
+0x8001D3F4, SpriteFrameTransferQueueRemove — unlinks every occurrence of a sprite from the pending frame-transfer queue.
+0x8001D468, BuildQueuedSpriteFrames — Traverses the pending sprite chain and decodes each active frame into render packets before clearing the chain.
+0x8001D4E8, SpriteEnsureDirectionTransforms — lazily allocates and zero-initializes the sprite’s eight direction-transform records.
+0x8001D53C, DecodeStaticSpriteFrameTiles — Decodes a packed static-atlas frame into positioned textured tile packets with palette page blend and flip attributes.
+0x8001DAE8, DecodeDynamicSpriteFrameTiles — Decodes a frame into tile packets and uploads embedded tile pixels into scratch VRAM when the frame uses dynamic texture data.
+0x8001E148, SpriteApplyRenderTransform — refreshes a dirty transform when required, transforms the sprite position and scaled frame offsets, and installs the resulting rotation and translation matrix.
+0x8001E298, RenderSpriteFramesWithOptionalShadow — applies the sprite render transform, renders its unclipped frame tiles, and conditionally renders its ground shadow.
+0x8001E2F8, RenderSpriteFramesAboveClipPlane — Updates the sprite transform and emits textured frame packets clipped to the upper side of the selected plane then prepares its optional shadow transform.
+0x8001E368, RenderSpriteFramesBelowClipPlane — Updates the sprite transform and emits textured frame packets clipped to the lower side of the selected plane then prepares its optional shadow transform.
+0x8001E3D8, RenderSpriteFrameTilesUnclipped — projects every current frame tile into a textured quad and links it into the supplied ordering table without Y clipping.
+0x8001E9BC, RenderSpriteGroundShadow — flattens the sprite at its ground height using half-height scaling and emits black textured quads into the supplied ordering table.
+0x8001EE68, SpriteFramesAreVramBacked — returns whether the current sprite-frame data uses VRAM-backed coordinates.
+0x8001EE74, SpriteFramesGetMaxTileCount — returns the maximum tile count encoded in the sprite-frame metadata.
+0x8001EE88, RenderSpriteFrameTilesAboveClipY — emits only each projected sprite-tile portion at or above a supplied Y boundary while adjusting geometry and texture coordinates at the cut.
+0x8001F1D4, RenderSpriteFrameTilesBelowClipY — emits only each projected sprite-tile portion at or below a supplied Y boundary while adjusting geometry and texture coordinates at the cut.
+0x8001F530, AllocateSpriteScratchVramStrip — Assigns a horizontal scratch-VRAM span across three 64-pixel rows and wraps to the first row after exhausting the region.
+0x8001F5BC, GetScaledSpriteFrameDimensions — Resolves the current frame and writes its three byte-sized dimensions multiplied by the sprite scale.
+0x8001F6B0, SpriteApplyFramePrimitiveAttributes — copies the sprite color, primitive code, and selected blend mode into every current frame-tile descriptor.
+0x8001F750, SpriteDecodeShortFrameDirectionTransforms — parses short-format frame records and applies embedded direction offsets and rotations to the sprite’s direction transforms.
+0x8001F8E8, SpriteUpdateFrameDirectionTransforms — validates a frame index and decodes that frame’s embedded direction-transform updates using the appropriate record format.
 0x8001FAB4, GraphicsDrawPauseLetters — rendering (decomp: ladysilverberg/xenogears-decomp, system/rendering.c)
+0x8001FB30, SpriteLoadEmbeddedVramImages — loads an embedded multi-image blob into VRAM at stored texture coordinates using a temporary 8 KiB stack.
+0x8001FBA4, AnimScriptResolveVariableAddress — resolves an encoded operand to either a stack-relative byte or an external-data byte selected by its high bit.
+0x8001FBE4, AnimScriptExecuteExtendedOpcode — executes extended animation opcodes that manipulate movement, transforms, attachments, resources, audio, arithmetic, colors, and models.
+0x80021AD8, ColorAddClampByte — adds a signed delta to a color channel and saturates the result to the range 0 through 255.
+0x80021B04, MathSetSVector — writes three supplied 16-bit components to a destination vector.
+0x80021B14, MathSetVector — writes three supplied 32-bit components to a destination vector.
+0x80021B24, CopyShortVector3 — Copies three consecutive 16-bit vector components.
+0x80021B48, CopyLongVector3 — Copies three consecutive 32-bit vector components.
+0x80021B6C, EnableSpriteRawTexture — Enables unmodulated texture rendering and refreshes the sprite packet colors.
 0x80021B98, SpriteSetColor — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
 0x80021BF0, SpriteSetSpecialAnimFile — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
+0x80021BF8, SetSpriteAnimationCallback — Stores the callback invoked by animation control opcodes.
+0x80021C00, SetSpriteCoordinateShift — Replaces the five-bit coordinate-shift value used when positioning sprite frames.
 0x80021C20, AnimScriptStackPopU8 — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
 0x80021C3C, AnimScriptStackPopU16 — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
 0x80021C6C, AnimScriptStackPopU24 — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
 0x80021CA0, AnimScriptStackPushU8 — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
 0x80021CC4, AnimScriptStackPushU16 — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
 0x80021CF8, AnimScriptStackPushU24 — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
+0x80021D3C, SetSpriteXZPosition — Converts integer X and Z coordinates to 16.16 fixed point and stores them in the sprite position.
+0x80021D50, RestoreSpriteMotionState — Restores position animation identifiers scale motion values and linked auxiliary values then advances animation until the saved cycle is reached.
+0x80021EBC, CaptureSpriteMotionState — Saves position animation progress orientation scale motion values and linked auxiliary values into a compact snapshot.
+0x80021FB8, SetSpriteLowBehaviorFlags — Replaces the low byte of the sprite behavior flags.
+0x80021FC0, SetSpriteMoveSpeed — Stores a new movement speed and recomputes horizontal velocity from the current direction and speed scale.
+0x80021FE0, SpriteSetMotionAngle — stores the sprite’s movement angle and immediately recomputes its horizontal velocity.
 0x80022000, SpriteSetScale — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
+0x80022038, SpriteRefreshTransformMatrix — recomputes the sprite transform matrix only when dirty and then clears the dirty state.
 0x80022090, SpriteComputeTransformMatrix — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
+0x80022224, SpriteResolveAnimationPackageFile — preserves texture and palette coordinates, resolves frame, palette, and animation references, and resets package animation bookkeeping.
+0x800222BC, SpriteSelectAnimationPackageFile — resolves a newly selected animation package, records it, marks frame data dirty, and applies battle-specific VRAM coordinates.
+0x80022974, SpriteRecomputeHorizontalVelocity — derives horizontal X and Z velocity from movement speed, time scale, and direction angle.
+0x80022A00, ReadFirstWord — Returns the 32-bit value stored at the supplied address.
 0x80022A0C, GfxLoadImageAccelerated — graphics (decomp: ladysilverberg/xenogears-decomp, system/graphics.c)
 0x80022A70, GfxLoadClutsAccelerated — graphics (decomp: ladysilverberg/xenogears-decomp, system/graphics.c)
+0x80022B2C, SpriteIntegrateVerticalMotion — integrates scaled vertical velocity and gravity, clamps at ground height, applies bounce restitution, and stops small rebounds.
+0x80022CAC, SpriteScaleMotionDelta — scales a motion delta by the sprite’s optional 10-bit fixed-point motion factor or returns it unchanged when no factor is active.
+0x80022CDC, SpriteIntegrateMotion — Advances fixed-point X and Z by scaled velocity then applies vertical velocity and gravity.
+0x80022D44, SpriteApplyDirectionalFrameEntry — Selects the current directional frame then updates horizontal flipping and applies its nine-bit frame index.
+0x80022DF4, SpriteAnimationTaskCallback — Ticks animation bytecode and motion once or conditionally twice then invokes the completion callback when the script ends.
+0x80022E8C, TickAnimationTaskWithFrameCounter — Increments the global animation-frame counter and executes the task’s normal animation update.
+0x80022EB8, DestroyAnimationTask — Releases queued image data directional transforms render packets and linked work entries before freeing the animation allocation.
+0x80022FC4, AllocateSpriteFramePackets — Replaces existing frame-packet storage with `count × 24` bytes allocated using the requested heap flags.
+0x8002303C, AllocateSpriteTileOverrides — Allocates one four-byte override per tile and initializes the first texture-coordinate pair from the active animation package.
+0x800230A8, DestroySpriteAllocation — Frees optional tile overrides and frame packets then unlinks and releases the sprite allocation.
+0x80023124, MathAngleBetweenPackedPoints — Returns the negated 12-bit angle from the second packed signed coordinate pair to the first.
+0x80023170, RestartSpriteAnimationFrame — Clears the script wait timer and cycle state then applies flip controls and selects the requested animation frame.
+0x800231E0, ReadRelativeSpriteWord — Returns the first 32-bit value at the sprite-relative offset stored in its motion field.
+0x800231F8, ReadIncrementedRelativeSpriteWord — Returns one plus the second 32-bit value at the sprite-relative offset stored in its motion field.
 0x80023210, AnimScriptTick — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp1.c)
+0x80023290, SpriteSetSemiTransparencyMode — Sets the sprite blend mode and primitive semitransparency state then updates existing render packets when required.
+0x80023340, ResizeSpriteFramePackets — Frees current frame-packet storage and allocates zero-flag replacement storage sized to `count × 24` bytes.
+0x80023440, SpriteDecodeRenderType — Decodes a four-bit sprite render type from the animation descriptor flags.
+0x80023468, SpriteClassifyRenderStorage — Maps a decoded sprite render type to storage class zero one or two.
+0x800234AC, SpriteClearDirectionTransforms — Zeroes all eight directional translation and rotation records.
+0x80023538, SpriteBindAnimationData — Binds animation data to a sprite then derives its script and frame tables and resets motion transform and interpreter state.
+0x80023804, SpriteInitializeState — Initializes a newly allocated sprite with default flags colors scale timing pointers and motion state.
+0x8002393C, SpriteBaseClearRotationAndFrames — Clears a sprite base record's rotation components and frame-data pointer.
+0x80023950, SpriteDisableBaseData — Selects the sprite storage layout without a base record.
+0x80023958, SpriteInitializeEmbeddedBase — Selects and clears the sprite's embedded base storage.
+0x800239A0, InitializeEmbeddedSpriteStorage — Initializes embedded transform storage and connects the sprite’s base animation package direction data and render-chain link.
+0x800239F4, SpriteInitializeEmbeddedFrameBase — Selects embedded base and frame storage then clears direction and linkage state.
+0x80023A48, SpriteAllocateAnimationTaskByRenderType — Allocates an animation task with render-type-specific trailing storage and initializes its selected storage layout and metadata.
+0x80023B84, SpriteSpawnLinkedChild — Allocates a linked child sprite then copies parent render and motion state before binding its animation and render callback.
+0x80023FD8, CreateSpriteFromAnimationEntry — Resolves an indexed animation entry then allocates and initializes a sprite with the requested position mode inherited attributes animation binding and runtime update policy.
+0x80024294, AllocateSpriteWithCreationGroup — Temporarily selects a creation group then allocates and initializes a 0x164-byte sprite before restoring the default group.
+0x800242F4, InitializeSpriteWithCreationGroup — Temporarily selects a creation group then initializes an existing sprite before restoring the default group.
+0x8002435C, InitializeSprite — Clears sprite state then installs its task callbacks and initializes transform animation color resource and render fields.
+0x80024524, AllocateSprite — Allocates a 0x164-byte sprite workspace then records its size and initializes it from the supplied parameters.
+0x800245D8, SpriteStartAnimationById — Selects a default or special animation by signed ID then binds it and reapplies the sprite's facing direction.
+0x80024730, SpriteConfigureRenderCallback — Performs render-type-specific setup and installs the corresponding indexed rendering callback.
+0x800248D4, SpriteRunAnimationBytecode — Interprets animation opcodes until a wait end or blocking condition while updating frames timing control flow and animation selection.
+0x80024F20, ResetSpriteRenderState — Clears the double-buffered sprite contexts and resets primitive cursors ordering buckets and transfer queues.
 0x80024F64, GfxAllocateWorkBuffers — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp1.c)
 0x80024FE4, GfxSetCurrentOT — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp1.c)
+0x80024FF4, GfxSetSpriteTransformMatrix — Copies a complete transformation matrix into the global matrix used for sprite projection.
+0x80025044, GfxFlushImageTransferQueue — Executes all queued image uploads or black clears for the current render context then empties its queue.
+0x800250E0, SelectSpriteRenderBuffer — Selects the active sprite buffer and resets its primitive cursor ordering buckets and transfer-record count.
+0x80025180, GfxQueueDeferredFree — Adds an allocation to the current render context's deferred-free list using a node from the graphics work buffer.
+0x800251C8, QueueSpriteTransferRecord — Appends a 16-byte transfer record when space remains and prepends it to the bucket selected by the current render index.
+0x80025224, SpriteSetRenderHandlerByType — Selects an indexed sprite rendering handler and assigns it as the work-list callback.
 0x80025258, RenderFieldActorSprite — resident field actor sprite projection and OT submission dispatcher (Ghidra decompile confirmed 2026-08-23).
+0x8002541C, RenderSpriteTile — Projects one sprite vertex then emits a TILE primitive with the configured color dimensions and depth.
+0x80025544, RenderSpriteTriangle — Projects three sprite vertices then emits a backface-tested F3 triangle into the depth ordering table.
+0x80025710, SkipSpriteRendering — Returns without producing any rendering work.
+0x80025718, RenderSpriteModel — Builds a rotation matrix from sprite angles and renders the associated model when its visibility state permits.
+0x800257F0, RenderParentedSpriteModel — Composes parent and local transforms then renders the associated model with the resulting matrix and position.
+0x80025A88, DrawSpriteModelPart — Depth-tests a sprite model then prepares its matrices and submits the selected model part into the active ordering table.
+0x80025C04, ScaleSpritePacketRgb555 — Scales each packed RGB555 channel by a fixed-point factor while preserving transparency and nonzero source channels.
+0x80025D4C, ModulateSpritePacketRgb555 — Applies mode-dependent RGB555 channel offsets and scaling then clamps each result while preserving transparency.
+0x80025FA8, BuildTintedSpriteFt4Packets — Decodes a selected sprite frame into scaled and flipped FT4 packets with texture coordinates CLUT pages and optional color modulation.
 0x8002675C, BuildFieldSpriteFt4Packets — builds scaled POLY_FT4 packets for field sprites (Ghidra static analysis + authenticated runtime producer work, 2026-08-23).
+0x80026A0C, BuildSpritePackets — Emits SPRT primitives for every fragment in a selected frame and appends the required texture-page draw-mode packet.
+0x80026B9C, SkipSpritePacketBuild — Returns without emitting any sprite packets.
+0x80026BA4, SubmitSpriteFt4Packets — Builds FT4 packets for a sprite frame then links each packet and its draw-mode command into the selected ordering bucket.
+0x80026DCC, BuildSpriteTextureDescriptors — Decodes a selected frame into compact geometry and texture descriptors with scaling and axis-flip adjustments.
+0x80026F44, ScaleTextureDescriptorRgb555 — Scales packed RGB555 descriptor colors by a fixed-point factor while preserving transparency and nonzero channels.
+0x80026FE8, BlendTextureDescriptorRgb555 — Interpolates packed RGB555 descriptor colors toward target colors with clamped channels and preserved transparency.
 0x8002709C, CreateFieldPanoramaPrimitiveSet — allocates and initializes the field panorama primitive set (Ghidra decompile confirmed 2026-08-23).
+0x800273C4, RenderFieldPanoramaSpan — Projects a panorama span between two world points and emits wrapped texture strips and optional clipping polygons into an ordering table.
+0x800278F8, RenderFieldPanoramaTextureStrips — Splits a horizontally wrapping panorama texture into at most eight textured quad strips and links them into the selected ordering table.
 0x80027D40, __builtin_delete — PsyQ libcard/libapi (Ghidra symbol DB, prior RE sessions)
 0x80027D64, GfxLineScrollInitialize — decomp module graphics/line_scroll.c (decomp: ladysilverberg/xenogears-decomp, graphics/line_scroll.c)
 0x80027EAC, GfxLineScrollUpdate — decomp module graphics/line_scroll.c (decomp: ladysilverberg/xenogears-decomp, graphics/line_scroll.c)
 0x8002800C, GfxLineScrollFree — decomp module graphics/line_scroll.c (decomp: ladysilverberg/xenogears-decomp, graphics/line_scroll.c)
+0x8002804C, ArchiveVisualizeHostIoRetry — Paints a color-coded retry stripe and after the fourth failure resets graphics and permanently displays the failing archive entry and path.
 0x80028230, ArchiveInit — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
 0x800283D4, ArchiveReset — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
 0x80028470, ArchiveSetIndex — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
 0x800284B4, ArchiveGetArchiveOffsetIndices — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
 0x80028530, ArchiveGetDiscNumber — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
+0x80028548, ArchiveGetRelativeEntryOffset — Returns an indexed archive sector offset relative to the current archive base.
 0x80028570, ArchiveReadHddFile — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
 0x800286BC, ArchiveGetCurFileSize — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
 0x800286CC, ArchiveDataSync — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
@@ -158,18 +288,42 @@
 0x80028928, ArchiveDecodeSizeAbsolute — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
 0x80028998, ArchiveGetFilePath — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
 0x800289D0, ArchiveDecodeSector — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
+0x80028A18, ArchiveDecodeSectorAtSavedOffset — Decodes a 24-bit sector number from the archive table using the saved archive offset.
 0x80028A60, ArchiveCdDataSync — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
 0x80028A94, ArchiveChangeStreamingFile — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
 0x80028AAC, ArchiveClearStreamFileSections — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
+0x80028B14, ReadCurrentArchiveFileFromHost — Reads the current host-backed archive file with retries then closes it and clears the active transfer state.
+0x80028E60, AreArchiveStreamSectionsInState — Tests a bounded run of stream sections and returns whether every section has the requested state.
 0x80028ECC, ArchiveConsolidateStreamFileEntry — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
+0x80028F30, AcquireArchiveStreamChunk — Advances host or CD stream filling then exposes the next contiguous payload and reports whether all required sections are ready.
+0x8002945C, ReleaseArchiveStreamSection — Locates a stream section from its payload address then clears it and returns its previous state.
+0x800294B4, ReleaseArchiveStreamChunk — Clears every section belonging to a consumed stream chunk then normalizes the ring and returns the first section's previous state.
 0x8002954C, ArchiveReadFileFromCdSector — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
 0x800295D8, ArchiveReadFileToBuffer — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
 0x80029690, ArchiveReadFile — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/archive.c)
+0x80029AFC, ArchiveStartQueuedReads — Sorts a terminated read queue by archive index then starts asynchronous CD reads or performs synchronous host-file reads.
+0x80029EB0, BeginArchiveTextureStream — Validates and initializes a multi-section texture stream then starts CD callbacks or drains the equivalent host stream synchronously.
 0x8002A260, ArchiveAllocStreamFile — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/archive.c)
+0x8002A2D0, ArchiveCdSeekOrPause — Waits for archive activity to settle then seeks to a requested entry or pauses the CD drive when no entry is requested.
 0x8002A394, ArchiveCdSeekToFile — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/archive.c)
 0x8002A428, ArchiveCdSetMode — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/archive.c)
 0x8002A524, ArchiveStreamFreeQueueData — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/archive.c)
+0x8002A57C, ArchiveStreamAllocQueueData — Allocates a terminated queue of archive entries and aligned payload buffers while releasing all partial allocations on failure.
 0x8002A68C, ArchiveCdDriveCommandHandler — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/archive.c)
+0x8002AC24, ArchiveQueuedReadReadyCallback — Consumes ready CD sectors across queued destinations while validating locations and seeking gaps or retrying failures before completion.
+0x8002B084, ArchiveCurrentFileReadyCallback — Copies each ready sector into the current archive destination, advances its destination and remaining-byte state, and retries or finalizes the read.
+0x8002B2F0, ArchiveStreamReadyCallback — Receives standard CD sectors into sequenced ring sections then advances counters and pauses or retries as required.
+0x8002B5D0, ArchiveTextureStreamReadyCallback — Receives texture-stream CD sectors into sequenced ring sections then advances counters and pauses or retries as required.
+0x8002B8B0, PumpHostArchiveStream — Reads 2048-byte blocks from a host file into free ring sections and updates section sequence and remaining-byte state.
+0x8002BA40, ArchiveQueuedReadDataCallback — Copies the queued-read remaining-entry count into the active completion counter when CD data arrives.
+0x8002BA58, ArchiveStreamDataCallback — Marks a completed ring transfer ready then advances its sequence and stops the drive after the final section drains.
+0x8002BB50, ArchiveTextureStreamDataCallback — Parses streamed texture commands and asynchronously uploads their image rectangles while releasing consumed ring sections.
+0x8002BF38, PumpHostTextureStream — Parses host-backed texture commands and synchronously uploads their image rectangles while releasing consumed ring sections.
+0x8002C310, PrintArchiveStreamDiagnostics — Prints current archive transfer counters ring positions texture coordinates and pending command values.
+0x8002C4BC, ModelUnresolvePointers — Clears the resolved flag and converts model-part pointers and packet references back into base-relative offsets.
+0x8002C59C, ModelResolvePartPointers — Converts one model part's relative data references into absolute addresses once and marks the part resolved.
+0x8002C644, ModelAllocateRuntimeBuffer — Performs a one-time allocation of the configured model runtime buffer and reports whether allocation had already occurred.
+0x8002C68C, ModelResolveEmbeddedResource — Performs one-time pointer resolution for an embedded model then frees and clears its transient backing allocation.
 
 # --- resident field-model packet builders/renderers (Ghidra-confirmed 2026-08-23) ---
 0x8002CDCC, BuildFlatTrianglePacketTemplate — builds a flat-triangle GPU packet template with optional lighting.
@@ -186,25 +340,74 @@
 0x8002D984, BuildRawFlatTexturedTrianglePacketTemplate — builds a raw flat-textured triangle GPU packet template.
 0x8002DA14, BuildGouraudTexturedTrianglePacketTemplate — builds a lit Gouraud-textured triangle GPU packet template.
 0x8002DAFC, BuildEnvironmentMappedTrianglePacketTemplate — builds an environment-mapped POLY_FT3 packet template.
+0x8002DD20, ModelLoadTimTextures — Walks embedded TIM images in reverse and uploads each pixel block and optional CLUT with draw synchronization.
+0x8002DDE4, GfxLoadPackedImageSet — Parses packed image records then computes mode-dependent VRAM coordinates and uploads their 16-bit pixels.
+0x8002DFE0, GetModelScratchBuffer — Returns the fixed model rendering workspace at 0x8006FAF0.
+0x8002DFF0, SetModelRenderBounds — Stores the horizontal clipping limit and packed vertical clipping limit used by model packet renderers.
+0x8002E010, ModelRenderPolyGT3ByAverageDepth — Projects and clips GT3 triangles then writes packet coordinates and orders visible primitives by average depth.
 0x8002E038, RenderFlatTriangleAverage — transforms and submits flat triangles using average depth.
 0x8002E054, RenderFlatQuadAverage — transforms and submits flat quads using average depth.
+0x8002E1F4, ModelPacketRenderHandlerEpilogue — Advances the model packet cursor by the current primitive stride and commits the rendered-packet count and packet cursor.
 0x8002E268, FieldModelFT4RawHandler — transforms, clips, and submits raw field-model POLY_FT4 packets.
+0x8002E448, ModelRenderPolyGT3ByNearestDepth — Projects and clips GT3 triangles then writes packet coordinates and orders visible primitives by their nearest vertex depth.
 0x8002E470, RenderFlatTriangleNearestMode — transforms and submits flat triangles using nearest-depth mode.
+0x8002E64C, RenderGouraudTexturedQuadFarthest — Projects indexed Gouraud-textured quads and rejects invalid or back-facing geometry before linking visible packets at their farthest vertex depth.
 0x8002E688, RenderRawTexturedQuadFarthest — transforms and submits raw textured quads using farthest depth (Ghidra static analysis + authenticated runtime seam).
+0x8002E8B4, RenderGouraudTexturedTriangleNearest — Projects indexed Gouraud-textured triangles and rejects invalid or back-facing geometry before linking visible packets at their nearest vertex depth.
 0x8002E8DC, RenderFlatTriangleNearest — transforms and submits flat triangles using nearest depth.
+0x8002EAB8, RenderGouraudTexturedQuadNearest — Projects indexed Gouraud-textured quads and rejects invalid or back-facing geometry before linking visible packets at their nearest vertex depth.
 0x8002ED20, RenderFlatTriangleFarthest — transforms and submits flat triangles using farthest depth.
+0x8002EEF8, RenderFlatTriangleAverageDepthCue — Projects flat triangles and applies depth-cued color before linking visible front-facing packets at their average depth.
 0x8002EF0C, RenderFlatTexturedTriangleAverageDepthCue — submits flat-textured triangles using average depth and depth cueing.
 0x8002F0E4, RenderFlatTexturedTriangleNearestDepthCue — submits flat-textured triangles using nearest depth and depth cueing.
+0x8002F2E0, RenderNormalLitTexturedTriangles — Projects textured triangles and derives each packet color from its surface normal before depth-sorting visible front-facing packets.
 0x8002F4B4, RenderFlatTexturedTriangleModeOne — submits flat-textured triangles through renderer mode one.
+0x8002F6B4, RenderGouraudLitTriangles — Projects triangles and computes separate normal-lit colors for all three vertices before depth-sorting visible front-facing packets.
 0x8002F8D0, RenderFlatTexturedQuadModeOne — submits flat-textured quads through renderer mode one.
+0x8002FAE8, RenderNormalLitTexturedQuads — Projects textured quads and derives each packet color from its surface normal before depth-sorting visible front-facing packets.
 0x8002FCFC, RenderFlatTexturedQuadAverageDepthCue — submits flat-textured quads using average depth and depth cueing.
 0x8002FF0C, RenderFlatTexturedQuadNearestDepthCue — submits flat-textured quads using nearest depth and depth cueing.
+0x8003014C, StepValueTowardTarget — Moves the current signed value toward its target by the configured step and clamps it at the target.
+0x800301C8, ModelCopyIndexedVertexPositions — Copies the X Y and Z components of each indexed source vertex to the corresponding destination vertex.
+0x80030228, ApplyScaledModelVertexDeltas — Adds indexed 12-bit fixed-point deformation deltas to model vertices.
+0x800302D4, ApplyScaledModelNormalDeltas — Adds indexed 12-bit fixed-point deformation deltas to model normals and renormalizes each result.
+0x800303C8, CreateModelDeformationWorkspace — Allocates deformation control storage and writable vertex arrays then copies indexed base vertices and initializes interpolation channels.
+0x800305D8, ApplyModelDeformationFrame — Advances every deformation channel and applies its scaled vertex deltas plus optional renormalized normal deltas.
+0x800306D0, DestroyModelDeformationWorkspace — Frees deformation vertex buffers and control storage after restoring the model’s original vertex and normal pointers.
 0x80030750, RenderEnvironmentMappedTriangle — transforms and submits environment-mapped triangles.
+0x80030A30, GsSetFlatLight — Normalizes and negates a selected directional light vector then installs its direction and color coefficients.
+0x80030B14, GsSetLightMatrix — Rotates the supplied light basis through the current rotation matrix and loads the resulting GTE light matrix.
+0x80030C40, GsSetAmbient — Converts three 12-bit ambient components to GTE precision and installs them as the background color.
+0x80030C78, SetAmbientColorRaw — Loads three unscaled components directly into the GTE background-color registers.
+0x80030C98, RenderLitQuadBatch — Projects packed four-index quads and emits normal-lit flat quad packets only when their geometry is valid visible and front-facing.
+0x80030EE8, AnyProjectedTriangleVertexVisible — Projects three vertices and returns true when at least one has valid depth and lies within the configured screen limits.
+0x8003101C, IsModelBoundsCulled — Tests selected bounding-box corners and edge midpoints and returns false as soon as any tested triplet is visible.
+0x800315A0, LinkPolyF3GpuPrimitive — Splices a flat triangle packet into a GPU DMA chain with a four-word payload.
+0x800315C4, LinkPolyFT3GpuPrimitive — Splices a flat-textured triangle packet into a GPU DMA chain with a seven-word payload.
+0x800315E8, LinkPolyG3GpuPrimitive — Splices a Gouraud triangle packet into a GPU DMA chain with a six-word payload.
+0x8003160C, LinkPolyGT3GpuPrimitive — Splices a Gouraud-textured triangle packet into a GPU DMA chain with a nine-word payload.
+0x80031630, LinkPolyF4GpuPrimitive — Splices a flat quad packet into a GPU DMA chain with a five-word payload.
+0x80031654, LinkPolyFT4GpuPrimitive — Splices a flat-textured quad packet into a GPU DMA chain with a nine-word payload.
+0x80031678, LinkPolyG4GpuPrimitive — Splices a Gouraud quad packet into a GPU DMA chain with an eight-word payload.
+0x8003169C, LinkPolyGT4GpuPrimitive — Splices a compact Gouraud-textured quad packet into a GPU DMA chain with an eleven-word payload.
+0x800316C0, LinkLineF2GpuPrimitive — Splices a two-point flat line packet into a GPU DMA chain with a three-word payload.
+0x800316E4, LinkLineG2GpuPrimitive — Splices a two-point Gouraud line packet into a GPU DMA chain with a four-word payload.
+0x80031708, LinkLineF3GpuPrimitive — Splices a three-point flat line packet into a GPU DMA chain with a five-word payload.
+0x8003172C, LinkLineG3GpuPrimitive — Splices a three-point Gouraud line packet into a GPU DMA chain with a seven-word payload.
+0x80031750, LinkLineF4GpuPrimitive — Splices a four-point flat line packet into a GPU DMA chain with a six-word payload.
+0x80031774, LinkLineG4GpuPrimitive — Splices a four-point Gouraud line packet into a GPU DMA chain with a nine-word payload.
+0x80031798, LinkFourWordGpuPrimitive — Prepends a primitive to an ordering-table chain and sets its GPU payload count to four words.
+0x800317BC, LinkFixedSpriteGpuPrimitive — Splices a fixed-size sprite packet into a GPU DMA chain with a three-word payload.
+0x800317E0, LinkThreeWordGpuPrimitive — Prepends a primitive to an ordering-table chain and sets its GPU payload count to three words.
+0x80031828, LinkTile1GpuPrimitive — Splices a one-pixel tile packet into a GPU DMA chain with a two-word payload.
+0x8003184C, LinkTile8GpuPrimitive — Splices an eight-pixel tile packet into a GPU DMA chain with a two-word payload.
+0x80031870, LinkTile16GpuPrimitive — Splices a sixteen-pixel tile packet into a GPU DMA chain with a two-word payload.
 
 0x80031894, HeapGetNextBlockHeader — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
 0x800318A8, HeapGetBlockUser — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
 0x800318BC, HeapGetBlockSourceAddress — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
 0x800318DC, HeapIsBlockPinned — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
+0x800318F0, HeapDebugHookNoOp — Returns immediately without reading or changing runtime state.
 0x800318F8, HeapLoadSymbols — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
 0x80031A30, HeapReset — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
 0x80031A68, HeapInit — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
@@ -241,6 +444,7 @@
 0x80032E7C, HeapDerefPtr — heap debug (decomp: ladysilverberg/xenogears-decomp, system/heap_debug.c)
 0x80032E88, LZSSHeapDecompress — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
 0x80032EB4, LZSSDecompress — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
+0x80032F54, InitializeDialogTextRenderer — Initializes dialog state and geometry then allocates line primitives and glyph-image buffers and configures two texture pages.
 0x8003342C, ResolveArchiveEntryPointers — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
 0x80033474, ResolveFileEntryPointers — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
 0x800334B8, GetSystemFontFile — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
@@ -254,11 +458,45 @@
 0x80033728, GetStringEntry — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
 0x8003373C, DialogGetWidth — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
 0x80033760, DialogGetHeight — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
+0x80033784, GetSystemTableString — Returns a selected string from a system text table chosen by the supplied table index.
+0x800337B8, GetSystemTable16String — Returns the selected string from system text table 16.
 0x800337E8, GetAccessoryName — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
 0x80033818, GetItemName — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
 0x80033848, GetWeaponName — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
+0x80033878, GetSystemTable24String — Returns the selected string from system text table 24.
+0x800338A8, GetSystemTable25String — Returns the selected string from system text table 25.
+0x800338D8, GetSystemTable18String — Returns the selected string from system text table 18.
+0x80033908, GetSystemTable20String — Returns the selected string from system text table 20.
+0x80033938, GetSystemTable19String — Returns the selected string from system text table 19.
+0x80033968, GetSystemTable21String — Returns the selected string from system text table 21.
+0x80033998, GetSystemTable27String — Returns the selected string from system text table 27.
+0x800339C8, GetExtendedSystemTableString — Returns a selected string from the system text table at index 28 plus the supplied table selector.
+0x800339FC, GetSystemTable48String — Returns the selected string from system text table 48.
+0x80033A2C, GetSystemTable50String — Returns the selected string from system text table 50.
+0x80033A5C, GetSystemStringTable51Entry — Returns indexed text from system string table 51 using its 16-bit relative offset table.
+0x80033A8C, GetSystemStringTable52Entry — Returns indexed text from system string table 52 using its 16-bit relative offset table.
+0x80033ABC, DecodeSystemTextCodes — Converts 16-bit system text codes through character-map entry 0x1B into a shared byte string until a 0xFFFF terminator.
+0x80033BAC, FindSystemGlyphPairIndex — Searches 324 encoded glyph pairs and returns the matching index or 0x8000 when absent.
+0x80033C20, EncodeSystemTextToGlyphIndices — Converts a null-terminated byte string into 16-bit glyph indices and returns -1 if any encoded pair is unmapped.
+0x80033CD0, GetDialogControlStatus — Returns the dialog control-status byte while the status-ready flag is set and otherwise returns zero.
+0x80033CF0, FormatIntegerAsSystemText — Encodes a signed or unsigned decimal value as system glyph codes and stores the trimmed decoded text in a shared buffer.
+0x80033DD4, PushDialogTextStream — Saves the current dialog text position then installs a nested text stream and marks it for automatic return.
+0x80033DF0, AdvanceDialogTextRenderer — Interprets dialog commands and advances line timing while rasterizing the next permitted batch of glyphs into the upload buffer.
+0x800345E0, TextStreamClearCompletionState — Clears the completion bit and also clears page-wait mode and delay when page waiting is active.
+0x80034614, TextStreamFinalizeWhenDelayExpires — Clears text mode and preserves only state bit 1 when the delay counter reaches zero.
+0x8003463C, TextStreamFreeQueuedEntriesWhenIdle — Frees every queued text entry and resets the queue head and count when no delay remains.
+0x800346A4, TextStreamReset — Clears mode and delay then preserves only state bit 1 and frees all queued text entries.
+0x800346D4, TextStreamDestroy — Resets queued text state and frees both rendering buffers.
+0x80034714, TextStreamEnqueueText — Allocates and appends an eight-byte text queue entry then increments the queue count.
+0x800347AC, TextStreamGetCursorX — Returns the base X coordinate plus four times the current horizontal text advance.
+0x800347C0, TextStreamGetCursorY — Returns base Y plus row height times the visible cursor-row offset with underflow mapped to the last row.
+0x80034800, TextStreamSetRowPrimitiveColors — Writes one RGB color to all four rendering primitives for every text row.
+0x80034874, TextStreamSetOpaqueRow — Selects the row whose rendering primitives remain opaque while other rows become semitransparent.
+0x8003487C, TextStreamClearOpaqueRow — Selects row 255 so every rendered text row becomes semitransparent.
 0x80034888, SystemStringEntryRender — renders and advances a system string entry, including glyph primitives and VRAM uploads (Ghidra static analysis + field text-box runtime census, 2026-08-23).
 0x80034EAC, SystemRenderStringEntry — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
+0x80034F98, GetEncodedGlyphTileWidth — Returns a two- or three-tile width according to the encoded glyph’s lead and trail bytes.
+0x80034FFC, RasterizeEncodedGlyph — Reads an 11-row encoded glyph and merges its pixels into the selected nibble phase of a 4-bpp image buffer.
 0x8003569C, ControllerGetButtonState — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)
 0x80035734, ControllerGetType — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)
 0x800357C0, ControllerRemapButtonState — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)
@@ -270,8 +508,27 @@
 0x80035CDC, ControllerPopState — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)
 0x80035DA0, ControllerGetNumStates — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)
 0x80035DB0, ControllerResetState — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)
+0x80035E44, IncrementCappedPlayTimeClock — Advances a 60-frame clock through seconds and minutes into hours then stops permanently at 100 hours.
+0x80035F1C, SaveVramRectAsTim — Captures a VRAM rectangle and writes a 16-bit TIM header followed by its pixel data to a host file.
+0x80035FF8, SaveVramRectAsPpm — Captures a VRAM rectangle and writes a P6 image after expanding each 15-bit pixel into 8-bit RGB channels.
+0x8003611C, InitializePadOutputPackets — Clears two eight-byte pad output packets and submits both packet buffers to the pad transport.
+0x80036188, AdvancePadOutputPacket — Advances one pad output packet through asserted and released states while consuming its pulse count unless paused.
+0x80036220, AdvancePadOutputPackets — Advances both pad output packets by one state-machine step.
+0x80036258, SetPadOutputPulseCount — Stores a 16-bit pulse count in the indexed pad output packet.
+0x80036270, SetPadOutputPacketPaused — Sets the indexed pad output packet's pause byte.
 0x80036288, ControllerInit — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
+0x8003633C, SetControllerPollingFlag — Stores the low byte of the supplied value in the controller polling flag.
+0x8003634C, ControllerTick — Polls both pads and queues their state then advances play time and pad output while invoking the optional tick callback and guarded software break.
+0x800363E0, SetControllerDebugBreakGuard — Stores the supplied value as the controller tick software-break guard.
+0x800363F0, SetControllerUpdateCallback — Sets the callback invoked after each controller polling and input-queue update cycle.
+0x80036400, SetControllerStateResetFlag — Stores the supplied value in the controller state reset flag.
+0x80036410, IsControllerStateQueueFull — Returns whether the controller input-state queue has overflowed.
+0x80036420, ControllerMergeQueuedStates — Drains queued controller snapshots and ORs all held and edge states together or resets everything after queue overflow.
+0x80036528, ControllerPrintRawPacket — Prints every byte in a raw pad packet and additionally prints the decoded active-low button mask for a valid digital packet.
 0x800365FC, ControllerDebugPrint — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
+0x800366E0, SetFormattedCharacterOutputCallback — Installs the callback used to emit each character produced by formatted output.
+0x800366F0, EmitFontCharacter — Emits one character into the current font rendering buffer.
+0x80036718, FontVPrintf — Formats a variable argument list using printf-style flags width precision and conversions and emits the resulting characters.
 0x80036CD8, FontSetFlag — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
 0x80036CF8, FontRemoveFlag — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
 0x80036D18, FontGetFlags — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
@@ -293,23 +550,41 @@
 0x80036FE4, FontRestoreCurrentPositions — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
 0x8003700C, FontPrintf — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
 0x80037058, FontSetPositionsByOffset — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
+0x8003708C, FontSetCursorAndRowOriginByOffset — Clamps offsets to zero and positions the cursor and next-row origin relative to the active font area.
 0x800370DC, FontAddLetterPrimitive — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
 0x800372CC, FontResetLetterRendering — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
 0x80037324, FontDrawLetters — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
+0x8003747C, SetFontExternalStorage — Selects or clears external font storage whose presence prevents the font allocation from being heap-freed.
 0x8003748C, FontFree — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
 0x800374E8, FontLoadFont — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
+0x80037878, SelectionSort — Sorts fixed-size records in place with a comparator using an allocated temporary record for each selection swap.
+0x800379B4, SetAuxiliaryRuntimeCallback — Stores the supplied callback pointer in the auxiliary runtime callback slot.
+0x800379C8, ScreenPrintf — Forwards a format string and variadic arguments to the active on-screen font renderer.
+0x800379D0, GraphicsInitializationNoOp — Returns immediately without reading or modifying runtime state.
+0x800379D8, LoadPairedArchiveResources — Validates an index then allocates and pins aligned buffers for entries 2n+6 and 2n+k+7 and queues both reads.
 0x80037B88, SoundInitialize — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x80037DC0, SoundReset — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x80037E8C, SoundEnableAllSpuChannels — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x80037EE4, SoundMuteAllSpuChannels — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x80037F44, SoundEnableEventProcessing — Enables the sound event and sets its enabled flag only when currently disabled.
+0x80037F88, SoundDisableEventProcessing — Disables the sound event and clears its enabled flag only when currently enabled.
 0x80037FD8, SoundLoadWdsFile — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x800380D0, SoundLoadPartialWdsFile — Rejects duplicate WDS IDs then reserves SPU memory and queues available sample bytes before retaining and linking the copied header.
 0x800381F4, SoundSpuMemoryAllocateWDS — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x80038264, SoundWdsSetTransferParamters — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003827C, SoundTransferWdsPart — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x80038310, SoundFreeWdsEntry — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x800383EC, SoundFindWdsEntry — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x80038428, SoundAddSedsEntry — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003852C, SoundRemoveSedsEntry — Stops channels using the target SEDS ID then unlinks the matching entry and reports absent or invalid data.
+0x80038624, SoundClearSedsEntries — Stops active sound-effect elements and clears the loaded SEDS list head.
+0x8003864C, SoundFindSedsEntry — Returns the loaded SEDS entry whose 16-bit ID matches the supplied entry or null when absent.
+0x8003869C, SoundStopAllPlayback — Releases voices from enabled managers and aborts all currently active sound elements.
+0x800386C4, SoundSetOutputMode — Replaces output-mode flags from a mode value and reapplies master and reverb settings while recalculating active channel volumes.
+0x80038824, SoundGetOutputMode — Decodes the sound output flags and returns mode 0 for normal output or mode 1 or 2 for the two alternate channel modes.
 0x8003885C, SoundSetupCdMix — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x800388D4, SoundSetAutoReverbEnabled — Sets or clears automatic application of per-manager reverb settings.
+0x8003890C, SoundSetManagerPlaybackEnabled — Clears the manager inhibit bit when enabling playback and sets it when disabling playback.
 0x80038934, SoundSetReverbModeWithAllocation — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x80038AD4, SoundInitiateReverbWorkAreaTransfer — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x80038B4C, SoundExecuteReverbWorkAreaTransfer — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
@@ -320,52 +595,146 @@
 0x80038E6C, SoundSetVolumeWithPhase — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x80038EC0, SoundHeapInitialize — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x80038F18, SoundHeapAllocate — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x80039024, AllocateSoundHeapFromHighEnd — Allocates aligned cleared memory from the high end of the last fitting sound-heap gap and re-enables sound events only after success.
 0x80039144, SoundHeapFree — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x800391CC, SoundHeapGetLargestFreeSpan — Scans every heap gap and returns the largest available span rounded down to 16 bytes.
 0x80039248, SoundHeapSetBlockMemory — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x800392EC, SoundHeapClearBlockMemory — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x80039360, SoundSpuMemoryInitialize — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x800393B8, SoundSpuMemoryAllocateBlock — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x800394B8, SoundSpuMemoryAllocateBlockFromTop — Allocates a suitably sized SPU RAM block from the upper end of a free gap and returns its SPU address or zero on failure.
 0x800395B8, SoundSpuMemoryAllocateBlockAtAddress — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x800396E0, SoundSpuMemoryFreeBlock — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x80039748, SoundSpuMemorySetBlockCategory — Finds the SPU RAM block at the requested address and updates its one-byte category when present.
+0x8003977C, SoundSpuMemoryGetIdleStatus — Returns zero unconditionally.
 0x80039784, SoundSpuMemoryGetFreeBlock — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x800397C0, SoundSpuMemoryFindBlock — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x800397FC, SoundAllocateAndStartAudioManager — Allocates playback state for SEDS data then starts it with the requested initial level and transition duration.
+0x80039850, SoundAllocateAudioManagerForSeds — Allocates and initializes playback state sized for the SEDS channel count and optional script table then links it into the active list.
+0x80039910, SoundInitializeAudioManagerInPlace — Clears caller-provided storage and initializes playback state within it while marking the storage as externally owned.
+0x800399D4, DestroyAudioManager — Stops an active audio manager then removes it from the global list and frees its linked allocations and owned manager block.
+0x80039A80, SoundStartAudioManager — Resets playback channels and interpolation state then applies the requested initial level transition and marks playback running.
+0x80039B68, SoundBindWdsSamplesAndStartAudioManager — Resolves each playback channel’s WDS sample and instrument data then starts playback with the requested level transition.
+0x80039C4C, StopAudioManager — Rejects a null manager then clears the active flag and releases all associated SPU voices.
+0x80039C8C, SoundFadeOutAudioManager — Transitions an audio manager’s playback level to zero over the requested number of updates.
+0x80039CC4, SoundStopAllActiveAudioManagers — Clears the running flag and releases every assigned voice for each active audio manager.
+0x80039D24, SoundImmediateReturnControlEntry — Returns immediately without reading arguments or changing state.
+0x80039D2C, SoundSetSedDispatchEnabled — Enables SED event dispatch or stops all pooled SED voices before disabling dispatch.
+0x80039D78, SoundSetOrGetSedVoiceLimit — Optionally clamps the pooled SED voice limit to an even value from 4 through 16 and always returns the current limit.
+0x80039DB8, SoundDispatchSedEventOnLastVoicePair — Dispatches an enabled SED event through the final pooled voice pair using the default amplitude parameters.
+0x80039E18, SoundDispatchSedEventOnVoicePair12 — Dispatches an enabled SED event through voice pair 12 using the default amplitude parameters.
+0x80039E60, PlayDefaultStereoSoundEffect — When sound effects are enabled selects two channels and starts the requested effect at volume 0x6000 and pan 0x4000.
+0x80039EC4, SoundDispatchSedEventOnSelectedVoicePair — Normalizes a voice-pair selector and dispatches an enabled SED event through that pair with default amplitude parameters.
+0x80039F9C, SoundDispatchSedEventWithAmplitudeRange — Normalizes a voice-pair selector and dispatches an enabled SED event with two signed eight-bit amplitude parameters converted to fixed point.
+0x80039FF8, SoundStopAllSedVoices — Releases every active voice in the pooled SED audio manager and clears its active-channel mask.
+0x8003A094, SoundStopSedVoicesByBankId — Stops every active pooled SED voice whose recorded bank identifier matches the supplied SEDS identifier.
+0x8003A20C, SoundStopSelectedSedVoicePair — Normalizes a pair selector then stops both pooled SED voices belonging to that pair.
+0x8003A2D4, SoundImmediateReturnVoiceEntry — Returns immediately without reading arguments or changing state.
+0x8003A2DC, SoundImmediateReturnChannelEntry — Returns immediately without reading arguments or changing state.
+0x8003A344, SoundSetSedVoicePairVolumeImmediate — Sets the fixed-point volume of both active voices in a selected pair and marks their volume state dirty.
+0x8003A3B8, SoundFadeSedVoicesById — Starts a fixed-duration volume transition on every active pooled SED voice matching the requested playback identifier.
+0x8003A450, SoundFadeSedVoicePairVolume — Starts a fixed-duration volume transition on both active voices in a selected pair.
+0x8003A4FC, SoundSetSedVoicesByIdVolumeImmediate — Sets the fixed-point volume of every active pooled SED voice matching the requested playback identifier.
+0x8003A55C, SoundSetSedVoicePairPanImmediate — Sets the fixed-point pan value of both active voices in a selected pair and marks their volume state dirty.
+0x8003A5D0, SoundGetActiveSedVoiceMask — Returns a bit mask of active pooled SED voices optionally restricted to a requested playback identifier.
+0x8003A65C, RecycleAndSelectSoundEffectChannels — Releases channels already playing the requested effect and selects a contiguous free or lowest-priority channel range.
+0x8003A82C, SoundIsAudioManagerRunning — Returns the audio manager’s running flag as zero or one.
+0x8003A838, SoundSetAudioManagerTempoScale — Sets or interpolates the playback tempo scale and immediately recalculates the effective tick rate when no duration is requested.
+0x8003A948, SoundSetAudioManagerPitchOffset — Sets or interpolates a manager-wide pitch offset and marks every active channel for pitch recalculation when applied immediately.
+0x8003A9BC, SoundSetAudioManagerPanOffset — Sets or interpolates a manager-wide pan offset and marks every active channel for volume recalculation when applied immediately.
+0x8003AA30, ActivateAudioManager — Applies optional reverb settings then marks active voices for refresh prepares eligible elements and sets the manager active flag.
+0x8003AAC4, SoundSetAudioManagerChannelPauseMask — Applies a channel pause mask and suspends newly selected active voices or reacquires voices whose pause bits were cleared.
+0x8003ABE8, SoundSetAudioManagerBookmarkId — Stores the one-byte bookmark identifier used when playback scripts capture restart positions.
+0x8003ABF0, SoundGetAudioManagerPlaybackTime — Returns the playback-position pointer and decomposes the fixed-point tick counter into sub-240 ticks and base-60 higher units.
+0x8003AC58, SoundUpdateAudioManagerMinimumWait — Finds the smallest pending wait among active channels and stores it as the manager’s next processing delay.
+0x8003ACC8, SoundResolveAudioManagerFirstScript — Resolves the first script address for a listed audio manager or for the list head when no manager is supplied.
+0x8003AD20, SoundApplyAudioManagerSnapshotCommand — Dispatches snapshot control mode zero to discard mode one to save and mode two to restore.
+0x8003AD98, SoundDiscardAudioManagerSnapshot — Frees saved playback snapshots and clears the snapshot-present flag when one is active.
+0x8003ADCC, SoundSaveAudioManagerSnapshot — Allocates storage for current playback state then copies that state and marks a snapshot available.
+0x8003AE84, SoundRestoreAudioManagerSnapshot — Releases current voices then restores saved playback state while preserving the current timeline position and reactivating eligible channels.
+0x8003AF24, SoundArmAudioManagerPositionControl — Records a target sequence position and marks it pending then releases assigned voices and resets the primary playback interpolator to full scale.
+0x8003AFA0, MarkEligibleAudioElementsForUpdate — Sets status bit 0 on each element whose active flags contain 0x101 and exclude both bits in mask 0x30.
 0x8003AFFC, SoundAbortAllVoices — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003B060, SoundReleaseAllVoices — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003B0AC, SoundBuildAudioManagerScriptOffsetTable — Expands packed script-index records into absolute script offsets stored after the audio manager’s channel data.
+0x8003B148, SoundCreateSedVoicePool — Creates the global pooled SED audio manager with an even channel count and assigns sequential voice numbers and descending priorities.
+0x8003B1FC, SoundDestroyAudioManager — Removes an audio manager from the active list and releases its heap allocation.
+0x8003B22C, SoundInitializeAudioManagerFromSoundFile — Copies sequence identifiers and reverb settings into the manager then applies enabled reverb and initializes playback state.
+0x8003B32C, SoundInitializeDefaultAudioManager — Assigns default sequence identifiers volume limits and reverb selection before initializing playback state.
 0x8003B370, SoundInitializeAudioManager — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003B424, SoundInitializeAudioManagerElements — Initializes every track from its sequence offset with timing pitch instrument voice and playback defaults while disabling empty tracks.
+0x8003B644, StartSedSoundVoices — Resolves the requested sound bank and sample data then initializes selected voices with scripts instrument parameters volume pan ownership and channel assignments.
+0x8003B930, FreeAudioManagerLinkedAllocations — Detaches and frees every sound-heap block in an audio manager’s secondary allocation chain.
 0x8003B97C, SoundCopyAudioManagerData — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003B9E4, SoundAddAudioManagerToList — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003BA38, SoundRemoveAudioManagerFromList — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003BB08, SoundSetFlagsOnActiveAudioElements — ORs the supplied flags into every currently active track.
 0x8003BB40, SoundCalculateAudioManagerSize — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003BB64, SoundOnTransferCallback — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003BC10, SoundQueueSpuWriteCommand — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003BC34, SoundQueueSpuReadCommand — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003BC58, SoundQueueSpuReadDecodedDataAll — Queues an asynchronous transfer that reads all decoded SPU capture data and invokes the supplied completion callback.
+0x8003BC7C, SoundQueueSpuReadDecodedDataCdOnly — Queues an asynchronous transfer that reads CD-only decoded SPU capture data and invokes the supplied completion callback.
 0x8003BCA0, SoundQueueTransferCommand — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003BDBC, SoundTransferQueueSync — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003BDF4, SoundTransferNoOp — Returns immediately without changing transfer state.
+0x8003BDFC, WaitOrQuerySoundTransfer — Optionally waits for SPU transfer processing to finish and otherwise returns the active transfer command type while processing remains busy.
 0x8003BE68, SoundProcessTransferCommand — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003C010, SoundSetSpuIrqCallback — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003C020, SoundUpdateSequencer — Advances volume fades and active sequences from the hardware timer then updates voices and commits pending SPU state.
 0x8003C484, SoundTickInterpolator — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003C4C4, SoundAdvanceTrackTimingAndSlides — Advances manager timing and active pitch volume and pan slides while decrementing note and gate durations and marking transitions.
+0x8003C6E8, SoundProcessReadyTrackScripts — Interprets commands for ready tracks then starts notes or rests and computes their duration gate pitch and modulation state.
+0x8003CC84, SoundConfigurePercussionNote — Selects the percussion mapping for a note and applies its instrument pitch and pan values.
 0x8003CD00, SoundScriptDefaultHandler — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003CD08, SoundScriptRest — Reads a duration then marks the track as resting and awaiting duration processing.
 0x8003CD30, SoundScriptFermata — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003CD4C, SoundScriptNop3 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003CD54, SoundScriptSavePositionIfSelectorMatches — Saves the next script position and current octave when the operand matches the manager selector.
 0x8003CD7C, SoundScriptDefaultSkip3 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003CD84, SoundScriptNop4 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003CD8C, SoundScriptReturnOrEndTrack — Returns to a saved position and restores its octave or releases the assigned voice and deactivates the track when no position is saved.
 0x8003CE04, SoundScriptSaveOctaveAndIP — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003CE18, SoundScriptSetOctave — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003CE38, SoundScriptRaiseOctave — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003CE50, SoundScriptLowerOctave — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003CE68, SoundScriptSetTimeSignature — Loads the timing numerator and denominator then derives and resets the manager tick divisors and counters.
+0x8003CE9C, SoundScriptSetTimingCycleState — Loads two timing-cycle values and resets the current timing divisor from the manager baseline.
 0x8003CEC0, SoundScriptSetManagerUnk1a — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003CED4, SoundScriptAddManagerUnk1a — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003CEF0, SoundScriptBeginLoop — Pushes a loop frame containing the repeat count continuation position and current octave.
+0x8003CF38, SoundScriptEndLoop — Repeats the current loop with its saved octave until its count expires then pops the loop frame.
+0x8003CFA4, SoundScriptBreakLoopOnFinalIteration — Jumps past the current loop and restores its saved octave when the final iteration has been reached.
+0x8003CFF0, SoundScriptPlaySoundEffectDefaultMix — Starts the identified sound effect at volume 127 and centered pan then advances past three operand bytes.
+0x8003D034, SoundScriptStopSoundEffect — Stops every active sound-effect track matching the supplied 16-bit identifier.
+0x8003D070, SoundScriptJumpToSoundEntry — Selects a sound bank by the track bank identifier and redirects execution through its indexed sequence-offset table.
+0x8003D0E8, SoundScriptSetTempo — Replaces the manager tempo with the operand and immediately recomputes its scaled tick increment.
+0x8003D110, SoundScriptAddTempo — Adds a signed operand to the fixed-point tempo and clears the cached tick increment.
+0x8003D13C, SoundScriptSlideTempo — Sets a target tempo and computes a per-tick step that reaches it over the requested duration.
+0x8003D17C, SoundScriptSetSequenceVolume — Replaces the sequence volume and marks every active track for volume recalculation.
+0x8003D1BC, SoundScriptFadeSequenceVolume — Computes and starts a sequence-volume transition to the requested target over the requested duration multiplied by 32 ticks.
 0x8003D208, SoundScriptSetUnk62 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003D21C, SoundScriptAssignSpuVoice — Releases the track’s previous SPU voice and assigns the requested valid voice number.
+0x8003D298, SoundScriptSetInstrument — Loads the requested instrument’s sample addresses ADSR settings and tuning into the track.
+0x8003D2D0, SoundScriptAccumulateTrackControlValue — Adds a nonzero operand to the track’s persistent control byte or clears that byte when the operand is zero.
+0x8003D300, SoundScriptEnablePercussion — Enables percussion-note mapping when percussion data is available.
 0x8003D328, SoundScriptPercussionOff — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003D340, SoundScriptSetActiveFlag800 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003D358, SoundScriptClearActiveFlag800 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003D370, SoundScriptEnablePitchModulation — Enables SPU pitch modulation for eligible odd-numbered voices.
+0x8003D3A4, SoundScriptDisablePitchModulation — Disables SPU pitch modulation for eligible odd-numbered voices.
+0x8003D3D8, SoundScriptSetNoiseClock — Sets the manager noise clock then enables noise generation for the track’s voice.
+0x8003D438, SoundScriptAddNoiseClock — Adds the operand to the manager noise clock modulo 64 then enables noise generation for the track’s voice.
 0x8003D4A4, SoundScriptSetVoiceFlags2000AndMode — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003D4C4, SoundScriptSetVoiceFlags2000ClearMode — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003D4E4, SoundScriptSetReverbParameters — Updates reverb depth delay and feedback while retaining the current reverb mode and reallocating its work area when required.
+0x8003D53C, SoundScriptEnableVoiceReverbIfAllowed — Enables reverb routing for the track’s voice when manager and interrupt-state restrictions permit it.
 0x8003D59C, SoundScriptSetVoiceFlags4000ClearMode — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003D5BC, SoundScriptSkip3 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003D5C4, SoundScriptNop — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003D5CC, SoundScriptNop2 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003D5D4, SoundScriptCallE5BC — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003D60C, SoundScriptSetAdsrModes — Loads attack sustain and release modes and marks every ADSR component for refresh.
 0x8003D640, SoundScriptSetAttackTime — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003D65C, SoundScriptSetDecayTime — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003D678, SoundScriptSetSustain — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
@@ -377,15 +746,45 @@
 0x8003D730, SoundScriptSetReleaseMode — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003D74C, SoundScriptSetUnk6E — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003D770, SoundScriptAddUnk6E — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003D79C, SoundScriptAddFinePitchOffset — Adds the signed operand multiplied by eight to the track pitch offset and marks pitch dirty.
+0x8003D7C8, SoundScriptAddWidePitchOffset — Adds the signed 16-bit operand to the track pitch offset and marks pitch dirty.
+0x8003D7FC, SoundScriptStartPitchSlide — Starts a per-tick pitch slide using the requested duration and signed pitch delta or disables the slide when either is zero.
 0x8003D854, SoundScriptToggleUnk04Bit2 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003D86C, SoundScriptClearUnk04Bit1 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003D884, SoundScriptSetPortamentoDuration — Stores the portamento duration and enables automatic note-to-note glides when nonzero.
+0x8003D8B8, SoundScriptStartTrianglePitchLfo — Initializes and activates a triangle-wave pitch oscillator from depth speed and phase operands.
+0x8003D9A4, SoundScriptStartSelectablePitchLfo — Initializes and activates a pitch oscillator with operand-selected waveform direction depth speed and phase.
+0x8003DAB0, SoundScriptSetPitchLfoRate — Converts the operand into a reciprocal oscillator step and applies it to both pitch-LFO phase counters.
 0x8003DAEC, SoundScriptSetUnkCEAndF6 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003DB0C, SoundScriptClearUnkCEAndF6 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003DB2C, SoundScriptSetVolume — Replaces the track volume immediately cancels active volume ramps and marks volume dirty.
+0x8003DB58, SoundScriptAddVolumeDelta — Adds a signed 8-bit Q8.24 volume delta and marks volume recomputation while cancelling active volume ramps.
+0x8003DB98, SoundScriptStartTargetVolumeRamp — Computes a per-tick Q8.24 step toward a signed target volume over the requested duration and enables the primary ramp mode.
+0x8003DBE4, SoundScriptStartSecondaryVolumeRamp — Captures the current signed volume level and computes a second ramp mode toward a signed target over the requested duration.
+0x8003DC50, SoundScriptConfigureTriangleTremolo — Initializes the volume modulation slot with a triangle-wave generator whose depth speed and phase derive from three command bytes.
+0x8003DD24, SoundScriptConfigureWaveformTremolo — Initializes the volume modulation slot with a selected waveform depth period polarity and phase configuration.
+0x8003DE18, SoundScriptSetTremoloDepthRate — Converts an encoded duration into the current and incremental tremolo-depth values.
 0x8003DE54, SoundScriptSetUnkCEAndUnk116 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003DE74, SoundScriptClearUnkCEAndUnk116 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003DE94, SoundScriptSetUnk74 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003DEB4, SoundScriptAddPanDelta — Adds a signed 8-bit Q8.8 delta to the channel pan value and marks pan recomputation.
+0x8003DEE4, SoundScriptStartPanRamp — Computes a Q8.8 pan step toward a signed target over the requested duration and enables pan interpolation.
+0x8003DF3C, SoundScriptSetAutoPanDepthRate — Converts an encoded duration into the current and incremental auto-pan depth values.
+0x8003DF78, SoundScriptConfigureTriangleAutoPan — Initializes the pan modulation slot with an alternating triangle-wave generator and command-defined depth speed and phase.
+0x8003E04C, SoundScriptConfigureWaveformAutoPan — Initializes the pan modulation slot with a selected waveform depth period polarity and phase configuration.
 0x8003E140, SoundScriptSetUnkCEAndUnk136 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003E160, SoundScriptDisableAutoPan — Clears the pan-modulation ownership flag and disables the configured auto-pan slot.
+0x8003E180, SoundScriptConfigureModulator — Selects one of four modulation slots and assigns its waveform output type polarity and initial control values.
+0x8003E1F8, SoundScriptSetModulatorAmplitude — Computes the selected modulator's amplitude and per-tick step from a three-byte signed control value.
+0x8003E308, SoundScriptSetModulatorDepthRate — Sets the selected modulator's depth index and derives its current and incremental depth values from an encoded duration.
 0x8003E358, SoundScriptNop5 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003E360, SoundScriptEnableModulator — Resets the selected modulation slot then marks both the slot and its channel mask active.
+0x8003E40C, SoundScriptDisableModulator — Disables the selected modulation slot and removes its bit from the channel modulation mask.
+0x8003E44C, SoundScriptSelectBankAndInstrument — Selects a wave bank with fallback to the first loaded bank then loads the requested instrument parameters.
+0x8003E4BC, SoundScriptSetTempoMultiplier — Applies an 8-bit tempo multiplier to the base tempo and initializes the manager's Q8.24 tempo accumulator.
+0x8003E4F0, SoundScriptSelectWaveBank — Selects a wave bank with fallback to the first loaded bank and stores it for subsequent instrument resolution.
+0x8003E54C, SoundScriptRetireEndedVoice — Tests the assigned SPU voice envelope and releases and deactivates the channel when its envelope reaches zero.
+0x8003E5BC, ConfigureAudioElementInstrument — Loads an indexed instrument preset into an audio element including sample addresses ADSR parameters priority and its voice-refresh flag.
 0x8003E680, unk_SoundSetFlagsOnActiveVoices — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003E6C0, SoundSetFlagsOnActiveVoices — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003E700, SoundClearVoiceDataPointers — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
@@ -393,8 +792,23 @@
 0x8003E7E0, SoundAssignVoiceToChannel — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003E83C, SoundReleaseVoiceFromChannel — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003E8A4, SoundAbortVoiceOnChannel — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003E900, SoundCommitVoiceUpdates — Writes pending volume pitch sample-address ADSR and mode changes for all 24 voices then commits FM noise reverb and key-on masks.
+0x8003EB5C, SoundCommitVoiceStops — Forces a fast release rate on voices awaiting termination then commits and clears the accumulated key-off masks.
+0x8003EBF0, SoundProcessElementVoiceRequests — Resolves active elements' modulated volume pan and pitch then services their pending channel assignment and stop requests.
+0x8003EEA0, ConvertSoundNoteToSpuPitch — Converts a signed note accumulator into a 14-bit SPU pitch value using octave and pitch lookup tables.
 0x8003EF04, SoundAssignVoiceToChannelAndPlay — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003EFA0, SoundStopVoiceOnChannel — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003EFE4, SoundTickElementModulators — Advances four enabled modulators per active element and accumulates their signed pitch volume and pan contributions.
+0x8003F190, SoundModulatorDisable — Clears the modulation slot's enabled bit.
+0x8003F1A4, SoundModulatorTickUnipolarSquare — Reloads the period at expiration and toggles the output between zero and the configured amplitude.
+0x8003F1EC, SoundModulatorTickBipolarSquare — Reloads the period at expiration and alternates the output between positive and negative amplitude.
+0x8003F240, SoundModulatorTickTriangle — Reverses the signed step at each period boundary and adds that step to the current output every tick.
+0x8003F2A0, SoundModulatorTickAlternatingRamp — Alternates step polarity and normal or doubled periods at boundaries then accumulates the selected step each tick.
+0x8003F308, SoundModulatorTickSawtooth — Adds a fixed step while the period remains and resets the output to zero whenever the period expires.
+0x8003F354, SoundModulatorTickUnipolarRandomHold — Samples a nonnegative random amplitude at each period boundary and holds it until the next boundary.
+0x8003F3C0, SoundModulatorTickBipolarRandomHold — Samples a random amplitude spanning negative through positive full scale at each period boundary and holds it.
+0x8003F42C, SeedSoundModulatorRandom — Replaces the modulation random-number state with the supplied seed.
+0x8003F43C, GenerateSoundRandom15 — Advances the sound subsystem’s xorshift seed and returns its low 15 bits.
 0x8003F468, SoundSetVoiceKeyOn — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003F484, SoundSetVoiceKeyOff — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
 0x8003F4A0, SoundSetReverbVoices — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
@@ -478,6 +892,8 @@
 0x80040B14, _patch_pad — PsyQ libapi (decomp: ladysilverberg/xenogears-decomp, psyq/libapi.c)
 0x80040B7C, _SendPAD — PsyQ libetc PAD (controller) (Ghidra symbol DB, prior RE sessions)
 0x80040BA4, _send_pad — PsyQ libetc PAD (controller) (Ghidra symbol DB, prior RE sessions)
+0x80040C20, SendPadResultMaskPatch — Masks the controller-transfer result with the active send-pad mask before the installed kernel path continues.
+0x80040C3C, SendPAD — Executes the installed low-level controller transfer routine.
 0x80040C5C, _remove_ChgclrPAD — PsyQ libetc PAD (controller) (Ghidra symbol DB, prior RE sessions)
 0x80040CBC, DsSyncCallback — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
 0x80040CD0, DsReadyCallback — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
@@ -652,6 +1068,7 @@
 0x80048D68, VectorNormalS — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
 0x80048D7C, VectorNormal — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
 0x80048DA8, VectorNormalSS — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
+0x80048DD8, NormalizeLoadedGteVector — Computes a reciprocal square root from the loaded vector's squared magnitude and scales all three components to Q12 unit length.
 0x80048E94, MatrixNormal — PsyQ libgte C wrappers / libmath (Ghidra symbol DB, prior RE sessions)
 0x80048F7C, LoadAverage12 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
 0x80048FCC, LoadAverage0 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
@@ -742,6 +1159,7 @@
 0x8004B18C, RotMatrixZ — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
 0x8004B32C, ratan2 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
 0x8004B4AC, _patch_gte — PsyQ libetc (vsync/intr) + libc (Ghidra symbol DB, prior RE sessions)
+0x8004B51C, GteExceptionContextSavePatch — Locates the active exception frame and saves AT V0 V1 and RA before reading the processor cause register.
 0x8004B694, v_wait — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/vsync.c)
 0x8004B730, ChangeClearRCnt — PsyQ libapi_3 (decomp: ladysilverberg/xenogears-decomp, psyq/libapi_3.c); BIOS thunk C0:0x0A
 0x8004B740, ResetCallback — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr.c)
@@ -762,6 +1180,8 @@
 0x8004BE24, memclrIntr — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr.c); Ghidra: `memclr`
 0x8004BE50, setjmp — PsyQ libapi_2 (decomp: ladysilverberg/xenogears-decomp, psyq/libapi_2.c)
 0x8004BE8C, longjmp — PsyQ libapi_2 (decomp: ladysilverberg/xenogears-decomp, psyq/libapi_2.c)
+0x8004BEC0, LongjmpReturn — Returns to the restored execution context with the supplied nonlocal return value.
+0x8004BED0, ReservedInstructionTrapStub — Executes a conditional branch with a reserved opcode in its delay slot and therefore raises a reserved-instruction exception before completion.
 0x8004BED8, A0:0x72 — PsyQ BIOS thunk (jr A0 syscall stub; name unknown); psx-spx: remove() — delete file; name unverified in binary
 0x8004BEF0, ReturnFromException — PsyQ libapi_2 (decomp: ladysilverberg/xenogears-decomp, psyq/libapi_2.c); BIOS thunk B0:0x17
 0x8004BF00, ResetEntryInt — PsyQ libapi_2 (decomp: ladysilverberg/xenogears-decomp, psyq/libapi_2.c); BIOS thunk B0:0x18
@@ -835,3 +1255,9 @@
 0x8004E850, InitCARD2 — PsyQ libcard (decomp: ladysilverberg/xenogears-decomp, psyq/libcard.c); BIOS thunk B0:0x4A
 0x8004E860, StartCARD2 — PsyQ libcard (decomp: ladysilverberg/xenogears-decomp, psyq/libcard.c); BIOS thunk B0:0x4B
 0x8004E870, StopCARD2 — PsyQ libcard (decomp: ladysilverberg/xenogears-decomp, psyq/libcard.c); BIOS thunk B0:0x4C
+0x8004E880, CardFastTrackWaitPatch — Waits for the card busy bit to clear when required then resumes the saved fast-track continuation; otherwise it returns immediately.
+0x8004E8D8, _patch_card — Installs the card fast-track wait path into kernel memory under a critical section and flushes the instruction cache.
+0x8004E960, CardHandlerDelayTrampoline — Executes the displaced card-handler instructions then waits 200 decrement iterations before returning.
+0x8004E990, _patch_card2 — Atomically swaps the card-handler prologue with the delay trampoline and flushes the instruction cache so repeated execution toggles installation.
+0x8004E9FC, CardLongBusyDelay — Spins on a decrementing counter initialized to 0x320000 before returning.
+0x8004EA20, _ExitCard — Replaces three kernel card-exit instructions with no-operations under a critical section then flushes the instruction cache.
