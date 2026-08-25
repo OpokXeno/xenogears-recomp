@@ -964,8 +964,13 @@ void xg_render_model_repository_handle_invalidation(
         xg_render_model_repository_clear_ft4_sources();
         xg_render_model_repository_clear_ft3_sources(
             services->model_repository);
-    } else if (event->kind == XG_RENDER_INVALIDATION_SCENE_BOUNDARY ||
-               event->kind == XG_RENDER_INVALIDATION_LOADER_MISMATCH ||
+    } else if (event->kind == XG_RENDER_INVALIDATION_SCENE_BOUNDARY) {
+        /* Full clear, not retain-resident: a field<->battle transition
+         * must not let FT3/FT4 sources survive across it. */
+        xg_render_model_repository_clear_ft4_sources();
+        xg_render_model_repository_clear_ft3_sources(
+            services->model_repository);
+    } else if (event->kind == XG_RENDER_INVALIDATION_LOADER_MISMATCH ||
                event->kind == XG_RENDER_INVALIDATION_RESOURCE_OVERLAP) {
         xg_render_model_repository_retain_resident_sources(
             services->model_repository);

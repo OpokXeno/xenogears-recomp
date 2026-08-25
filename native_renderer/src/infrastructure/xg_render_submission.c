@@ -20,6 +20,21 @@ static bool submission_services_configured;
 static XgRenderSubmissionObserver submission_observer;
 static void *submission_observer_user_data;
 
+/* Each standalone scene gets a fresh scene_epoch, so the stream's own
+ * same-epoch supersede logic never retires the previous one. Track it
+ * ourselves and abandon it once its successor is active. */
+static GpuRenderTransactionId last_activated_standalone_visual;
+
+static void retire_previous_standalone_visual(GpuRenderTransactionId visual) {
+    if (last_activated_standalone_visual.scene_epoch != 0u &&
+        !(last_activated_standalone_visual.scene_epoch == visual.scene_epoch &&
+          last_activated_standalone_visual.state_sequence ==
+              visual.state_sequence))
+        guest_render_native_stream_abandon_visual(
+            last_activated_standalone_visual);
+    last_activated_standalone_visual = visual;
+}
+
 static uint64_t interpolation_generation(void) {
     return submission_services_configured &&
             submission_services.interpolation_generation != NULL
@@ -431,11 +446,14 @@ bool xg_render_submission_standalone_finalize(void) {
             guest_render_native_stream_has_staged_predecessor(
                 (GpuRenderTransactionId){
                     completed.id.scene_epoch, completed.id.state_sequence,
-                }))
-            (void)guest_render_native_stream_activate_visual(
-                (GpuRenderTransactionId){
-                    completed.id.scene_epoch, completed.id.state_sequence,
-                });
+                })) {
+            const GpuRenderTransactionId visual_id = {
+                completed.id.scene_epoch, completed.id.state_sequence,
+            };
+            if (guest_render_native_stream_activate_visual(visual_id) ==
+                    GUEST_RENDER_NATIVE_STREAM_OK)
+                retire_previous_standalone_visual(visual_id);
+        }
         return true;
     }
     if (guest_render_bridge_producer_end(
@@ -453,13 +471,16 @@ bool xg_render_submission_standalone_finalize(void) {
         xg_render_submission_standalone_abort();
         return true;
     }
-    if (guest_render_native_stream_enabled() &&
-        guest_render_native_stream_activate_visual(
-            (GpuRenderTransactionId){
-                completed.id.scene_epoch, completed.id.state_sequence,
-            }) != GUEST_RENDER_NATIVE_STREAM_OK) {
-        xg_render_submission_standalone_abort();
-        return false;
+    if (guest_render_native_stream_enabled()) {
+        const GpuRenderTransactionId visual_id = {
+            completed.id.scene_epoch, completed.id.state_sequence,
+        };
+        if (guest_render_native_stream_activate_visual(visual_id) !=
+                GUEST_RENDER_NATIVE_STREAM_OK) {
+            xg_render_submission_standalone_abort();
+            return false;
+        }
+        retire_previous_standalone_visual(visual_id);
     }
     clear_standalone();
     return true;
@@ -601,6 +622,7 @@ void xg_render_submission_reset(void) {
     clear_standalone();
     standalone_stage_failure_detail = 0u;
     xg_render_temporal_submission_reset();
+    last_activated_standalone_visual = (GpuRenderTransactionId){0};
 }
 
 void xg_render_submission_reset_transaction(void) {
@@ -655,6 +677,7 @@ void xg_render_submission_scene_boundary(void) {
     xg_render_submission_reset_transaction();
     xg_render_submission_pre_scene_clear();
     xg_render_submission_standalone_abort();
+    last_activated_standalone_visual = (GpuRenderTransactionId){0};
 }
 
 void xg_render_submission_source_reset(void) {
