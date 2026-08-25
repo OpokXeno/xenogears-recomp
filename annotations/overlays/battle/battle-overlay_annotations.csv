@@ -1,0 +1,901 @@
+# image-id: battle-overlay
+# annotated_functions/total_functions: 862/862
+# Total basis: whole-image AOT range manifest, including authenticated overlapping roots.
+# sha256: 1830b4ef1fe37129972fc310dfad534f8161d6c0b123e74254c3711334a3e291
+# load-address: 0x8006faf0
+# identity-source: annotations/overlays/disc1-images.toml
+# source-record-id: battle-image
+# format: address, note
+
+0x80070E2C, function start — BattleEventOverlayLoad; conditionally loads and enters the separate Battle Event overlay.
+0x80070EB0, function start — BattleEventOverlayUpdate; conditionally invokes the separate Battle Event update entry.
+0x80070EDC, function start — BattleEventOverlayShutdown; conditionally closes the separate overlay and restores Battle music.
+0x80070F40, function start — BattleMain; loads, runs, renders, and shuts down the central Battle mode.
+0x800711A0, call site — Battle startup creates its initial fullscreen fader.
+0x800711A8, return site — resumes after initial Battle fader creation.
+0x800711C8, call site — conditional Battle startup path creates a transition fader.
+0x800711D0, return site — resumes after conditional startup fader creation.
+0x80071680, call site — Battle shutdown creates its transition fader.
+0x80071688, call site — resumes from fader creation and invokes BattleEventOverlayShutdown.
+0x80071690, call site — invokes the separate Battle Event finalization entry.
+0x80071698, return site — resumes central Battle shutdown after Battle Event finalization.
+0x800716D8, function start — BattleRenderDebugAndMain; executes one Battle update and render iteration.
+0x8007171C, function start — BattleTimeProgress; advances readiness timers and timed statuses for all entities.
+0x800718BC, function start — BattleUpdateTicksEndOfTurn; resets readiness and reloads the acting entity's turn timer.
+0x80071964, function start — BattleLoadPendingAttackNameTexture; conditionally renders the pending attack name, uploads it to VRAM, and advances three frames.
+0x80071A08, function start — BattleClearPartyStatusRefreshFlags; clears the three party status-display refresh flags.
+0x80071A38, function start — BattleCommitPartyStatusRefreshFlags; copies the three pending party status refresh flags into display state and advances one frame.
+0x80071A8C, function start — BattleHideAllMonsterNameDisplays; hides all eight monster-name entries, closes both name windows, and advances one frame.
+0x80071AE0, function start — BattleShowPendingAttackNameTimed; conditionally displays the pending attack name for up to 59 frames or until input, then hides it.
+0x80071B94, function start — BattleTickMain; executes one complete combatant turn and its cleanup.
+0x80071BA0, function start — BattleTickMainPreserveNameSlotCounter; continuation entry that begins turn execution without resetting the monster-name slot counter to one, resolves the selected turn and reactions, and restores readiness progression.
+0x80072270, function start — BattleApplyDeferredReadyEffects; applies deferred readiness and timer effects.
+0x80072324, function start — BattleExecuteForcedEnemyTurns; executes special-mode turns for enemy slots selected by the forced-turn mask after clearing action and script scratch state.
+0x800723E0, function start — BattleTickGameplay; selects the next ready combatant and enters turn handling.
+0x8007252C, function start — BattleCheckWinConditions; rebuilds the living mask and sets victory or defeat.
+0x800728B8, function start — BattleSubmitDoubleBufferedPacketRange; submits one selected packet from each consecutive double-buffered pair to the Battle ordering table.
+0x80072938, function start — BattleTintHpTextPacketRange; disables texture shading and colors a current-buffer HP text range yellow or red.
+0x80072A9C, function start — BattleBuildCharacterHpTextPackets; builds current and maximum character HP digits with a separator and optionally applies warning tinting.
+0x80072DA8, function start — BattleBuildGearHpTextPackets; builds a five-digit Gear HP display and optionally applies warning tinting.
+0x80072F38, function start — BattleFormatHpDisplayValues; computes HP digits, blanks, and warning colors.
+0x80073380, function start — BattleBuildApOrFuelValueTextPackets; converts the selected party member's AP or fuel value into four positioned digit packets.
+0x80073538, function start — BattleUpdatePortraitsAndTimeBars; rebuilds portraits and active or transitioning time bars.
+0x80073A58, function start — BattleDrawActivePortraitSelection; draws the highlighted portrait selection.
+0x80073B64, function start — BattleStageActionLines; authenticates and stages captured Battle UI line packets.
+0x80073E80, return site — returns from the authenticated Battle UI line stage.
+0x80073E88, function start — BattleDrawCommandRing; draws enabled command-ring primitive groups.
+0x80073F08, function start — BattleDrawAuxiliaryUiTextGroups; submits each enabled auxiliary Battle text group using its packet count and active buffer.
+0x80073FB8, function start — BattleDrawApBarsAndDialogWindows; draws AP bars and active dialog-window packets.
+0x800742A0, function start — BattleRefreshPartyStatusTextPackets; rebuilds dirty party AP, fuel, and HP text packets and clears their refresh flags.
+0x800743A4, function start — BattleDrawChiMenuEpCostPanels; submits the four chi-menu EP cost panel packets when cost display is enabled.
+0x800744BC, function start — BattleDrawChiMenuSecondaryDescriptionPair; submits the two current-buffer packets for the chi-menu secondary description layer.
+0x80074554, function start — BattleDrawChiMenuPrimaryDescriptionPair; submits the two current-buffer packets for the chi-menu primary description layer.
+0x800745EC, function start — BattleDrawActiveChiMenuComposition; selects and submits the enabled chi-menu cost, selection, description, and detail packet groups for the active menu state.
+0x80074AB8, function start — BattleDrawOverallUi; draws enabled overall Battle UI and result groups.
+0x80074D4C, function start — BattleDrawTargetSelectionCursor; pulses and draws directional target cursors.
+0x80074EEC, function start — BattleDrawDeathblowFlashPolys; draws three deathblow flash primitive arrays.
+0x80074F70, function start — BattleDrawDialogPortraitAndText; draws the active portrait and dialog text.
+0x8007500C, function start — BattleDrawMonsterNames; positions and submits active monster-name strips.
+0x80075168, function start — BattleUpdateApAndFuelBarGeometry; updates party AP and fuel bar widths, positions, and threshold-dependent colors.
+0x80075938, function start — BattleUpdateStatusGaugePolys; updates party HP, AP, and fuel gauge geometry.
+0x80076418, function start — BattleRenderFrameAndUi; dispatches per-frame Battle rendering and UI stages.
+0x80076454, call site — per-frame Battle rendering invokes BattleStageActionLines.
+0x8007645C, return site — resumes after staging Battle UI lines.
+0x800764B4, function start — BattleDrawMode0Ui; renders the Battle result-mode composition.
+0x800764EC, function start — BattleDrawMode2Ui; renders the Battle cutscene-mode composition.
+0x80076544, function start — BattleDrawFromModes; dispatches result, gameplay, or cutscene rendering.
+0x800765C4, function start — BattleBeginTurnTimeBarTransition; initializes a party time bar's movement, scaling, rotation, and completion state for its turn transition.
+0x80076710, function start — BattleAdvanceTurnTimeBarTransition; advances the active time bar transition, rebuilds its glyph packets, updates scale and rotation, and marks arrival at the target.
+0x800769E8, function start — BattleUploadTextureRectAndSync; uploads a rectangular texture region to VRAM and waits for drawing to complete.
+0x80076A10, function start — BattleBuildFullScaleTextGlyphPackets; builds current-buffer text glyph packets at full scale and returns the generated packet count.
+0x80076A6C, function start — BattleBuildHalfScaleTextGlyphPackets; builds current-buffer text glyph packets at half scale and returns the generated packet count.
+0x80076AC8, function start — BattleEnableSemitransparentUnshadedPacket; enables semitransparency and disables texture shading on a packet.
+0x80076B00, function start — BattleConfigureDialogBorderBlendPacket; configures a dialog-border packet with neutral color and the selected normal or subtractive blend mode.
+0x80076B68, function start — BattleConfigureAdditiveBrightTextPacket; configures a semitransparent unshaded text packet with neutral-bright color and additive blending.
+0x80076BAC, function start — BattleConfigureAdditiveDimTextPacket; configures a semitransparent unshaded text packet with dim color and additive blending.
+0x80076BF0, function start — BattleConfigureSubtractiveBrightTextPacket; configures a semitransparent unshaded text packet with neutral-bright color and subtractive blending.
+0x80076C34, function start — BattleConfigureSubtractiveDimTextPacket; configures a semitransparent unshaded text packet with dim color and subtractive blending.
+0x80076C78, function start — BattleSetTextStripPacketBounds; assigns a packet's screen and texture coordinates for a 13-pixel-high text strip.
+0x80076CE8, function start — BattleSetTextRectanglePacketBounds; assigns a packet's screen and texture coordinates for an arbitrary rectangular text region.
+0x80076D58, function start — BattleInitializeChiMenuPacketPair; initializes both buffers of a chi-menu texture packet pair with palette and texture-page selection.
+0x80076EA4, function start — BattleLoadChiMenuTargetLabelTextures; renders and uploads eleven target labels and ten digit glyphs while recording their texture positions and widths.
+0x80077074, function start — BattleInitializeChiMenuPacketStorage; clears chi-menu visibility flags and initializes all eighteen double-buffered texture packet groups.
+0x80077364, function start — BattleSetupDialogWindowTexturePolys; initializes textured dialog-border polygons.
+0x80077454, function start — BattleSetupDialogWindow; initializes dialog background, draw modes, and borders.
+0x80077610, function start — BattleAllocateChiMenuPacketStorage; allocates and clears chi-menu packet storage, then initializes every packet group.
+0x8007765C, function start — BattleReleaseChiMenuPacketStorage; advances one Battle frame and releases the chi-menu packet allocation.
+0x80077698, function start — BattleInitializeDirectionalTargetCursor; initializes four double-buffered directional cursor triangles, their colors, fade state, and visibility.
+0x80077980, function start — BattleHideDirectionalTargetCursor; disables directional target-cursor rendering.
+0x80077990, function start — BattleInitializeUiTexturePagesAndDrawModes; initializes scrolling text upload regions, menu-border texture metrics, texture rectangles, and paired draw-mode packets.
+0x800780A8, function start — BattleInitializeMonsterNamePacketPair; initializes both monster-name packets with neutral color, alternating palette, texture row, and hidden state.
+0x8007819C, function start — BattleSetupMonsterNameUi; initializes monster-name windows and VRAM slots.
+0x80078310, function start — BattleUploadPartyPortraitTextures; loads and uploads palette and image data for each present party portrait at its assigned VRAM coordinates.
+0x80078508, function start — BattleInitializeEntityReadinessCounters; computes readiness counters for occupied slots, marks empty slots unavailable, and clears ready, half-speed, and auxiliary state.
+0x800785D4, function start — BattleFinalizeScriptActionRecord; stores the acting entity and script-context value in the current action record and advances the record count.
+0x80078658, function start — BattleQueueShowMonsterNameAction; renders and uploads a scripted monster name, then queues a show-name action referencing its texture slot.
+0x800787E0, function start — BattleQueueStatusEffectAction; queues a scripted status-effect action with its acting entity and low-byte effect value.
+0x8007887C, function start — BattleQueueHideMonsterNameAction; queues a hide-name action for the most recently allocated monster-name texture slot.
+0x8007893C, function start — BattleStageEnemyNameDisplay; when the action has a name token, queues name display, a 30-tick delay, and name removal.
+0x80078998, function start — BattleExecuteEnemyScriptAttack; stages any name display, computes and applies the scripted attack, records its animation and actual hit mask, and corrects a preceding movement target mask.
+0x80078B34, function start — BattleStageEnemyMoveAttack; queues movement toward the selected target, initializes character or Gear approach motion unless suppressed, expands camera visibility, and finalizes the action entry.
+0x80078C9C, function start — BattleStageEnemyActorCommand; queues marker 0xFC with the context payload used to replace the actor's active command.
+0x80078CEC, function start — BattleStageEnemyAnimation; queues the selected animation number with its actor and context payload.
+0x80078D48, function start — BattleSetDeferredEnemyTurnMask; stores the scripted target mask for deferred enemy-turn processing.
+0x80078D6C, function start — BattleStageEnemyDespawn; queues marker 0xF9, marks the actor unavailable, enables its enemy status entry, and clears its combat flags except bit 15.
+0x80078E24, function start — BattleCloneEnemyIntoSlot; copies identity, scripts, status, and combat state from the first entity in the context mask into the destination enemy slot, then queues marker 0xFB.
+0x80079054, function start — BattleSetEntityByteAttribute; writes the context byte value to the selected 8-bit combat attribute.
+0x80079098, function start — BattleAddEntityByteAttribute; adds the context byte to the selected 8-bit combat attribute with modulo-256 wrapping.
+0x80079114, function start — BattleSetEntityWordAttribute; writes the context word value to the selected 16-bit combat attribute.
+0x8007916C, function start — BattleAddEntityWordAttribute; adds the context word to the selected 16-bit combat attribute with modulo-65536 wrapping.
+0x800791FC, function start — BattleStageEnemyExtendedAnimation; stages any name display and queues marker 0xF4 with a packed extended-animation identifier.
+0x80079270, function start — BattleStageEnemyCameraMask; queues marker 0xF6 carrying the scripted target mask for camera visibility and the associated context payload.
+0x800792F8, function start — BattleHandleInvalidEnemyActionType; clears all pending action markers and, when diagnostics are enabled, repeatedly renders a language and actor error screen.
+0x800793F0, function start — BattleExecuteScriptedActions; converts enemy-script actions into Battle operations.
+0x80079674, function start — BattleStageEnemyReturnAndSequenceEnd; conditionally appends a Gear pre-end marker, writes the terminal return marker, and clears action completion state.
+0x80079778, function start — BattleMonsterJumpToTarget; runs a staged enemy attack and waits for completion.
+0x80079840, function start — BattleUpdateMonsterScriptAttackVars; records attack results in enemy script state.
+0x80079934, function start — BattleAdvanceEnemyScript; advances an enemy script by one instruction.
+0x80079948, function start — BattleSkipEnemyScriptConditionalBlock; skips chained false condition blocks.
+0x800799C8, function start — BattleExecuteMonsterTurnScript; interprets an enemy's normal turn script.
+0x80079AB0, function start — BattleExecuteMonsterAttackedScript; executes an enemy counter or attacked script.
+0x80079C24, function start — BattleExecuteMonsterEndTurnScripts; runs eligible enemy end-of-turn scripts.
+0x80079E18, function start — BattleShowMonsterNameSlot; enables shared monster-name display state and marks the selected name slot visible.
+0x80079E4C, function start — BattleHideMonsterNameSlot; disables shared monster-name display state and marks the selected name slot hidden.
+0x80079E7C, function start — BattleFindFirstEntityInTargetMask; returns the first entity index present in an 11-slot mask, or 11 when the mask is empty.
+0x80079ED8, function start — BattleAccessEntityByteAttribute; reads or writes one of 24 selector-mapped 8-bit combat attributes for an entity.
+0x8007A280, function start — BattleAccessEntityWordAttribute; reads or writes one of 24 selector-mapped 16-bit combat attributes for an entity.
+0x8007A628, function start — BattleEnemyScriptIsVisibleTargetValid; accepts an occupied, visually included entity without blocking lifecycle flags and optionally permits the secondary untargetable status.
+0x8007A6C8, function start — BattleEnemyScriptIsOccupiedTargetValid; accepts an occupied entity without blocking lifecycle flags and optionally permits the secondary untargetable status regardless of visual exclusion.
+0x8007A744, function start — BattleEnemyScriptIsLivingVisibleEntity; accepts an occupied, visually included entity whose two high lifecycle flags are clear.
+0x8007A7BC, function start — BattleEnemyScriptAppendRawAction; appends an action entry marked 0x80, copies all four current script bytes into it, and increments the action count.
+0x8007A828, function start — BattleEnemyScriptWriteActionByte; writes an immediate byte to the selected field of the current action entry and advances the entry count when writing its type field.
+0x8007A874, function start — BattleEnemyScriptCopyByteVariableToAction; copies a selected enemy byte variable into the selected field of the current action entry.
+0x8007A8B4, function start — BattleEnemyScriptCopyActionEntry; copies all eight bytes of one indexed action entry into another.
+0x8007A900, function start — BattleEnemyScriptSetByteVariableImmediate; writes an 8-bit immediate to the selected enemy byte variable.
+0x8007A92C, function start — BattleEnemyScriptSetWordVariableImmediate; writes a little-endian 16-bit immediate to the selected enemy word variable.
+0x8007A968, function start — BattleEnemyScriptSetFixedPointVariableImmediate; stores a little-endian 16-bit immediate shifted left four bits in the selected enemy 32-bit variable.
+0x8007A9A8, function start — BattleEnemyScriptSetSharedWordImmediate; zero-extends an 8-bit immediate into the selected shared 16-bit script variable.
+0x8007A9D0, function start — BattleEnemyScriptAddByteImmediateSaturating; adds an immediate to the selected enemy byte variable and clamps the result to 255.
+0x8007AA1C, function start — BattleEnemyScriptSubtractByteImmediateSaturating; subtracts an immediate from the selected enemy byte variable and clamps the result to zero.
+0x8007AA60, function start — BattleEnemyScriptMultiplyByteImmediateSaturating; multiplies the selected enemy byte variable by an immediate and clamps the result to 255.
+0x8007AAB8, function start — BattleEnemyScriptDivideByteByImmediate; divides the selected enemy byte variable by an unsigned 8-bit immediate.
+0x8007AAF4, function start — BattleEnemyScriptModuloByteByImmediate; replaces the selected enemy byte variable with its remainder modulo an unsigned 8-bit immediate.
+0x8007AB30, function start — BattleEnemyScriptAndByteWithImmediate; applies an 8-bit immediate mask to the selected enemy byte variable.
+0x8007AB68, function start — BattleEnemyScriptOrByteWithImmediate; sets immediate-selected bits in the selected enemy byte variable.
+0x8007ABA0, function start — BattleEnemyScriptXorByteWithImmediate; toggles immediate-selected bits in the selected enemy byte variable.
+0x8007ABD8, function start — BattleEnemyScriptAddWordImmediateSaturating; adds a 16-bit immediate to the selected enemy word variable and clamps the result to 65535.
+0x8007AC30, function start — BattleEnemyScriptSubtractWordImmediateSaturating; subtracts a 16-bit immediate from the selected enemy word variable and clamps the result to zero.
+0x8007AC80, function start — BattleEnemyScriptMultiplyWordImmediateSaturating; multiplies the selected enemy word variable by a 16-bit immediate and clamps the result to 65535.
+0x8007ACDC, function start — BattleEnemyScriptDivideWordByImmediate; divides the selected enemy word variable by an unsigned little-endian 16-bit immediate.
+0x8007AD24, function start — BattleEnemyScriptModuloWordByImmediate; replaces the selected enemy word variable with its remainder modulo an unsigned little-endian 16-bit immediate.
+0x8007AD6C, function start — BattleEnemyScriptAndWordWithImmediate; applies a little-endian 16-bit immediate mask to the selected enemy word variable.
+0x8007ADB0, function start — BattleEnemyScriptOrWordWithImmediate; sets immediate-selected bits in the selected enemy word variable.
+0x8007ADF4, function start — BattleScriptXorWordImmediate; xors an indexed 16-bit local with a little-endian 16-bit immediate.
+0x8007AE38, function start — BattleScriptAddByteRegistersSaturating; adds two indexed 8-bit locals into an indexed destination and clamps the result to 255.
+0x8007AE98, function start — BattleScriptSubtractByteRegistersClamped; subtracts one indexed 8-bit local from another into an indexed destination and clamps negative results to zero.
+0x8007AEF0, function start — BattleScriptMultiplyByteRegistersWithClampQuirk; multiplies two indexed 8-bit locals, stores products below 256, clamps products from 256 through 32767 to 255, and stores the low byte for larger products.
+0x8007AF5C, function start — BattleScriptDivideByteRegisters; divides one indexed 8-bit local by another and stores the quotient in an indexed 8-bit destination.
+0x8007AFAC, function start — BattleScriptModuloByteRegisters; divides one indexed 8-bit local by another and stores the remainder in an indexed 8-bit destination.
+0x8007AFFC, function start — BattleScriptAndByteRegisters; stores the bitwise AND of two indexed 8-bit locals in an indexed destination.
+0x8007B040, function start — BattleScriptOrByteRegisters; stores the bitwise OR of two indexed 8-bit locals in an indexed destination.
+0x8007B084, function start — BattleScriptXorByteRegisters; stores the bitwise XOR of two indexed 8-bit locals in an indexed destination.
+0x8007B0C8, function start — BattleScriptAddWordRegistersSaturating; adds two indexed 16-bit locals into an indexed destination and clamps the result to 65535.
+0x8007B134, function start — BattleScriptSubtractWordRegistersClamped; subtracts one indexed 16-bit local from another into an indexed destination and clamps negative results to zero.
+0x8007B198, function start — BattleScriptMultiplyWordRegistersWithClampQuirk; multiplies two indexed 16-bit locals, stores products below 65536, clamps products through 2147483647 to 65535, and stores the low word for larger products.
+0x8007B208, function start — BattleScriptDivideWordRegisters; divides one indexed 16-bit local by another and stores the quotient in an indexed 16-bit destination.
+0x8007B264, function start — BattleScriptModuloWordRegisters; divides one indexed 16-bit local by another and stores the remainder in an indexed 16-bit destination.
+0x8007B2C0, function start — BattleScriptAndWordRegisters; stores the bitwise AND of two indexed 16-bit locals in an indexed destination.
+0x8007B310, function start — BattleScriptOrWordRegisters; stores the bitwise OR of two indexed 16-bit locals in an indexed destination.
+0x8007B360, function start — BattleScriptXorWordRegisters; stores the bitwise XOR of two indexed 16-bit locals in an indexed destination.
+0x8007B3B0, function start — BattleScriptSetSelfBytePropertyImmediate; writes an immediate byte to the selected byte property of the executing enemy combatant.
+0x8007B3E4, function start — BattleScriptSetSelfWordPropertyImmediate; writes a little-endian 16-bit immediate to the selected word property of the executing enemy combatant.
+0x8007B424, function start — BattleScriptReadSelectedByteProperty; reads a selected byte property from the lowest-index combatant in a local target mask and stores it in an indexed 8-bit local.
+0x8007B4B8, function start — BattleScriptWriteSelectedByteProperty; writes an indexed 8-bit local to a selected property of the lowest-index masked enemy, or sets the first pending action type to 0x20 and advances the action cursor when a party member is selected.
+0x8007B578, function start — BattleScriptReadSelectedWordProperty; reads a selected word property from the lowest-index combatant in a local target mask and stores it in an indexed 16-bit local.
+0x8007B608, function start — BattleScriptWriteSelectedWordProperty; writes an indexed 16-bit local to a selected property of the lowest-index masked enemy, or sets the first pending action type to 0x20 and advances the action cursor when a party member is selected.
+0x8007B6C0, function start — BattleScriptLoadGearHpOrBattleGlobal; copies the selected combatant's current Gear HP for source mode 1 or the shared battle value for source mode 2 into an indexed 32-bit local, leaving it unchanged for other modes.
+0x8007B7B0, function start — BattleScriptWriteSelectedGearHp; writes an indexed 32-bit local to the selected enemy's maximum Gear HP for mode zero or current Gear HP otherwise, while party targets instead set pending action type 0x20 and advance the action cursor.
+0x8007B8D4, function start — BattleScriptLoadGameStateWord; copies an indexed word from the battle game-state mirror into an indexed 16-bit local.
+0x8007B914, function start — BattleScriptStoreGameStateWord; copies an indexed 16-bit local into an indexed word of the battle game-state mirror.
+0x8007B958, function start — BattleScriptCopyByteRegister; copies one indexed 8-bit local to another.
+0x8007B98C, function start — BattleScriptCopyWordRegister; copies one indexed 16-bit local to another.
+0x8007B9C8, function start — BattleScriptCopyDwordRegister; copies one indexed 32-bit local to another.
+0x8007BA04, function start — BattleScriptWidenByteToWord; zero-extends an indexed 8-bit local into an indexed 16-bit local.
+0x8007BA44, function start — BattleScriptWidenWordToDword; zero-extends an indexed 16-bit local into an indexed 32-bit local.
+0x8007BA88, function start — BattleScriptClearByteRegisters; clears all sixteen 8-bit locals for the executing enemy.
+0x8007BAB8, function start — BattleScriptClearWordRegisters; clears all eight 16-bit locals for the executing enemy.
+0x8007BAE8, function start — BattleScriptSetSelfRuntimeScalar; zero-extends a 16-bit immediate into the executing enemy's 32-bit runtime scalar at offset 0x14C.
+0x8007BB2C, function start — BattleScriptSetSelfRuntimeVectorTail; writes a 16-bit immediate to the executing enemy's runtime word at offset 0x156.
+0x8007BB70, function start — BattleScriptSetSelfRuntimeVectorHighBytes; writes the three operand bytes in reverse order to the high bytes of the runtime words at offsets 0x150, 0x152, and 0x154.
+0x8007BBD8, function start — BattleScriptSetSelfRuntimeVectorLowBytes; writes the three operand bytes in reverse order to the low bytes of the runtime words at offsets 0x150, 0x152, and 0x154.
+0x8007BC40, function start — BattleScriptWriteActionRecordWord; writes a little-endian 16-bit immediate at the selected byte offset within the current eight-byte action record.
+0x8007BC84, function start — BattleScriptRandomizeByteRegister; stores a uniformly distributed value from zero through an immediate 8-bit maximum in an indexed 8-bit local.
+0x8007BCE8, function start — BattleScriptRandomizeWordRegister; stores a uniformly distributed value from zero through a little-endian 16-bit maximum in an indexed 16-bit local.
+0x8007BD5C, function start — BattleScriptSelectRandomOnFootPartyTarget; stores the target mask of a random eligible on-foot party combatant, or zero when none qualifies.
+0x8007BEA8, function start — BattleScriptSelectRandomSameRowPartyTarget; stores the target mask of a random eligible on-foot party combatant in the executing enemy's row, or zero when none qualifies.
+0x8007C040, function start — BattleScriptSelectRandomSameRowEnemyTarget; stores the target mask of a random eligible on-foot enemy combatant in the executing enemy's row, or zero when none qualifies.
+0x8007C1A4, function start — BattleScriptSelectRandomDifferentRowPartyTarget; stores the target mask of a random eligible on-foot party combatant outside the executing enemy's row, or zero when none qualifies.
+0x8007C33C, function start — BattleScriptSelectRandomDifferentRowEnemyTarget; stores the target mask of a random eligible on-foot enemy combatant outside the executing enemy's row, or zero when none qualifies.
+0x8007C4A0, function start — BattleScriptSelectLowestReadinessPartyTarget; stores the target mask of the eligible party combatant with the lowest readiness timer, favors the highest slot on ties, and yields slot zero's mask when none qualifies.
+0x8007C580, function start — BattleEnemyScriptSelectOtherEnemyWithShortestReadyDelay; stores the target mask of the eligible enemy with the shortest readiness delay, excluding the acting enemy, with ties favoring the highest slot and no match falling back to slot 0.
+0x8007C678, function start — BattleEnemyScriptSelectPartyMemberWithLowestHp; stores the target mask of the eligible party member with the lowest current HP, with ties favoring the highest slot and no match falling back to slot 0.
+0x8007C75C, function start — BattleEnemyScriptSelectEnemyWithLowestHp; stores the target mask of the eligible enemy with the lowest current HP, with ties favoring the highest slot and no match falling back to slot 0.
+0x8007C840, function start — BattleEnemyScriptSelectRandomGearPartyMemberInSameRow; stores a random eligible Gear party member sharing the acting enemy's formation row, or zero when none qualifies.
+0x8007C9D4, function start — BattleEnemyScriptSelectRandomGearPartyMember; stores a random eligible Gear party member's target mask, or zero when none qualifies.
+0x8007CB20, function start — BattleEnemyScriptSelectRandomGearEnemy; stores a random eligible Gear enemy's target mask, or zero when none qualifies.
+0x8007CC50, function start — BattleEnemyScriptCountTargetablePartyMembersInRow; stores the number of targetable party members occupying the specified formation row.
+0x8007CD10, function start — BattleEnemyScriptCountTargetableEnemiesInRow; stores the number of targetable enemies occupying the specified formation row.
+0x8007CDD0, function start — BattleEnemyScriptLoadSelectedTargetRowRestriction; finds the first entity in a stored target mask and loads the row-pair targeting restriction between it and the acting enemy.
+0x8007CEA4, function start — BattleEnemyScriptCountPartyMembersInSelectedEntityRow; counts targetable party members sharing the formation row of the first entity in a stored target mask.
+0x8007CFB8, function start — BattleEnemyScriptCountEnemiesInSelectedEntityRow; counts targetable enemies sharing the formation row of the first entity in a stored target mask.
+0x8007D0CC, function start — BattleEnemyScriptLoadInventoryItemQuantity; scans 48 inventory entries for the specified item identifier and stores its quantity, or zero when absent.
+0x8007D148, function start — BattleEnemyScriptCopyWordVariableToActionRecord; copies a selected 16-bit script variable into two consecutive bytes of the current action record.
+0x8007D1A8, function start — BattleEnemyScriptLoadCurrentGold; copies the current gold total into a selected 32-bit script variable.
+0x8007D1DC, function start — BattleEnemyScriptSelectRandomActiveCombatantInRow; stores a random active combatant's target mask from the specified formation row, or zero when none qualifies.
+0x8007D30C, function start — BattleEnemyScriptLoadEnemyControlCode; copies the acting enemy's indexed control code into a selected 32-bit script variable.
+0x8007D344, function start — BattleEnemyScriptSelectRandomHiddenEnemy; stores a random targetable enemy whose visual-state high bit is set, or zero when none qualifies.
+0x8007D478, function start — BattleEnemyScriptSelectRandomDefeatedPartyMember; stores a random party member marked defeated but not removed or otherwise excluded, or zero when none qualifies.
+0x8007D5B0, function start — BattleEnemyScriptCountUndefeatedPartySlots; counts party slots whose primary status has neither defeated nor removed high bit set.
+0x8007D610, function start — BattleEnemyScriptCountActiveVisibleEnemies; counts filled enemy slots with neither primary high status bit set and with a zero visual-state byte.
+0x8007D6A8, function start — BattleEnemyScriptSelectGearPartyMemberWithLowestHp; stores the target mask of the eligible Gear party member with the lowest 32-bit Gear HP, with ties favoring the highest slot and no match falling back to slot 0.
+0x8007D7B4, function start — BattleEnemyScriptSelectGearEnemyWithLowestHp; stores the target mask of the eligible Gear enemy with the lowest 16-bit base HP, with ties favoring the highest slot and no match falling back to slot 0.
+0x8007D8C0, function start — BattleEnemyScriptSelectRandomPartyMemberMatchingAttributeMask; stores a random targetable party member whose selected combat attribute intersects a stored mask, or zero when none qualifies.
+0x8007DA1C, function start — BattleEnemyScriptSelectRandomEnemyMatchingAttributeMask; stores a random targetable enemy whose selected combat attribute intersects a stored mask, or zero when none qualifies.
+0x8007DB78, function start — BattleEnemyScriptSelectRandomGearPartyMemberMatchingAttributeMask; stores a random targetable Gear party member whose selected combat attribute intersects a stored mask, or zero when none qualifies.
+0x8007DCF8, function start — BattleEnemyScriptSelectRandomGearEnemyMatchingAttributeMask; stores a random targetable Gear enemy whose selected combat attribute intersects a stored mask, or zero when none qualifies.
+0x8007DE78, function start — BattleEnemyScriptSelectRandomPartyMemberMatchingAttributeMaskIgnoringRestrictions; stores a random active party member whose selected combat attribute intersects a stored mask while ignoring the usual target-restriction bit, or zero when none qualifies.
+0x8007DFD4, function start — BattleEnemyScriptSelectRandomGearPartyMemberMatchingAttributeMaskIgnoringRestrictions; stores a random active Gear party member whose selected combat attribute intersects a stored mask while ignoring the usual target-restriction bit, or zero when none qualifies.
+0x8007E154, function start — BattleEnemyScriptSetSelfVisualStateAndFormationOccupancy; stores the requested visual-state byte for the acting enemy, removing its formation occupancy when the high bit is clear and retaining it when the high bit is set.
+0x8007E1D0, function start — BattleEnemyScriptStoreSelfTargetMask; stores the acting enemy's own target mask in a selected 16-bit script variable.
+0x8007E234, function start — BattleEnemyScriptBuildPartyTargetMaskByGearMode; builds a mask of active party members filtered to Gears, non-Gears, or either form according to the requested mode.
+0x8007E334, function start — BattleEnemyScriptBuildEnemyTargetMaskByGearMode; builds a mask of active enemies filtered to Gears, non-Gears, or either form according to the requested mode.
+0x8007E438, function start — BattleEnemyScriptBuildPartyTargetMaskForSelectedRow; builds a mask of active party members sharing the formation row of the first entity in a stored target mask.
+0x8007E554, function start — BattleEnemyScriptBuildEnemyTargetMaskForSelectedRow; builds a mask of active enemies sharing the formation row of the first entity in a stored target mask.
+0x8007E674, function start — BattleEnemyScriptResetEnemyControlState; zeros the acting enemy's indexed 32-bit control accumulator and sets its indexed phase code to 4.
+0x8007E6A0, function start — BattleEnemyScriptAddInt32Variables; adds two selected 32-bit script variables and stores the result in a third.
+0x8007E6F0, function start — BattleEnemyScriptSubtractInt32Variables; subtracts one selected 32-bit script variable from another and stores the result in a third.
+0x8007E740, function start — BattleEnemyScriptMultiplyInt32VariableByImmediate; multiplies a selected 32-bit script variable by an unsigned immediate byte in place.
+0x8007E780, function start — BattleEnemyScriptDivideInt32VariableByImmediate; divides a selected 32-bit script variable by an unsigned immediate byte in place.
+0x8007E7C0, function start — BattleEnemyScriptWriteBattleEventVariable; stores an immediate byte as a 16-bit value in the selected Battle Event variable.
+0x8007E7E4, function start — BattleEnemyScriptSetCommandEnableBitForAllCombatants; sets or clears the selected command-enable bit across all eleven combatant slots.
+0x8007E8AC, function start — BattleEnemyScriptSetRowTargetRestriction; writes a byte into the primary targeting-restriction entry for the specified pair of formation rows.
+0x8007E8E0, function start — BattleEnemyScriptForceSelectedEntityNextTurn; finds the first entity in a stored target mask and schedules that entity as the next combatant.
+0x8007E934, function start — BattleEnemyScriptResetReadinessState; recomputes initial readiness delays for occupied combatants, assigns 255 to empty slots, mirrors reload delays, and clears readiness and timing auxiliaries.
+0x8007E954, function start — BattleEnemyScriptTestByteVariableEqualsImmediate; returns whether a selected byte script variable equals the immediate byte.
+0x8007E98C, function start — BattleEnemyScriptTestWordVariableEqualsImmediate; returns whether a selected 16-bit script variable equals the immediate 16-bit value.
+0x8007E9D0, function start — BattleEnemyScriptTestByteVariableAtMostImmediate; returns whether a selected unsigned byte script variable is less than or equal to the immediate byte.
+0x8007EA08, function start — BattleTestMonsterWordAtMostImmediate; returns whether the selected unsigned 16-bit monster variable is at most the immediate operand.
+0x8007EA4C, function start — BattleTestMonsterByteAtLeastImmediate; returns whether the selected unsigned 8-bit monster variable is at least the immediate operand.
+0x8007EA84, function start — BattleTestMonsterWordAtLeastImmediate; returns whether the selected unsigned 16-bit monster variable is at least the immediate operand.
+0x8007EAC8, function start — BattleTestMonsterBytesEqual; returns whether two selected 8-bit monster variables are equal.
+0x8007EB08, function start — BattleTestMonsterWordsEqual; returns whether two selected 16-bit monster variables are equal.
+0x8007EB50, function start — BattleTestMonsterByteAtMostByte; returns whether the first selected unsigned 8-bit monster variable is at most the second.
+0x8007EB90, function start — BattleTestMonsterWordAtMostWord; returns whether the first selected unsigned 16-bit monster variable is at most the second.
+0x8007EBD8, function start — BattleTestMonsterByteMask; returns whether the selected 8-bit monster variable shares any bits with the immediate mask.
+0x8007EC10, function start — BattleTestMonsterWordMask; returns whether the selected 16-bit monster variable shares any bits with the immediate mask.
+0x8007EC54, function start — BattleTestMonsterByteIntersection; returns whether two selected 8-bit monster variables share any set bits.
+0x8007EC94, function start — BattleTestMonsterWordIntersection; returns whether two selected 16-bit monster variables share any set bits.
+0x8007ECDC, function start — BattleTestMonsterByteNotImmediate; returns whether the selected 8-bit monster variable differs from the immediate operand.
+0x8007ED14, function start — BattleTestMonsterWordNotImmediate; returns whether the selected 16-bit monster variable differs from the immediate operand.
+0x8007ED58, function start — BattleTestMonsterBytesNotEqual; returns whether two selected 8-bit monster variables differ.
+0x8007ED98, function start — BattleTestMonsterWordsNotEqual; returns whether two selected 16-bit monster variables differ.
+0x8007EDE0, function start — BattleTestMonsterDwordsEqual; returns whether two selected 32-bit monster variables are equal.
+0x8007EE28, function start — BattleTestMonsterDwordAtMostDword; returns whether the first selected unsigned 32-bit monster variable is at most the second.
+0x8007EE70, function start — BattleTestSelectedEntityDefeated; returns the selected entity's defeat flag.
+0x8007EEA8, function start — BattleTestFormationSlotEmpty; returns whether the selected formation slot is empty.
+0x8007EED0, function start — BattleTestFirstPartySlotsEmpty; returns whether neither of the first two party slots is represented in the living-entity mask.
+0x8007EEE8, function start — BattleTestAllMonstersHidden; returns true when no upper monster bits remain in the living mask or every monster slot is hidden.
+0x8007EF44, function start — BattleTestCurrentMonsterHidden; returns the current monster's hidden flag.
+0x8007EF6C, function start — BattleExecuteMonsterScriptLowerOpcode; dispatches enemy action opcodes below 0x80.
+0x8007F8C0, function start — BattleExecuteMonsterScriptCondition; evaluates chained enemy condition opcodes.
+0x8007FB70, function start — BattleClearBillyTurnDialog; closes Billy's active turn dialog and clears its display flag.
+0x8007FBE0, function start — BattleCaptureActionLines; builds up to six horizontal Battle UI line packets.
+0x8007FCE0, return site — returns from the authenticated Battle UI line capture.
+0x8007FCE8, function start — BattleFreeChiMenuData; releases loaded Chi menu data and clears its loaded flag.
+0x8007FD38, function start — BattleLoadChiMenuData; lazily loads character or Gear chi-menu resources.
+0x8007FDEC, function start — BattleFreeGearOptionMenuData; releases loaded Gear option menu data and clears its loaded flag.
+0x8007FE3C, function start — BattleLoadGearOptionMenuData; synchronously loads Gear option menu data once and marks it available.
+0x8007FEC4, function start — BattleAllocateTurnRenderWorkspace; allocates and clears the per-turn rendering workspace and initializes its display limits.
+0x8007FF14, function start — BattleInitializeGearTurnUi; computes Gear command values, formats their decimal glyphs, allocates turn rendering storage, and animates the Gear command display into view.
+0x800800E8, function start — BattleFreeTurnRenderWorkspace; clears turn-rendering flags, normalizes the Gear turn state, and releases the rendering workspace.
+0x80080160, function start — BattleCommandSelectionLoop; runs Battle command selection and action processing.
+0x800806E8, call site — Battle command selection invokes BattleCaptureActionLines.
+0x800806F0, return site — resumes after Battle UI line capture.
+0x80080AE4, function start — BattleSelectLowestReadinessEntity; selects the other entity with the smallest remaining readiness timer, breaking ties by circular turn order.
+0x80080B64, function start — BattleStageAttackSequenceTerminator; writes an end marker and acting entity into the current action entry and clears attack-jump startup.
+0x80080BD0, function start — BattleFinishPlayerTurnResources; marks the turn complete and conditionally releases its Chi data, Gear option data, rendering workspace, and Billy dialog.
+0x80080C6C, function start — BattleMarkEventMechaCommandComplete; sets the selected Battle Event entity's mecha-command completion flag.
+0x80080C94, function start — BattleExecuteConfusedPartyTurn; chooses a random valid nonself target, performs an available basic attack, ability, or Gear transformation for a confused party member, and waits for completion.
+0x8008115C, function start — BattleHandleCharacterAttackCommand; navigates from Attack to enabled neighboring commands and enters basic-attack target selection when confirmed.
+0x80081318, function start — BattleHandleCharacterItemCommand; navigates the primary Item command and opens, applies, or cancels item selection when confirmed.
+0x80081504, function start — BattleHandleCharacterDefendCommand; navigates the Defend command and commits a defensive turn when confirmed.
+0x800816F8, function start — BattleHandleCharacterCircleMenu; dispatches character Attack, Item, Defend, Gear, and Chi commands.
+0x8008189C, function start — BattleUpdateTargetSelectionMarker; frames and blinks the current target, enables only directions leading to another target, and refreshes the special ranged-target display.
+0x800819A4, function start — BattleCommitSelectedAttackTarget; locks the selected target, removes selection displays, reframes the combatants, stages approach motion, and begins attack calculation.
+0x80081B58, function start — BattleHandleMenuSelectEnemy; handles target movement, confirmation, AP, and attack setup.
+0x800820A4, function start — BattleHandleCharacterComboCommand; navigates the Combo command and runs combo selection, committing or restoring the menu according to its result.
+0x800822C4, function start — BattleHandleCharacterAlternateItemCommand; navigates the alternate Item command and opens, applies, or cancels item selection when confirmed.
+0x80082504, function start — BattleHandleCharacterEscapeCommand; navigates the Escape command, attempts a 50 percent escape when confirmed, and ends the turn.
+0x800826CC, function start — BattleTransformCharacterToGear; relocates the combatant, clears character statuses, swaps in the Gear, updates battle flags, and records the party's Gear state.
+0x80082820, function start — BattleHandleCharacterCallGearCommand; navigates the Call Gear command and transforms the character when confirmed.
+0x800829F4, function start — BattleHandleGearAttackCommand; navigates the Gear Attack command and enters Gear attack target selection when confirmed.
+0x80082BB0, function start — BattleHandleGearItemCommand; navigates the Gear Item command and opens, applies, or cancels item selection when confirmed.
+0x80082D4C, function start — BattleHandleGearChargeCommand; navigates the Gear Charge command and restores fuel up to the Gear's maximum when confirmed.
+0x80082F7C, function start — BattleHandleGearEtherCommand; navigates the Gear command ring and opens, executes, or cancels the Ether ability menu.
+0x800830A8, function start — BattleHandleGearBoosterCommand; navigates the Gear command ring, toggles Booster state on confirmation, and ends command selection.
+0x80083340, function start — BattleHandleGearInventoryCommand; navigates the Gear command ring and opens, executes, or cancels Gear item selection.
+0x80083580, function start — BattleHandleGearEscapeCommand; navigates the Gear command ring, attempts escape with a 50 percent success check, and ends command selection.
+0x80083748, function start — BattleHandleGearSpecialCommand; navigates the Gear command ring and opens, executes, or cancels Gear special ability selection.
+0x80083948, function start — BattleHandleGearAttackSelection; processes directional targeting and attack inputs, validates fuel costs and move availability, performs selected attacks, drains fuel, and closes selection when required.
+0x80083FF4, function start — BattleIsTargetValid; validates presence, life, row, reachability, and entity mode.
+0x80084108, function start — BattleIsAbilityTargetCandidate; tests a slot against ability target restrictions.
+0x800841E0, function start — BattleBuildBasicAttackTargetPriority; collects valid opposing targets, prioritizes those sharing the attacker's position slot, and selects the lowest-HP candidate within the preferred group.
+0x80084548, function start — BattleBuildAbilityTargetList; builds ordered party, enemy, or combined targets.
+0x80084750, function start — BattleBuildEnemyAbilityTargetList; builds targets for enemy-style abilities.
+0x80084854, function start — BattleSelectNearestDirectionalTarget; returns the nearest valid target lying within the requested directional sector.
+0x80084A7C, function start — BattleRefreshDefaultBasicAttackTarget; rebuilds basic-attack targets and preserves the current target when valid or replaces it with the highest-priority candidate.
+0x80084B40, function start — BattleRunBasicAttackTargetSelection; renders interactive target selection, moves to the nearest directional candidate, updates camera and cursor masks, and returns confirmation or cancellation.
+0x80084D28, function start — BattleGetAbilityTargetsInSelectedRow; filters targets to the selected row.
+0x80084DE4, function start — BattleAbilityTargetSelectionInit; builds the valid ability-target mask and initial target.
+0x80085084, function start — BattleAbilitySelectTarget; runs interactive ability target selection.
+0x80085310, function start — BattleIsSecondEntityLeftOfFirst; returns whether the second entity's X coordinate is less than the first entity's X coordinate.
+0x80085350, function start — BattleResetTurnDamageAccumulators; clears per-entity turn damage and status accumulators.
+0x80085388, function start — BattleClearCurrentDamageEntry; clears all target values in the current action record.
+0x80085454, function start — BattleStoreAndAggregateDamageResults; stores and combines damage and healing totals.
+0x80085618, function start — BattleApplyDamageAndResourceChanges; applies HP, MP, Gear HP, fuel, and defeat changes.
+0x80085AC4, function start — BattleReviveEntityAndClearStatuses; restores an entity to maximum HP and clears six transient status values.
+0x80085B58, function start — BattleApplyPassiveModifiersAtEndOfTurn; applies and displays passive HP, MP, and fuel changes.
+0x80085C48, function start — BattleComputeItemEffectsForTargets; resets the affected-target mask, caches the target mask and action index, and computes the selected item's effects for every chosen target.
+0x80085C88, function start — BattleFinalizeDamageEntry; stores computed damage and applies it to entities.
+0x80085CCC, function start — BattleComputeAttackAgainstTargets; initializes attack context and computes selected targets.
+0x80085D34, function start — BattleUpdateApCounterText; rebuilds the remaining-AP, separator, and maximum-AP glyph packets for the current frame buffer.
+0x80085E78, function start — BattleClearAttackInputSequence; fills all seven attack-input slots with the empty marker and resets the recorded input count.
+0x80085EB4, function start — BattleIsCompletedDeathblowUnlocked; matches the recorded attack inputs against deathblow patterns and tests whether the matching move is unlocked.
+0x80086028, function start — BattleBuildDeathblowHintRow; renders one available deathblow name and its input hint into a positioned menu row.
+0x800861D0, function start — BattleAppendCharacterAttackInputAndBuildDeathblowHints; appends a character attack input, detects completed deathblows, displays the input history and available continuations, and commits a recognized move when required.
+0x80086B88, function start — BattleCanSelectGearAttackInput; tests whether a Gear attack input is unlocked and compatible with the current sequence length and attack state.
+0x80086B8C, function start — BattleCanSelectGearAttackInputContinuation; continues Gear attack availability testing with the attack tier already preloaded, omitting the normal first-argument copy.
+0x80086C88, function start — BattleBuildGearAttackMoveHintRow; renders one available Gear attack name and its associated input glyphs into a positioned menu row.
+0x80086F98, function start — BattleAppendGearAttackInputAndBuildMoveHints; appends a Gear attack input, displays the current sequence and available continuations, selects a completed move, and reports whether the sequence should end.
+0x800877E0, function start — BattleBuildAttackApproachPath; initializes the attacker-to-target waypoint list from formation routing data and reports whether the attacker uses the special ranged approach.
+0x800879A8, function start — BattleInitializeAttackAnimationRecords; initializes all 32 action records with the attacker, target mask, and no pending animation.
+0x80087A38, function start — BattleStartBasicAttackApproach; refreshes AP text, initializes action records and approach waypoints, starts movement toward the selected target, and enables attack processing.
+0x80087AF0, function start — BattlePerformBasicAttack; moves, animates, computes, scripts, and applies a basic attack.
+0x80087EDC, function start — BattleRelocateEntityToTargetFormationSlot; removes an entity from its old formation slot, claims a free local position at the target's slot, and updates its battle coordinates.
+0x800881B8, function start — BattleRelocateEntityToRangedAttackSlot; moves an entity into an empty ranged position associated with the target's formation and updates its battle coordinates.
+0x800883AC, function start — BattleRemoveDefeatedEntityFromSlot; removes a defeated entity from its local slot.
+0x80088490, function start — BattleRelocateEntityToGearSlot; moves an entity to the first available Gear position.
+0x800885D0, function start — BattleGetRangedAttackSlotOccupancy; returns the occupancy count of the ranged formation row associated with an entity's current position slot.
+0x8008860C, function start — BattleBuildGearCommandHeaderText; builds and activates the fixed Gear command header, separator, and background glyph packets.
+0x8008887C, function start — BattleInitializeResultTextDrift; stores a two-dimensional trajectory, normalizes its deltas to fixed-point steps, chooses a random step count, and resets its accumulators.
+0x80088990, function start — BattleAdvanceResultTextDrift; advances the result-text trajectory by its randomized step count and marks completion when the major axis crosses the destination.
+0x80088B80, function start — BattleRenderResultText; builds and draws Battle result text and effects.
+0x80089038, function start — BattleBuildGearStatusConditionText; builds positioned text packets for each of five active Gear condition bits.
+0x80089110, function start — BattleBuildGearBoosterStateText; selects the Booster-on or Booster-off label, builds its packets, and activates them.
+0x800891E4, function start — BattleBuildGearAttackLevelText; builds and activates both label strips associated with the current Gear attack level.
+0x80089348, function start — BattleBuildGearHitRateText; converts the cached Gear hit-rate value to digits, positions them on the command display, and activates the packets.
+0x8008946C, function start — BattleBuildGearHyperModeChanceText; renders the cached Hyper Mode chance with a percent sign or substitutes the maximum-level indicator.
+0x8008963C, function start — BattleBuildGearAttackLevelProgressText; converts the cached Gear attack-level progress value to digits, appends a percent sign, and activates the packets.
+0x800897CC, function start — BattleBuildGearAttackLevelLimitText; converts the cached Gear attack-level limit value to digits, positions them on the command display, and activates the packets.
+0x800898F0, function start — BattleBuildGearFuelCounterText; converts current and maximum Gear fuel values to digits, appends their separator, and prepares both packet groups.
+0x80089AF8, function start — BattleBuildGearCommandStatusText; rebuilds all fixed labels, condition indicators, attack-level values, hit rate, Hyper Mode chance, and related Gear command text.
+0x80089B50, function start — BattleRandomU16InRange; returns an inclusive random 16-bit value between the supplied bounds while honoring zero and 0xFFFF sentinel cases.
+0x80089BEC, function start — BattleGetMsbFirstEntityMask; returns the 16-bit mask containing bit 15 shifted right by the supplied entity index.
+0x80089C08, function start — BattleGetLsbFirstEntityMask; returns the 16-bit mask containing bit 0 shifted left by the supplied entity index.
+0x80089C24, function start — BattleGetInvertedMsbFirstEntityMask; returns the 16-bit complement of the MSB-first mask for the supplied entity index.
+0x80089C48, function start — BattleGetInvertedLsbFirstEntityMask; returns the 16-bit complement of the LSB-first mask for the supplied entity index.
+0x80089C6C, function start — BattleTestMsbFirstEntityMask; returns the selected MSB-first bit from a 16-bit mask or zero when the index is outside 0 through 15.
+0x80089C9C, function start — BattleTestLsbFirstEntityMask; returns the selected LSB-first bit from a 16-bit mask or zero when the index is outside 0 through 15.
+0x80089CCC, function start — BattleHandleInput; polls controllers and translates input into Battle commands.
+0x8008A144, function start — BattleChiMenuTextScrollTick; advances four scrolling chi-menu text strips.
+0x8008A274, function start — BattleUpdateInputsMode1; advances active-time and gameplay UI animation state.
+0x8008A3EC, function start — BattleUpdateInputsMode2; updates input during Battle cutscene mode.
+0x8008A684, function start — BattleUpdateInputsMode0; handles input, pause, disconnect, and result countdown state.
+0x8008A9C0, function start — BattleUpdateInputs; dispatches result, gameplay, or cutscene input updates.
+0x8008AA40, function start — BattlePlaySequenceSoundEffect; plays the low-byte sound identifier through the current battle sequence bank.
+0x8008AA74, function start — BattlePlayGatedSequenceSoundEffect; plays the requested sound only while the battle command sound gate is enabled.
+0x8008AAA0, function start — BattleFormatNineDigitDecimal; splits an unsigned value into nine decimal digits and marks leading positions with 0xFF while retaining the final zero.
+0x8008AB4C, function start — BattleSelectEventDataDirectory; selects battle event data directory 0 within archive group 0x20.
+0x8008AB70, function start — BattleSelectMusicDataDirectory; selects battle music directory 2 within archive group 0x20.
+0x8008AB94, function start — BattleSelectAbilityDataDirectory; selects battle ability data directory 3 within archive group 0x20.
+0x8008ABB8, function start — BattleAllocateArenaTwoMemory; selects allocation arena 2 and allocates the requested byte count using the requested allocation mode.
+0x8008AC00, function start — BattleAllocateTextTextureMemory; allocates 26 times the requested width plus three bytes of text texture storage.
+0x8008AC50, function start — BattleWaitForCdWithFrames; renders battle frames until CD activity finishes.
+0x8008AC88, function start — BattleQueueProtectedEnemyReaction; retains protected enemy targets from a supplied mask and appends an animation command with reaction code 0xF3 when any remain.
+0x8008ADD0, function start — BattleExecuteAbility; computes, animates, applies, and waits for an ability attack.
+0x8008B108, function start — BattleHideAbilityMenuUi; disables chi-menu text, dialogs, and detail rendering.
+0x8008B168, function start — BattleRestoreAbilityTargetSelectionUi; restores UI after target-selection cancellation.
+0x8008B224, function start — BattleTryUseAbility; validates availability and MP before target selection.
+0x8008B478, function start — BattleRunChiMenu; creates, navigates, confirms, and tears down the ability grid.
+0x8008B908, function start — BattleExecuteItemUse; prepares the selected item action, consumes its inventory quantity, computes and applies its effects, queues result animations, waits for completion, and refreshes affected party gauges.
+0x8008BC40, function start — BattleHideItemTargetSelectionUi; hides item text, item dialogs, and detail panels during target selection, optionally restoring the command ring.
+0x8008BC98, function start — BattleRestoreItemTargetSelectionUi; restores item text and dialogs, selects item display mode 2, frames the actor and current target, and resumes target blinking.
+0x8008BD50, function start — BattleTryUseInventoryEntry; rejects empty inventory entries, opens target selection for ordinary items, or immediately activates and consumes eligible secondary items.
+0x8008BED8, function start — BattleRunItemSelectionMenu; creates the item windows, navigates standard and secondary inventory pages, updates item details and scrolling, confirms item targeting or direct use, and tears the menu down.
+0x8008C360, function start — BattleCleanupCommandMenu; clears command UI, dialogs, cursors, and menu storage.
+0x8008C3F0, function start — BattleRestoreComboTargetSelectionUi; restores combo text and dialogs, selects combo display mode 3, frames the actor and current target, and resumes target blinking.
+0x8008C4A8, function start — BattleExecuteSelectedCombo; runs combo selection, commits each chosen move and its result animation on confirmation, waits for completion, or restores the command menu after cancellation.
+0x8008C81C, function start — BattleDrawCircleMenuComboSelect; runs combo selection and validates fuel and move cost.
+0x8008CCCC, function start — BattleHideGearSpecialTargetSelectionUi; hides gear-special text, three dialogs, and detail panels during target selection, optionally restoring the command ring.
+0x8008CD28, function start — BattleRestoreGearSpecialTargetSelectionUi; restores gear-special text and dialogs, selects display mode 4, frames the actor and current target, and resumes target blinking.
+0x8008CDE4, function start — BattleTryUseGearSpecial; validates fuel cost, availability, and restriction flags, runs target selection, deducts fuel on confirmation, and plays rejection audio on failure.
+0x8008CDEC, function start — BattleTryUseGearSpecialMaskContinuation; continues gear-special validation with the first restriction mask preloaded, loads the remaining masks, checks fuel and availability, runs target selection, deducts fuel on confirmation, and plays rejection audio on failure.
+0x8008CFB8, function start — BattleRunGearSpecialSelectionMenu; builds four available gear specials and their fuel costs, navigates their menu, confirms target selection, records the chosen special, and closes all associated windows.
+0x8008D328, function start — BattleFadeCommandRingTiles; decreases command-ring tile brightness in fixed steps and disables the ring when every tile has faded out.
+0x8008D598, function start — BattleBuildOrFadeCommandRingTiles; builds both command-ring halves from the selected layout, shades disabled commands, records their primitive counts, or advances their fade-out.
+0x8008DC34, function start — BattleBuildDialogWindowCorners; builds normal or alternate dialog corners.
+0x8008DE04, function start — BattleBuildDialogWindowTopBorder; builds the two-piece top border.
+0x8008E430, function start — BattleBuildDialogWindowBottomBorder; builds the two-piece bottom border.
+0x8008EA70, function start — BattleBuildDialogWindowLeftBorder; builds the two-piece left border.
+0x8008F0A8, function start — BattleBuildDialogWindowRightBorder; builds the two-piece right border.
+0x8008F6E4, function start — BattleDrawDialogWindow; builds and activates a complete dialog window.
+0x8008F8F4, function start — BattleAllocateAndSetupDialogWindow; allocates and starts a dialog window.
+0x8008FA60, function start — BattleClearDialogWindow; disables and frees one dialog window.
+0x8008FAD8, function start — BattleUpdateExpandingDialogWindows; expands active windows toward requested dimensions.
+0x8008FC1C, function start — BattleBuildChiMenuBackgroundText; builds repeating and central chi-menu strips.
+0x8008FDE4, function start — BattleBuildItemMenuBackdropText; builds the repeating and central text strips used behind the item menu.
+0x8008FE18, function start — BattleUploadItemMenuTextures; optionally initializes item-menu resources, uploads names and quantities for 32 standard and secondary inventory entries, frees temporary texture memory, and selects item display mode 2.
+0x8009023C, function start — BattleBuildItemMenuScrollRows; builds nine vertically spaced item-menu row strips at the requested scrolling offset.
+0x80090310, function start — BattlePositionItemNamePanels; selects the texture page for an inventory position and places its wide and narrow name panels.
+0x800904A0, function start — BattlePositionItemTargetLabels; derives an item's target side and targeting mode from its flags and positions the corresponding labels.
+0x8009070C, function start — BattleBuildItemDescriptionText; renders the selected item's description into temporary texture memory, uploads it, and positions the resulting text panel.
+0x8009080C, function start — BattleUpdateSelectedItemDetails; updates the selected inventory entry's name panels and, for an available ordinary item, builds its description and targeting labels.
+0x8009093C, function start — BattlePositionItemMenuPanels; scrolls and positions the four item-list texture panels across the two available texture pages.
+0x80090B90, function start — BattleUpdateChiMenuCursorGlyph; cycles the chi cursor glyph.
+0x80090C44, function start — BattlePositionMpDigits; positions the actor's current and maximum MP digits while suppressing leading tens digits.
+0x80090E7C, function start — BattleBuildMpSummaryPanel; positions the MP labels, current and maximum MP digits, and separator glyph for the ability menu.
+0x80091064, function start — BattleInitializeChiMenuContents; builds ability names, costs, textures, and details.
+0x80091604, function start — BattleBuildChiMenuScrollText; builds vertically spaced scrolling text strips.
+0x800916D4, function start — BattleBuildGearAbilityFuelCostDigits; computes a selected gear ability's fuel cost and emits up to three nonleading decimal digits.
+0x8009187C, function start — BattlePositionAbilityTargetLabels; derives a selected character or gear ability's target side and targeting mode and positions the corresponding labels.
+0x80091B38, function start — BattleBuildAbilityDescriptionText; renders both description lines for the selected character or gear ability, uploads them, and positions their panels.
+0x80091D38, function start — BattleUpdateChiMenuAbilityDetails; updates the selected ability detail panel.
+0x80091EC4, function start — BattlePositionChiMenuPanels; positions wide and narrow chi-menu panels.
+0x8009209C, function start — BattleSetupComboSelectionPanels; positions the combo menu background panels, enables their rendering, and selects combo display mode 3.
+0x80092298, function start — BattleBuildComboSelectionLegend; resets double-buffered combo summary primitives and builds the labels for each currently selected move.
+0x80092784, function start — BattleInitializeComboSelectionContents; uploads up to seven available move names and costs plus the completion entry, then initializes the combo legend and background panels.
+0x80092B74, function start — BattleUpdateComboSequenceSummary; rebuilds the remaining budget digits and selected move sequence symbols, then positions the combo summary and highlight polygons.
+0x800930AC, function start — BattleInitializeGearSpecialMenuContents; uploads four available gear-special names and four-digit fuel costs, positions their panels, and selects gear-special display mode 4.
+0x80093578, function start — BattlePositionGearSpecialTargetLabels; positions the selected gear special's target-side and targeting-mode labels from its attack flags.
+0x8009382C, function start — BattleBuildGearSpecialDescriptionText; renders and uploads both description lines for the selected gear special and positions their panels.
+0x800939CC, function start — BattleUpdateGearSpecialDetails; checks special availability and restriction masks, hides invalid details, or rebuilds the selected special's targeting labels and description.
+0x800939D4, function start — BattleUpdateGearSpecialDetailsMaskContinuation; continues gear-special detail validation with the first restriction mask preloaded, loads the remaining masks, and hides invalid details or rebuilds targeting labels and description.
+0x80093B08, function start — BattleOpenBillyAmmoPanel; conditionally renders Billy's two equipped ammunition names and three-digit remaining counts, opens their dialog, and selects ammo display mode 5.
+0x8009413C, function start — BattleResetBillyTurnResources; clears Billy's auxiliary turn state and optionally releases his active battle resources.
+0x800941A4, function start — BattleComputeAttackResults; computes hit, damage, counters, and status for selected targets.
+0x800946F4, function start — BattlePostComputeAttackDamage; applies post-damage statuses, guards, counters, and multipliers.
+0x80094C78, function start — BattleAccumulatePartyDamageTotals; adds the current resolved amount to each successful party target's character or Gear damage total.
+0x80094D24, function start — BattlePreventPartyWideCommandLock; removes command-lock status and restores command masks when it would disable every surviving party member.
+0x80094EE4, function start — BattleComputeStandardDamage; resolves hit, power, defence, elements, variance, and damage type.
+0x80095690, function start — BattleComputeCharacterHealing; computes HP recovery from the attacker's ether and effect power, applies healing modifiers, rejects Gear targets, and records HP healing.
+0x800957D8, function start — BattleResolveRevivalEffect; clears incapacitating statuses, restores a power-scaled portion of maximum HP, and marks the target as revived.
+0x800958D8, function start — BattleDispelSelectedStatusGroups; performs a chance roll, clears the selected status groups on success, and selects the dispel result animation.
+0x80095A78, function start — BattleInflictConfiguredStatus; attempts the configured status effect, initializes its duration, and records a status miss when resistance prevents it.
+0x80095B44, function start — BattleInflictAttackerInnateStatus; attempts the attacker's innate status payload and initializes the corresponding configured duration on success.
+0x80095BAC, function start — BattleRemoveConfiguredStatuses; performs a success roll and clears the selected persistent or timed status groups, otherwise recording a miss.
+0x80095D4C, function start — BattleComputeDrainTransfer; calculates an HP or MP transfer amount and records matched damage for the target and recovery for the attacker.
+0x80096018, function start — BattleComputeScriptedDamageAmount; resolves fixed, fractional, current, missing, maximum, MP-scaled, or one-point damage modes after a success roll.
+0x80096494, function start — BattleApplyElementalDamageModifiers; applies elemental affinity and protection modifiers.
+0x80096824, function start — BattleRollGearAttackFailure; tests a flagged Gear attack against ether and accuracy values and marks the attack as failed when the roll misses.
+0x800968C0, function start — BattleTriggerPlayerCounterattack; tests counterattack eligibility and chance, swaps attacker and target roles, cancels incoming damage, and schedules the counter.
+0x80096AB8, function start — BattleResolveAttackHitType; determines hit, miss, evade, guard, or immunity.
+0x80096FBC, function start — BattleComputeAttackPower; computes physical or ether power from stats and buffs.
+0x80097610, function start — BattleComputeDefenceValue; computes effective physical or ether defence.
+0x8009795C, function start — BattleLeaveStateUnchanged; returns immediately without changing battle state.
+0x80097964, function start — BattleApplyStatusWithResistance; checks chance and immunity, cancels opposing effects, enforces party survival rules, applies status bits, and starts durations.
+0x80097D08, function start — BattleInitializeAttackResultArrays; initializes all target results and damage values.
+0x80097D5C, function start — BattleInitializePartyCombatStats; builds combat stats for occupied party slots, applies equipment and scenario modifiers, derives Gear values, and clears accumulated damage totals.
+0x8009892C, function start — BattleFinalizePartyCombatStats; preserves command masks, applies accessory agility changes, caps agility, and installs scenario-dependent combat defaults.
+0x80098AF8, function start — BattleComputeActionRecoveryTicks; derives action recovery time from agility, technique modifiers, and random variance while enforcing party command-lock safety.
+0x80098C6C, function start — BattleApplySelectedItemToTargets; resets result storage, applies the selected item to every targeted combatant, and selects its battle animation.
+0x80098D2C, function start — BattleApplyItemEffectToTarget; applies configured recovery, damage, revival, status, timer, resource, command, and progression effects to one target.
+0x80099498, function start — BattleCanApplyPartyDisablingStatus; permits a disabling status only when it cannot leave the active party without an available member.
+0x800995A0, function start — BattleInitializeStatusDuration; maps a status bit to its timer slot and adjusts duration for haste, slow, and duration-modifying effects.
+0x80099890, function start — BattleUpdateEntityStatusTimers; decrements statuses and removes expired effects.
+0x80099CF0, function start — BattleDecrementSecondaryStatusTimers; decrements secondary timed statuses and clears each associated status bit when its duration expires.
+0x80099FB0, function start — BattleCaptureAttackEffectMetadata; copies the active effect's display metadata and derives an elemental category from the target when none is specified.
+0x8009A074, function start — BattleRestoreTargetFactionBits; replaces each represented faction's active target bits with the corresponding bits from the saved target mask.
+0x8009A0DC, function start — BattleGetEntityStatusAnimationIndex; selects the animation category implied by active status.
+0x8009A1AC, function start — BattleGetEntityStatusEffectMask; converts status fields to a visual-effect mask.
+0x8009A258, function start — BattleComputeCharacterTechniqueAccuracy; adds character ether to the selected technique's accuracy bonus and caps the result at 100 percent.
+0x8009A2D4, function start — BattlePrepareGearTurnParameters; loads Gear technique metadata, computes turn resources and Hyper chance, derives condition flags, and advances Hyper duration.
+0x8009A7B8, function start — BattleGetPersistentCharacterIdentifier; returns the persistent character identifier for the selected roster entry.
+0x8009A7E4, function start — BattleIsBillyAmmoReward; checks whether a battle reward identifier matches any of Billy's four equipped ammunition identifiers.
+0x8009A854, function start — BattleRegisterBillyAmmoReward; maps a matching ammunition reward to its equipped slot and updates its persistent attributes, quantity, and party copies.
+0x8009A9D0, function start — BattleAttemptEscape; performs a 50 percent escape roll and preserves party HP, MP, statuses, Gear HP, and fuel when successful.
+0x8009AA44, function start — BattleApplyDefendStance; marks the combatant as defending, removes incompatible Gear statuses, and selects the special defend effect when active.
+0x8009AB00, function start — BattleClearDefendStance; removes the combatant's defending flag.
+0x8009AB38, function start — BattleApplyTechniqueCostReduction; sets eligible character or Gear technique costs to one when the corresponding passive modifier is active.
+0x8009AC48, function start — BattlePrepareAttackerStatusTrackers; updates attacker action trackers and clears triggers.
+0x8009ADA0, function start — BattleGetPassiveEndOfTurnModifiers; computes passive HP, MP, and fuel regeneration.
+0x8009AEFC, function start — BattleClearCharacterStatusForGear; clears status before character-to-Gear transformation.
+0x8009AFD8, function start — BattleConsumeActionAmmunition; decrements the ammunition quantities associated with the selected action, including both required stocks for combined shots.
+0x8009B098, function start — BattleInitializeReservePartyDefaults; sets party slots one and two to fixed HP, hit, evade, command, element, and presentation defaults.
+0x8009B104, function start — BattleScaleCharacterHpForGear; multiplies character HP for Gear conversion with saturation.
+0x8009B1E4, function start — BattleSeedDebugItemInventory; fills item identifiers 1 through 47 with quantity 99 and initializes their built-in battle effect definitions.
+0x8009B46C, function start — BattleApplyCrisisAndCriticalPowerModifiers; raises attack power for low-HP party members and applies a chance-based critical multiplier controlled by attacker traits.
+0x8009B684, function start — BattleSelectStatusResultAnimation; maps an applied status group and bit to the corresponding result animation code.
+0x8009BAC4, function start — BattleSelectAutomatedCharacterAttack; chooses an automated basic, special, or learned deathblow attack and selects its random variant.
+0x8009BD94, function start — BattleComputeGearHealing; records Gear HP recovery equal to effect power times maximum Gear HP divided by twenty.
+0x8009BE0C, function start — BattlePersistPartyCombatState; writes party HP, MP, status counters, Gear HP, and fuel back to persistent state with maximum and defeat corrections.
+0x8009C050, function start — BattleGetGearConditionFlags; returns flags for a Gear status modifier, critical HP below one eighth, and active Hyper mode.
+0x8009C0E0, function start — BattleActivateGearHyperMode; enters Hyper mode, sets its duration to three turns, and enables the associated attack modifier.
+0x8009C134, function start — BattleSelectBartPartyMask; scans the three party slots and stores the target bit belonging to Bart.
+0x8009C198, function start — BattleResolveGearOrEnemyAttack; selects Gear or enemy attack data, resolves every targeted effect, applies postprocessing, and updates attack progression.
+0x8009C4B4, function start — BattlePostprocessGearAttackResult; advances attack level, clears recoverable confusion, applies damage variance and reflection, and nullifies protected MP damage.
+0x8009C9C4, function start — BattleFinalizeAttackContextMetadata; copies attack effect bytes into shared state, snapshots the active attack mode, and fills an empty elemental mask from attacker and target affinities.
+0x8009CA90, function start — BattleSelectAttackStatsVariantForTarget; advances to an alternate attack-stat block by 0x78 for modes 12 through 14 or by 0x258 for modes 0 through 2 when the target is not a Gear.
+0x8009CB68, function start — BattleMirrorDeferredStatusFlag; mirrors auxiliary flag 0x200 into active flag 0x20 for the selected combatant.
+0x8009CBC4, function start — BattleResolveCurrentTargetDamage; rolls the hit outcome, computes power and defence, applies elemental, status, variance, barrier, and scaling modifiers, assigns the result type, and clamps damage to 9999.
+0x8009D354, function start — BattleResolveCurrentTargetStatusEffect; attempts the configured status operation and assigns failure result 6 when the target rejects it.
+0x8009D3A0, function start — BattleRollCurrentTargetHitOutcome; evaluates forced hit, immunity, accuracy, evasion, status modifiers, and random thresholds to return the target outcome code.
+0x8009D948, function start — BattleComputeScaledAttackerPower; computes attack power and applies Gear output and active power-boost modifiers.
+0x8009DA04, function start — BattleComputeScaledTargetDefence; computes effective defence and applies defence reduction, Gear defence, and active defence-boost modifiers.
+0x8009DB54, function start — BattleApplyAttackMaskResistance; selects the highest set attack-mask bit and reduces damage by the target's corresponding resistance, reaching zero at resistance 20.
+0x8009DBFC, function start — BattleTryApplyGearOrEnemyAttackStatus; rolls status accuracy, rejects immunities and conflicts, applies or clears status flags and timers, handles defence reduction and HP-fraction effects, and selects the resulting visual cue.
+0x8009E268, function start — BattleClearTargetDefenceReduction; clears the current target's percentage defence reduction.
+0x8009E278, function start — BattleSetGearHealingFromTargetFactor; assigns HP-healing type 2 and sets the amount to the target's Gear maximum HP multiplied by its healing factor and divided by 10.
+0x8009E2EC, function start — BattleRecordGearMaximumHpHealing; assigns HP-healing type 2 and restores the current target by the ability rate times Gear maximum HP divided by 20.
+0x8009E364, function start — BattleSetEtherBasedHealing; assigns HP-healing type 2 and sets the amount to attacker ether multiplied by the ability rate.
+0x8009E3C8, function start — BattleSetCurrentTargetAuxiliaryEffect; sets the current target's auxiliary state to 4 and its per-target effect code to 3.
+0x8009E410, function start — BattleSetFuelDamageFromAbilityRate; assigns fuel-damage type 10 and computes the amount from current Gear fuel and the ability rate.
+0x8009E48C, function start — BattleSetFuelHealingFromAbilityRate; assigns fuel-healing type 11 and computes the amount from current Gear fuel and the ability rate.
+0x8009E508, function start — BattleClearTargetGearRestrictions; clears the target's transient Gear restriction flags and disables command bit 0x20.
+0x8009E53C, function start — BattleIsEntityMappedToActivePartyUnit; returns whether an entity identifier matches any of the active party unit's three configured identifiers.
+0x8009E5C8, function start — BattlePropagateEntityPartyUnitMetadata; classifies an entity against three active-party identifiers, copies its metadata into the selected party slot, and mirrors that metadata to every Gear combatant.
+0x8009E788, function start — BattleConsumeResolvedBillyAmmunition; decrements one or two indexed ammunition counters selected by the resolved attack mode and Billy's equipped ammunition identifiers.
+0x8009E868, function start — BattleMapAppliedStatusToEffectCue; maps an applied status category and mask to the visual-effect cue used for the current attack.
+0x8009EBA8, function start — BattleIndexMechaModelBlocks; allocates and fills an indexed pointer table over fixed-size serialized mecha model blocks.
+0x8009EC4C, function start — BattleBuildMechaSkeleton; allocates a bone hierarchy, resolves parents and geometry, initializes transforms, and creates paired runtime model packets.
+0x8009EF3C, function start — BattleRebuildMechaBoneTransforms; rebuilds dirty root and child transforms, propagates parent translation changes, composes hierarchy matrices, and clears dirty flags.
+0x8009F1C4, function start — BattleRebuildScaledMechaBoneTransforms; rebuilds dirty hierarchical transforms with per-bone scaling, inverse parent-scale compensation, and propagated rotation and translation changes.
+0x8009F5B0, function start — BattleMechaRenderEmptyHook; returns immediately without changing state or emitting geometry.
+0x8009F5B8, function start — BattleRenderMechaBoneGeometry; composes view, root, and bone transforms and submits enabled geometry for every visible nonroot bone.
+0x8009F708, function start — BattleFreeMechaSkeleton; frees every bone's runtime model packets and then releases the complete bone hierarchy.
+0x8009F794, function start — BattleFreeMechaModelBlockIndex; optionally releases every indexed model block's runtime resources, then frees and clears the block index.
+0x8009F844, function start — BattleRenderMechaAuxiliaryEffects; renders an active mecha's body, projected shadow, auxiliary meshes, animated texture tiles, and wheel trails.
+0x800A0838, function start — BattleAdvanceMechaBoneAnimationTracks; advances rotation, translation, and scale tracks, decodes their update modes, handles looping or completion, releases expired tracks, marks changed bones, and returns transition flags.
+0x800A1B50, function start — BattleApplyMechaKeyframePose; copies available keyframe rotations and translations directly into bones whose persistent tracks do not block replacement.
+0x800A1CF4, function start — BattleCreateMechaPoseTransitionTracks; allocates timed rotation and translation tracks from current bone values to a keyframe using shortest-angle deltas and selectable interpolation.
+0x800A216C, function start — BattleClearMechaBoneAnimationChannels; releases the selected rotation, translation, and scale animation channels from one indexed bone.
+0x800A2234, function start — BattleCreateMechaAnimationTrackPool; allocates a fixed-capacity animation-track pool and resets every slot.
+0x800A22A8, function start — BattleFreeMechaAnimationTrackPool; frees the animation-track storage and clears its allocation state.
+0x800A22E8, function start — BattleResetMechaAnimationTrackPool; marks every animation-track slot free and resets the next-allocation index.
+0x800A2330, function start — BattleAllocateMechaAnimationTrack; returns the next free animation-track slot and advances the allocation hint to the following vacancy.
+0x800A23E8, function start — BattleReleaseMechaAnimationTrack; marks a track free and moves the allocation hint backward when the released slot precedes it.
+0x800A2434, function start — BattleBindMechaAnimationTracks; binds serialized rotation and translation streams to bones, removes absent channels, or applies a static pose immediately.
+0x800A2704, function start — BattleBindAndPrimeMechaAnimationTracks; binds serialized bone tracks while seeding current rotations and translations from the animation's initial keyed pose.
+0x800A2ACC, function start — BattleClearTransientMechaAnimationTracks; releases every bone animation track whose tag is not 0xFF and clears the corresponding channels.
+0x800A2BB8, function start — BattleClearTaggedMechaAnimationTracks; releases every bone animation track carrying the requested tag and clears the corresponding channels.
+0x800A2CA4, function start — BattleCreateMechaWheelTrailPool; allocates the requested wheel-trail slots plus one sentinel slot and initializes their rendering state.
+0x800A2D1C, function start — BattleFreeMechaWheelTrailPool; frees all wheel-trail storage and clears its capacity and active-count state.
+0x800A2D5C, function start — BattleResetMechaWheelTrailPool; resets every wheel-trail slot and configures two semitransparent textured quads per slot with fixed palette and texture-page state.
+0x800A2E88, function start — BattleAllocateMechaWheelTrailSegment; allocates the next free wheel-trail segment, initializes both transform matrices, advances the free cursor, and returns a sentinel when exhausted.
+0x800A2F94, function start — BattleReleaseMechaWheelTrailSegment; marks a wheel-trail segment free and rewinds the allocation cursor when the released index is earlier.
+0x800A2FD8, function start — BattleDrawMechaWheelTrail; draws and advances active wheel-trail particles.
+0x800A32D8, function start — BattleInitializeMechaWheelTrailEmitter; initializes a wheel-trail emitter with positions, colors, lifetime limits, and per-tick color deltas.
+0x800A3484, function start — BattleDisableMechaWheelTrailEmitter; disables a wheel-trail emitter by setting its controlling index to -1.
+0x800A3490, function start — BattleComputeEasedTextureEffectFrame; returns a signed frame value by adding a normalized nonnegative trigonometric term to a base value.
+0x800A3514, function start — BattleAdvanceTextureEffectFrame; returns the base plus elapsed-over-duration while the result is at most 32, then returns -1 to terminate the effect.
+0x800A3578, function start — BattleReverseTextureEffectFrame; returns the base minus elapsed-over-duration as a signed frame value.
+0x800A35C8, function start — BattleClampDescendingTextureEffectFrame; returns the greater of the supplied floor and 32 minus elapsed-over-duration.
+0x800A3640, function start — BattleCreateAnimatedEnvironmentTextureEffect; configures an environment texture effect, allocates requested working buffers, captures or synthesizes source pixels, and installs timing and interpolation controls.
+0x800A3E98, function start — BattleUpdateAnimatedEnvironmentTextureTile; advances and uploads one environment tile.
+0x800A429C, function start — BattleDestroyAnimatedEnvironmentTextureEffect; releases every allocated texture-effect buffer, restores tracked VRAM state when required, and marks the effect inactive.
+0x800A4348, function start — BattleScaleEnvironmentTexturePixels; multiplies each source pixel by a factor over 32 and writes the scaled values into the selected environment texture region.
+0x800A43F8, function start — BattleBlendEnvironmentTexturePixels; interpolates each environment texture pixel between two source buffers using a factor over 32.
+0x800A44C0, function start — BattleRefreshAttachedMechaTransforms; recomputes attached positions from parent bone matrices.
+0x800A4654, function start — BattleDrawEnvironment; advances animated texture tiles, rebuilds changed VRAM data, executes deferred image moves, draws environment geometry and background layers, and emits the horizon backdrop.
+0x800A4820, function start — BattleUnloadEnvironmentResources; removes the environment mecha, frees texture and background resources, destroys deferred image commands, and clears their global handles.
+0x800A48EC, function start — BattleDrawEnvironmentModelGeometry; composes active environment bone transforms, applies billboard modes, selects depth handling, and submits each visible geometry block.
+0x800A4B3C, function start — BattleProjectPointOutsideEnvironmentCollider; scans environment collision cylinders, pushes the first penetrating XZ point onto its circumference, and reports whether a correction occurred.
+0x800A4CF8, function start — BattleResolveMechaEnvironmentCollisions; pushes a mecha away from collision cylinders.
+0x800A4DB8, function start — BattleDrawHorizonBackdrop; constructs Battle horizon and backdrop fan primitives.
+0x800A577C, function start — BattleGetTerrainVertices; returns the active battle terrain vertex array.
+0x800A578C, function start — BattleGetTerrainTriangles; returns the active battle terrain triangle table.
+0x800A579C, function start — BattleFindTerrainTriangleBruteForce; scans terrain triangles for an XZ point.
+0x800A5870, function start — BattleComputeTerrainHeightAtTriangle; computes plane height and returns triangle flags.
+0x800A5914, function start — BattleFindTerrainTriangle; searches neighboring terrain triangles from a hint.
+0x800A5A48, function start — BattleIsPointInsideTerrainTriangleXZ; performs three XZ edge tests.
+0x800A5BE8, function start — BattleComputeTerrainTrianglePlaneHeight; solves a terrain plane equation for Y.
+0x800A5D54, function start — BattleFindTerrainTriangleRecursive; recursively searches neighboring triangles.
+0x800A5E9C, function start — BattleSetEnvironmentBackgroundColorTargets; registers the two background RGB destinations updated by environment color effects.
+0x800A5EB4, function start — BattleInitializeEnvironmentColorEffects; clears color-effect slots, redirects animated environment color data, allocates working color buffers, and captures model and background colors.
+0x800A6444, function start — BattleConfigureEnvironmentColorEffectSlot; enables or disables one of four color-effect slots and assigns its blend mode, strength, and RGB offsets.
+0x800A64E4, function start — BattleCommitEnvironmentColorEffects; writes the working model and background colors back to active environment resources.
+0x800A6884, function start — BattleApplyEnvironmentColorEffectSlot; derives a full, reduced, grayscale, black, or offset target color, blends toward the original color, clamps every channel, and copies the result.
+0x800A6AE8, function start — BattleRebuildEnvironmentVramBuffer; rebuilds environment VRAM buffers after texture changes.
+0x800A6F98, function start — BattleShutdownEnvironmentColorEffects; optionally uploads final color data, destroys the active texture effect, commits current colors, and frees both working buffers.
+0x800A7064, function start — BattleInitializeMechaStrandMesh; decodes strand control data and allocates transformed vertices, triangle connectivity, collision volumes, lighting accumulators, and double-buffered textured packets.
+0x800A7948, function start — BattleUpdateAndDrawMechaStrandMesh; deforms strand vertices from animated anchors, enforces collision radii and height limits, computes averaged normals, projects triangles, and queues visible packets.
+0x800A8A88, function start — BattleFreeMechaStrandMesh; frees all vertex, connectivity, packet, and collision allocations owned by one mecha strand mesh and marks it inactive.
+0x800A8B0C, function start — BattleMechaInit; resets mecha animation, loading, pointers, and model slots.
+0x800A8BF0, function start — BattleInitializeMechaModelInstance; loads a mecha slot from model and animation resources, prepares textures, bones, packets, effects, attachments, scale, and initial animation state, and optionally snaps it to terrain.
+0x800A9540, function start — BattleCreatePartyMechaLoadRequests; builds and starts party Gear file requests.
+0x800A96B4, function start — BattleStartMechaFilePairLoading; allocates a terminated request list for paired mecha files, allocates each destination buffer, and starts the batch load.
+0x800A979C, function start — BattleFinalizeMechaLoadingCommands; installs loaded mecha resources and frees temporaries.
+0x800A9A50, function start — BattleRenderAndAdvanceMechas; animates, collides, and submits all active mechas.
+0x800A9F94, function start — BattleUnloadAllMechas; unloads all 31 regular mecha slots and clears shared wheel-trail and animation resources.
+0x800A9FF0, function start — BattleUnloadMechaSlot; releases one mecha's models, animation data, attachments, texture effects, and strand meshes, clears its slot, and recursively removes paired child slots.
+0x800AA320, function start — BattleStartMechaAnimation; selects the acting mecha and target mask, disables event-camera mode, and starts or queues the requested animation.
+0x800AA384, function start — BattleStartEventControlledMechaAnimation; selects the acting mecha and target mask, enables event-camera control, binds actor and target state, and starts or queues the requested animation.
+0x800AA454, function start — BattleStartRemoteMechaAnimation; temporarily selects another loaded mecha, starts its requested animation outside event-camera mode, and restores the previous selection.
+0x800AA514, function start — BattleAddSaturatingColorDelta; adds a scaled signed color delta with saturation.
+0x800AA564, function start — BattleStartBorrowedMechaAnimation; selects a target mecha and starts an animation using another mecha's animation source.
+0x800AA600, function start — BattleGetMechaRootHeight; computes scaled mecha root-bound height.
+0x800AA650, function start — BattleGetMechaColliderRadius; derives a mecha collision radius from scale and bone bounds.
+0x800AA6E0, function start — BattleAllocateMechaWheelTrailEmitters; allocates and clears the configured wheel-trail emitter array for a loaded mecha.
+0x800AA760, function start — BattleSetMechaModelMode; updates the primary model-mode byte for a loaded mecha slot.
+0x800AA788, function start — BattleSetMechaRenderingEnabled; sets the global mecha-rendering gate from the low bit of the supplied value.
+0x800AA79C, function start — BattleSwapActiveMechaSlots; disables the first slot, enables the second slot, and exchanges their loaded mecha instances.
+0x800AA7DC, function start — BattleGetNextMechaLoadCommandType; scans loading commands from a supplied index, skips 0xF7 entries, and converts the 0xFF terminator to 0xFE.
+0x800AA820, function start — BattleSelectTextureEffectFrameCalculator; returns the linear-rise, linear-fall, clamped-fall, or trigonometric frame calculator selected by the mode.
+0x800AA898, function start — BattleResetMechaAnimationState; resets animation streams, motion accumulators, attachment state, timers, target data, and deferred rotation values to their defaults.
+0x800AA934, function start — BattleStartOrQueueMechaAnimation; selects the requested animation stream, resets playback state and motion, starts interpretation immediately when idle, or appends the request to the pending queue.
+0x800AAA20, function start — BattleAdvanceMechaAnimationAndEffects; updates terrain placement and bone animation, processes timed effects, advances animation bytecode, and returns the accumulated visibility mask.
+0x800AAB34, function start — BattleUpdateAttachedMechaBaseTransform; inherits parent visibility, composes the selected parent-bone transform, and updates the attached mecha's root orientation and position.
+0x800AAD54, function start — BattleInterpretMechaAnimationBytecode; advances mecha motion and executes animation commands for waits, branches, transforms, targeting, effects, sounds, textures, resource loading, attachments, child instances, and playback control.
+0x800ADF1C, function start — BattleSetOrInterpolateMechaBoneRotation; applies rotation immediately for durations below two ticks or schedules shortest-path interpolation from the current angles to the requested angles.
+0x800AE098, function start — BattleCreateMechaTargetMovementTrack; creates or reuses a movement track from the current root position to a target, with duration derived from distance and the requested movement mode.
+0x800AE1BC, function start — BattleInitializeMechaAnimationEventStream; initializes, disables, or configures looping for a timed mecha animation event stream.
+0x800AE220, function start — BattleGetMechaAnimationSoundBankPrefix; selects the requested mecha, alternate, global, or event sound bank and returns its packed sound identifier prefix.
+0x800AE2A4, function start — BattleAdvanceMechaAnimationEventStream; executes events scheduled for the current animation frame, advances the stream and timeline, and restarts looping streams at their configured boundary.
+0x800AEEEC, function start — BattleStopMechaAnimationEventStream; disables further processing of the active mecha animation event stream.
+0x800AEEF8, function start — BattleGetMechaTargetDistance; returns the three-dimensional distance between the current mecha root position and its stored target position.
+0x800AEF68, function start — BattleResolveMechaTargetPosition; resolves a symbolic target and optional bone into world coordinates, updates the stored target position, and synchronizes an active movement track.
+0x800AF180, function start — BattleReleaseMechaBoneTracksRecursive; disables one bone, releases its three interpolation tracks, and recursively performs the same cleanup for attached child bones.
+0x800AF270, function start — BattleTransferChildBoneVisibility; moves enabled child-bone visibility flags from one bone array to the corresponding entries in another.
+0x800AF2C4, function start — BattleProjectMechaOffsetOntoAxis; transforms two points, normalizes their displacement, projects a vector onto it, and returns the projection scaled by the supplied divisor.
+0x800AF400, function start — BattleGetFirstMechaEventTarget; returns the first set index in the active mecha event target mask, or 13 when the mask is empty.
+0x800AF438, function start — BattleResolveMechaTargetSelector; converts a literal or symbolic mecha target selector into its entity index and single-bit target mask.
+0x800AF518, function start — BattleResolveMechaAnimationKeyframe; resolves an animation keyframe pointer, deriving and recording the context-sensitive animation index when requested.
+0x800AF678, function start — BattleCreateMechaVectorInterpolationTrack; creates or reuses a position, rotation, or scale interpolation track with absolute or relative endpoints and optionally propagates it to attached child bones.
+0x800AFA98, function start — BattleSetMechaBoneVisibilityRecursive; sets one bone's visibility flag and optionally propagates the setting to attached child bones.
+0x800AFB4C, function start — BattleSpawnMechaBoneAttachedEffect; spawns an effect at a mecha-relative position and optionally configures it to follow a selected bone while retaining its normal update behavior.
+0x800AFC68, function start — BattleUpdateMechaBoneAttachedEffect; transforms a stored local offset through the selected mecha bone, updates the effect's world position, and then performs its retained update behavior.
+0x800AFD98, function start — BattleSetMechaBoneVectorChannel; sets or adds a position, rotation, or scale vector, marks the bone dirty, and optionally propagates the change to attached child bones.
+0x800AFF9C, function start — BattleSnapMechaBoneToTerrain; snaps a mecha root to the selected terrain triangle.
+0x800B0060, function start — BattleReleaseMechaAnimationResource; stops an associated sound bank when active, frees the loaded animation resource, and clears its retained pointers.
+0x800B00D0, function start — BattleClearMechaEventPointerArray; clears nine mecha event pointers.
+0x800B00F4, function start — BattleReleaseMechaEventTracks; releases all nine mecha event interpolation tracks and clears the event-track pointer array.
+0x800B0164, function start — BattleSetMechaEventKeyframeTrack; allocates or reuses one of nine event tracks and fills its interpolation type, endpoints, target selector, and duration unless event updates are suppressed.
+0x800B026C, function start — BattleUpdateMechaEventAnimation; advances camera and target event keyframes.
+0x800B0AB4, function start — BattleIsPointInsideCameraTerrainBounds; tests whether a point's X and Z coordinates lie strictly inside the configured camera terrain bounds.
+0x800B0B14, function start — BattleSampleTerrainAheadOfCamera; projects a point forward along the eye-to-target direction, searches or reuses its terrain triangle, and returns the cached terrain height.
+0x800B0D70, function start — BattlePushCameraPointOutsideMechas; detects vertical and horizontal overlap with active mechas, pushes the point to the largest intersecting collision boundary, and returns the selected mecha index plus one.
+0x800B0FF4, function start — BattleResolveCameraLineMechaCollision; derives a normalized XZ direction between two camera points and pushes the second point outside intersecting mecha collision bounds.
+0x800B10EC, function start — BattlePushMechaAway; enforces minimum XZ separation from a world point.
+0x800B12D0, function start — BattlePassesMechaEventTypeFilter; tests an entity's battle type against the corresponding event filter bit, while accepting an empty filter unconditionally.
+0x800B136C, function start — BattleWaitForMechaAnimationsAndLoads; renders frames until mecha animations and effects finish, then waits for pending media activity and releases retained animation resources.
+0x800B14B8, function start — BattleEnableMechaGroundShadows; enables projection of mecha ground-shadow quads during rendering.
+0x800B14CC, function start — BattleDismissOtherPartyMechas; starts dismissal animation 5 for every party mecha except the selected slot, renders until they settle, and then releases those mechas.
+0x800B15D8, function start — BattleActivateCustomPolySubBuffer; copies the indexed custom-polygon descriptor into active state, relocates its internal offsets when needed, resets packet iteration, and returns its packet count.
+0x800B168C, function start — BattleGetCustomPolySubBuffer; resolves an indexed custom-polygon sub-buffer.
+0x800B16A4, function start — BattleGetCustomPolyPacketBufferSize; computes runtime packet storage size.
+0x800B16F0, function start — BattleAdvanceCustomPolyPacketCursor; increments the active packet index and advances the serialized packet cursor by the current packet's encoded length.
+0x800B1720, function start — BattleCopyCustomPolyPackets; converts serialized primitives into runtime GPU packets.
+0x800B1EA0, function start — BattleScaleCustomPolyVerticesOnce; left-shifts every custom-polygon vertex coordinate by the requested amount and marks the vertices to prevent repeated scaling.
+0x800B1F0C, function start — BattleAppendCustomPolyDrawModePacket; allocates an eight-byte GPU draw-mode packet when space remains, copies the active draw state, and inserts it into the requested ordering-table entry.
+0x800B1F10, function start — BattleAppendCustomPolyDrawModePacketContinuation; continues draw-mode packet insertion after destination preservation and therefore requires the preserved destination in inherited temporary state.
+0x800B1F6C, function start — BattleRenderCustomPolyBuffer; transforms and emits indexed custom polygons.
+0x800B2AEC, function start — BattleTintCustomPolyPacketColors; transforms every supported packet's vertex colors by three channel factors, substitutes neutral colors where required, and mirrors the results into both runtime packet buffers.
+0x800B3348, function start — BattleCustomPolyPrimaryNoOp; returns immediately without changing runtime state.
+0x800B3350, function start — BattleCustomPolySecondaryNoOp; returns immediately without changing runtime state.
+0x800B3358, function start — BattleUpdateSceneShake; interpolates the shake amplitude toward its target, alternates its sign every two updates, publishes the scene offset, and completes when both amplitude and duration reach zero.
+0x800B3588, function start — BattleDeleteSceneShake; unregisters and frees the active scene-shake task and clears its global handle.
+0x800B35C0, function start — BattleCreateOrRetargetSceneShake; creates the shared scene-shake task or preserves its current amplitude as the start of a new interpolation.
+0x800B3658, function start — BattleSetEventCameraTarget; creates an interpolated event camera target.
+0x800B36BC, function start — BattleFaderUpdate; interpolates fader colors and completes black fades.
+0x800B383C, function start — BattleFaderDelete; unregisters and frees the Battle fader task.
+0x800B3878, function start — BattleFaderDraw; emits the fullscreen semitransparent fader packets.
+0x800B3934, call site — Battle fader completes its GPU draw-state packet.
+0x800B393C, instruction site — captures the completed authenticated Battle POLY_F4 fader packet.
+0x800B3948, call site — inserts the Battle fader quad into the ordering table.
+0x800B3950, return site — resumes after inserting the Battle fader quad.
+0x800B3958, call site — inserts the Battle fader draw-state packet.
+0x800B3960, return site — resumes after inserting the fader draw-state packet.
+0x800B3974, return site — returns from BattleFaderDraw.
+0x800B397C, function start — BattleCreateAlternateFader; creates a fader using the alternate packet buffer.
+0x800B39A0, call site — alternate-buffer wrapper invokes BattleCreateFader.
+0x800B39A8, return site — resumes after alternate fader creation.
+0x800B39C0, function start — BattleCreateFader; creates or retargets the Battle fader task.
+0x800B3AD4, call site — registers the Battle fader draw callback.
+0x800B3AD8, instruction site — materializes the BattleFaderDraw callback address.
+0x800B3ADC, return site — resumes after Battle fader callback registration.
+0x800B3B6C, function start — BattleIsFaderComplete; reports completion when no fader exists or returns the active fader's completion flag.
+0x800B3B94, function start — BattleUpdateEnvironmentLightingFade; linearly interpolates the current lighting level toward its target and completes a zero-level fade when its duration expires.
+0x800B3C2C, function start — BattleDeleteEnvironmentLightingFade; releases lighting-fade resources, unregisters and frees the task, clears its handle, and restores normal environment lighting state.
+0x800B3C74, function start — BattleApplyEnvironmentLightingFade; updates lighting override slot zero when the interpolated level changes, applying the configured mode, intensity, and RGB values.
+0x800B3CD4, function start — BattleCreateOrRetargetEnvironmentLightingFade; creates or retargets the shared lighting fade with a target level, duration, mode, and RGB values, then performs its initial update.
+0x800B3E04, function start — BattleCopyStagedMechaTexturesToSlots; copies three fixed 64-by-256 VRAM texture bands into the three configured mecha texture slots.
+0x800B3F04, function start — BattleSpriteAnimationCommandDispatcher; executes animation-event commands.
+0x800B4EDC, function start — BattleStageSpriteTileAndPalette; copies the current sprite's eight-by-eight-word texture rectangle and sixteen-entry palette into fixed scratch VRAM locations.
+0x800B4F88, function start — BattleBuildFrameAttachmentTransform; builds a world-space transform from a selected sprite frame point with scale, mirroring, translation, and orientation applied.
+0x800B50D4, function start — BattleBuildTrailFrameControlPoints; reads five configured frame vertices, applies sprite scale and horizontal mirroring, and writes local trail control points.
+0x800B51B0, function start — BattleDrawSpriteTrailSegment; projects two distinct 3D points and appends a camera-facing textured ribbon segment with the active trail render state.
+0x800B5588, function start — BattleUpdateSpriteTrail; refreshes frame control points, smooths the trailing points toward their predecessors, and ends tracking when the source state becomes invalid.
+0x800B56E4, function start — BattleDrawSpriteTrail; prepares the source sprite render state and emits the connected segments of its stored trail.
+0x800B572C, function start — BattleCreateSpriteTrail; allocates a trail tracker, captures its source and rendering parameters, and initializes both control-point buffers.
+0x800B57E4, function start — BattleMeasureTargetDistance; calculates the three-dimensional distance between the sprite position and its target position.
+0x800B5854, function start — BattleUpdateDistanceThresholdMonitor; detects the configured distance-threshold crossing and completes when the movement or animation state terminates.
+0x800B5924, function start — BattleCreateDistanceThresholdMonitor; allocates and initializes a tracker for a sprite's distance from its target.
+0x800B59BC, function start — BattleResolveFramePointOffset; resolves a selected frame point into a scaled and horizontally mirrored local offset.
+0x800B5AC4, function start — BattleResolveWorldFramePoint; adds the sprite position to a resolved frame-point offset to produce world coordinates.
+0x800B5B3C, function start — BattleUpdateAttachmentPointFollower; moves a linked sprite by the changing delta between two selected attachment points and stops when either source state ends.
+0x800B5C18, function start — BattleCreateAttachmentPointFollower; allocates a follower and initializes the packed source and destination attachment-point selections.
+0x800B5CC0, function start — BattleUpdateTargetRelativeOffset; rotates a local movement offset, adds it to the target position, and updates the sprite's world position.
+0x800B5DC4, function start — BattleEnableTargetRelativeOffset; switches the sprite into target-relative positioning mode and installs its position updater.
+0x800B5DF4, function start — BattleDrawMovementStreak; projects the sprite and a velocity-offset endpoint to draw a line along its recent movement.
+0x800B5FBC, function start — BattleEnableMovementStreak; installs the self-motion streak renderer and configures its sprite size.
+0x800B6004, function start — BattleDrawTargetLinkStreak; projects a sprite and its linked target to draw a line between their positions.
+0x800B61B0, function start — BattleEnableTargetLinkStreak; installs the linked-target streak renderer and configures its sprite size.
+0x800B61F8, function start — BattleLoadScriptedEffectFragments; loads effect fragments selected by a script byte through a temporary scratch buffer.
+0x800B626C, function start — BattleUnloadAuxiliaryEffectSlot; releases the resources assigned to auxiliary effect slot 11 through temporary scratch storage.
+0x800B62C8, function start — BattleInitializeAuxiliaryEffectSlot; loads a selected variant into auxiliary effect slot 11 for an entity mask and initializes it at the supplied coordinates.
+0x800B639C, function start — BattleStartScriptedVisualInterpolation; resolves a relative six-byte parameter block and starts the configured timed visual interpolation.
+0x800B63F0, function start — BattleSpawnEffectFromScriptBlock; resolves a relative effect descriptor and spawns it with all optional offsets and modifiers cleared.
+0x800B6438, function start — BattleRestoreDefaultSpriteMotion; reinstalls the standard sprite update callback.
+0x800B6464, function start — BattleOffsetSpriteTextureCoordinates; adds the supplied horizontal and vertical offsets to every active sprite primitive's texture coordinates.
+0x800B64D4, function start — BattleAssignIndexedEntityAnimation; selects an entity from the battle table and assigns its requested animation.
+0x800B6518, function start — BattleFaceSpriteTowardTarget; computes the planar target bearing and applies it to both facing and movement direction.
+0x800B65B0, function start — BattleSteerVelocityTowardTarget; turns the velocity toward the target with a scripted angular limit while preserving its magnitude.
+0x800B6808, function start — BattleAimVelocityAtTarget; points the velocity directly toward the target using the configured movement speed.
+0x800B6930, function start — BattleLoadFixedPointScriptVector; resolves a relative signed three-component script vector and writes it as 16.16 fixed-point values.
+0x800B6990, function start — BattleLoadShortScriptVector; resolves a relative signed three-component script vector and writes it as 16-bit values.
+0x800B69E4, function start — BattleAddShortScriptVector; resolves a relative signed three-component script vector and adds it to existing 16-bit values.
+0x800B6A50, function start — BattleCopyLinkedSpriteVelocity; copies all three velocity components from the linked sprite.
+0x800B6A7C, function start — BattleConfigureScriptedSpriteGeometry; converts packed script values into geometry parameters, transfers them to the current render resource, and clears the consumed geometry handles.
+0x800B6B98, function start — BattleConfigureScriptedSpriteLayout; converts six packed script values into angle, scale, offset, and layout parameters and applies them to the sprite.
+0x800B6BFC, function start — BattleCaptureDisplayForTransition; copies the 320x224 display buffer to VRAM at coordinates 704,256 and initializes the captured-screen transition state.
+0x800B6C44, function start — BattleOrientSpriteInXYPlane; derives an angle from the horizontal and vertical velocity components, writes it to the sprite geometry, and marks the transform dirty.
+0x800B6C98, function start — BattleOrientSpriteInXZPlane; derives an angle from the horizontal and depth velocity components, writes it to the sprite geometry, and marks the transform dirty.
+0x800B6CEC, function start — BattleOrientSpriteAlongVelocity; converts the full velocity vector into geometry orientation angles and marks the transform dirty.
+0x800B6DC0, function start — BattleClearFrameAttachmentCache; clears all eight cached frame-attachment records and resets their associated counters.
+0x800B6E84, function start — BattleRotateVelocityAroundZ; rotates the complete velocity vector around the Z axis by the signed scripted angle.
+0x800B6F0C, function start — BattleStartEffectUpdate; advances all Battle start-effect fragments.
+0x800B7134, function start — BattleStartEffectDraw; invokes start-effect fragment rendering.
+0x800B7160, function start — BattleStartEffectRenderTriangles; transforms and emits start-effect triangles.
+0x800B7330, function start — BattleStartEffectFree; synchronizes and frees standalone start-effect state.
+0x800B7364, function start — BattleStartEffectTaskDelete; unregisters and frees a start-effect task.
+0x800B73A0, function start — BattleCreateStartEffectTask; creates a registered transition-effect task.
+0x800B73EC, function start — BattleCreateStartEffectStandalone; creates a standalone transition effect.
+0x800B7424, function start — BattleInitStartEffectFragments; initializes fragment grids, motion, and FT3 packets.
+0x800B7870, function start — BattleStartEffect; runs the standard Battle transition while loading asynchronously.
+0x800B7C28, function start — BattleResetLoadingEffectFragmentFlag; clears the loading-effect fragment state.
+0x800B7C34, function start — BattleLoadAbilityEffectResources; loads the requested ability animation bundle, performs special VRAM uploads when required, parses resource flags, and prepares supplemental data.
+0x800B7E94, function start — BattleInitializeAbilityEffectFragments; initializes the loaded ability bundle, binds its animation data, loads supplemental fragments and audio, and marks the resources ready.
+0x800B8048, function start — BattleSetAbilityEffectRenderingActor; stores the sprite that will render the current ability effect.
+0x800B8054, function start — BattleQueueAbilityEffectFragmentSetup; stores the requested ability resource identifier and clears the fragment-ready flag.
+0x800B8068, function start — BattleSetupAbilityEffectFragments; loads the requested ability resources, initializes their effect fragments, and sets the fragment-ready flag.
+0x800B8098, function start — BattleStartLoader; selects transition loading and initializes the environment.
+0x800B81BC, function start — BattleInitGraphicsAndEntities; initializes rendering, sprites, entities, and camera vectors.
+0x800B8284, function start — BattleInitRenderContexts; initializes paired draw and display environments.
+0x800B8354, function start — BattleIdleDuringLoading; renders Battle frames until CD activity completes.
+0x800B838C, function start — BattlePlayIndexedAudioClipBlocking; loads indexed battle audio resources, plays the selected clip while rendering through loading and playback, then releases the resources.
+0x800B853C, function start — BattleTransitionCleanup; runs a Battle transition and cleanup sequence.
+0x800B8610, call site — Battle transition cleanup creates a fullscreen fader.
+0x800B8618, return site — resumes after transition fader creation.
+0x800B8774, function start — BattleReleaseRuntimeResources; releases all actor visuals, sprite callbacks, audio banks, environment assets, and battle allocations after quiescing rendering.
+0x800B8840, function start — BattleInitSpriteSystem; resets sprite callbacks, transfers, effects, and vibration.
+0x800B88C4, function start — BattleInit3dRendering; initializes double-buffer rendering and frame compensation.
+0x800B89F4, function start — BattleStopControllerVibration; empty compatibility routine for stopping rumble.
+0x800B89FC, function start — BattleStartJumpAttackAnimation; initializes an attack animation sequence, binds its actor and target, prepares required resources and camera state, and begins the character or Gear approach.
+0x800B8D04, function start — BattleWaitAndReleaseAnimationResources; waits for animation loading and display synchronization, unloads effect sequences, and releases the loaded animation bundle.
+0x800B8D7C, function start — BattleClearAnimationData; resets the active disc transfer and waits until temporary battle animation resources can be safely released.
+0x800B8DA4, function start — BattleRestoreActiveActorHomePosition; returns the active actor to its formation position, terrain height, and default facing, or starts the equivalent Gear restoration animation.
+0x800B8EBC, function start — BattleFinalizeJumpAttackAnimation; settles pending animations, releases attack resources and displays, restores camera and audio state, restarts deferred Gear loads, and clears temporary actor flags.
+0x800B9020, function start — BattleRestoreActorIdleAndClearCompletionCallback; restores an actor's saved idle animation and removes its animation completion handler.
+0x800B905C, function start — BattleStartCurrentAttackAnimationStep; prepares the current attacker, optionally positions it beside the target and snaps the camera to both actors, then dispatches the current animation step.
+0x800B9258, function start — BattleQueueAnimationAdvance; increments the number of completed animation events awaiting sequence advancement.
+0x800B9284, function start — BattleDispatchSpecialAnimationStep; executes a special animation record controlling target masks, effect loading, camera framing, delays, and audio state.
+0x800B9508, function start — BattleAdvanceCharacterAttackSequence; interprets the next character attack record, controlling movement, animations, resource swaps, delays, camera framing, and sequence completion.
+0x800B9B30, function start — BattleSignalActorAnimationComplete; marks the active animation step complete and records the sequence state to enter next.
+0x800B9B54, function start — BattleFaceActorsTowardEachOther; rotates two distinct actors toward one another while preserving the target's death pose.
+0x800B9C00, function start — BattleCompleteActorApproach; snaps an actor to its destination, restores its idle animation, faces both participants, and advances the attack sequence.
+0x800B9C78, function start — BattleAdvanceGearAttackSequence; interprets the next Gear attack record and updates animation, effect, camera, damage, and sequence state.
+0x800B9F78, function start — BattleUpdateAttackAnimationSequence; consumes pending completions, monitors movement and loading states, advances character or Gear steps, and finalizes the sequence when its terminal state settles.
+0x800BA4E0, function start — BattlePrepareEndOfTurnAnimations; clears animation counters, settles Gear activity, reloads or releases actor animation data as appropriate, and restores the standard camera pitch.
+0x800BA59C, function start — BattleSetActorHorizontalVelocityFromHeading; converts an actor's heading and movement speed into signed X and Z velocity components.
+0x800BA614, function start — BattleAimActorBallisticArcAtDestination; derives heading and vertical velocity for reaching a destination under gravity while accounting for horizontal distance and terrain height.
+0x800BA768, function start — BattleInitializeActorBallisticMotion; derives flight duration and horizontal velocity from vertical impulse and gravity, corrects for destination terrain height, and starts movement toward the destination.
+0x800BA8F4, function start — BattleRefreshActorTerrainContact; finds the terrain beneath an actor and stores its supporting surface index and floor height.
+0x800BA984, function start — BattleAllocateSpriteActor; creates and initializes a Battle sprite task.
+0x800BAB0C, function start — BattleSpriteRender; projects and renders a visible Battle sprite actor.
+0x800BABDC, function start — BattleSpriteActorDelete; unregisters and frees a sprite actor task.
+0x800BAC50, function start — BattleSpriteUpdate; runs sprite bytecode and movement updates.
+0x800BACBC, function start — BattleProjectEntityScreenAnchors; projects an entity position and returns its screen center, depth, and fixed horizontal anchors at X minus 48, width 48, and X minus 24.
+0x800BADD4, function start — BattleReleaseSpriteActor; unregisters and frees a Battle sprite actor.
+0x800BAEB8, function start — BattleRestoreActorFormationFacing; restores a living actor's angle and facing from its configured formation side.
+0x800BAF40, function start — BattleStopVibration; empty vibration-off variant used by combo selection.
+0x800BAF48, function start — BattleSwapCharacterSpriteToGear; releases a character sprite and loads its Gear model.
+0x800BB080, function start — BattleCullOtherPartySprites; releases inactive party visuals except the selected slot, then completes the selected actor's transition.
+0x800BB13C, function start — BattleMechaUpdate; updates a mecha actor and copies root-bone position.
+0x800BB248, function start — BattleMechaDrawSetup; derives mecha height, projection, and OT depth.
+0x800BB314, function start — BattleMechaActorDelete; unregisters and frees a mecha sprite task.
+0x800BB350, function start — BattleInitMechaActor; creates and registers a mecha proxy actor.
+0x800BB540, function start — BattleFinalizePartyMechaLoad; installs party mecha resources and deletes its loader task.
+0x800BB620, function start — BattleMechaLoadingTaskWaitForFiles; waits for files and finalizes a mecha load.
+0x800BB690, function start — BattleStartPartyMechaLoading; builds Gear requests and starts completion polling.
+0x800BB6E0, function start — BattleMechaLoadingTaskWaitForSlot; waits for loader availability.
+0x800BB760, function start — BattleCreateMechaLoadingTask; creates an asynchronous Gear loading task.
+0x800BB7F8, function start — BattleResetCameraModeState; restores default camera interpolation, visibility, and control values and returns the camera to its base mode.
+0x800BB844, function start — BattleBuildLookAtMatrixNoDivide; constructs an orthogonal view matrix and translation from eye, target, and up vectors without perspective division.
+0x800BB9D4, function start — BattleRenderScene; builds the camera matrix and renders the environment.
+0x800BBAB8, function start — BattleUpdateCamera; updates camera targets, interpolation, and facing angles.
+0x800BBEE0, function start — BattleCameraControlSpriteDelete; deletes camera control and restores backed-up camera state.
+0x800BC018, function start — BattleCameraControlSpriteUpdate; advances a controlled eye or target sprite.
+0x800BC158, function start — BattleCameraControlSpriteInit; claims and initializes a controlled camera track.
+0x800BC2F0, function start — BattleSetCameraMode; changes camera mode and manages control tasks.
+0x800BC3F8, function start — BattleSetSceneRenderingDisabled; enables or suppresses rendering of the battle environment.
+0x800BC404, function start — BattleSetCameraVisibleEntities; selects entities that the camera must frame.
+0x800BC454, function start — BattleSetCameraFitPitch; sets the pitch angle used when fitting selected entities into the camera view.
+0x800BC460, function start — BattleComputeCameraParams; fits visible entities and computes camera eye, target, and distance.
+0x800BCAA4, function start — BattleCancelCameraControlIfUnlocked; switches to camera mode 4 and removes controlled camera tracks when scripted camera locking is inactive.
+0x800BCAD0, function start — BattleEnableAutoFramingCameraIfUnlocked; switches to automatic entity-framing camera mode when scripted camera locking is inactive.
+0x800BCAFC, function start — BattlePulseTargetCursorBrightness; derives grayscale cursor brightness from a cosine phase, clamps it, and refreshes the cursor primitive.
+0x800BCB54, function start — BattleStopTargetBlinking; restores the affected actor's rendering flag, unregisters the blinking update, releases its storage, and clears the active blink state.
+0x800BCBB4, function start — BattleAnimateTargetBlinkingColors; cycles an actor's red and cyan color components with sine and cosine waves and advances the blink phase.
+0x800BCC60, function start — BattleStartTargetBlinking; replaces any blink bound to another target and starts color cycling on the currently selected actor.
+0x800BCD8C, function start — BattleClearBlinkingTargetMask; clears the mask selecting actors for target blinking and cursor updates.
+0x800BCD98, function start — BattleUpdateCharacterBlinkingTask; creates or removes target blinking tasks.
+0x800BCEAC, function start — BattleSpinningTargetCursorDraw; transforms and renders a target cursor.
+0x800BCFAC, function start — BattleSpinningTargetCursorUpdate; tracks the target and updates cursor motion and color.
+0x800BD024, function start — BattleSpinningTargetCursorDelete; restores target state and frees the cursor task.
+0x800BD098, function start — BattleCreateSpinningTargetCursor; allocates and initializes a target cursor task.
+0x800BD1FC, function start — BattleEmitPendingEntityDamageDisplay; creates an eligible entity's queued damage display from the current attack record and marks that value consumed.
+0x800BD2E4, function start — BattleEmitPendingDamageDisplays; scans all battle entities and emits each eligible queued damage display while honoring special-hit exclusions.
+0x800BD3AC, function start — BattleCreateDamageDisplay; creates an entity-relative damage or resource display.
+0x800BD7A0, function start — BattleDeleteDamageDisplayTask; unlinks and frees a damage-display task.
+0x800BD810, function start — BattleEmitDamageGlyphPacket; transforms one textured damage glyph into a screen quad, fills its color and texture fields, and inserts it into the ordering table.
+0x800BD974, function start — BattleProjectDamageDisplayAnchor; projects a world position into geometry-offset-relative screen coordinates and records the current projection distance.
+0x800BDA1C, function start — BattleDrawDamageDisplayTask; transforms and emits every damage-display glyph.
+0x800BDB08, function start — BattleUpdateMissDamageDisplay; fades and deletes a MISS display.
+0x800BDB74, function start — BattleUpdateDamageDisplayFadeOut; applies final fade and deletes an exhausted display.
+0x800BDC14, function start — BattleUpdateDamageDisplayHold; holds a display before entering fade-out.
+0x800BDC78, function start — BattleUpdateDamageDisplayMotion; moves a display before entering its hold phase.
+0x800BDCF8, function start — BattleDeleteTotalDamageDisplayTask; unregisters the total-damage task.
+0x800BDD34, function start — BattleTotalDamageDisplayIdleUpdate; preserves the persistent total-damage display unchanged for the frame and returns immediately.
+0x800BDD3C, function start — BattleDrawTotalDamageDisplayTask; draws the Total Damage label and number.
+0x800BDE58, function start — BattleCreateTotalDamageDisplayTask; creates the shared total-damage display.
+0x800BDF1C, function start — BattleUpdateTotalDamageDisplay; rebuilds changed total-damage glyphs.
+0x800BE0DC, function start — BattleFreeTotalDamageDisplayTask; deletes the total-damage display when active.
+0x800BE108, function start — BattleResetTotalDamageDisplayState; clears the active total-damage display reference and its disable state.
+0x800BE11C, function start — BattleUpdateTotalDamageBurst; spins and enlarges a total-damage burst, fades its color channels, decrements its lifetime, and deletes it at expiration.
+0x800BE1C4, function start — BattleDrawTotalDamageBurstTrail; renders six progressively rotated and scaled copies of every glyph in a total-damage burst.
+0x800BE330, function start — BattleCreateTotalDamageBurst; creates a randomized spinning total-damage burst, selects its color, formats its value, builds its glyphs, and assigns a 32-frame lifetime.
+0x800BE538, function start — BattleDisplayPassiveModifiers; animates and displays passive resource changes.
+0x800BE6A0, function start — BattleFormatFixedWidthHexGlyphString; writes a length-prefixed sequence of exactly the requested number of hexadecimal digits using the requested glyph offset.
+0x800BE6E8, function start — BattleFormatSignedDecimalGlyphString; writes a length-prefixed signed decimal value, suppressing optional leading zeroes and applying the requested glyph offset.
+0x800BE790, function start — BattleRender; executes the complete low-level Battle frame loop.
+0x800BEB04, function start — BattleLoadRequestedFragmentCode; when the requested fragment bank changes, waits for CD activity, loads its archive entry into fixed memory, restores the prior directory, synchronizes graphics, flushes cached code, and marks the data ready.
+0x800BEBC4, function start — BattlePollControllersAndApplySelectDelay; polls both controllers and, while Select is held, waits eight vertical blanks and clears the timing accumulator.
+0x800BEC18, function start — BattleUpdateControllerTransitionsAndHistory; samples both controllers, derives pressed and released masks, and shifts changed primary-controller snapshots through four history entries.
+0x800BED30, function start — BattleResetActionAnimationState; clears active animation-control pointers and defeated-actor tracking.
+0x800BED4C, function start — BattleAllocateJumpAnimationControl; allocates and initializes jump-animation control state, installs its update callback, resets progress fields, and enables completion tracking.
+0x800BEDE8, function start — BattleDeleteJumpAnimationControl; releases active jump-animation control state and clears its counters and global handle.
+0x800BEE2C, function start — BattlePlayMechaAnimationWithScratch; runs a mecha animation command with a temporary 4 KB execution stack and releases that storage afterward.
+0x800BEEB4, function start — BattleBuildTargetActorList; expands an eleven-bit target mask into a null-terminated actor list, links each target to the supplied actor, and returns the target count.
+0x800BEF24, function start — BattleComputeActorFacingAngle; returns the twelve-bit horizontal angle from one actor position toward another.
+0x800BEF8C, function start — BattleComputeActorDestinationFacingAngle; returns the twelve-bit horizontal angle from an actor's current position toward its destination.
+0x800BEFF4, function start — BattleSelectAnimationActor; restores the previously selected actor's idle animation when appropriate, then selects and returns the requested actor for action animation.
+0x800BF0B4, function start — BattleSetJumpAnimationPhase; stores the requested phase in active jump-animation control state.
+0x800BF0C4, function start — BattleAdvanceJumpWaypoint; selects the next explicit waypoint or derives an approach point beside the target, starts movement when needed, and advances the waypoint index.
+0x800BF1EC, function start — BattleStartActorWaypointMovement; records distance to the destination, turns the actor toward it, starts the requested movement animation, and enters movement phase six.
+0x800BF2B8, function start — BattleBeginAttackAnimationLoad; clears prior animation resources, allocates storage for the actor's attack animation archive entry, starts its CD read, and records the actor slot.
+0x800BF354, function start — BattleLoadAttackFragmentsOnce; processes the pending attack-animation resource exactly once and marks its embedded fragments as loaded.
+0x800BF3A4, function start — BattleUnloadAttackFragmentSequences; unloads embedded attack sequences when present and clears their loaded flag.
+0x800BF3E8, function start — BattleBindAttackerToTargets; builds the current target list, falls back to self-targeting when empty, links attacker and primary target, records the target slot, and turns both actors toward each other.
+0x800BF4F0, function start — BattleChooseAttackApproachPosition; snaps to the previous destination, chooses a point 80 units beside the target, completes immediately if already there, or starts approach movement.
+0x800BF5E8, function start — BattleAbilityAnimationCompletionCallback; increments the ability-animation completion count and returns directly from the callback.
+0x800BF600, function start — BattlePlayAbilityAnimation; loads the requested ability resources, temporarily restarts the actor's current animation when required, renders until its completion callback fires, and removes the callback.
+0x800BF6CC, function start — BattleEmitPendingActionDamageDisplays; while action animation is active, emits queued per-target damage displays except a protected item-action target.
+0x800BF6F8, function start — BattleGetAnimationTaskBalance; returns the registered transient-task count minus one while the total-damage display is active.
+0x800BF720, function start — BattleIsTotalDamageDisplayActive; reports whether the shared total-damage display is active.
+0x800BF730, function start — BattleSetPendingFragmentActor; records the actor that requires deferred effect-fragment setup.
+0x800BF73C, function start — BattleUpdateDistanceTrigger; recomputes the monitored actor's destination distance and invokes the trigger callback before deleting the monitor when distance reverses or falls below its threshold.
+0x800BF7C8, function start — BattleCreateDistanceTrigger; creates an actor-owned distance monitor with a baseline, threshold, trigger callback, and captured animation identifier.
+0x800BF85C, function start — BattleBindMechaAnimationEndpoints; records a mecha animation's actor, target bit, target actor, and null-terminated one-target list when the actor exists.
+0x800BF8CC, function start — BattleAdvanceActorTargetPointer; replaces an actor's current target with the following entry in the active target list, or with the first entry when the current target is absent.
+0x800BF954, function start — BattleFindTargetActorIndex; returns an actor's index in the active target list, or the target count when absent.
+0x800BF998, function start — BattleSignalMechaAnimationBranchComplete; increments two mecha-animation synchronization counters and releases auxiliary mecha slot eleven when the first counter reaches two.
+0x800BF9EC, function start — BattleProcessPendingAnimationTextureLoad; when requested, clears prior animation data, loads and uploads the shared attack texture resource, renders one frame, frees temporary storage, and clears the request.
+0x800BFA9C, function start — BattleRestartReservedMechaLoads; restarts and waits for deferred party mecha loads.
+0x800BFBA0, function start — BattleEnsureCommonAttackSoundBank; loads the common attack sound bank when absent, replaces the previous bank, waits for audio initialization, and marks it available.
+0x800BFC80, function start — BattleFindOrDeleteAttachedAbilityActor; scans attached actors sharing the owner's runtime and visual resource, returning a matching animation in lookup mode or deleting matching or all attachments in cleanup modes.
+0x800BFD88, function start — BattleDeleteMatchingAttachedAbilityActor; deletes attached ability actors matching the requested animation identifier.
+0x800BFDA8, function start — BattleCreateAttachedAbilityActor; if no matching attachment exists, spawns one from the indexed animation entry, assigns its animation and parent, and marks it as attached.
+0x800BFE48, function start — BattleUpdateRunningStatusAnimations; restores positions and updates status animations and effects.
+0x800C0314, function start — BattleStartNewDefeatAnimations; starts death animations for newly defeated targets, marks them processed, renders until sprite waits clear, waits for mecha completion when needed, and returns the number started.
+0x800C0564, function start — BattleWaitForStatusAnimationsToSettle; renders until active status animations settle.
+0x800C06E4, function start — BattleComputeVector32Distance; returns the integer Euclidean distance between two signed 32-bit XYZ positions.
+0x800C0758, function start — BattleComputeVector16Distance; returns the integer Euclidean distance between two signed 16-bit XYZ positions.
+0x800C07CC, function start — BattleComputePackedXZDistance; returns the integer distance between two packed signed 16-bit XZ coordinate pairs.
+0x800C0828, function start — BattleComputeDirectionAngles; writes angles equal to zero, atan2 of Z over X, and atan2 of Y over horizontal distance for the delta between two positions.
+0x800C08CC, function start — BattleTraceSmoothedPathSegments; samples a clamped cubic path at eight subdivisions per span and emits every consecutive segment, with direct endpoint handling for two points.
+0x800C0D18, function start — BattleSampleCubicPathPoint; computes one path sample from four signed 16-bit control points using boundary-specific phase weights and quarter scaling.
+0x800C0F70, function start — BattleUnloadAttackSoundBank; unloads the current attack sound bank when present and clears its handle.
+0x800C0FAC, function start — BattleLoadEmbeddedAttackResources; processes embedded attack resources by replacing sound banks, waiting for audio readiness, loading sequences, initializing visual fragments, compacting a trailing sound payload when applicable, and returning the loaded sequence.
+0x800C1140, function start — BattleUnloadEmbeddedAttackSequences; scans embedded attack resources and unloads every sequence entry.
+0x800C11CC, function start — BattleSpriteAnimationBytecodeRun; interprets central Battle sprite and animation bytecode.
+0x800C13D4, call site — sprite animation opcode 0xCA creates a fullscreen fader.
+0x800C13DC, return site — resumes sprite animation bytecode after fader creation.

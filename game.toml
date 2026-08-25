@@ -179,12 +179,9 @@ memcard_dir = "."
 # WORLDMAP crash).
 disc_speed = "1x"
 bios_hle = true
-# Overlay capture→compile→cache.
-# overlay_backend = "auto" selects the best available compiler on every
-# platform (gcc on Linux/macOS, MSVC or MinGW gcc on Windows). The
-# runtime compiles captured overlays automatically in the background.
+# Authenticated overlays are linked statically and dispatch before this cache.
+# Keep capture/autocompile enabled for every other runtime overlay identity.
 overlay_cache = true
-overlay_backend = "auto"
 
 [controller]
 multitap_analog = true

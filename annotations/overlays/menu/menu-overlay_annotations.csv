@@ -1,0 +1,373 @@
+# image-id: menu-overlay
+# annotated_functions/total_functions: 362/362
+# Total basis: whole-image AOT range manifest, including authenticated overlapping roots.
+# sha256: 82f84a24ac1fd1979754e1cc9c861405fb59ce95dd78db00a76f00c8f1bd177d
+# load-address: 0x801c5000
+# identity-source: annotations/overlays/disc1-images.toml
+# source-record-id: menu-image
+# format: address, note
+
+0x801C531C, function start — MenuExecuteSelection; dispatches the selected central-menu action.
+0x801C55A0, function start — MainMenuExecute; runs navigation and selection for the seven-entry menu.
+0x801C57A4, function start — LoadSaveGameMenuExecute; runs the title load/save menu.
+0x801C58EC, function start — RunLoadSaveTitleSelectionLoop; runs the three-entry load/save title menu with wrapping navigation, selection updates, confirmation dispatch, and a 600-frame Disc 1 timeout.
+0x801C5B54, function start — ToggleMemoryCardWorkspaceAllocation; allocates and clears 0x5034 bytes for memory-card state when enabled and releases that storage when disabled.
+0x801C5BB8, function start — ToggleMenuPresentationAllocation; allocates and clears 0x6C bytes for shared presentation state when enabled and releases that storage when disabled.
+0x801C5C1C, function start — ToggleMainMenuEntryAllocation; allocates and clears 0x1194 bytes for main-menu entries when enabled and releases that storage when disabled.
+0x801C5C80, function start — ToggleMenuTextBatchAllocation; allocates and clears 0x140C bytes for menu text batches when enabled and releases that storage when disabled.
+0x801C5CE4, function start — ToggleMenuResourceStateAllocation; allocates and clears 0xCC bytes for menu resource state when enabled and releases that storage when disabled.
+0x801C5D48, function start — ToggleMenuCursorAllocation; allocates and clears 0x328 bytes for cursor rendering when enabled and releases that storage when disabled.
+0x801C5DAC, function start — ToggleGoldDisplayAllocation; allocates and clears 0x374 bytes for the gold display when enabled and releases that storage when disabled.
+0x801C5E10, function start — TogglePlayTimeDisplayAllocation; allocates and clears 0x15C bytes for the play-time display when enabled and releases that storage when disabled.
+0x801C5E74, function start — TogglePartyCardAllocation; allocates and clears three 0x127C-byte party-card workspaces when enabled and releases all three when disabled.
+0x801C5F10, function start — DrawMenuPrimaryElements; dispatches the primary menu draw group.
+0x801C5FE4, function start — MenuMainLoopShutdown; renders final frames and releases menu resources.
+0x801C62A8, function start — MenuOverlayEntry; initializes and dispatches normal or load-game operation.
+0x801C6400, function start — SetupMenuModeSpecificElements; initializes mode-specific presentation.
+0x801C65F4, function start — ProcessMenuDebugSelector; implements the development submenu selector.
+0x801C6AA0, function start — InitMenuGlobals; initializes selection, party availability, and shared resources.
+0x801C6D4C, function start — ResetMenuParity; resets double-buffer parity.
+0x801C6D5C, function start — ResetMemoryCardAnimationState; clears the memory-card drawing mode, icon animation counters, fade level, and fade direction.
+0x801C6D90, function start — UploadBlankMenuPalette; creates a 16-color palette with white in entry one and black elsewhere, uploads it to VRAM at 0,448, waits for completion, and releases the temporary buffer.
+0x801C6E0C, function start — InitMenuTextContexts; initializes prerendered text contexts.
+0x801C6E68, function start — ComputeMenuBorderGlyphs; resolves the four border font glyphs.
+0x801C6F70, function start — InitMenuCursorAndBackgroundPrimitives; builds cursor, background, and draw-mode packets.
+0x801C72BC, function start — SetupMenuGlyphPolys; converts one font glyph into double-buffered quads.
+0x801C7B0C, function start — SetupMainMenu; initializes globals, text, borders, and presentation.
+0x801C7BF4, function start — MenuDraw; performs one complete input, render, and buffer-swap frame.
+0x801C7D78, function start — UpdateMenuInput; translates controller state into a menu command.
+0x801C7F34, function start — UpdatePlayTimeDigits; decomposes play time into displayed digits.
+0x801C80B8, function start — DrawMenuPlayTime; rebuilds enabled play-time glyphs.
+0x801C8164, function start — InitializeTopLitGradientPolygon; initializes a four-vertex shaded polygon with the supplied color on its first two vertices and black on its last two.
+0x801C81E0, function start — ConfigureMenuMotionInterpolation; records start and end coordinates, derives direction and normalized 8.8 step ratios, installs the step count, and clears interpolation progress.
+0x801C8324, function start — InfoCardAnimationStep; advances one party information-card interpolation.
+0x801C851C, function start — CenterMenuQuadVertices; converts an x, y, width, and height into four screen-centered corners with zero depth.
+0x801C8574, function start — PlayMenuSoundEffect; submits a menu sound effect.
+0x801C85C0, function start — GetAscendingBitMask16; returns the indexed 16-bit mask whose single set bit progresses from least to most significant.
+0x801C85DC, function start — GetDescendingBitMask16; returns the indexed 16-bit mask whose single set bit progresses from most to least significant.
+0x801C85F8, function start — GetInverseAscendingBitMask16; returns the 16-bit complement of the indexed least-to-most-significant single-bit mask.
+0x801C861C, function start — GetInverseDescendingBitMask16; returns the 16-bit complement of the indexed most-to-least-significant single-bit mask.
+0x801C8640, function start — TestAscendingBitMask16; isolates the indexed least-to-most-significant bit from a 16-bit value.
+0x801C865C, function start — TestDescendingBitMask16; isolates the indexed most-to-least-significant bit from a 16-bit value.
+0x801C8678, function start — TestAscendingBitMask32; isolates the indexed least-to-most-significant bit from a 32-bit value.
+0x801C8694, function start — SetupInfoCardAnimation; initializes one party-card transition.
+0x801C87C4, function start — CloseMemoryCardEvents; closes four memory-card events inside a critical section.
+0x801C881C, function start — WaitAndConsumeMemoryCardEvent; polls until new-device, error, I/O-complete, or timeout occurs, consumes all four event deliveries, and returns code 3, 1, 0, or 2 respectively.
+0x801C891C, function start — RequestMemoryCardInfoStatus; starts a card-information request and maps its completion to success 0, error -3, timeout -1, or new-device -2.
+0x801C8960, function start — FinalizeMemoryCardEventHandles; renders one frame and closes all four memory-card event handles inside a critical section.
+0x801C8A10, function start — ProbeMemoryCardPortState; probes one card port, records its status, clears cached files when unavailable, invalidates stale scans after presence changes, and rejects new-device completion.
+0x801C8BEC, function start — PeriodicallyRefreshMemoryCardPorts; advances the active scan timer, reprobes both ports when its interval expires, clears the aggregate-card flag when neither responds, and resets the timer.
+0x801C8CA4, function start — ShowMemoryCardAccessDelay; enables the card-access indicator for 59 rendered frames when the selected port is responsive and then disables it.
+0x801C8D1C, function start — MakeSaveBlockDisplay; displays memory-card block activity.
+0x801C8D78, function start — EnumerateMemoryCardDirectory; clears one port's cached mappings, enumerates up to sixteen directory entries, copies their metadata, and records the resulting file count.
+0x801C8EE8, function start — EnumerateRequestedMemoryCardDirectories; enumerates each pending port once according to the active scan mode and marks aggregate card availability when requested.
+0x801C9038, function start — ReadMemoryCardTitleFrame; opens a card file, reads exactly 0x200 bytes into the destination, closes it, and reports success only for a complete read.
+0x801C90B0, function start — LoadMemoryCardSaveHeader; builds a card path from the port and directory name, reads its 0x200-byte title frame, and registers the entry once per occupied block.
+0x801C9270, function start — MarkMatchingGameSavesOnCard; clears one port's validity flags, compares displayed filenames with the game save prefix, marks matching saves, and records their save-slot numbers.
+0x801C93A8, function start — ScanMemoryCardsAndSaveSlots; refreshes cards, save headers, icons, and slots.
+0x801C9984, instruction site — begins the authenticated memory-card slot FT4 XY override.
+0x801C9B80, instruction site — finishes and recaptures the overridden memory-card slot FT4.
+0x801C9BCC, function start — ValidateCurrentMemoryCardSelection; tests the current tile against delete, load, or save eligibility and emits the accepted-input command when usable.
+0x801C9D34, function start — FindInitialMemoryCardSelection; scans both card grids for the first tile eligible for the requested operation, returns its display index or 0xFF, and emits the accepted-input command.
+0x801C9EF4, function start — MoveMemoryCardSelectionDown; scans downward through the three-column card grid for the next tile eligible for the active operation and updates the selection.
+0x801CA1D4, function start — MoveMemoryCardSelectionUp; scans upward through the three-column card grid for the next tile eligible for the active operation and updates the selection.
+0x801CA480, function start — MoveMemoryCardSelectionRight; scans rightward for the next tile eligible for the active operation without crossing the combined grid boundary.
+0x801CA5F0, function start — MoveMemoryCardSelectionLeft; scans leftward for the next tile eligible for the active operation without crossing the combined grid boundary.
+0x801CA750, function start — ProcessMemoryCardGridInput; dispatches directional movement, returns confirm or cancel status, and refreshes the highlight when the selected tile changes.
+0x801CA8C0, function start — ComposeMemoryCardSaveTitle; copies the Xenogears title template, appends a two-digit one-based slot number and trailing space, and stores the completed card title.
+0x801CA8D4, function start — ResumeMemoryCardSaveTitleComposition; resumes title composition after the one-based slot number and divide-by-ten product are prepared, then appends both digits and stores the completed title.
+0x801CAA38, function start — RunMemoryCardPromptInput; renders prompt frames until confirmation, cancellation, card-change restart, or the no-input timeout and returns the resulting choice.
+0x801CACF8, function start — PresentMemoryCardPromptSequence; presents one prompt and optionally a second after acceptance, dismisses each presentation, and returns the final response.
+0x801CADB0, function start — ResetMemoryCardSlotCursor; clears the selected slot and positions the cursor on the first port containing a card.
+0x801CAE08, function start — SetMemoryCardTransferBannerState; creates, activates, changes, or releases the animated memory-card transfer banner according to the requested state.
+0x801CB184, function start — DecodeSaveNameRecords; converts 31 fixed-width save-name records into the runtime text encoding.
+0x801CB28C, function start — ApplyLoadedSavePayload; imports loaded game state, restores persistent configuration values, and decodes saved names for runtime use.
+0x801CB304, function start — RunMemoryCardLoadOperation; selects a save, reads its blocks with retries, validates its checksum, applies valid game state, and reports success or failure.
+0x801CB8AC, function start — ConfirmMemoryCardFormat; displays the port-specific format prompt, cancels if card presence changes, and returns the player's confirmation.
+0x801CB9E8, function start — ResolveSaveFileNumber; preserves an explicit file number or selects the first unused number from the card's fifteen-file occupancy map.
+0x801CBA4C, function start — BuildMemoryCardSaveImage; snapshots current settings and party metadata, encodes names for storage, serializes game state into a save image, and restores runtime names.
+0x801CBD90, function start — RunMemoryCardSaveOperation; selects and optionally formats a card, confirms overwrites, builds a checksummed save image, writes its blocks through a temporary file, and commits the result.
+0x801CC6D8, function start — RunMemoryCardCopyOperation; validates source and destination cards, prevents duplicate saves, transfers every save block between ports, and refreshes card contents.
+0x801CD2AC, function start — RunMemoryCardDeleteOperation; confirms deletion, removes the selected save file, clears cached slot metadata, and refreshes both card displays.
+0x801CD710, function start — ExecuteSelectedMemoryCardAction; dispatches delete, copy, load, or save according to the selected entry and current menu mode.
+0x801CD81C, function start — BuildPartySummaryIdentity; prepares a party summary's portrait, name, fixed labels, palette, and placement for the active render buffer.
+0x801CDB1C, function start — BuildPartySummaryLevelDigits; converts the displayed level into glyphs and intentionally suppresses the secondary level field.
+0x801CDC6C, function start — BuildPartySummaryVitalDigits; converts character or gear vital values into positioned current, maximum, and auxiliary numeric glyph groups.
+0x801CE0CC, function start — BuildPartySummaryCard; prepares all identity, level, and vital graphics for one party member and marks the completed render buffer ready.
+0x801CE198, function start — TransformAndSubmitMenuQuads; perspective-transforms a sequence of textured quads and submits each result to the menu ordering table.
+0x801CE2B4, function start — SubmitMenuQuadArray; submits the requested buffered quad sequence without applying a new transformation.
+0x801CE338, function start — DrawMenuCursorLayer; submits the cursor draw mode and conditionally submits the visible cursor sprite.
+0x801CE3C8, function start — DrawMenuSelectionMarkers; submits each enabled buffered selection marker while marker drawing is active.
+0x801CE464, function start — DrawGoldAndPlayTimeDisplays; submits enabled gold graphics and the play-time digit and separator groups.
+0x801CE540, function start — DrawPartyInformationCards; submits enabled portraits, names, labels, levels, experience, HP, and MP for all three party slots.
+0x801CE660, function start — DrawSelectedCharacterInformation; transforms and submits the selected character's portrait, name, status icons, and detailed value groups.
+0x801CE860, function start — DrawSelectedCharacterStatRows; transforms and submits enabled primary and secondary graphics for seven detailed statistic rows.
+0x801CEB5C, function start — DrawSelectedCharacterStatistics; submits the enabled statistic heading group followed by all active detailed rows.
+0x801CEBB4, function start — DrawStatusMenuOptionElements; transforms and submits up to five individually enabled status-menu option elements.
+0x801CEC40, function start — DrawMainMenuEntries; updates entry translucency and brightness when availability changes, then submits both main-menu text groups.
+0x801CF308, function start — DrawLoadSaveActionEntries; submits both buffered text groups for the enabled load-save action menu.
+0x801CF37C, function start — DrawSelectedSaveBlockHighlights; finds every block belonging to the selected save and submits pulsing highlight and fill graphics for those blocks.
+0x801CF5E4, function start — DrawMemoryCardSaveIcons; advances each valid save icon's animation frame and submits one transformed icon tile for every occupied block.
+0x801CF8D8, function start — DrawMemoryCardPortHeadings; builds and submits each available port's heading and number with selection-dependent styling.
+0x801CFB48, function start — DrawMemoryCardBlockGrid; colors selected save blocks red and other usable blocks green, transforms their outlines, and submits them.
+0x801CFF64, function start — AnimateMemoryCardTransferBanner; updates the transfer banner geometry, blinks its secondary glyphs, submits all banner graphics, and advances its horizontal cycle.
+0x801D01D0, function start — DrawMemoryCardDisplay; draws save highlights, icons, block outlines, port headings, and the transfer banner while advancing icon frames and highlight pulsing.
+0x801D02D8, function start — DrawMemoryCardSlotDetails; draws either the complete block overview with its selected icon or three expanded save summaries with their footer graphics.
+0x801D0954, function start — TransformAndSubmitMenuBoxQuad; perspective-transforms one menu-box quad and submits it to the requested ordering-table depth.
+0x801D09F0, function start — DrawFramedMenuBox; transforms and submits a menu box's corners, optional side ornaments, edge segments, translucent interior, and draw mode.
+0x801D0C78, function start — DrawEnabledMenuBoxes; draws each of seven enabled menu boxes, installing a neutral perspective transform when required.
+0x801D0D90, function start — DrawMenuTextGroup34; draws the text group controlled by state offset 0x34.
+0x801D0E20, function start — DrawMenuNoOpSevenLoop; retains the original seven-iteration no-op helper.
+0x801D0E38, function start — DrawMenuTextGroup14; transforms and submits the text group at offset 0x14.
+0x801D0EBC, function start — DrawMenuNoOpFiveLoop; retains the original five-iteration no-op helper.
+0x801D0ED4, function start — DrawMenuTextGroup38; draws the text group controlled by offset 0x38.
+0x801D0F54, function start — DrawMenuTextGroup40; draws the text group controlled by offset 0x40.
+0x801D0FD4, function start — DrawMenuTextFlag4E; draws the optional text element at flag 0x4E.
+0x801D1030, function start — DrawCheckingMemoryCardText; submits checking-memory-card text packets.
+0x801D10DC, function start — DrawMenuTextGroup54; draws the text group controlled by offset 0x54.
+0x801D1160, function start — DrawMenuTextGroup5C; draws the text group controlled by offset 0x5C.
+0x801D11F0, function start — DrawMenuTextGroups; dispatches the complete menu text draw set.
+0x801D1258, function start — DrawMenuBackground; submits the fullscreen background and draw mode.
+0x801D12D4, function start — DrawPartySummaryCard; submits one prepared party summary's portrait, name, labels, level, and vital glyph groups with optional extra labels.
+0x801D13F8, function start — DrawPartySummaryCardSet; submits all three prepared party summaries while summary-card drawing is enabled.
+0x801D1464, function start — DrawOptionalMenuElement49; draws the optional element at flag 0x49.
+0x801D14B0, function start — DrawOptionalMenuElement53; draws the optional element at flag 0x53.
+0x801D14FC, function start — DrawOptionalMenuElement48; draws the optional group at flag 0x48.
+0x801D1640, function start — DrawOptionalMenuElement4A; draws the optional group at flag 0x4A.
+0x801D17C4, function start — DrawOptionalMenuElement4C; draws the optional group at flag 0x4C.
+0x801D1914, function start — DrawOptionalMenuElement4D; draws the optional group at flag 0x4D.
+0x801D1AAC, function start — DrawOptionalMenuElement50; draws the optional group at flag 0x50.
+0x801D1B20, function start — DrawMenuNormalMode; dispatches normal in-game menu visuals.
+0x801D1BE8, function start — DrawMenuLoadMode; dispatches reduced load-game visuals.
+0x801D1C48, function start — DrawMenuModeSixComposition; draws the mode-six panel animation, selection markers, text, cursor, card display, transfer visuals, framed boxes, and action entries.
+0x801D1CA0, function start — DrawMenuSpecificElements; selects composition and draws the background.
+0x801D1D40, function start — UpdateMenuTransforms; advances transition transforms and installs GTE matrices.
+0x801D1E80, function start — BeginMenuTransitionIn; starts the opening transform and sound.
+0x801D1EB0, function start — BeginMenuTransitionOut; starts the closing transform and sound.
+0x801D1EE0, function start — UpdateMenuCursorGeometry; positions the cursor from the selected-entry table and optionally rebuilds and enables its surrounding highlight and guide lines.
+0x801D22C4, function start — ResetMenuCursorState; disables both the cursor sprite and its surrounding highlight graphics.
+0x801D22F4, function start — ConfigureMenuSelectionMarkerSet; disables marker drawing, then enables marker state or prepares four-marker or single-marker graphics according to the requested mode.
+0x801D2484, function start — HideMenuDetailOverlay; disables the optional menu detail overlay.
+0x801D249C, function start — ConfigureStatusActionLabels; prerenders and enables three alternate status-action labels or hides the three selected-label entries.
+0x801D25E4, function start — HideStatusActionLabelSets; disables all six status-action label entries.
+0x801D261C, function start — SelectStatusActionLabel; hides the current status-action labels then positions and enables the selected entry.
+0x801D28A8, function start — RefreshGoldPanel; opens the gold window and rebuilds the displayed currency amount.
+0x801D28FC, function start — InitializePlayTimePanel; opens the play-time window then builds and enables its digit display.
+0x801D2968, function start — RefreshVisiblePlayTime; rebuilds the play-time digits only while their display is enabled.
+0x801D29A8, function start — TransitionPartyInfoCards; animates populated party cards on or off screen and updates the associated gold window and play-time visibility.
+0x801D2D38, function start — InitializeNormalMenuContent; allocates normal-menu windows then renders party names and gear names before presenting the main entries and information panels.
+0x801D2EC0, function start — RefreshPartyInfoCard; rebuilds the selected party card and stages its portrait labels and numeric statistics across two rendered frames.
+0x801D2F4C, function start — ShowMemoryCardStatusPrompt; opens an animated status window then renders and uploads three memory-card progress messages before displaying two settling frames.
+0x801D30C4, function start — ResumeMemoryCardPromptAllocation; resumes allocation of the remaining status-message packets then renders uploads enables and displays the prompt.
+0x801D32B4, function start — DismissMemoryCardStatusPrompt; closes the status window when present then disables its messages frees four text packets and renders the updated frame.
+0x801D3344, function start — UpdateMenuScrollMarker; allocates the scroll marker on first use then positions sizes and enables it for the current buffer.
+0x801D3354, function start — ResumeScrollMarkerCoordinateCapture; resumes scroll-marker setup by capturing its coordinates then allocating if necessary and rebuilding its glyph geometry.
+0x801D3388, function start — ResumeScrollMarkerBufferInitialization; resumes with the newly allocated marker buffer then clears it and completes marker placement and visibility.
+0x801D33CC, function start — ResumeScrollMarkerGeometryFinalization; resumes after marker glyph creation then installs its dimensions records the active buffer and enables drawing.
+0x801D3444, function start — ReleaseMenuScrollMarker; disables the scroll marker and frees its packet storage.
+0x801D3488, function start — SetupStatusUnavailableNotice; creates and enables the two-glyph status notice when the selected party or gear availability count is not one.
+0x801D3538, function start — ResumeStatusNoticeAllocationFinalization; marks notice storage initialized then creates its two glyphs and four transformable quads.
+0x801D3614, function start — ResumeStatusNoticeVertexGeneration; resumes the current notice-quad dimensions then advances the remaining quad setup and enables the completed notice.
+0x801D3628, function start — FinalizeStatusUnavailableNotice; records the active notice buffer and enables notice drawing.
+0x801D3674, function start — ReleaseStatusUnavailableNotice; hides and frees the status notice when its storage is initialized.
+0x801D3688, function start — ResumeStatusNoticeReleaseCheck; resumes the allocation check then conditionally hides the notice clears initialization and frees its storage.
+0x801D369C, function start — ResumeStatusNoticeReleaseCommit; hides the initialized notice clears its allocation flag and frees its storage.
+0x801D36E0, function start — SetupCharacterOrGearHeaderSprite; configures a parity-colored character-name or gear-name header with mode-specific texture coordinates width and placement.
+0x801D375C, function start — ResumeHeaderSpriteModeSelection; resumes header packet selection then applies character or gear palette texture coordinates and dimensions.
+0x801D3938, function start — FinalizeHeaderSpriteGeometry; creates the header quad geometry and records the active buffer.
+0x801D397C, function start — InitializeMenuWindowSlot; allocates higher-numbered window slots as needed then either builds the complete window immediately or schedules centered expansion.
+0x801D3B00, function start — AdvanceAnimatedMenuWindows; expands each active window by up to 32 pixels per axis around its center and marks it complete at the target size.
+0x801D3C4C, function start — SetupWindowOptionalVerticalTrim; builds the optional top cap mirrored bottom cap and stretchable eight-pixel vertical trim.
+0x801D3DB0, function start — SetupWindowCornerGlyphs; builds four corner glyphs positions them around the window bounds and initializes their translucent packets.
+0x801D3F7C, function start — ResumeWindowBottomRightCornerSetup; finishes bottom-right corner geometry then initializes all four corner packets for the active buffer.
+0x801D3FF8, function start — SetupWindowTopEdge; assigns top-edge texture coordinates then divides the span into two equal quads and initializes both packets.
+0x801D41F8, function start — ResumeWindowTopEdgeSecondHalfVCoordinate; resumes the second top-edge quad at its upper V coordinate then completes both geometry and packet initialization.
+0x801D421C, function start — ResumeWindowTopEdgeBottomUvGeometry; resumes the second top-edge quad at its lower texture coordinates then builds both halves and initializes them.
+0x801D42CC, function start — FinalizeWindowTopEdgeSecondHalf; creates the second top-edge half then initializes both top-edge packets.
+0x801D42F4, function start — ResumeWindowTopEdgePacketInitialization; resumes active-buffer packet selection then initializes both top-edge packets and returns.
+0x801D4318, function start — ReturnFromWindowTopEdgeSetup; completes top-edge cleanup after both halves are initialized and returns.
+0x801D433C, function start — SetupWindowBottomEdge; assigns bottom-edge texture coordinates then divides the lower span into two equal quads and initializes both packets.
+0x801D4388, function start — ResumeWindowBottomEdgeFirstUvSetup; resumes active-buffer addressing then assigns the first bottom-edge U coordinate and completes the lower edge.
+0x801D4398, function start — ResumeWindowBottomEdgeFirstVCoordinateSetup; resumes after the first bottom-edge U coordinate then resolves the active buffer and completes the lower edge.
+0x801D43A0, function start — ResumeWindowBottomEdgeParityLookup; resumes bottom-edge buffer selection then writes the remaining texture coordinates and builds both halves.
+0x801D43B0, function start — ResumeWindowBottomEdgeFirstVCoordinateCommit; resumes active-buffer address calculation then commits the first V coordinate and completes bottom-edge setup.
+0x801D4550, function start — ResumeMenuWindowBottomEdgeSetup; resumes bottom-edge construction by finishing texture coordinates and preparing both buffered halves.
+0x801D4688, function start — SetupMenuWindowLeftEdge; builds and initializes both buffered halves of a menu window's left border.
+0x801D47EC, function start — ResumeMenuWindowLeftEdgeSetup; resumes left-border construction by finishing the first half and preparing the second half.
+0x801D49D0, function start — SetupMenuWindowRightEdge; builds and initializes both buffered halves of a menu window's right border.
+0x801D4D1C, function start — BuildMenuWindowPrimitives; rebuilds a window's center and four borders then records its color and rendering options.
+0x801D4EA0, function start — ReleaseMenuWindowResources; disables a window slot and releases its rendering and transition allocations.
+0x801D4F2C, function start — BuildInfoCardPortraitAndName; prepares a party member's portrait and palette-selected name image at the requested position.
+0x801D50EC, function start — BuildInfoCardFixedLabels; prepares the fixed labels displayed across a party information card.
+0x801D51EC, function start — BuildInfoCardHitPointValues; converts current and maximum HP into positioned digit images.
+0x801D53D0, function start — BuildInfoCardEtherPointValues; converts current and maximum EP into positioned digit images.
+0x801D55B4, function start — BuildInfoCardExperienceValues; converts current and next-level experience totals into positioned digit images.
+0x801D5794, function start — BuildInfoCardLevelValues; prepares primary and secondary level digits and colors the secondary value green.
+0x801D5890, function start — ResumeSecondaryLevelValueSetup; resumes after primary-level preparation to build and tint the secondary-level value.
+0x801D58CC, function start — ResumeSecondaryLevelGlyphLoop; resumes the secondary-level digit loop and emits each available glyph.
+0x801D58EC, function start — ResumeSecondaryLevelGlyphPlacement; resumes a pending secondary-level glyph by calculating its horizontal position.
+0x801D5900, function start — ResumeSecondaryLevelGlyphEmission; resumes a positioned secondary-level glyph and appends it to the buffered display.
+0x801D59C4, function start — ResumeSecondaryLevelGreenTint; resumes recoloring secondary-level glyphs by setting their green and blue channels.
+0x801D5A04, function start — ResumeSecondaryLevelTintCompletion; resumes the tinting tail by clearing blue and processing the remaining glyphs.
+0x801D5A50, function start — BuildCompletePartyInfoCard; rebuilds every visual field for one party information card at its animated position.
+0x801D5BA4, function start — BuildGoldAmountDisplay; converts the current gold total into digits and appends the currency marker.
+0x801D5CF8, function start — BuildPlayTimeDisplay; prepares the seven play-time digits and two separators for the active buffer.
+0x801D5DE8, function start — ResumePlayTimeSecondsSetup; resumes at the final two play-time digits then adds both separators and records the active buffer.
+0x801D5ED4, function start — BuildStatusPortraitAndName; prepares the selected character or gear portrait and palette-selected name image.
+0x801D6194, function start — BuildStatusFixedLabels; prepares the complete mode-specific set of fixed status-panel labels.
+0x801D6338, function start — BuildStatusHitPointValues; prepares current and maximum HP values for character or gear status mode.
+0x801D680C, function start — BuildStatusEtherPointValues; prepares current and maximum EP values for character or gear status mode.
+0x801D6CF4, function start — BuildStatusLevelValues; prepares primary and secondary level values and applies the secondary-value tint.
+0x801D7154, function start — BuildStatusProgressTotals; prepares two eight-glyph progression totals for the selected character or gear.
+0x801D74EC, function start — BuildStatusExperienceValues; prepares two seven-glyph experience values for the selected character or gear.
+0x801D7884, function start — BuildStatusModeSpecificValue; prepares the final mode-dependent status value and its body-mode derived digit.
+0x801D7C3C, function start — BuildStatusIdentityPanel; assembles the portrait and all summary values then enables the identity panel.
+0x801D7CFC, function start — BuildStatusGearPresenceIndicator; prepares and highlights the equipped or unequipped gear indicator when applicable.
+0x801D7F50, function start — BuildStatusAttributeLabels; prepares the visible attribute names and alternates shading between rows.
+0x801D827C, function start — InitializeStatusBarGradients; initializes two buffered gradient bars using the requested comparison color.
+0x801D83AC, function start — TintStatusValueGlyphs; applies a comparison-dependent tint to a selected run of status-value glyphs.
+0x801D84B4, function start — ComputeStatusBarComparison; scales a base value and its difference against a maximum and selects increase or decrease styling.
+0x801D85DC, function start — FindStatusAttributeMaximum; returns the largest value across two seven-entry attribute sets.
+0x801D8644, function start — BuildStatusAttributeValuesAndBars; builds numeric attributes and scaled bars with optional increase or decrease differences.
+0x801D8DE4, function start — BuildStatusAttributePanel; positions and assembles attribute labels and value bars then enables the panel.
+0x801D8EA4, function start — BuildStatusEquipmentList; resolves and prepares the selected character or gear's equipment-name images.
+0x801D9704, function start — SelectAdjacentAvailablePartySlot; wraps forward or backward through three party slots while skipping unavailable character or gear entries.
+0x801D9808, function start — ProcessSoundMenu; handles sound-mode navigation and confirmation.
+0x801D9B08, function start — RestartMemoryCardInterface; restarts card services and opens and enables completion error timeout and insertion events.
+0x801D9C84, function start — InitializeLoadSaveMemoryCards; transitions into card access mode then restarts services backs up callbacks and scans both cards.
+0x801D9E3C, function start — ShutdownLoadSaveMemoryCards; releases card-display resources clears cached slots and restores the saved callbacks.
+0x801D9E54, function start — ResumeLoadSaveCleanupAfterVramClear; frees 32 card-entry buffers and shared card data, clears card-presence state, drains rendering, and restores saved CD callbacks.
+0x801D9EDC, function start — ResumeLoadSaveCleanupAtVSyncDrain; waits for vertical synchronization, enters a critical section, restores three saved CD callbacks, and leaves the critical section.
+0x801D9EE4, function start — ResumeLoadSaveCleanupAtCdCallbackRestore; enters a critical section, restores the saved CD sync, ready, and read callbacks, and leaves the critical section.
+0x801D9F34, function start — SetupLoadSaveCardSelectorText; initializes six card-selection text elements using the load-game or normal-menu variant.
+0x801D9F98, function start — ProcessLoadSaveMenu; drives card setup, slot selection, load/save, and cleanup.
+0x801DA4A8, function start — InitializeItemMenuResources; prepares selector artwork and item text, allocates and clears item-display storage, and enables item glyphs.
+0x801DA518, function start — ReleaseItemMenuResources; removes item windows and text, disables item glyphs, and frees item-display, image, and inventory-view storage.
+0x801DA5BC, function start — BuildItemInventoryPage; renders sixteen inventory slots from the requested page with item names, quantities, usability coloring, and empty-slot suppression.
+0x801DA9A8, function start — UpdateSelectedItemDetails; displays the selected item's name, quantity, description, targeting icons, and classification icons or hides the detail area for an empty slot.
+0x801DB02C, function start — AllocateAnimatedSelectionCursor; allocates and clears one cursor animation, initializes its frame to four, and resets its frame timer.
+0x801DB0A8, function start — UpdateAnimatedSelectionCursor; advances the cursor animation, positions it for item, technique, target, or equipment layouts, and hides it when its row is outside the visible page.
+0x801DB340, function start — ReleaseAnimatedSelectionCursor; frees the requested cursor animation and disables its draw flag.
+0x801DB39C, function start — SetItemMenuDimming; switches item windows, list entries, cursors, details, and icons between normal and dimmed presentation.
+0x801DB5E4, function start — BuildItemTargetCards; builds up to three party target cards, suppresses absent members, and positions the three target-highlight regions.
+0x801DB920, function start — RunItemTargetSelection; selects eligible party targets, applies the chosen consumable, decrements its quantity after a successful use, and returns the affected-target mask.
+0x801DBD4C, function start — SwapInventorySlots; exchanges both item identifiers and quantities between two inventory positions.
+0x801DBDB4, function start — ComputeItemInventoryScrollRange; finds the final occupied inventory slot and derives the page limit, scrollbar height, and scrollbar step.
+0x801DBE54, function start — ProcessItemMenu; handles paged item navigation, item reordering, consumable use, target selection, scrolling, cancellation, and resource cleanup.
+0x801DC1D4, function start — InitializeTechniqueMenuResources; allocates technique-display storage and prepares mode-specific text, glyphs, selector artwork, and party-switch indicators.
+0x801DC2CC, function start — ReleaseTechniqueMenuResources; closes technique windows, hides technique text, disables mode-specific glyphs, frees display storage, and restores parent-menu draw flags.
+0x801DC3D8, function start — BuildTechniqueList; renders up to fourteen character or gear techniques with names, costs, values, availability state, and resource-affordability coloring.
+0x801DCE60, function start — UpdateSelectedTechniqueDetails; displays the selected technique's name, two-line description, target type, element, and classification icons or hides details for an unavailable entry.
+0x801DD5E8, function start — SetTechniqueMenuDimming; switches technique windows, entries, cursor, descriptions, and icons between normal and dimmed presentation.
+0x801DD790, function start — RunTechniqueTargetSelection; selects valid party targets, applies the chosen healing technique, deducts MP or gear fuel after success, and restores the technique display on exit.
+0x801DDF24, function start — ProcessTechniqueMenu; handles technique-grid navigation, character switching, detail refreshes, target selection, activation, and cancellation.
+0x801DE29C, function start — CheckCurrentDiscNumber; validates or transitions using a disc and field request.
+0x801DE2C8, function start — InitializeEquipmentMenuResources; allocates and clears equipment-list storage and prepares equipment text, glyphs, selector artwork, cursor animation, and party-switch indicators.
+0x801DE2E4, function start — ResumeEquipmentInitializationWithDisplayStorage; accepts newly allocated display storage, clears it, and completes equipment text, glyph, selector, cursor, and party-switch setup.
+0x801DE334, function start — ResumeEquipmentInitializationAtGlyphSetup; enables equipment glyphs and then prepares selector artwork, cursor animation, and party-switch indicators.
+0x801DE33C, function start — ResumeEquipmentInitializationAtSelectorSetup; prepares selector artwork, allocates its animated cursor, and enables the mode-appropriate party-switch indicator.
+0x801DE344, function start — ResumeEquipmentInitializationAtCursorSetup; allocates the equipment cursor animation and enables the mode-appropriate party-switch indicator.
+0x801DE34C, function start — ResumeEquipmentInitializationAtPartySwitchSetup; enables the party-switch indicator for the active character or gear equipment mode and returns.
+0x801DE36C, function start — ReleaseEquipmentMenuResources; closes equipment windows, hides equipment text, disables equipment glyphs, frees list and selector storage, and clears their draw flags.
+0x801DE3AC, function start — ResumeEquipmentCleanupAfterWindowClosure; hides equipment text, disables equipment glyphs, frees list and selector storage, and clears the remaining selector state.
+0x801DE400, function start — ReleaseEquipmentPreviewResources; hides equipment overview and preview elements, renders their final frame, and frees both preview work areas.
+0x801DE434, function start — ResumeEquipmentPreviewCleanupAtStorageRelease; frees both equipment overview work areas and returns.
+0x801DE474, function start — SetupEquipmentCategoryWindow; selects the character or gear category labels, enables the applicable entries, closes the previous category window, and opens a correctly sized replacement.
+0x801DE5AC, function start — ReturnFromEquipmentCategoryWindowSetup; returns after the category labels and replacement window have been established without changing further state.
+0x801DE5CC, function start — BuildCompatibleEquipmentPage; filters inventory by mode, slot, compatibility, and restrictions, renders eight candidate names and quantities from the requested offset, and returns the remaining scroll range.
+0x801DED50, function start — ResumeEquipmentCandidateRendering; renders up to eight previously filtered equipment candidates with quantities and enable flags, updates the scrollbar, and returns the remaining scroll range.
+0x801DF0D4, function start — ApplyEquipmentSelection; equips or removes the selected item, returns displaced equipment to inventory, consumes the replacement, removes empty stacks, clamps quantities, and reports a required category switch.
+0x801DF5D0, function start — StageCurrentEquipmentLoadout; copies the active character or gear loadout into editable slots and snapshots the current derived statistics for comparison.
+0x801DF890, function start — CommitStagedEquipmentLoadout; writes the edited character or gear equipment slots back to persistent state.
+0x801DFB68, function start — StageSelectedEquipmentCandidate; writes the selected candidate identifier into the appropriate staged weapon, armor, accessory, or gear slot.
+0x801DFE2C, function start — RecalculateGearEquipmentPreview; recomputes the selected gear's derived parameters and snapshots the resulting statistics for equipment comparison.
+0x801DFF5C, function start — BuildEquipmentDescriptionLines; resolves the selected or currently equipped item for the active mode and slot, renders its three description lines, or hides the description when no item is present.
+0x801E0434, function start — ReturnReplacedEquipmentToInventory; clears the replaced character or gear equipment slot and returns that item to its inventory stack with a quantity cap of 99.
+0x801E05D0, function start — ProcessEquipmentMenu; drives equipment-category navigation, inventory browsing, character switching, stat previews, equip confirmation, cancellation, rendering, and cleanup.
+0x801E0680, function start — ResumeEquipmentViewRefresh; resumes the equipment loop by refreshing character and equipment-page visuals when the selected character or page changes.
+0x801E06B4, function start — ResumeEquipmentCategoryRefresh; resumes by rebuilding the selected equipment category, item count, scroll position, stat preview, and item-list display.
+0x801E0884, function start — ResumeEquipmentPreviewRefresh; resumes after item preview generation by preserving selection state, positioning the category cursor, opening panels when required, and continuing input processing.
+0x801E0A78, function start — ResumeEquipmentPanelSetup; resumes setup by creating panels 3 and 5, optionally completing the opening animation, enabling selection rendering, and entering the equipment input loop.
+0x801E0AAC, function start — ResumeEquipmentLowerPanelSetup; resumes setup by creating panel 5, optionally completing the opening animation, enabling selection rendering, and entering the equipment input loop.
+0x801E0AE0, function start — ResumeEquipmentOpeningTransition; resumes by conditionally starting and waiting for the equipment opening transition before enabling selection rendering and processing input.
+0x801E0AF8, function start — ResumeEquipmentPanelAnimation; resumes the opening sequence by starting panel interpolation, waiting for it to finish, and continuing equipment interaction.
+0x801E0B04, function start — ResumeEquipmentTransitionPolling; resumes at the transition poll, drawing frames until animation completes before enabling equipment selection and processing input.
+0x801E0B14, function start — ResumeEquipmentTransitionWait; waits while the active transition flag remains set, then enables item and cursor rendering and continues the equipment loop.
+0x801E0F78, function start — OpenEquipmentMenu; allocates and clears equipment work areas, loads equipment assets, runs the interactive equipment menu, unloads its assets, and returns success.
+0x801E0F9C, function start — ResumeEquipmentPrimaryAllocation; resumes with the primary allocation result by storing and clearing it, preparing the auxiliary area, loading equipment assets, running interaction, and unloading assets.
+0x801E0FC0, function start — ResumeEquipmentAuxiliaryAllocation; resumes with the auxiliary allocation result by storing and clearing it, loading equipment assets, running interaction, and unloading those assets.
+0x801E0FE0, function start — ResumeEquipmentInteraction; resumes after equipment assets are loaded by running the interactive menu, unloading its assets, and returning success.
+0x801E1014, function start — SetupDeathblowMenuDisplay; allocates and clears deathblow display memory, loads character assets, builds headings and panels, validates party eligibility, and initializes thirteen double-buffered entry displays.
+0x801E1398, function start — TeardownDeathblowMenuDisplay; closes deathblow visuals, renders the final frame, releases text and character assets, unloads deathblow resources, and frees display memory.
+0x801E1418, function start — CalculateDeathblowMastery; averages seven capped learning-counter ratios against the selected deathblow requirements and suppresses advanced results unless enabled.
+0x801E1544, function start — BuildDeathblowEntryDetails; renders either a deathblow input sequence or its mastery percentage and progress bar according to the entry state.
+0x801E1AC8, function start — PopulateDeathblowMenuEntries; evaluates thirteen deathblows for learned and mastery states, builds their names and level indicators, renders entry details, and displays the selected character.
+0x801E20C8, function start — ProcessDeathblowMenu; rejects ineligible characters, initializes deathblow presentation, supports party-member switching, processes cancellation, and tears the display down.
+0x801E2250, function start — SetupStatusMenuDisplay; allocates and clears status work areas, loads status assets, selects the first enabled party slot, creates the status selector, and returns that slot.
+0x801E2324, function start — BuildStatusModeLabel; rebuilds the status-mode text using the selected mode-specific label.
+0x801E2368, function start — TeardownStatusMenuDisplay; frees all status work areas and unloads the associated status assets.
+0x801E23CC, function start — OpenStatusMenu; initializes and drives character status and equipment views.
+0x801E2AE0, function start — SetupAbilitiesMenuDisplay; enables party-selection labels, allocates and clears ability work areas, loads shared assets, and creates the abilities selector.
+0x801E2B80, function start — TeardownAbilitiesMenuDisplay; frees all ability work areas and unloads their shared assets.
+0x801E2BE4, function start — ProcessAbilitiesMenu; drives character and three-option ability navigation, opens equipment, targeted ability, or deathblow interaction, restores presentation afterward, and exits on cancellation.
+0x801E3088, function start — CleanupCompletedMenuAction; dispatches resource teardown for the completed top-level menu action and disables any associated party presentation.
+0x801E31C0, function start — ApplyConsumableEffect; applies item-defined HP, EP, attribute, status, and special effects with proper caps and reports when requested recovery was already full.
+0x801E35BC, function start — ApplyTargetedHealing; adds potency-scaled character healing or ten percent of maximum gear HP to the selected target and clamps the result to its maximum.
+0x801E36D4, function start — RecalculateCharacterEquipmentEffects; clears and rebuilds a character's equipment bonuses, status masks, elemental effects, weapon attributes, and accumulated modifiers from three equipped items.
+0x801E3A80, function start — CalculateCharacterDisplayedStats; combines character base attributes with equipment modifiers and writes capped attack, defense, accuracy, evade, and related displayed values.
+0x801E3C2C, function start — CalculateGearDisplayedStats; combines gear components, equipment effects, weapon values, and pilot modifiers into current displayed HP, fuel, attack, defense, response, and related values.
+0x801E3ECC, function start — SynchronizeLinkedGearLoadouts; recomputes selected gear effects, mirrors its three loadout identifiers into linked gear records, and refreshes every affected gear.
+0x801E4170, function start — LoadGearComponentBaseStats; refreshes one gear's frame, engine, and armor-derived base values from its selected component identifiers.
+0x801E41C0, function start — LoadGearFrameBaseStats; loads frame-defined maximum HP and core attributes, resets current HP to maximum, and enforces the HP limit.
+0x801E4258, function start — LoadGearArmorBaseStats; loads the two armor-derived defensive values selected for a gear.
+0x801E42AC, function start — LoadGearEngineBaseStats; loads engine fuel capacity and output attributes and clamps current fuel to the new capacity.
+0x801E433C, function start — RecalculateGearEquipmentEffects; clears and rebuilds gear equipment totals, weight, attribute modifiers, elemental and status masks, compatibility effects, and the derived weight penalty.
+0x801E4754, function start — LoadGearWeaponStats; loads the selected gear weapon's power, effects, attributes, and status mask while resolving multi-weapon variants for applicable gears.
+0x801E4928, function start — CalculateGearWeightPenalty; derives a nonnegative equipment penalty from accumulated gear weight and its innate offset.
+0x801E4998, function start — InitializeGearResourceHpThreshold; derives a gear-resource HP threshold from maximum HP and rounds it down to a multiple of ten.
+0x801E4A28, function start — SnapshotMenuGameState; copies mutable character, gear, inventory, progression, and related gameplay state into a menu snapshot.
+0x801E4D10, function start — RestoreMenuGameState; restores character, gear, inventory, progression, and related gameplay state from a snapshot and recalculates component and equipment effects.
+0x801E5058, function start — GrantTenOfEveryInventoryEntry; fills five inventory catalogs with sequential identifiers and sets every populated quantity to ten.
+0x801E5178, function start — UnlockAllCharactersAndAbilities; enables all eleven party members, installs their complete ability masks, and sets ability energy to seven.
+0x801E53CC, function start — InitializeMenuBoxPrimitivePool; resets one indexed menu box and prepares its double-buffered background, border, texture, color, and draw-mode packets.
+0x801E56E8, function start — InitializeMemoryCardTileFaces; prepares double-buffered 16x16 card icons, dim backing quads, transformation vertices, and draw modes for one tile.
+0x801E5924, function start — InitializeMemoryCardTileOutlines; prepares double-buffered green triangular outlines and transformation vertices for one 16x16 card tile.
+0x801E5ACC, function start — AllocateMemoryCardTileDisplay; allocates, clears, and initializes all 32 memory-card tile work areas.
+0x801E5B3C, function start — ReleaseMemoryCardTileDisplay; releases all 32 memory-card tile work areas.
+0x801E5B88, function start — InitializeMemoryCardBlockGlyphs; builds double-buffered 12x16 glyph sprites for 32 memory-card blocks arranged across two rows.
+0x801E5E4C, function start — InitializeMemoryCardSelectionBand; builds double-buffered 32x32 textured quads and a full-width purple-to-blue selection band.
+0x801E61B0, function start — BuildMemoryCardPreviewLabels; renders nine fixed labels and prepares a textured name quad for each of three save-preview panes.
+0x801E6450, function start — AllocateMemoryCardPreviewDisplay; allocates and clears the save-preview display storage before initializing its block glyphs and selection band.
+0x801E649C, function start — ReleaseMemoryCardPreviewDisplay; releases the save-preview display storage and disables its draw flag.
+0x801E64E0, function start — ClearSavePreviewTexture; restores a blank 64x32 texture at VRAM origin and disables save-preview drawing.
+0x801E6544, function start — CompressMenuGlyphToTwelvePixels; folds each 16-pixel glyph row into twelve columns by merging four boundary pairs.
+0x801E65E4, function start — ResolveMenuGlyphBitmap; converts a one- or two-byte encoded character into a font code, records its byte length, and resolves its glyph bitmap.
+0x801E6668, function start — RasterizeMemoryCardTitle; decodes up to 32 title characters, compresses their glyphs, packs a 4bpp 64x32 image, and uploads it to VRAM.
+0x801E68AC, function start — BuildMemoryCardSaveHeaderDisplay; renders save-header labels, seven play-time digits, two fixed values, and the two-digit save number.
+0x801E6AE8, function start — BuildSavePartyMemberEmblem; selects and renders the saved party member emblem for one preview row.
+0x801E6B70, function start — BuildSavePartyLevelValues; formats and renders primary and secondary three-digit levels for one saved party member.
+0x801E6CFC, function start — BuildSavePartyHpValues; formats and renders current and maximum three-digit HP values for one saved party member.
+0x801E6F5C, function start — BuildSavePartyMpValues; formats and renders current and maximum two-digit MP values for one saved party member.
+0x801E71B4, function start — UploadSavePartyMemberName; decodes a saved party member name into a 40x13 image and uploads it to that preview row's VRAM region.
+0x801E733C, function start — InitializeSaveSlotMarkers; builds sixteen double-buffered 12x16 textured markers at consecutive save-slot positions.
+0x801E76EC, function start — BuildMemoryCardSavePreview; assembles three available party rows, their names, emblems, levels, HP, MP, header values, and slot markers.
+0x801E781C, function start — RefreshMemoryCardSavePreview; clears the preview texture, optionally rebuilds valid save details, rasterizes the title, and updates visibility.
+0x801E78C8, function start — UploadMemoryCardIconFrames; uploads one icon palette and three icon frames to VRAM and records frame locations from the display mode.
+0x801E7C50, function start — InitializeMenuTextSpritePair; prepares two neutral text quads with atlas coordinates, palette selection, and inactive state.
+0x801E7E68, function start — RasterizeMenuTextPairs; renders paired dialog strings, defines their 28x13 VRAM regions, initializes their sprites, and uploads each pair.
+0x801E8018, function start — RasterizeMenuTextPairsAtRowFour; renders the requested paired menu strings beginning at atlas row four.
+0x801E8044, function start — ClearMenuDisplayFlags; clears the requested number of consecutive menu display flags.
+0x801E8070, function start — UpdateIndexedMenuTextEntry; applies mode-specific coordinates or texture geometry to one indexed text entry, records buffer parity, and enables it.
+0x801E8474, function start — AnimateMainMenuTextReveal; progressively builds the two main-menu text columns and renders two frames after each reveal step.
+0x801E86C8, function start — AnimateLoadSaveOptionReveal; progressively reveals up to four configured load-save options in both text columns with interleaved frames.
+0x801E8978, function start — RefreshMainMenuSelection; rerenders both main-menu columns with the selected label variant, repositions the cursor, and enables drawing.
+0x801E8B4C, function start — RefreshLoadSaveSelection; rerenders available load-save options with the selected label variant, updates buffer parity, and repositions the cursor.
+0x801E8DA8, function start — UploadCharacterNameTexture; rasterizes the selected character name pair into a 40x13 image and uploads it to the assigned VRAM region.
+0x801E8EAC, function start — ConfigureTexturedQuadTone; applies one of four shading and translucency modes while setting the quad's neutral or dark intensity.
+0x801E8F60, function start — ToggleMenuBoxBorderDimming; applies the requested bright or dim tone to every active border segment of one menu box.
+0x801E91C4, function start — InitializeSemitransparentMenuTile; enables semitransparency, disables texture shading, and assigns neutral gray intensity.
+0x801E920C, function start — SetTexturedQuadRectangle; writes all screen and texture corners from an origin, texture origin, width, and height.
+0x801E927C, function start — InitializeNeutralTexturedQuad; initializes an opaque unshaded textured quad with neutral gray intensity.
+0x801E92CC, function start — InitializeDiscSwapInterface; resets an inactive CD interface and repeatedly issues initialization command 8 until accepted.
+0x801E9340, function start — ReadHostPathIntoMemory; opens a host path, transfers the requested byte count to memory, and closes the handle.
+0x801E93A0, function start — ValidateDiscIdentityAndLoadIndexes; waits for media readiness, verifies the expected disc marker and number, loads disc indexes, and reports success, read failure, or wrong media.

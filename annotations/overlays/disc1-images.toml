@@ -1,0 +1,265 @@
+schema = "xenogears-disc-overlay-images/v1"
+
+[[images]]
+id = "field-image"
+source_sector = 108933
+stored_size = 125304
+stored_sha256 = "7735f4e2f204b7afd053d95f2812053b56eb03306c7d2de38c08b2d78ba392dd"
+storage = "lzss"
+sha256 = "38a1ce829a6f094c505f67143d6ace2d328418c65425a7383991179467e1fdfc"
+crc32 = "b8874993"
+size = 260862
+load_address = "0x8006faf0"
+
+[[images]]
+id = "world-image"
+source_sector = 108995
+stored_size = 92180
+stored_sha256 = "0f7e7a283fc5ef25d4a82960e16b119d09e1ba5594cc02069cf3dd2113f48803"
+storage = "lzss"
+sha256 = "4c15fd32b3a03d7cd5ea4403dcaabc70abaf99b6aaca65d63d6866803edaac70"
+crc32 = "082b6ba5"
+size = 180422
+load_address = "0x8006faf0"
+
+[[images]]
+id = "battle-image"
+source_sector = 109041
+stored_size = 166564
+stored_sha256 = "b9c3a15bf5f3eb06bcb3824ef62793b9a500fe1dcb3717fe8963e23e9f27628b"
+storage = "lzss"
+sha256 = "1830b4ef1fe37129972fc310dfad534f8161d6c0b123e74254c3711334a3e291"
+crc32 = "0fb96498"
+size = 343936
+load_address = "0x8006faf0"
+
+[[images]]
+id = "battling-image"
+source_sector = 108893
+stored_size = 80284
+stored_sha256 = "1449e55e665200c0d363938815ef23a77e53620228cb6b14ef5937f8f43ed3cf"
+storage = "lzss"
+sha256 = "3e6df915e9c7f05f5fb997cb331392f1333e867dfb2628cd65e5e1ea1575646e"
+crc32 = "a76dcf88"
+size = 142953
+load_address = "0x8006faf0"
+
+[[images]]
+id = "menu-image"
+source_sector = 109123
+stored_size = 70944
+stored_sha256 = "f3b8d9516c519ee7b1580716c653c54804f205f43eaef3567355700e45d13261"
+storage = "lzss"
+sha256 = "82f84a24ac1fd1979754e1cc9c861405fb59ce95dd78db00a76f00c8f1bd177d"
+crc32 = "4d16749c"
+size = 153864
+load_address = "0x801c5000"
+
+[[images]]
+id = "movie-image"
+source_sector = 109158
+stored_size = 14360
+stored_sha256 = "0b7ad43d33fff081ba74010c7c3af3ed166fed694efb852f1f50a062b3a06af5"
+storage = "lzss"
+sha256 = "50e1a9d9e08b90eed0c2da1c289507e71cbf51749893a92f457ce79a59701f9a"
+crc32 = "0b5b82a1"
+size = 29779
+load_address = "0x8006faf0"
+
+[[images]]
+id = "member-change-menu-image"
+source_sector = 239411
+stored_size = 26012
+stored_sha256 = "b0aaf001bb97fde7f8df89f2d7de0906713a155f54097897dc9a9482117b736b"
+storage = "raw-zero-pad"
+sha256 = "3b9e2b890c27ae0de97fe343ac75cd35c05fe7f9605ae387d2166da0be78109c"
+crc32 = "aa61c9e7"
+size = 26624
+load_address = "0x801c5000"
+
+[[images]]
+id = "shop-menu-image"
+source_sector = 239515
+stored_size = 53860
+stored_sha256 = "fd894b5113e4e12bb6aba5f775f1036744eb7f98ff2d1462ee10673868370c2a"
+storage = "raw-zero-pad"
+sha256 = "7890e14bcabddcf85368de10783ecff8daa166dc5ac254e06db5e27959cab4cf"
+crc32 = "d558e06e"
+size = 55296
+load_address = "0x801c5000"
+
+[[images]]
+id = "gear-shop-menu-image"
+source_sector = 239542
+stored_size = 82080
+stored_sha256 = "5a08a22f2c5cc1d131b33a944d3167a2ac460c5f9f17f2dcf94dd8860158a25c"
+storage = "raw-zero-pad"
+sha256 = "c7a1982f0ea624c81fd0f85e1a1335c7517723f12ba3e2d08395842392423691"
+crc32 = "77c1d7e4"
+size = 83968
+load_address = "0x801c5000"
+
+[[images]]
+id = "gear-helper-image"
+source_sector = 239659
+stored_size = 50868
+stored_sha256 = "18d35e7640a0763cdea5feaf485b8865854d0831bbf28fb3d86d0d1996f1756f"
+storage = "raw-zero-pad"
+sha256 = "14395a9f54c124fed016f07906cc882b2a9256d5ade2d10eef99e10fe9366523"
+crc32 = "ec219bef"
+size = 51200
+load_address = "0x801dc000"
+
+[[images]]
+id = "battle-event-image"
+source_sector = 257151
+stored_size = 19516
+stored_sha256 = "64668d85bf48dea46cf6d5f04b38e38ca887877cfef53961f0c26cd2d363b670"
+storage = "raw-zero-pad"
+sha256 = "1cac23da143e6dfc8f1f4b52ed5754392ea853ee58d6e62d65fd7fbfa86932cc"
+crc32 = "81aee074"
+size = 20480
+load_address = "0x801e5000"
+
+[[images]]
+id = "battle-result-image"
+source_sector = 239322
+stored_size = 25856
+stored_sha256 = "f474fd482506b89eaff9601d5958a1c867d35a4ad11c1f58f0ecef630008a0c8"
+storage = "raw-zero-pad"
+sha256 = "c0ae90d4db9f81edfe4b856ac234308614c12dd3a9dd7212be92cb4c5b9d14e8"
+crc32 = "8337fbef"
+size = 26624
+load_address = "0x801de000"
+
+[[images]]
+id = "enter-name-menu-image"
+source_sector = 239500
+stored_size = 28980
+stored_sha256 = "6ce24a96a62ac897e83dff7d0bb4bb22bcafdef11b6d577ef8e1e30533bbba4b"
+storage = "raw-zero-pad"
+sha256 = "b0c6226511fdf0d3b874cf5e8658ed1fe19fd06833c0e0d61c4762aeb6a6f1b0"
+crc32 = "95ae4479"
+size = 30720
+load_address = "0x801c5000"
+
+[[images]]
+id = "battle-debug-setup-menu-image"
+source_sector = 239690
+stored_size = 7644
+stored_sha256 = "ca291c99b6277615629846aee67b64e918f9b330ee008ac510816b2b39cc8760"
+storage = "raw-zero-pad"
+sha256 = "2bc183a361781237723615b35ce5d5b3e5547fc919d6cda1348a8dadec99a2ea"
+crc32 = "f6bacec3"
+size = 8192
+load_address = "0x801e0000"
+
+[[images]]
+id = "battle-runtime-debug-image"
+source_sector = 239743
+stored_size = 8432
+stored_sha256 = "f0e10e1880c209d56fe9f22a25e9fa223ee6d6c238c0cb15b529eb151704429b"
+storage = "raw-zero-pad"
+sha256 = "4ef85df0c9fa6db377a0ce73c60e25445d71c3c19ac1d0e0e3246d0d7087ec47"
+crc32 = "39c7b5b1"
+size = 10240
+load_address = "0x80280000"
+
+[[images]]
+id = "movie-str-lib-image"
+source_sector = 108561
+stored_size = 88604
+stored_sha256 = "4606650a38c794ae4b27157d702eeea72d362b9e5c5871f67955c6284af1584b"
+storage = "raw-zero-pad"
+sha256 = "2a8469095fd33daef61dbbf09d4f106ba1d72904a502763cb89057cbb615a440"
+crc32 = "2bb071fe"
+size = 90112
+load_address = "0x801d3000"
+
+[[images]]
+id = "field-runtime-diagnostics-image"
+source_sector = 120685
+stored_size = 25032
+stored_sha256 = "c123c880e71cfa0448a6ea4d9961bb0f1c0e2ced0595d9fa5eefc4a913248048"
+storage = "raw-zero-pad"
+sha256 = "51cd5e710994516709d1866f15f1e6adf4219c43a5bfd398830ef16f0d5f44b8"
+crc32 = "1d19144c"
+size = 26624
+load_address = "0x80280000"
+
+[[images]]
+id = "battle-loader-image"
+source_sector = 239777
+stored_size = 22208
+stored_sha256 = "4300fdd99d19805a7a68ded0b21db49e1261688e90bf58e10dead9b978b52885"
+storage = "raw-zero-pad"
+sha256 = "31a7c8828e87fc854da310925b91fd2221c19dc1a6987b800ca1a4d250632abf"
+crc32 = "4ac45ae6"
+size = 22528
+load_address = "0x801e4000"
+
+[[images]]
+id = "battle-green-framebuffer-grid-image"
+source_sector = 266873
+stored_size = 1832
+stored_sha256 = "34d3343fb30a1c76327b53504c6dd12e03e6d1c8d96e66adc4509fb98c605b43"
+storage = "raw-zero-pad"
+sha256 = "d5156aab0158dc55a629fb3ddff5f09f21ee8053ce8ffd06350e12490482d6dd"
+crc32 = "3857db10"
+size = 2048
+load_address = "0x801fc000"
+
+[[images]]
+id = "battle-curved-sprite-ribbon-image"
+source_sector = 266875
+stored_size = 1508
+stored_sha256 = "0d975d1f4e0aea2ebaf942bc66b00670d782ed12b3efec9b2c6b062f63504c05"
+storage = "raw-zero-pad"
+sha256 = "5720f937ed2758ac21b69501c096d5da1b3aea80b3fe59cd7b5363b3420affb0"
+crc32 = "6bdd004f"
+size = 2048
+load_address = "0x801fc000"
+
+[[images]]
+id = "battle-polygon-shatter-image"
+source_sector = 266876
+stored_size = 3612
+stored_sha256 = "8c303aab8a88012d916e8d033f2e4cda36f388ecbb3d684a8d4729c1af3a78a3"
+storage = "raw-zero-pad"
+sha256 = "8bdc2df18b6d3222f6ba444eb26acc0961c37c52d0d058f01ba68ca490369523"
+crc32 = "40bc5969"
+size = 4096
+load_address = "0x801fc000"
+
+[[images]]
+id = "battle-velocity-sprite-clone-strip-image"
+source_sector = 266878
+stored_size = 2068
+stored_sha256 = "6b53e33996d44b095b1264a6301956672547550c877a9589b50f05460b8c54ab"
+storage = "raw-zero-pad"
+sha256 = "d93be18b501cfeb18586928ee78a378e0f62a5c0f3fafbc2492285e0a59e8067"
+crc32 = "c6b87e46"
+size = 4096
+load_address = "0x801fc000"
+
+[[images]]
+id = "battle-fixed-origin-sprite-marquee-image"
+source_sector = 266880
+stored_size = 1924
+stored_sha256 = "f47e5565d4b6159c48bbe1ca09c4c9ca12948d65d1324739f120e5fe4cd80d32"
+storage = "raw-zero-pad"
+sha256 = "a96f7e6ed7b704f4c90f686f534b25bfd6af467ea16f2cd1cb870ef8c799da82"
+crc32 = "0098a34d"
+size = 2048
+load_address = "0x801fc000"
+
+[[images]]
+id = "battle-framebuffer-ripple-dissolve-image"
+source_sector = 266881
+stored_size = 3660
+stored_sha256 = "a647bafc3608e0d86dd5f72d6f867aef0e4004bc1f3b2a2079d5392dfce84d01"
+storage = "raw-zero-pad"
+sha256 = "5c65f607264d841d2f4a0f6d0323f1e1c85b642e09750ceded520d47a3f06a83"
+crc32 = "a2330476"
+size = 4096
+load_address = "0x801fc000"

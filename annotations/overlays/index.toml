@@ -3,19 +3,18 @@ schema = "xenogears-overlay-annotations/v1"
 [[images]]
 id = "field-overlay"
 subsystem = "field"
-logical_name = "field_module.exe"
-sha256 = "920a3e20ccc5d8aae32225c272066e819c427b566b2274df60b182e1265f04dd"
-crc32 = "4bba5a07"
-size = 284672
-load_address = "0x8006f000"
-image_format = "ps-x-exe"
-header_size = 2048
-loaded_size = 282624
-annotations = "annotations/overlays/field-overlay_annotations.csv"
-identity_source = "native_renderer/xg_render_manifest.toml"
-source_kind = "render-manifest-field"
+logical_name = "field.bin"
+sha256 = "38a1ce829a6f094c505f67143d6ace2d328418c65425a7383991179467e1fdfc"
+crc32 = "b8874993"
+size = 260862
+load_address = "0x8006faf0"
+image_format = "raw"
+header_size = 0
+loaded_size = 260862
+annotations = "annotations/overlays/field/field-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
 source_record_id = "field-image"
-artifact = "overlays/field_module.exe"
 
 [[images]]
 id = "world-overlay"
@@ -28,9 +27,9 @@ load_address = "0x8006faf0"
 image_format = "raw"
 header_size = 0
 loaded_size = 180422
-annotations = "annotations/overlays/world-overlay_annotations.csv"
-identity_source = "native_renderer/xg_render_manifest.toml"
-source_kind = "render-manifest-world"
+annotations = "annotations/overlays/world/world-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
 source_record_id = "world-image"
 artifact = "overlays/worldmap_module.bin"
 
@@ -45,9 +44,9 @@ load_address = "0x8006faf0"
 image_format = "raw"
 header_size = 0
 loaded_size = 343936
-annotations = "annotations/overlays/battle-overlay_annotations.csv"
-identity_source = "native_renderer/xg_render_manifest.toml"
-source_kind = "render-manifest-battle"
+annotations = "annotations/overlays/battle/battle-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
 source_record_id = "battle-image"
 artifact = "overlays/battle_module.bin"
 
@@ -62,9 +61,9 @@ load_address = "0x8006faf0"
 image_format = "raw"
 header_size = 0
 loaded_size = 142953
-annotations = "annotations/overlays/battling-overlay_annotations.csv"
-identity_source = "native_renderer/xg_render_manifest.toml"
-source_kind = "render-manifest-battling"
+annotations = "annotations/overlays/battle/battling-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
 source_record_id = "battling-image"
 artifact = "overlays/battling_module.bin"
 
@@ -79,9 +78,9 @@ load_address = "0x801c5000"
 image_format = "raw"
 header_size = 0
 loaded_size = 153864
-annotations = "annotations/overlays/menu-overlay_annotations.csv"
-identity_source = "native_renderer/xg_render_manifest.toml"
-source_kind = "render-manifest-menu"
+annotations = "annotations/overlays/menu/menu-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
 source_record_id = "menu-image"
 artifact = "overlays/menu_module.bin"
 
@@ -96,9 +95,9 @@ load_address = "0x8006faf0"
 image_format = "raw"
 header_size = 0
 loaded_size = 29779
-annotations = "annotations/overlays/movie-overlay_annotations.csv"
-identity_source = "native_renderer/xg_render_manifest.toml"
-source_kind = "render-manifest-movie"
+annotations = "annotations/overlays/movie/movie-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
 source_record_id = "movie-image"
 artifact = "overlays/movie_module.bin"
 
@@ -113,9 +112,9 @@ load_address = "0x801c5000"
 image_format = "raw"
 header_size = 0
 loaded_size = 26624
-annotations = "annotations/overlays/member-change-menu-overlay_annotations.csv"
-identity_source = "native_renderer/xg_render_manifest.toml"
-source_kind = "render-manifest-member-change-menu"
+annotations = "annotations/overlays/menu/member-change-menu-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
 source_record_id = "member-change-menu-image"
 artifact = "overlays/member_change_menu.bin"
 
@@ -130,9 +129,9 @@ load_address = "0x801c5000"
 image_format = "raw"
 header_size = 0
 loaded_size = 55296
-annotations = "annotations/overlays/shop-menu-overlay_annotations.csv"
-identity_source = "native_renderer/xg_render_manifest.toml"
-source_kind = "render-manifest-shop-menu"
+annotations = "annotations/overlays/menu/shop-menu-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
 source_record_id = "shop-menu-image"
 artifact = "overlays/shop_menu.bin"
 
@@ -147,9 +146,9 @@ load_address = "0x801c5000"
 image_format = "raw"
 header_size = 0
 loaded_size = 83968
-annotations = "annotations/overlays/gear-shop-menu-overlay_annotations.csv"
-identity_source = "native_renderer/xg_render_manifest.toml"
-source_kind = "render-manifest-gear-shop-menu"
+annotations = "annotations/overlays/menu/gear-shop-menu-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
 source_record_id = "gear-shop-menu-image"
 artifact = "overlays/gear_shop_menu.bin"
 
@@ -164,9 +163,9 @@ load_address = "0x801dc000"
 image_format = "raw"
 header_size = 0
 loaded_size = 51200
-annotations = "annotations/overlays/gear-helper-overlay_annotations.csv"
-identity_source = "native_renderer/xg_render_manifest.toml"
-source_kind = "render-manifest-gear-helper"
+annotations = "annotations/overlays/gear/gear-helper-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
 source_record_id = "gear-helper-image"
 artifact = "overlays/lib_gear.bin"
 
@@ -181,8 +180,216 @@ load_address = "0x801e5000"
 image_format = "raw"
 header_size = 0
 loaded_size = 20480
-annotations = "annotations/overlays/battle-event-overlay_annotations.csv"
-identity_source = "native_renderer/xg_render_manifest.toml"
-source_kind = "render-manifest-battle-event"
+annotations = "annotations/overlays/battle/battle-event-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
 source_record_id = "battle-event-image"
 artifact = "overlays/battle_event.bin"
+
+[[images]]
+id = "battle-result-overlay"
+subsystem = "battle"
+logical_name = "battle_result.bin"
+sha256 = "c0ae90d4db9f81edfe4b856ac234308614c12dd3a9dd7212be92cb4c5b9d14e8"
+crc32 = "8337fbef"
+size = 26624
+load_address = "0x801de000"
+image_format = "raw"
+header_size = 0
+loaded_size = 26624
+annotations = "annotations/overlays/battle/battle-result-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
+source_record_id = "battle-result-image"
+
+[[images]]
+id = "enter-name-menu-overlay"
+subsystem = "menu"
+logical_name = "enter_name_menu.bin"
+sha256 = "b0c6226511fdf0d3b874cf5e8658ed1fe19fd06833c0e0d61c4762aeb6a6f1b0"
+crc32 = "95ae4479"
+size = 30720
+load_address = "0x801c5000"
+image_format = "raw"
+header_size = 0
+loaded_size = 30720
+annotations = "annotations/overlays/menu/enter-name-menu-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
+source_record_id = "enter-name-menu-image"
+
+[[images]]
+id = "battle-debug-setup-menu-overlay"
+subsystem = "battle"
+logical_name = "battle_debug_setup_menu.bin"
+sha256 = "2bc183a361781237723615b35ce5d5b3e5547fc919d6cda1348a8dadec99a2ea"
+crc32 = "f6bacec3"
+size = 8192
+load_address = "0x801e0000"
+image_format = "raw"
+header_size = 0
+loaded_size = 8192
+annotations = "annotations/overlays/battle/battle-debug-setup-menu-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
+source_record_id = "battle-debug-setup-menu-image"
+
+[[images]]
+id = "battle-runtime-debug-overlay"
+subsystem = "battle"
+logical_name = "battle_runtime_debug.bin"
+sha256 = "4ef85df0c9fa6db377a0ce73c60e25445d71c3c19ac1d0e0e3246d0d7087ec47"
+crc32 = "39c7b5b1"
+size = 10240
+load_address = "0x80280000"
+image_format = "raw"
+header_size = 0
+loaded_size = 10240
+annotations = "annotations/overlays/battle/battle-runtime-debug-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
+source_record_id = "battle-runtime-debug-image"
+
+[[images]]
+id = "movie-str-lib-overlay"
+subsystem = "movie"
+logical_name = "movie_str_lib.bin"
+sha256 = "2a8469095fd33daef61dbbf09d4f106ba1d72904a502763cb89057cbb615a440"
+crc32 = "2bb071fe"
+size = 90112
+load_address = "0x801d3000"
+image_format = "raw"
+header_size = 0
+loaded_size = 90112
+annotations = "annotations/overlays/movie/movie-str-lib-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
+source_record_id = "movie-str-lib-image"
+
+[[images]]
+id = "field-runtime-diagnostics-overlay"
+subsystem = "field"
+logical_name = "field_runtime_diagnostics.bin"
+sha256 = "51cd5e710994516709d1866f15f1e6adf4219c43a5bfd398830ef16f0d5f44b8"
+crc32 = "1d19144c"
+size = 26624
+load_address = "0x80280000"
+image_format = "raw"
+header_size = 0
+loaded_size = 26624
+annotations = "annotations/overlays/field/field-runtime-diagnostics-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
+source_record_id = "field-runtime-diagnostics-image"
+
+[[images]]
+id = "battle-loader-overlay"
+subsystem = "battle"
+logical_name = "battle_loader.bin"
+sha256 = "31a7c8828e87fc854da310925b91fd2221c19dc1a6987b800ca1a4d250632abf"
+crc32 = "4ac45ae6"
+size = 22528
+load_address = "0x801e4000"
+image_format = "raw"
+header_size = 0
+loaded_size = 22528
+annotations = "annotations/overlays/battle/battle-loader-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
+source_record_id = "battle-loader-image"
+
+[[images]]
+id = "battle-green-framebuffer-grid-overlay"
+subsystem = "battle"
+logical_name = "battle_green_framebuffer_grid.bin"
+sha256 = "d5156aab0158dc55a629fb3ddff5f09f21ee8053ce8ffd06350e12490482d6dd"
+crc32 = "3857db10"
+size = 2048
+load_address = "0x801fc000"
+image_format = "raw"
+header_size = 0
+loaded_size = 2048
+annotations = "annotations/overlays/battle/battle-green-framebuffer-grid-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
+source_record_id = "battle-green-framebuffer-grid-image"
+
+[[images]]
+id = "battle-curved-sprite-ribbon-overlay"
+subsystem = "battle"
+logical_name = "battle_curved_sprite_ribbon.bin"
+sha256 = "5720f937ed2758ac21b69501c096d5da1b3aea80b3fe59cd7b5363b3420affb0"
+crc32 = "6bdd004f"
+size = 2048
+load_address = "0x801fc000"
+image_format = "raw"
+header_size = 0
+loaded_size = 2048
+annotations = "annotations/overlays/battle/battle-curved-sprite-ribbon-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
+source_record_id = "battle-curved-sprite-ribbon-image"
+
+[[images]]
+id = "battle-polygon-shatter-overlay"
+subsystem = "battle"
+logical_name = "battle_polygon_shatter.bin"
+sha256 = "8bdc2df18b6d3222f6ba444eb26acc0961c37c52d0d058f01ba68ca490369523"
+crc32 = "40bc5969"
+size = 4096
+load_address = "0x801fc000"
+image_format = "raw"
+header_size = 0
+loaded_size = 4096
+annotations = "annotations/overlays/battle/battle-polygon-shatter-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
+source_record_id = "battle-polygon-shatter-image"
+
+[[images]]
+id = "battle-velocity-sprite-clone-strip-overlay"
+subsystem = "battle"
+logical_name = "battle_velocity_sprite_clone_strip.bin"
+sha256 = "d93be18b501cfeb18586928ee78a378e0f62a5c0f3fafbc2492285e0a59e8067"
+crc32 = "c6b87e46"
+size = 4096
+load_address = "0x801fc000"
+image_format = "raw"
+header_size = 0
+loaded_size = 4096
+annotations = "annotations/overlays/battle/battle-velocity-sprite-clone-strip-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
+source_record_id = "battle-velocity-sprite-clone-strip-image"
+
+[[images]]
+id = "battle-fixed-origin-sprite-marquee-overlay"
+subsystem = "battle"
+logical_name = "battle_fixed_origin_sprite_marquee.bin"
+sha256 = "a96f7e6ed7b704f4c90f686f534b25bfd6af467ea16f2cd1cb870ef8c799da82"
+crc32 = "0098a34d"
+size = 2048
+load_address = "0x801fc000"
+image_format = "raw"
+header_size = 0
+loaded_size = 2048
+annotations = "annotations/overlays/battle/battle-fixed-origin-sprite-marquee-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
+source_record_id = "battle-fixed-origin-sprite-marquee-image"
+
+[[images]]
+id = "battle-framebuffer-ripple-dissolve-overlay"
+subsystem = "battle"
+logical_name = "battle_framebuffer_ripple_dissolve.bin"
+sha256 = "5c65f607264d841d2f4a0f6d0323f1e1c85b642e09750ceded520d47a3f06a83"
+crc32 = "a2330476"
+size = 4096
+load_address = "0x801fc000"
+image_format = "raw"
+header_size = 0
+loaded_size = 4096
+annotations = "annotations/overlays/battle/battle-framebuffer-ripple-dissolve-overlay_annotations.csv"
+identity_source = "annotations/overlays/disc1-images.toml"
+source_kind = "disc-image"
+source_record_id = "battle-framebuffer-ripple-dissolve-image"

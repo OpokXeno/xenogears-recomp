@@ -1,0 +1,38 @@
+# image-id: field-runtime-diagnostics-overlay
+# annotated_functions/total_functions: 29/29
+# Total basis: whole-image AOT range manifest; the leading diagnostic strings are non-code.
+# sha256: 51cd5e710994516709d1866f15f1e6adf4219c43a5bfd398830ef16f0d5f44b8
+# load-address: 0x80280000
+# identity-source: annotations/overlays/disc1-images.toml
+# source-record-id: field-runtime-diagnostics-image
+# format: address, note
+
+0x802811EC, function start — FieldRuntimeDiagnosticsEntry; resets the diagnostics page scroll and selector state when Field enters the loaded image.
+0x80281204, function start — RecordFieldEncounterSelection; records the selected encounter and starts its transient on-screen counter notification.
+0x8028125C, function start — ResetFieldDiagnosticCounters; clears profile checkpoints and all aggregate and per-encounter diagnostic counters.
+0x802812A4, function start — InitializeActorCollisionDebugLines; initializes the transforms and double-buffered line packets used to draw actor collision boxes.
+0x80281400, function start — UpdateAndFlushFieldDiagnostics; runs the active diagnostics page, submits its text, and clears per-frame collision and profiling state.
+0x80281450, function start — DrawActorCollisionDebugBox; projects and queues the twelve edges of the configured actor collision box when collision diagnostics are active.
+0x802814D4, function start — ProjectAndQueueCollisionDebugLine; transforms one 3D line segment into the current LINE_G2 packet and inserts it into the ordering table.
+0x802815B0, function start — UpdateCollisionDebugLineMatrices; composes all collision-line local transforms with the current Field camera matrix.
+0x80281678, function start — ConfigureActorCollisionDebugBoxLines; derives twelve collision-box edges from an actor position and its X Y and Z extents.
+0x80281994, function start — PrintDebugRect; prints a four-component rectangle with the embedded REC diagnostic format.
+0x802819DC, function start — PrintDebugMatrix; prints a matrix as three signed rotation rows with their translation components.
+0x80281A78, function start — PrintDebugVector; prints the three 32-bit components of a VECTOR.
+0x80281ABC, function start — PrintDebugShortVector; prints the three signed 16-bit components of an SVECTOR.
+0x80281B00, function start — RecordFieldProfileCheckpoint; records a named VSync timing checkpoint and advances the frame timing baseline.
+0x80281B90, function start — UpdateAndDrawFieldDiagnosticsMenu; navigates and renders fourteen live Field diagnostics and tuning pages including player scene event CPU memory particle encounter lighting and fade state.
+0x802835E0, function start — UpdateAndDrawParticleBankEditor; renders thirty particle-bank parameters and applies row and vector-component edits from controller input.
+0x80284354, function start — DrawParticleEditorComponentCursor; prints the component cursor only for the selected vector component on the active editor row.
+0x8028439C, function start — DrawParticleEditorRowCursor; colors and marks a particle-editor row according to its selection state and advances the row index.
+0x80284424, function start — AdjustDebugValueFromInput; adjusts a value with modifier-selected step sizes and clamps it to caller-supplied bounds.
+0x802844BC, function start — SetVectorS16Component; writes one of three signed 16-bit vector components.
+0x80284510, function start — GetVectorS16Component; returns one of three signed 16-bit vector components or zero for an invalid index.
+0x8028456C, function start — SetVectorU8Component; writes one of three unsigned byte vector components used by particle color editing.
+0x802845C0, function start — GetVectorU8Component; returns one of three unsigned byte vector components or zero for an invalid index.
+0x8028461C, function start — SetVectorS8Component; writes one of three signed byte vector components used by particle color-offset editing.
+0x80284670, function start — GetVectorS8Component; returns one of three sign-extended byte vector components or zero for an invalid index.
+0x802846CC, function start — EditSelectedParticleBankParameter; dispatches the selected row and component to the corresponding scalar vector flag bitfield or angle field in the live particle bank.
+0x80284EA4, function start — ApplyFieldCameraDebugMouseControls; maps PSX mouse buttons and deltas to Field camera offset dip scale and angle tuning while the debug chord is held.
+0x80284FB4, function start — UploadTaggedImageBlockList; parses tagged image blocks computes their destination rectangles and uploads recognized blocks to VRAM.
+0x802851B0, function start — PrintFieldSoundResourceName; maps recognized Field sound-resource identifiers to embedded bank names and prints the selected name.

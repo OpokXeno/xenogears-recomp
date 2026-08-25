@@ -5,6 +5,7 @@ import tomllib
 from pathlib import Path
 
 from validate_overlay_annotations import DEFAULT_INDEX, ROOT, validate_index
+from extract_disc_overlays import DEFAULT_MANIFEST, DEFAULT_ROOTS, image_plan
 
 
 def test_repository_overlay_annotations_are_valid() -> None:
@@ -25,7 +26,31 @@ def test_repository_catalog_contains_general_gameplay_images() -> None:
         ("gear-shop-menu-overlay", "gear-shop-menu"),
         ("gear-helper-overlay", "gear-helper"),
         ("battle-event-overlay", "battle-event"),
+        ("battle-result-overlay", "battle"),
+        ("enter-name-menu-overlay", "menu"),
+        ("battle-debug-setup-menu-overlay", "battle"),
+        ("battle-runtime-debug-overlay", "battle"),
+        ("movie-str-lib-overlay", "movie"),
+        ("field-runtime-diagnostics-overlay", "field"),
+        ("battle-loader-overlay", "battle"),
+        ("battle-green-framebuffer-grid-overlay", "battle"),
+        ("battle-curved-sprite-ribbon-overlay", "battle"),
+        ("battle-polygon-shatter-overlay", "battle"),
+        ("battle-velocity-sprite-clone-strip-overlay", "battle"),
+        ("battle-fixed-origin-sprite-marquee-overlay", "battle"),
+        ("battle-framebuffer-ripple-dissolve-overlay", "battle"),
     ]
+
+
+def test_authenticated_native_plan_matches_catalog_order() -> None:
+    catalog = tomllib.loads(DEFAULT_INDEX.read_text(encoding="utf-8"))
+    plan = image_plan(DEFAULT_INDEX, DEFAULT_MANIFEST, DEFAULT_ROOTS)
+
+    assert [record["image_id"] for record in plan] == [
+        image["id"] for image in catalog["images"]
+    ]
+    assert all(re.fullmatch(r"[0-9a-f]{64}", record["sha256"]) for record in plan)
+    assert all(Path(record["annotation"]).is_file() for record in plan)
 
 
 def test_overlay_coverage_headers_match_function_rows() -> None:
@@ -114,6 +139,12 @@ source_record_id = "second-source"
     )
 
     assert validate_index(annotations / "index.toml", tmp_path) == []
+
+    nested = annotations / "field"
+    nested.mkdir()
+    (nested / "orphan_annotations.csv").write_text("", encoding="utf-8")
+    errors = validate_index(annotations / "index.toml", tmp_path)
+    assert any("unindexed annotation CSV" in error for error in errors)
 
 
 def test_duplicate_address_in_one_image_is_rejected(tmp_path: Path) -> None:

@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.20)
 project(XenogearsRecomp C CXX)
 
 include(CTest)
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
+find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
 
 set(XG_RENDER_MANIFEST
     "${CMAKE_CURRENT_SOURCE_DIR}/native_renderer/xg_render_manifest.toml"
@@ -25,6 +25,17 @@ set(XG_RENDER_OVERLAY_RANGES
 set(XG_RENDER_RUNTIME_ARTIFACT
     "${CMAKE_CURRENT_SOURCE_DIR}/overlays/field5_runtime.bin"
     CACHE FILEPATH "Private game runtime variant artifact")
+set(XG_DISC_IMAGE
+    "${CMAKE_CURRENT_SOURCE_DIR}/game/disc1.cue"
+    CACHE FILEPATH "Legally owned Xenogears USA Disc 1 CUE/BIN/ISO used for AOT overlays")
+set(XG_OVERLAY_CATALOG
+    "${CMAKE_CURRENT_SOURCE_DIR}/annotations/overlays/index.toml")
+set(XG_OVERLAY_DISC_MANIFEST
+    "${CMAKE_CURRENT_SOURCE_DIR}/annotations/overlays/disc1-images.toml")
+set(XG_OVERLAY_AOT_ROOTS
+    "${CMAKE_CURRENT_SOURCE_DIR}/annotations/overlays/aot-dispatch-roots.toml")
+set(XG_OVERLAY_EXTRACTOR
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/extract_disc_overlays.py")
 set(XG_RENDER_MANIFEST_TOOL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest_fixture.py"
@@ -60,18 +71,7 @@ option(XG_RENDER_NATIVE
 option(XG_RENDER_VALIDATE_OVERLAYS
     "Verify private native-render overlay artifacts during the build"
     OFF)
-if(BUILD_TESTING
-        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/field_module.exe"
-        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/worldmap_module.bin"
-        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/battle_module.bin"
-        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/battling_module.bin"
-        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/menu_module.bin"
-        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/movie_module.bin"
-        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/member_change_menu.bin"
-        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/shop_menu.bin"
-        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/gear_shop_menu.bin"
-        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/lib_gear.bin"
-        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/overlays/battle_event.bin")
+if(BUILD_TESTING)
     add_test(NAME overlay_annotation_catalog
         COMMAND "${Python3_EXECUTABLE}" -m pytest
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_overlay_annotations.py")
@@ -83,6 +83,10 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${XG_RENDER_RUNTIME_VARIANTS}"
     "${XG_RENDER_OVERLAY_RANGES}"
     "${XG_RENDER_GAME_EXE}"
+    "${XG_OVERLAY_CATALOG}"
+    "${XG_OVERLAY_DISC_MANIFEST}"
+    "${XG_OVERLAY_AOT_ROOTS}"
+    "${XG_OVERLAY_EXTRACTOR}"
     ${XG_RENDER_MANIFEST_TOOL_SOURCES}
     ${XG_OVERLAY_CODEGEN_INPUTS})
 if(XG_RENDER_NATIVE AND XG_RENDER_VALIDATE_OVERLAYS)
@@ -150,6 +154,268 @@ endif()
 set(PSXRECOMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp" CACHE PATH
     "psxrecomp framework root (pinned submodule)")
 include(${PSXRECOMP_ROOT}/runtime/runtime.cmake)
+
+if(NOT EXISTS "${XG_DISC_IMAGE}")
+    message(FATAL_ERROR
+        "Xenogears Disc 1 is required to precompile authenticated overlays.\n"
+        "Set -DXG_DISC_IMAGE=/path/to/disc1.cue (or .bin/.iso).")
+endif()
+if(CMAKE_HOST_WIN32)
+    set(XG_RECOMPILER_HOST_SUFFIX ".exe")
+else()
+    set(XG_RECOMPILER_HOST_SUFFIX "")
+endif()
+set(XG_RECOMPILER_EXECUTABLE
+    "${PSXRECOMP_ROOT}/recompiler/build/psxrecomp-game${XG_RECOMPILER_HOST_SUFFIX}"
+    CACHE FILEPATH "psxrecomp-game executable used for AOT overlay generation")
+if(NOT EXISTS "${XG_RECOMPILER_EXECUTABLE}")
+    message(FATAL_ERROR
+        "psxrecomp-game is required for AOT overlay generation: ${XG_RECOMPILER_EXECUTABLE}\n"
+        "Build psxrecomp/recompiler first or set -DXG_RECOMPILER_EXECUTABLE=...")
+endif()
+
+file(GLOB_RECURSE XG_OVERLAY_ANNOTATION_FILES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/annotations/overlays/*_annotations.csv")
+set(XG_OVERLAY_AOT_DIR "${CMAKE_CURRENT_BINARY_DIR}/overlay_aot")
+set(XG_OVERLAY_FINALIZER
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/finalize_static_overlays.py")
+set(XG_OVERLAY_JOB_RUNNER
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_with_job_pool.py")
+set(XG_OVERLAY_CODEGEN_JOBS 2 CACHE STRING
+    "Maximum concurrent authenticated overlay generation jobs")
+if(NOT XG_OVERLAY_CODEGEN_JOBS MATCHES "^[1-9][0-9]*$")
+    message(FATAL_ERROR "XG_OVERLAY_CODEGEN_JOBS must be a positive integer")
+endif()
+set(XG_OVERLAY_JOB_LOCK_DIR "${XG_OVERLAY_AOT_DIR}/job-pool")
+set(XG_OVERLAY_STATIC_C
+    "${XG_OVERLAY_AOT_DIR}/static/overlays_static_dispatch.c")
+set(XG_OVERLAY_DISPATCH_SHARD_PREFIX
+    "${XG_OVERLAY_AOT_DIR}/static/overlays_static_dispatch")
+set(XG_OVERLAY_DISPATCH_SHARD_COUNT 64)
+function(xg_overlay_shard_paths OUTPUT_VARIABLE PREFIX SHARD_COUNT)
+    set(SHARD_PATHS)
+    math(EXPR SHARD_LAST "${SHARD_COUNT} - 1")
+    foreach(SHARD_INDEX RANGE 0 ${SHARD_LAST})
+        if(SHARD_INDEX LESS 10)
+            set(SHARD_SUFFIX "0${SHARD_INDEX}")
+        else()
+            set(SHARD_SUFFIX "${SHARD_INDEX}")
+        endif()
+        list(APPEND SHARD_PATHS "${PREFIX}_${SHARD_SUFFIX}.c")
+    endforeach()
+    set(${OUTPUT_VARIABLE} ${SHARD_PATHS} PARENT_SCOPE)
+endfunction()
+xg_overlay_shard_paths(XG_OVERLAY_STATIC_DISPATCH_SHARDS
+    "${XG_OVERLAY_DISPATCH_SHARD_PREFIX}"
+    ${XG_OVERLAY_DISPATCH_SHARD_COUNT})
+set(XG_OVERLAY_STATIC_COVERAGE
+    "${XG_OVERLAY_AOT_DIR}/static/overlays_static_coverage.json")
+set(XG_OVERLAY_STATIC_SOURCES
+    "${XG_OVERLAY_STATIC_C}" ${XG_OVERLAY_STATIC_DISPATCH_SHARDS})
+set(XG_DISC_DEPENDENCIES "${XG_DISC_IMAGE}")
+if(XG_DISC_IMAGE MATCHES "\\.[Cc][Uu][Ee]$")
+    file(STRINGS "${XG_DISC_IMAGE}" XG_DISC_CUE_FILE_LINE
+        REGEX "^[ \t]*FILE[ \t]+\"[^\"]+\"[ \t]+BINARY"
+        LIMIT_COUNT 1)
+    if(XG_DISC_CUE_FILE_LINE)
+        string(REGEX REPLACE
+            "^[ \t]*FILE[ \t]+\"([^\"]+)\"[ \t]+BINARY.*" "\\1"
+            XG_DISC_CUE_DATA_NAME "${XG_DISC_CUE_FILE_LINE}")
+        get_filename_component(XG_DISC_CUE_DIR "${XG_DISC_IMAGE}" DIRECTORY)
+        list(APPEND XG_DISC_DEPENDENCIES
+            "${XG_DISC_CUE_DIR}/${XG_DISC_CUE_DATA_NAME}")
+    endif()
+endif()
+
+# Generate the same codegen hash consumed by the runtime before any native
+# overlay invocation. psxrecomp-game verifies it and rejects a stale host tool.
+set(PSXRECOMP_CODEGEN_HASH_ROOT "${PSXRECOMP_ROOT}")
+include("${PSXRECOMP_ROOT}/runtime/codegen_hash_sources.cmake")
+set(XG_OVERLAY_CODEGEN_HASH_HEADER
+    "${PSXRECOMP_ROOT}/runtime/include/overlay_codegen_hash.h")
+if(NOT TARGET psxrecomp_codegen_hash)
+    add_custom_command(
+        OUTPUT "${XG_OVERLAY_CODEGEN_HASH_HEADER}"
+        COMMAND "${CMAKE_COMMAND}"
+            -DOUT=${XG_OVERLAY_CODEGEN_HASH_HEADER}
+            "-DSRCS=${PSXRECOMP_CODEGEN_HASH_SRCS}"
+            -P "${PSXRECOMP_ROOT}/runtime/hash_codegen.cmake"
+        DEPENDS ${PSXRECOMP_CODEGEN_HASH_SRCS}
+            "${PSXRECOMP_ROOT}/runtime/hash_codegen.cmake"
+        COMMENT "Hashing native overlay codegen inputs"
+        VERBATIM)
+    add_custom_target(psxrecomp_codegen_hash
+        DEPENDS "${XG_OVERLAY_CODEGEN_HASH_HEADER}")
+endif()
+
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}" "${XG_OVERLAY_EXTRACTOR}"
+        --catalog "${XG_OVERLAY_CATALOG}"
+        --manifest "${XG_OVERLAY_DISC_MANIFEST}"
+        --roots "${XG_OVERLAY_AOT_ROOTS}"
+        --list-json
+    RESULT_VARIABLE XG_OVERLAY_PLAN_RESULT
+    OUTPUT_VARIABLE XG_OVERLAY_PLAN_JSON
+    ERROR_VARIABLE XG_OVERLAY_PLAN_ERROR
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+if(NOT XG_OVERLAY_PLAN_RESULT EQUAL 0)
+    message(FATAL_ERROR "Cannot build authenticated overlay plan:\n${XG_OVERLAY_PLAN_ERROR}")
+endif()
+string(JSON XG_OVERLAY_PLAN_COUNT LENGTH "${XG_OVERLAY_PLAN_JSON}")
+if(XG_OVERLAY_PLAN_COUNT LESS 1)
+    message(FATAL_ERROR "Authenticated overlay plan is empty")
+endif()
+
+set(XG_OVERLAY_UNIT_METADATA)
+set(XG_OVERLAY_AGGREGATE_ARGS)
+math(EXPR XG_OVERLAY_PLAN_LAST "${XG_OVERLAY_PLAN_COUNT} - 1")
+foreach(XG_OVERLAY_INDEX RANGE 0 ${XG_OVERLAY_PLAN_LAST})
+    string(JSON XG_OVERLAY_ID GET "${XG_OVERLAY_PLAN_JSON}"
+        ${XG_OVERLAY_INDEX} image_id)
+    string(JSON XG_OVERLAY_LOAD_ADDRESS GET "${XG_OVERLAY_PLAN_JSON}"
+        ${XG_OVERLAY_INDEX} load_address)
+    string(JSON XG_OVERLAY_ENTRY_PC GET "${XG_OVERLAY_PLAN_JSON}"
+        ${XG_OVERLAY_INDEX} entry_pc)
+    string(JSON XG_OVERLAY_INPUT_SHA256 GET "${XG_OVERLAY_PLAN_JSON}"
+        ${XG_OVERLAY_INDEX} sha256)
+    string(JSON XG_OVERLAY_SIZE GET "${XG_OVERLAY_PLAN_JSON}"
+        ${XG_OVERLAY_INDEX} size)
+    string(JSON XG_OVERLAY_ANNOTATION GET "${XG_OVERLAY_PLAN_JSON}"
+        ${XG_OVERLAY_INDEX} annotation)
+
+    set(XG_OVERLAY_INPUT_DIR "${XG_OVERLAY_AOT_DIR}/inputs")
+    set(XG_OVERLAY_NATIVE_DIR "${XG_OVERLAY_AOT_DIR}/native/${XG_OVERLAY_ID}")
+    set(XG_OVERLAY_RAW "${XG_OVERLAY_INPUT_DIR}/${XG_OVERLAY_ID}.bin")
+    set(XG_OVERLAY_CAPTURE "${XG_OVERLAY_INPUT_DIR}/${XG_OVERLAY_ID}.capture.json")
+    set(XG_OVERLAY_SEEDS "${XG_OVERLAY_INPUT_DIR}/${XG_OVERLAY_ID}.seeds")
+    set(XG_OVERLAY_NATIVE_C "${XG_OVERLAY_NATIVE_DIR}/${XG_OVERLAY_ID}_full.c")
+    set(XG_OVERLAY_NATIVE_RANGES
+        "${XG_OVERLAY_NATIVE_DIR}/${XG_OVERLAY_ID}_full.ranges")
+    set(XG_OVERLAY_NATIVE_PROVENANCE
+        "${XG_OVERLAY_NATIVE_DIR}/${XG_OVERLAY_ID}_input.json")
+    set(XG_OVERLAY_NATIVE_DISPATCH
+        "${XG_OVERLAY_NATIVE_DIR}/${XG_OVERLAY_ID}_dispatch.c")
+    set(XG_OVERLAY_BODY_PREFIX
+        "${XG_OVERLAY_AOT_DIR}/static/${XG_OVERLAY_ID}")
+    # Empirically the emitter produces at most 3.4 C lines per input byte.
+    # One slot per 10 KiB leaves headroom for a 40,000-line shard budget.
+    math(EXPR XG_OVERLAY_BODY_SHARD_COUNT
+        "(${XG_OVERLAY_SIZE} + 9999) / 10000")
+    xg_overlay_shard_paths(XG_OVERLAY_BODY_SHARDS
+        "${XG_OVERLAY_BODY_PREFIX}" ${XG_OVERLAY_BODY_SHARD_COUNT})
+    set(XG_OVERLAY_METADATA
+        "${XG_OVERLAY_AOT_DIR}/metadata/${XG_OVERLAY_ID}.json")
+
+    add_custom_command(
+        OUTPUT "${XG_OVERLAY_RAW}" "${XG_OVERLAY_CAPTURE}" "${XG_OVERLAY_SEEDS}"
+        COMMAND "${Python3_EXECUTABLE}" "${XG_OVERLAY_JOB_RUNNER}"
+            --lock-dir "${XG_OVERLAY_JOB_LOCK_DIR}"
+            --jobs "${XG_OVERLAY_CODEGEN_JOBS}" --
+            "${Python3_EXECUTABLE}" "${XG_OVERLAY_EXTRACTOR}"
+            --disc "${XG_DISC_IMAGE}"
+            --catalog "${XG_OVERLAY_CATALOG}"
+            --manifest "${XG_OVERLAY_DISC_MANIFEST}"
+            --roots "${XG_OVERLAY_AOT_ROOTS}"
+            --image-id "${XG_OVERLAY_ID}"
+            --raw-out "${XG_OVERLAY_RAW}"
+            --capture-out "${XG_OVERLAY_CAPTURE}"
+            --seeds-out "${XG_OVERLAY_SEEDS}"
+        DEPENDS ${XG_DISC_DEPENDENCIES}
+            "${XG_OVERLAY_CATALOG}"
+            "${XG_OVERLAY_DISC_MANIFEST}"
+            "${XG_OVERLAY_AOT_ROOTS}"
+            "${XG_OVERLAY_ANNOTATION}"
+            "${XG_OVERLAY_EXTRACTOR}"
+            "${XG_OVERLAY_JOB_RUNNER}"
+        COMMENT "Authenticating ${XG_OVERLAY_ID} from Disc 1"
+        VERBATIM)
+
+    add_custom_command(
+        OUTPUT "${XG_OVERLAY_NATIVE_C}" "${XG_OVERLAY_NATIVE_RANGES}"
+               "${XG_OVERLAY_NATIVE_PROVENANCE}"
+        BYPRODUCTS "${XG_OVERLAY_NATIVE_DISPATCH}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${XG_OVERLAY_NATIVE_DIR}"
+        COMMAND "${CMAKE_COMMAND}" -E env PSX_CPS=1
+            "${Python3_EXECUTABLE}" "${XG_OVERLAY_JOB_RUNNER}"
+            --lock-dir "${XG_OVERLAY_JOB_LOCK_DIR}"
+            --jobs "${XG_OVERLAY_CODEGEN_JOBS}" --
+            "${XG_RECOMPILER_EXECUTABLE}"
+            --raw-image "${XG_OVERLAY_RAW}"
+            --load-address "${XG_OVERLAY_LOAD_ADDRESS}"
+            --entry-pc "${XG_OVERLAY_ENTRY_PC}"
+            --input-sha256 "${XG_OVERLAY_INPUT_SHA256}"
+            --out-stem "${XG_OVERLAY_ID}"
+            --seeds "${XG_OVERLAY_SEEDS}"
+            --out-dir "${XG_OVERLAY_NATIVE_DIR}"
+            --overlay
+            --discovery whole-image
+            --ws-config "${CMAKE_CURRENT_SOURCE_DIR}/game.toml"
+            --game-identity-sha256 "${XG_RENDER_GAME_IDENTITY_SHA256}"
+            --manifest-digest-sha256 "${XG_RENDER_MANIFEST_IDENTITY_SHA256}"
+            --project-root "${CMAKE_CURRENT_SOURCE_DIR}"
+            --runtime-include "${PSXRECOMP_ROOT}/runtime/include"
+        DEPENDS "${XG_OVERLAY_RAW}" "${XG_OVERLAY_SEEDS}"
+            "${XG_RECOMPILER_EXECUTABLE}"
+            psxrecomp_codegen_hash
+            "${XG_OVERLAY_CODEGEN_HASH_HEADER}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/game.toml"
+            "${XG_OVERLAY_JOB_RUNNER}"
+            ${XG_OVERLAY_CODEGEN_INPUTS}
+        COMMENT "Native recompiling ${XG_OVERLAY_ID}"
+        VERBATIM)
+
+    add_custom_command(
+        OUTPUT ${XG_OVERLAY_BODY_SHARDS} "${XG_OVERLAY_METADATA}"
+        COMMAND "${Python3_EXECUTABLE}" "${XG_OVERLAY_JOB_RUNNER}"
+            --lock-dir "${XG_OVERLAY_JOB_LOCK_DIR}"
+            --jobs "${XG_OVERLAY_CODEGEN_JOBS}" --
+            "${Python3_EXECUTABLE}" "${XG_OVERLAY_FINALIZER}" unit
+            --capture "${XG_OVERLAY_CAPTURE}"
+            --generated-c "${XG_OVERLAY_NATIVE_C}"
+            --ranges "${XG_OVERLAY_NATIVE_RANGES}"
+            --provenance "${XG_OVERLAY_NATIVE_PROVENANCE}"
+            --game-toml "${CMAKE_CURRENT_SOURCE_DIR}/game.toml"
+            --input-sha256 "${XG_OVERLAY_INPUT_SHA256}"
+            --entry-pc "${XG_OVERLAY_ENTRY_PC}"
+            --discovery whole-image
+            --game-identity-sha256 "${XG_RENDER_GAME_IDENTITY_SHA256}"
+            --manifest-identity-sha256 "${XG_RENDER_MANIFEST_IDENTITY_SHA256}"
+            --body-out-prefix "${XG_OVERLAY_BODY_PREFIX}"
+            --body-shard-count "${XG_OVERLAY_BODY_SHARD_COUNT}"
+            --metadata-out "${XG_OVERLAY_METADATA}"
+        DEPENDS "${XG_OVERLAY_CAPTURE}" "${XG_OVERLAY_NATIVE_C}"
+            "${XG_OVERLAY_NATIVE_RANGES}" "${XG_OVERLAY_NATIVE_PROVENANCE}"
+            "${XG_OVERLAY_FINALIZER}"
+            "${XG_OVERLAY_JOB_RUNNER}"
+            "${PSXRECOMP_ROOT}/tools/compile_overlays.py"
+        COMMENT "Finalizing native unit ${XG_OVERLAY_ID}"
+        VERBATIM)
+
+    list(APPEND XG_OVERLAY_STATIC_SOURCES ${XG_OVERLAY_BODY_SHARDS})
+    list(APPEND XG_OVERLAY_UNIT_METADATA "${XG_OVERLAY_METADATA}")
+    list(APPEND XG_OVERLAY_AGGREGATE_ARGS --unit "${XG_OVERLAY_METADATA}")
+endforeach()
+
+add_custom_command(
+    OUTPUT "${XG_OVERLAY_STATIC_C}" ${XG_OVERLAY_STATIC_DISPATCH_SHARDS}
+           "${XG_OVERLAY_STATIC_COVERAGE}"
+    COMMAND "${Python3_EXECUTABLE}" "${XG_OVERLAY_JOB_RUNNER}"
+        --lock-dir "${XG_OVERLAY_JOB_LOCK_DIR}"
+        --jobs "${XG_OVERLAY_CODEGEN_JOBS}" --
+        "${Python3_EXECUTABLE}" "${XG_OVERLAY_FINALIZER}" aggregate
+        ${XG_OVERLAY_AGGREGATE_ARGS}
+        --game-identity-sha256 "${XG_RENDER_GAME_IDENTITY_SHA256}"
+        --manifest-identity-sha256 "${XG_RENDER_MANIFEST_IDENTITY_SHA256}"
+        --dispatch-main-out "${XG_OVERLAY_STATIC_C}"
+        --dispatch-shard-prefix "${XG_OVERLAY_DISPATCH_SHARD_PREFIX}"
+        --dispatch-shard-count "${XG_OVERLAY_DISPATCH_SHARD_COUNT}"
+        --coverage-out "${XG_OVERLAY_STATIC_COVERAGE}"
+    DEPENDS ${XG_OVERLAY_UNIT_METADATA}
+        "${XG_OVERLAY_FINALIZER}"
+        "${XG_OVERLAY_JOB_RUNNER}"
+        "${PSXRECOMP_ROOT}/tools/compile_overlays.py"
+    COMMENT "Aggregating authenticated native overlay dispatch"
+    VERBATIM)
 if(PSX_SDL3)
     add_compile_definitions(PSX_SDL3=1)
 endif()
@@ -204,6 +470,7 @@ set(PSXRT_LAUNCHER_BOXART "${CMAKE_CURRENT_SOURCE_DIR}/assets/boxart.tga")
 psxrecomp_add_runtime_target(psx-runtime
     GAME_GENERATED_FULL_C      ${GAME_FULL_C}
     GAME_GENERATED_DISPATCH_C  "${CMAKE_CURRENT_SOURCE_DIR}/generated/slus_006.64_dispatch.c"
+    GAME_OVERLAY_STATIC_C      ${XG_OVERLAY_STATIC_SOURCES}
     WINDOW_TITLE               "XenogearsRecomp"
     DEBUG_PORT                 4370
     DEFAULT_GAME_CONFIG_PATH   "game.toml"
@@ -211,6 +478,12 @@ psxrecomp_add_runtime_target(psx-runtime
     GAME_MANIFEST_DIGEST_SHA256 "${XG_RENDER_MANIFEST_IDENTITY_SHA256}"
     OVERLAY_PLAN_HASH          "${XG_OVERLAY_PLAN_HASH}"
 )
+add_custom_command(TARGET psx-runtime POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+        "${XG_OVERLAY_STATIC_COVERAGE}"
+        "$<TARGET_FILE_DIR:psx-runtime>/overlays_static_coverage.json"
+    COMMENT "Staging byte-free static overlay coverage metadata"
+    VERBATIM)
 
 target_link_libraries(psx-runtime PRIVATE
     xg_visual_state
@@ -227,6 +500,12 @@ target_compile_definitions(psx-runtime PRIVATE
     PSX_INPUT_REPLAY_XG_BASELINE=1
     PSX_INPUT_REPLAY_XG_AUTH_PROOF=1)
 if(TARGET psx-runtime-pgxp)
+    add_custom_command(TARGET psx-runtime-pgxp POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${XG_OVERLAY_STATIC_COVERAGE}"
+            "$<TARGET_FILE_DIR:psx-runtime-pgxp>/overlays_static_coverage.json"
+        COMMENT "Staging byte-free static overlay coverage metadata"
+        VERBATIM)
     target_link_libraries(psx-runtime-pgxp PRIVATE
         xg_visual_state
         xg_render_ir

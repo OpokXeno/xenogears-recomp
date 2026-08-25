@@ -98,6 +98,13 @@ tools/*
 !tools/native_render_overlay_codegen.py
 !tools/native_render_overlay_ranges.py
 !tools/validate_overlay_annotations.py
+!tools/census_disc_overlays.py
+!tools/test_census_disc_overlays.py
+!tools/extract_disc_overlays.py
+!tools/finalize_static_overlays.py
+!tools/test_finalize_static_overlays.py
+!tools/run_with_job_pool.py
+!tools/test_run_with_job_pool.py
 !tools/native_render_field_character_shadow_schema.py
 !tools/native_render_producer_family_schema.py
 !tools/native_render_producer_family_scratch.py

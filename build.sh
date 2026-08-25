@@ -14,7 +14,9 @@
 #   - pkg-config
 #   - SDL3 3.4+ development library
 #   - Python 3.11+
-#   - Place your legally owned Xenogears disc 1 EXE at ./game/slus_006.64
+#   - Place your legally owned Xenogears Disc 1 at ./game/disc1.cue,
+#     ./game/disc1.bin, or ./game/disc1.iso; extracted overlay binaries are not required
+#   - Place its boot EXE at ./game/slus_006.64
 #   - Place your legally owned retail BIOS at ./psxrecomp/bios/SCPH1001.BIN for source generation
 #
 # Examples:
@@ -43,6 +45,7 @@ RUNTIME_CMAKE_ARGS=(
     "-DBUILD_TESTING=OFF"
     "-DPSX_SDL_BACKEND=SDL3"
     "-DSDL_WAYLAND=${PSX_SDL_WAYLAND:-ON}"
+    "-DXG_RENDER_VALIDATE_OVERLAYS=OFF"
 )
 if [[ "$BUILD_TYPE" == "ReleaseNoOpt" ]]; then
     # Keep release semantics (NDEBUG) while removing compiler optimization.
@@ -66,14 +69,46 @@ RENDER_MANIFEST="$ROOT/native_renderer/xg_render_manifest.toml"
 GAME_EXE="$ROOT/game/slus_006.64"
 PYTHON="${PYTHON:-python3}"
 NATIVE_RENDER="${XG_RENDER_NATIVE:-ON}"
+DISC_IMAGE="${XG_DISC:-}"
+if [[ -z "$DISC_IMAGE" ]]; then
+    for CANDIDATE in \
+        "$ROOT/game/disc1.cue" \
+        "$ROOT/game/disc1.bin" \
+        "$ROOT/game/disc1.iso"; do
+        if [[ -f "$CANDIDATE" ]]; then
+            DISC_IMAGE="$CANDIDATE"
+            break
+        fi
+    done
+elif [[ "$DISC_IMAGE" != /* ]]; then
+    DISC_IMAGE="$ROOT/$DISC_IMAGE"
+fi
+if [[ -z "$DISC_IMAGE" || ! -f "$DISC_IMAGE" ]]; then
+    echo "!!> ERROR: Xenogears Disc 1 image not found."
+    echo "    Place disc1.cue, disc1.bin, or disc1.iso under $ROOT/game"
+    echo "    or set XG_DISC to its path."
+    exit 1
+fi
 
 # --- Auto-detect number of parallel jobs ---
-if command -v nproc &>/dev/null; then
-    PARALLEL="$(nproc)"
-elif command -v sysctl &>/dev/null && sysctl -n hw.logicalcpu &>/dev/null; then
-    PARALLEL="$(sysctl -n hw.logicalcpu)"
-else
-    PARALLEL=4
+PARALLEL="${BUILD_JOBS:-${CMAKE_BUILD_PARALLEL_LEVEL:-}}"
+if [[ -z "$PARALLEL" ]]; then
+    if command -v nproc &>/dev/null; then
+        PARALLEL="$(nproc)"
+    elif command -v sysctl &>/dev/null && sysctl -n hw.logicalcpu &>/dev/null; then
+        PARALLEL="$(sysctl -n hw.logicalcpu)"
+    else
+        PARALLEL=4
+    fi
+    # AOT compiler processes are memory-heavy; unconstrained logical-core
+    # counts can exhaust memory before compilation starts.
+    if (( PARALLEL > 16 )); then
+        PARALLEL=16
+    fi
+fi
+if [[ ! "$PARALLEL" =~ ^[1-9][0-9]*$ ]]; then
+    echo "!!> ERROR: BUILD_JOBS must be a positive integer."
+    exit 1
 fi
 
 if [[ "$NATIVE_RENDER" == "OFF" ]]; then
@@ -125,6 +160,8 @@ cmake -S "$ROOT" -B "$ROOT/$BUILD_DIR" -G "$GENERATOR" \
     -DPSX_RECOMP_UI=ON \
     -DRECOMP_UI_ROOT="$ROOT/recomp-ui" \
     -DXG_RENDER_NATIVE="$NATIVE_RENDER" \
+    -DXG_DISC_IMAGE="$DISC_IMAGE" \
+    -DXG_RECOMPILER_EXECUTABLE="$RECOMPILER_BUILD/psxrecomp-game" \
     "${RUNTIME_CMAKE_ARGS[@]}"
 cmake --build "$ROOT/$BUILD_DIR" --target psx-runtime -j "$PARALLEL"
 

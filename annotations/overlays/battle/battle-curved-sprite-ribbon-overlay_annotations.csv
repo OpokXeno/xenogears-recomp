@@ -1,0 +1,12 @@
+# image-id: battle-curved-sprite-ribbon-overlay
+# annotated_functions/total_functions: 3/3
+# Total basis: whole-image AOT range manifest.
+# sha256: 5720f937ed2758ac21b69501c096d5da1b3aea80b3fe59cd7b5363b3420affb0
+# load-address: 0x801fc000
+# identity-source: annotations/overlays/disc1-images.toml
+# source-record-id: battle-curved-sprite-ribbon-image
+# format: address, note
+
+0x801FC000, function start — UpdateCurvedSpriteSliceRibbon; advances the ribbon's base phase by its configured per-frame phase velocity.
+0x801FC020, function start — DrawCurvedSpriteSliceRibbon; divides the actor sprite into four-pixel horizontal strips and projects them with evolving cosine offsets to form a curved ribbon.
+0x801FC53C, function start — CreateCurvedSpriteSliceRibbon; registers an actor-owned task and stores the phase radius and derivative parameters controlling ribbon curvature.

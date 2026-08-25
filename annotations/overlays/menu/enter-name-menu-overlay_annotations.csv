@@ -1,0 +1,77 @@
+# image-id: enter-name-menu-overlay
+# annotated_functions/total_functions: 68/68
+# Total basis: whole-image AOT range manifest.
+# sha256: b0c6226511fdf0d3b874cf5e8658ed1fe19fd06833c0e0d61c4762aeb6a6f1b0
+# load-address: 0x801c5000
+# identity-source: annotations/overlays/disc1-images.toml
+# source-record-id: enter-name-menu-image
+# format: address, note
+
+0x801C5040, function start — EnterNameMenuIsCharacterFlagSet; tests a character availability bit.
+0x801C505C, function start — EnterNameMenuManageResourceState; allocates clears or frees resource state.
+0x801C50C0, function start — EnterNameMenuSetManager; allocates or frees menu-manager state.
+0x801C5124, function start — EnterNameMenuManageSelectionMenu; allocates or frees selection-menu state.
+0x801C5188, function start — EnterNameMenuManageState354; allocates or frees auxiliary state at offset 0x354.
+0x801C51EC, function start — EnterNameMenuManageState330; allocates or frees auxiliary state at offset 0x330.
+0x801C5250, function start — EnterNameMenuManageState348; allocates or frees auxiliary state at offset 0x348.
+0x801C52B4, function start — EnterNameMenuManageState1E20; allocates or frees name-entry display state.
+0x801C5318, function start — EnterNameMenuLoadResources; decompresses textures names and sound resources.
+0x801C58B8, function start — EnterNameMenuInitialize; initializes character availability and loads resources.
+0x801C5A30, function start — EnterNameMenuResetRenderContext; resets double-buffer render state.
+0x801C5A40, function start — EnterNameMenuUploadSmallVramImage; uploads an initialized 16x1 image.
+0x801C5ABC, function start — EnterNameMenuInitializeStringFt4Pair; initializes double-buffered string quads.
+0x801C5CFC, function start — EnterNameMenuInitializeTextEntryPairs; rasterizes paired strings and builds their quads.
+0x801C5EAC, function start — EnterNameMenuInitializeTextResources; initializes text entries and a small VRAM image.
+0x801C5F08, function start — EnterNameMenuInitializeWindowBorders; resolves border texture metadata.
+0x801C6010, function start — EnterNameMenuClearManagerFlags; clears manager selection and render flags.
+0x801C6040, function start — EnterNameMenuInitializeShadedQuad; initializes a shaded POLY_G4.
+0x801C60BC, function start — EnterNameMenuInitializeBackgrounds; initializes selection and dimming primitives.
+0x801C6408, function start — EnterNameMenuSetVertices; builds screen-centered quad vertices.
+0x801C6460, function start — EnterNameMenuSetWindowBorderPrimitive; configures a translucent border primitive.
+0x801C64A8, function start — EnterNameMenuInitializeWindowGraphics; initializes one window packet state.
+0x801C67C4, function start — EnterNameMenuInitializeScrollBar; initializes scroll-bar graphics.
+0x801C6928, function start — EnterNameMenuInitializeWindowBorderCorners; initializes four border corners.
+0x801C6B70, function start — EnterNameMenuSetWindowBorderTop; configures top-border geometry.
+0x801C6EB4, function start — EnterNameMenuSetWindowBorderBottom; configures bottom-border geometry.
+0x801C7200, function start — EnterNameMenuSetWindowBorderLeft; configures left-border geometry.
+0x801C7548, function start — EnterNameMenuSetWindowBorderRight; configures right-border geometry.
+0x801C7894, function start — EnterNameMenuSetWindow; assembles and activates a complete window.
+0x801C7A18, function start — EnterNameMenuFreeWindow; deactivates and frees a window.
+0x801C7AA4, function start — EnterNameMenuInitializeWindow; allocates or configures a window.
+0x801C7C28, function start — EnterNameMenuUpdateWindows; advances window-opening dimensions.
+0x801C7D74, function start — EnterNameMenuRenderTopWindowBorder; projects and queues the top border.
+0x801C7F48, function start — EnterNameMenuRenderBottomWindowBorder; projects and queues the bottom border.
+0x801C811C, function start — EnterNameMenuRenderLeftWindowBorder; projects and queues the left border.
+0x801C82F0, function start — EnterNameMenuRenderRightWindowBorder; projects and queues the right border.
+0x801C84C4, function start — EnterNameMenuRenderWindowBackground; projects and queues a window background.
+0x801C8600, function start — EnterNameMenuRenderWindowBorderCorners; projects and queues four corners.
+0x801C874C, function start — EnterNameMenuRenderScrollBar; projects and queues scroll-bar packets.
+0x801C8970, function start — EnterNameMenuRenderWindows; renders all active windows.
+0x801C8AE8, function start — EnterNameMenuRenderPointerCursors; positions and queues active pointers.
+0x801C8E38, function start — EnterNameMenuRenderAuxGroup4; queues up to four enabled auxiliary primitives.
+0x801C8EC8, function start — EnterNameMenuRenderAuxGroup8; queues up to eight enabled auxiliary primitives.
+0x801C8F58, function start — EnterNameMenuRenderAuxQuads; projects and queues up to six auxiliary quads.
+0x801C90D0, function start — EnterNameMenuRenderAuxGroup6; queues up to six enabled auxiliary primitives.
+0x801C9160, function start — EnterNameMenuRenderPromptText; projects and queues prompt text.
+0x801C92BC, function start — EnterNameMenuRenderBackgroundDim; queues fullscreen dimming and draw mode.
+0x801C9338, function start — EnterNameMenuRenderNameEntryUi; renders the name character grid controls and cursor.
+0x801C97FC, function start — EnterNameMenuRenderAuxiliaryGroups; dispatches the auxiliary graphics groups.
+0x801C983C, function start — EnterNameMenuRender; composes windows pointers name-entry graphics and dimming.
+0x801C989C, function start — EnterNameMenuPlaySoundEffect; submits a menu sound effect.
+0x801C98E8, function start — EnterNameMenuPollInput; maps controller events into menu commands.
+0x801C9AF4, function start — EnterNameMenuUpdateTransitionEffect; advances rotation and depth transitions.
+0x801C9C34, function start — EnterNameMenuUpdateAndRender; updates input transitions rendering and OT submission.
+0x801C9D5C, function start — EnterNameMenuInitializePointerCursors; allocates and initializes pointer cursors.
+0x801C9F1C, function start — EnterNameMenuFreePointerCursors; disables flushes and frees pointer cursors.
+0x801C9F60, function start — EnterNameMenuStartOpenMenuTransition; starts the opening animation and sound.
+0x801C9F90, function start — EnterNameMenuStartCloseMenuTransition; starts the closing animation and sound.
+0x801C9FC0, function start — EnterNameMenuInitializePromptText; allocates rasterizes and uploads prompt text.
+0x801CA39C, function start — EnterNameMenuFreePromptText; disables and frees prompt-text resources.
+0x801CA400, function start — EnterNameMenuFree; tears down graphics sound and allocated menu state.
+0x801CA558, function start — EnterNameMenuInitializeCharacterGridGraphics; builds selectable character labels and control graphics.
+0x801CADC8, function start — EnterNameMenuInitializeNameEntryScreen; creates the window prompt character grid and field sprites.
+0x801CB1C4, function start — EnterNameMenuUpdateEnteredNameTexture; rasterizes the current name and uploads its texture.
+0x801CB25C, function start — EnterNameMenuInitializeNameBuffers; prepares encoded and display buffers from the saved name.
+0x801CB2F0, function start — EnterNameMenuGetEncodedNameLength; counts encoded characters up to the terminator.
+0x801CB33C, function start — EnterNameMenuMainLoop; handles grid navigation editing redraws and name commit.
+0x801CBDBC, function start — EnterNameMenuMain; manages the complete Enter Name menu lifetime.

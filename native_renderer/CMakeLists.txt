@@ -601,8 +601,6 @@ if(BUILD_TESTING)
         COMMAND test_xg_native_render_baseline_adapter)
     add_test(NAME xg_render_manifest
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/contracts/test_native_render_manifest.py")
-    add_test(NAME xg_render_manifest_build
-        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/contracts/test_native_render_manifest_build.py")
     add_test(NAME xg_render_manifest_field_identity
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/contracts/test_native_render_manifest_field_identity.py")
     add_test(NAME xg_render_manifest_auth_metadata

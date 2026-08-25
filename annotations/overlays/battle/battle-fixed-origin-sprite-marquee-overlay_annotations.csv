@@ -1,0 +1,14 @@
+# image-id: battle-fixed-origin-sprite-marquee-overlay
+# annotated_functions/total_functions: 5/5
+# Total basis: whole-image AOT range manifest.
+# sha256: a96f7e6ed7b704f4c90f686f534b25bfd6af467ea16f2cd1cb870ef8c799da82
+# load-address: 0x801fc000
+# identity-source: annotations/overlays/disc1-images.toml
+# source-record-id: battle-fixed-origin-sprite-marquee-image
+# format: address, note
+
+0x801FC000, function start — MeasureSpriteFrameBounds; scans all sprite frame rectangles and returns their count dimensions and minimum and maximum local bounds.
+0x801FC0EC, function start — UpdateFixedOriginSpriteMarquee; decrements the task's horizontal wrap phase by the actor's configured per-frame velocity.
+0x801FC110, function start — DrawClippedSpriteCloneAtHorizontalOffset; projects a sprite clone at the requested offset clips its left edge and returns whether it touches the viewport.
+0x801FC5C4, function start — DrawFixedOriginSpriteMarquee; restores the captured actor origin and emits sixteen modulo-spaced horizontal sprite copies.
+0x801FC6FC, function start — CreateFixedOriginSpriteMarquee; registers the actor-owned marquee marks its actor flag captures its origin and clears phase state.

@@ -1,9 +1,9 @@
 # image-id: member-change-menu-overlay
-# annotated_functions/total_functions: 64/67
-# Total basis: union of Ghidra functions and recovered callbacks/entries.
+# annotated_functions/total_functions: 67/67
+# Total basis: audited whole-image ranges; excludes the 0x801C5000 switch table misidentified as code.
 # sha256: 3b9e2b890c27ae0de97fe343ac75cd35c05fe7f9605ae387d2166da0be78109c
 # load-address: 0x801c5000
-# identity-source: native_renderer/xg_render_manifest.toml
+# identity-source: annotations/overlays/disc1-images.toml
 # source-record-id: member-change-menu-image
 # format: address, note
 
@@ -20,6 +20,8 @@
 0x801C5714, function start — MemberChangeMenuResetRenderContext; resets double-buffer state.
 0x801C5724, function start — MemberChangeMenuUploadSmallVramImage; uploads an initialized 16x1 image.
 0x801C57A0, function start — MemberChangeMenuInitializeStringFt4Pair; initializes double-buffered string quads.
+0x801C59E0, function start — MemberChangeMenuInitializeStringGroup; renders a counted list of menu string IDs in pairs, uploads each rasterized pair to VRAM, and initializes their double-buffered primitives.
+0x801C5B90, function start — MemberChangeMenuInitializeTextGraphics; transfers the system text palette, allocates the shared string buffer, initializes four common strings, and uploads the auxiliary VRAM image.
 0x801C5BEC, function start — MemberChangeMenuInitializeWindowBorders; resolves border texture metadata.
 0x801C5CF4, function start — MemberChangeMenuClearManagerFlags; clears manager render and selection flags.
 0x801C5D24, function start — MemberChangeMenuInitializeShadedQuad; initializes a vertical POLY_G4 gradient.
@@ -57,6 +59,7 @@
 0x801C9270, function start — MemberChangeMenuPlaySoundEffect; submits a menu sound effect.
 0x801C92AC, function start — MemberChangeMenuPollInput; maps controller events into commands.
 0x801C94A0, function start — MemberChangeMenuUpdateAndRender; updates input, buffers, rendering, and OT submission.
+0x801C95A0, function start — MemberChangeMenuUploadCharacterNamePair; renders two adjacent character names and uploads their packed 40x13 VRAM strip.
 0x801C969C, function start — MemberChangeMenuParseNumberToString; converts an integer to display digits.
 0x801C9748, function start — MemberChangeMenuFree; commits the party and tears down resources.
 0x801C9908, function start — MemberChangeMenuRebuildAvailableCharacters; rebuilds benched-character availability.

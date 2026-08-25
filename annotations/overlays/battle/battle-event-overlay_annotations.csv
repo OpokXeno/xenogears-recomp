@@ -1,9 +1,9 @@
 # image-id: battle-event-overlay
 # annotated_functions/total_functions: 105/105
-# Total basis: complete MIPS control-flow census across the 19,516-byte payload.
+# Total basis: whole-image AOT range manifest, including authenticated overlapping roots.
 # sha256: 1cac23da143e6dfc8f1f4b52ed5754392ea853ee58d6e62d65fd7fbfa86932cc
 # load-address: 0x801e5000
-# identity-source: native_renderer/xg_render_manifest.toml
+# identity-source: annotations/overlays/disc1-images.toml
 # source-record-id: battle-event-image
 # format: address, note
 

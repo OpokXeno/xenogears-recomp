@@ -1,0 +1,17 @@
+# image-id: battle-framebuffer-ripple-dissolve-overlay
+# annotated_functions/total_functions: 8/8
+# Total basis: whole-image AOT range manifest.
+# sha256: 5c65f607264d841d2f4a0f6d0323f1e1c85b642e09750ceded520d47a3f06a83
+# load-address: 0x801fc000
+# identity-source: annotations/overlays/disc1-images.toml
+# source-record-id: battle-framebuffer-ripple-dissolve-image
+# format: address, note
+
+0x801FC000, function start — UpdateFramebufferRadialRippleDissolve; advances ripple phase amplitude age depth translation and the delayed grayscale fade.
+0x801FC11C, function start — DrawFramebufferRadialRippleDissolve; applies distance-phased sinusoidal depth and grayscale then projects and submits all 560 textured triangles.
+0x801FC400, function start — SynchronizeAndFreeFramebufferRippleState; waits for GPU drawing to finish and frees the large ripple mesh allocation.
+0x801FC434, function start — DeleteFramebufferRippleTask; removes task and timer registrations and queues the task allocation for deferred release.
+0x801FC470, function start — CreateFramebufferRippleMesh; allocates the mesh state initializes its object pointers and builds the complete ripple mesh.
+0x801FC4A8, function start — InitializeFramebufferRippleMesh; constructs a 20 by 14 screenshot mesh and derives each vertex's initial radial phase from its center distance.
+0x801FC898, function start — RunFramebufferRippleTransitionOnTemporaryStack; runs the complete ripple transition on an allocated temporary stack then restores and frees it.
+0x801FC8F4, function start — RunFramebufferRadialRippleDissolve; captures the framebuffer runs the semitransparent ripple and fade loop restores VRAM and releases temporary resources.

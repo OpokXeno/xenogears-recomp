@@ -1,0 +1,60 @@
+# image-id: battle-loader-overlay
+# annotated_functions/total_functions: 51/51
+# Total basis: whole-image AOT range manifest excluding the leading callback table.
+# sha256: 31a7c8828e87fc854da310925b91fd2221c19dc1a6987b800ca1a4d250632abf
+# load-address: 0x801e4000
+# identity-source: annotations/overlays/disc1-images.toml
+# source-record-id: battle-loader-image
+# format: address, note
+
+0x801E4048, function start — BattleLoaderResetVisualEntityState; clears loader globals and initializes eleven visual-entity records from the selected party and character-versus-Gear state.
+0x801E4160, function start — BattleLoaderConfigureEntityLayout; builds party and enemy slot mappings and resolves each active entity's initial arena position.
+0x801E4870, function start — BattleLoaderLoadEnemyDefinitions; copies eight selected enemy definitions relocates their script pointers and clears enemy script variables.
+0x801E4AC0, function start — BattleLoaderInitializePartyDisplayState; applies initial party status and selects AP fuel or hidden HUD displays from character and Gear state.
+0x801E4CD0, function start — BattleLoaderBuildBattleInventory; clamps quantities removes empty entries and compacts usable character and Gear items into Battle inventory arrays.
+0x801E4E7C, function start — BattleLoaderInitializeTurnOrder; randomizes entity indices applies immediate-readiness flags and normalizes initial readiness timers.
+0x801E5014, function start — BattleLoaderInitializeCommandsAndTargets; installs party command layouts computes facing targets and enforces no-Gear and no-escape restrictions.
+0x801E5384, function start — BattleLoaderLoadPartyResources; copies party and Gear statistics decompresses combat UI resources uploads portraits and queues encounter configuration files.
+0x801E5840, function start — BattleLoaderRunInitializationPhase; dispatches the four staged Battle initialization phases from core resources through HUD creation.
+0x801E5924, function start — BattleLoaderInitializeHudPrimitives; initializes textured gauges AP and fuel polygons font palettes and line primitives for the party HUD.
+0x801E5D2C, function start — BattleLoaderInitializeOverlayPrimitives; creates paired semitransparent quads and draw-mode packets used by Battle UI overlays.
+0x801E5E78, function start — BattleLoaderRenderItemTargetLabels; allocates ten small text textures and renders localized item-target labels into them.
+0x801E5EE8, function start — BattleLoaderBuildPartyHudText; builds status labels name strips and HP and MP primitives for each occupied party member.
+0x801E6290, function start — BattleLoaderInitializePartyHud; initializes both general HUD primitives and party-specific HUD text.
+0x801E62B8, function start — BattleLoaderInitializeItemTargetUi; initializes overlay packets and pre-renders item-target label textures.
+0x801E62E0, function start — BattleLoaderCreateSpriteLoadingTask; creates the asynchronous Battle sprite loader while guarding task creation with the resident flag.
+0x801E6314, function start — BattleLoaderInstallEnemyVisualAssets; uploads enemy sprite sheets binds animation streams resolves shared visuals and initializes enemy Gear meshes.
+0x801E6710, function start — BattleLoaderCreateEnemySpriteActors; creates normal sprite actors for occupied enemy slots with resolved sprite data.
+0x801E67A4, function start — BattleLoaderCreateSpriteActor; allocates and configures a Battle sprite actor with entity position direction animation and visibility state.
+0x801E693C, function start — BattleLoaderQueuePartySpriteFiles; builds and starts requests for non-Gear party character sprite packages.
+0x801E6A4C, function start — BattleLoaderStartPartyGearEntranceLoads; creates Gear loading tasks for occupied party slots that enter Battle as Gears.
+0x801E6AC4, function start — BattleLoaderCreatePartySpriteActors; creates normal party sprites assigns VRAM and animation resources and starts entrance animation where required.
+0x801E6C80, function start — BattleLoaderWaitForPartyLanding; waits for all normal party actors to reach terrain height then enables Battle time and removes the loader task.
+0x801E6D34, function start — BattleLoaderBeginPartyLandingDelay; starts the final sixteen-frame entrance delay and switches to the landing-completion callback.
+0x801E6D6C, function start — BattleLoaderWaitForMusicAndStartGearEntrances; waits for music readiness releases its temporary resource and starts party Gear entrances.
+0x801E6DC8, function start — BattleLoaderUploadCommonSpriteTextures; decompresses and uploads the common Battle sprite texture package then synchronizes the GPU.
+0x801E6E48, function start — BattleLoaderFinalizeCommonSpriteAssets; uploads common textures initializes animations loads the Battle sequence and advances entrance handling.
+0x801E6F00, function start — BattleLoaderQueueCommonSpriteAssets; creates party sprites and queues common textures animations and the Battle sequence from directory 0x2C.
+0x801E6FEC, function start — BattleLoaderFinalizeEnemySpritesAndQueuePartyAssets; installs enemy visuals creates enemy actors frees their package and queues party sprite files.
+0x801E7098, function start — BattleLoaderCreateSpriteLoadingTaskInternal; allocates the sprite-loader task installs its initial callback and stores the encounter sprite package.
+0x801E70E8, function start — BattleLoaderComputeEnvironmentTextureBounds; scans relocated TIM entries and caches the Battle environment texture bounds and pixel area.
+0x801E7210, function start — BattleLoaderLoadEnvironment; relocates and installs environment models textures bones panoramas ground terrain image commands lighting and matrices.
+0x801E7914, function start — BattleLoaderCreateEnvironmentGroundPlane; builds a textured 9 by 9 vertex ground grid with double-buffered cells palette and draw-state packets.
+0x801E7EC4, function start — BattleLoaderInitializeTerrain; installs terrain vertices and triangles records the count and clears traversal-generation markers.
+0x801E7F4C, function start — BattleLoaderUpdateTileTransition; advances 140 transition tiles by fading colors and optionally moving them vertically.
+0x801E8088, function start — BattleLoaderRenderTileTransitionToMainOt; selects the resident main ordering table and forwards the tile effect to its renderer.
+0x801E80B4, function start — BattleLoaderRenderTileTransition; transforms and submits every visible transition tile while preserving the prior GTE projection state.
+0x801E827C, function start — BattleLoaderFreeTileTransition; synchronizes pending GPU work and frees the tile-transition allocation.
+0x801E82B0, function start — BattleLoaderDeleteTileTransitionTask; unregisters the tile task releases its render state and frees the task object.
+0x801E82EC, function start — BattleLoaderCreateTileTransition; allocates and initializes the tile-transition state object and render pointers.
+0x801E8320, function start — BattleLoaderInitializeTileTransition; builds two 10 by 7 tile layers with positions UVs colors and double-buffered textured quads.
+0x801E8588, function start — BattleLoaderRunTileRiseTransitionMode1; captures the framebuffer and runs a rising fading tile transition while interleaving staged Battle loading.
+0x801E893C, function start — BattleLoaderRunTileFadeTransitionMode4; selects stationary tiles and invokes the common tile-transition loader loop.
+0x801E8964, function start — BattleLoaderUpdateTriangleTransition; advances triangle-transition frame brightness scale rotation and movement parameters for the selected mode.
+0x801E8A64, function start — BattleLoaderRenderTriangleTransition; transforms shades clips and submits 560 textured framebuffer fragments.
+0x801E8D48, function start — BattleLoaderFreeTriangleTransition; synchronizes the GPU and frees the triangle-transition allocation.
+0x801E8D7C, function start — BattleLoaderDeleteTriangleTransitionTask; unregisters and frees the task that owns the triangle transition.
+0x801E8DB8, function start — BattleLoaderCreateTriangleTransition; allocates and initializes the large triangular transition object.
+0x801E8DF0, function start — BattleLoaderInitializeTriangleTransition; builds two 20 by 14 triangle layers with coordinates phase values UVs and double-buffered packets.
+0x801E91E8, function start — BattleLoaderRunTriangleBurstTransitionMode2; captures the framebuffer and runs an expanding triangular-fragment transition while interleaving Battle loading.
+0x801E9594, function start — BattleLoaderRunTriangleSpiralTransitionMode3; selects rotating triangular-fragment motion and invokes the common triangle transition driver.

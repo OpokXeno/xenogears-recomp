@@ -1,0 +1,25 @@
+# image-id: battle-runtime-debug-overlay
+# annotated_functions/total_functions: 16/16
+# Total basis: whole-image AOT range manifest.
+# sha256: 4ef85df0c9fa6db377a0ce73c60e25445d71c3c19ac1d0e0e3246d0d7087ec47
+# load-address: 0x80280000
+# identity-source: annotations/overlays/disc1-images.toml
+# source-record-id: battle-runtime-debug-image
+# format: address, note
+
+0x8028022C, function start — BattleDebugDrawStatusPages; prints the selected battle character flag or work-list diagnostics page.
+0x80280844, function start — BattleDebugMoveCameraEye; translates the camera eye from directional input using the current rotation matrix.
+0x80280960, function start — BattleDebugMoveCameraTarget; translates the camera target using a horizontal rotation matrix.
+0x80280A9C, function start — BattleDebugFrame; updates camera sprite heap timing and diagnostic controls for one developer frame.
+0x8028103C, function start — BattleDebugReloadFontResources; conditionally reloads the debug font and CLUT after controller input.
+0x802810C4, function start — BattleDebugHeapViewer; handles heap-view masks and paging prints tasks and invokes the resident heap debugger.
+0x80281330, function start — BattleDebugPerformanceGaugeUpdate; smooths CPU and GPU timing samples and maintains temporary peaks.
+0x802813F4, function start — BattleDebugDrawGaugeTriangle; transforms three vertices and submits a colored gauge triangle.
+0x802814F8, function start — BattleDebugDrawGaugeTick; transforms fixed radial endpoints and submits a colored gauge tick.
+0x802815E8, function start — BattleDebugDrawGaugeNeedle; draws a colored line from the gauge center to a transformed radius.
+0x802816AC, function start — BattleDebugPerformanceGaugeDraw; renders CPU and GPU timing needles peaks and graduated ticks.
+0x802818C4, function start — BattleDebugCreatePerformanceGauge; registers and initializes the timing-gauge update and draw task.
+0x8028191C, function start — BattleDebugPrintWorkTasks; walks the active work-task list and prints each index and address.
+0x80281980, function start — BattleDebugEditSelectedSprite; displays and interactively edits a selected sprite render properties.
+0x80281F98, function start — BattleDebugDumpHeapToFile; increments the dump filename suffix and writes the current heap report.
+0x80281FD8, function start — BattleDebugDumpHeapWithScratchStack; allocates a temporary stack performs the heap dump and releases it.

@@ -110,6 +110,17 @@ def _validate_source_record(
                     "load_address": "base_address",
                 }
                 break
+    elif kind == "disc-image":
+        for candidate in source.get("images", []):
+            if isinstance(candidate, dict) and candidate.get("id") == record_id:
+                record = candidate
+                fields = {
+                    "sha256": "sha256",
+                    "size": "size",
+                    "load_address": "load_address",
+                    "loaded_size": "size",
+                }
+                break
     else:
         errors.append(f"{label}: unsupported source_kind {kind!r}")
         return
@@ -345,7 +356,7 @@ def validate_index(index_path: Path = DEFAULT_INDEX, root: Path = ROOT) -> list[
     indexed_csvs = {path.resolve() for path in seen_csv_paths}
     catalog_dir = index_path.parent
     orphan_csvs = sorted(
-        path for path in catalog_dir.glob("*_annotations.csv") if path.resolve() not in indexed_csvs
+        path for path in catalog_dir.rglob("*_annotations.csv") if path.resolve() not in indexed_csvs
     )
     for path in orphan_csvs:
         errors.append(f"{index_path}: unindexed annotation CSV: {path}")

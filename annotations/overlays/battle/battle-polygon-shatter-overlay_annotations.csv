@@ -1,0 +1,14 @@
+# image-id: battle-polygon-shatter-overlay
+# annotated_functions/total_functions: 5/5
+# Total basis: whole-image AOT range manifest.
+# sha256: 8bdc2df18b6d3222f6ba444eb26acc0961c37c52d0d058f01ba68ca490369523
+# load-address: 0x801fc000
+# identity-source: annotations/overlays/disc1-images.toml
+# source-record-id: battle-polygon-shatter-image
+# format: address, note
+
+0x801FC000, function start — DestroyCustomPolygonShatterBurst; frees fragment and packet buffers unregisters both task callbacks and releases the effect task.
+0x801FC074, function start — DeleteCustomPolygonShatterBurstTask; performs complete shatter resource and scheduler cleanup as the registered deletion callback.
+0x801FC0CC, function start — UpdateCustomPolygonShatterFragments; integrates each fragment's translation rotation velocity and acceleration and deletes the effect when its lifetime expires.
+0x801FC1A8, function start — DrawCustomPolygonShatterFragments; composes per-fragment transforms projects each centroid-relative triangle or quad and submits its runtime packet.
+0x801FC4C4, function start — CreateCustomPolygonShatterBurst; converts custom polygons to centroid-relative fragments and assigns randomized outward velocity spin and lifetime.

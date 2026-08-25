@@ -1,0 +1,91 @@
+# image-id: gear-helper-overlay
+# annotated_functions/total_functions: 82/82
+# Total basis: whole-image AOT range manifest, including authenticated overlapping roots.
+# sha256: 14395a9f54c124fed016f07906cc882b2a9256d5ade2d10eef99e10fe9366523
+# load-address: 0x801dc000
+# identity-source: annotations/overlays/disc1-images.toml
+# source-record-id: gear-helper-image
+# format: address, note
+
+0x801DC22C, function start — GearHelperInitializeMesh; initializes model mesh state.
+0x801DC2D0, function start — GearHelperInitializeSkeleton; initializes model skeleton state.
+0x801DC5C0, function start — GearHelperUpdateSkeletonTransforms; propagates parent joint transforms and dirty state.
+0x801DC848, function start — GearHelperUpdateSkeletonTransformsWithLocalScale; rebuilds root and dirty child matrices while applying each joint's local scale and canceling inherited parent scale before hierarchy composition.
+0x801DCC34, function start — GearHelperNoOpCallback; intentional empty callback.
+0x801DCC3C, function start — GearHelperRenderSkeletonParts; composes the supplied transforms with each drawable joint matrix and submits every joint's current model packet to the ordering table.
+0x801DCD8C, function start — GearHelperFreeModelSkeleton; frees skeleton nodes and their array.
+0x801DCE18, function start — GearHelperFreeModelMesh; frees model mesh state.
+0x801DCEC8, function start — GearHelperRenderModel; renders an enabled model's joint packets plus its billboard attachment auxiliary-image and trail primitives using the supplied transforms and ordering table.
+0x801DDBF8, function start — GearHelperAdvanceSkeletonAnimationTracks; advances every joint's rotation translation and scale tracks across supported interpolation modes while releasing completed tracks and returning activity status bits.
+0x801DEF10, function start — GearHelperApplyAnimationBasePose; copies unmasked animation rotation and translation vectors into joints not protected by active tracks and marks their transforms dirty.
+0x801DF0B4, function start — GearHelperBlendSkeletonToAnimationPose; allocates per-joint rotation and translation tracks that interpolate from the current pose to an animation's base pose over the requested duration.
+0x801DF52C, function start — GearHelperStopJointAnimationTracks; releases selected rotation translation and scale track slots for one in-range joint according to a channel mask.
+0x801DF5F4, function start — GearHelperObjectPoolInitialize; initializes the helper object pool.
+0x801DF668, function start — GearHelperObjectPoolFree; frees the helper object pool.
+0x801DF6A8, function start — GearHelperObjectPoolReset; resets object-pool allocation state.
+0x801DF6F0, function start — GearHelperObjectPoolAllocate; returns the first free 20-byte track record at or after the allocation cursor and advances the cursor to the next free record.
+0x801DF7A8, function start — GearHelperObjectPoolRelease; releases one pooled object.
+0x801DF7F4, function start — GearHelperStartAnimationTracksPreservingPose; installs encoded rotation and translation tracks without replacing the current pose or directly applies a non-streamed animation pose.
+0x801DFAC4, function start — GearHelperStartAnimationTracksFromBasePose; loads encoded initial rotation and translation values into affected joints before installing their animation tracks and marking transforms dirty.
+0x801DFE8C, function start — GearHelperStopAllSkeletonAnimationTracks; releases every nonprotected rotation translation and scale track attached to every skeleton joint.
+0x801DFF78, function start — GearHelperStopSkeletonAnimationTracksByTag; releases every joint track whose tag byte equals the requested tag.
+0x801E0064, function start — GearHelperInitializeVertexBuffer; initializes a model vertex buffer.
+0x801E00DC, function start — GearHelperFreeVertexBuffer; frees a model vertex buffer.
+0x801E011C, function start — GearHelperInitializeVertices; initializes model vertices.
+0x801E0248, function start — GearHelperVertexAllocate; allocates one helper vertex record.
+0x801E0354, function start — GearHelperVertexRelease; releases one helper vertex record.
+0x801E0398, function start — GearHelperVertexUpdateAndRender; updates and renders helper vertices.
+0x801E0698, function start — GearHelperInitializeModelTrailEmitter; initializes a trail emitter's attachment mode endpoints bounded history lifetime colors and per-frame RGB fade deltas.
+0x801E0844, function start — GearHelperDisableModelTrailEmitter; disables a model trail emitter by setting its active attachment index to minus one.
+0x801E0850, function start — GearHelperEvaluateCosineStep; returns the signed-short value of base plus cosine-angle-plus-4096 divided by the supplied divisor.
+0x801E08D4, function start — GearHelperEvaluateBoundedLinearRise; returns base plus value divided by divisor when the result is at most 32 and otherwise returns minus one.
+0x801E0938, function start — GearHelperEvaluateLinearFall; returns the signed-short value of base minus value divided by the supplied divisor.
+0x801E0988, function start — GearHelperEvaluateClampedCountdown; returns the greater of the supplied floor and 32 minus value divided by divisor.
+0x801E0A00, function start — GearHelperInitializeAuxImagePlane; activates an auxiliary image plane and conditionally allocates then loads fills or copies its enabled 16-bit pixel channels from VRAM or source data.
+0x801E1258, function start — GearHelperAdvanceImageAnimationFrame; advances the frame selector then decodes or blends the new image and copies its overlapping pixels into the linked destination surface.
+0x801E165C, function start — GearHelperFreeImageAnimation; uploads pending image pixels when required then frees all buffers owned by an initialized image-animation record.
+0x801E1708, function start — GearHelperScaleImageFramePixels; scales every source pixel by the supplied five-bit interpolation factor and writes the resulting image plane.
+0x801E17B8, function start — GearHelperBlendImageFramePixels; linearly blends every pixel from a base image toward a target image using the supplied five-bit interpolation factor.
+0x801E1880, function start — GearHelperUpdateAttachedLightVectors; resolves each enabled light vector through its bound model joint while preserving unbound vectors in local coordinates.
+0x801E1A14, function start — GearHelperInitializeDeformableTriangleMesh; parses serialized deformable-mesh geometry and allocates scaled vertices constraint data triangle packets and optional attachment records.
+0x801E22F8, function start — GearHelperUpdateAndRenderDeformableTriangleMesh; simulates vertex displacement constraints and floor limits then lights projects and submits the mesh's double-buffered textured triangles.
+0x801E3438, function start — GearHelperFreeDeformableTriangleMesh; frees every vertex constraint packet and attachment allocation owned by a deformable triangle mesh.
+0x801E34BC, function start — GearHelperSelectImageFrameEvaluator; returns the frame-progression callback implementing the requested image-animation evaluation mode.
+0x801E3534, function start — GearHelperResetModelAnimationState; initializes a model's script cursors attachment selectors transform deltas counters and sentinel-valued animation fields.
+0x801E35D0, function start — GearHelperStartModelAnimation; installs and primes the requested animation script or appends it to the model's pending chained-animation sequence.
+0x801E36BC, function start — GearHelperUpdateAndRenderModel; advances texture and model animation for the requested substeps then updates skeleton transforms renders model parts and returns their accumulated result flags.
+0x801E37D0, function start — GearHelperUpdateAttachedModelRootTransform; derives an attached model's root matrices and translation from the selected parent model joint or disables the attachment when its parent is absent.
+0x801E39F0, function start — GearHelperExecuteModelAnimationBytecode; interprets model-animation commands to update motion transforms joints attachments rendering state sound triggers control flow and chained model scripts.
+0x801E59D4, function start — GearHelperQueueJointRotationTransition; applies immediate Euler rotation or queues a shortest-path timed rotation transition on the selected joint.
+0x801E5B50, function start — GearHelperQueueJointTranslationTransition; allocates and queues a timed joint-translation command carrying the target position travel distance duration and interpolation mode.
+0x801E5C74, function start — GearHelperBindTextureAnimationStream; initializes the model's texture-animation cursor and loop metadata from a relocated stream descriptor or disables playback for an empty stream.
+0x801E5CD8, function start — GearHelperResolveAnimationSoundBankBase; resolves the common or model-specific sound-bank base used by animation sound commands.
+0x801E5D44, function start — GearHelperExecuteTextureAnimationBytecode; advances the bound texture-animation stream and dispatches frame control image initialization model-animation triggers evaluator selection and resource teardown commands.
+0x801E632C, function start — GearHelperStopAuxiliaryAnimationTrack; disables the model's auxiliary animation-command track by setting its current command index to -1.
+0x801E6338, function start — GearHelperComputeDistanceToTarget; returns the Euclidean distance from the model root translation to its stored target position.
+0x801E63A8, function start — GearHelperUpdateTargetWorldPosition; resolves an encoded model and joint selector then transforms the stored local target into world coordinates and propagates it to a compatible attachment.
+0x801E6578, function start — GearHelperTransferJointSubtreeActivation; recursively deactivates a selected joint subtree while releasing its three interpolation records and activating the corresponding joints in another skeleton.
+0x801E6668, function start — GearHelperTransferActiveJointFlags; moves active flags from each non-root joint of one skeleton to the corresponding joint of another skeleton.
+0x801E66BC, function start — GearHelperProjectVectorOntoPlaneNormal; computes a scale-adjusted signed projection of a vector onto the normalized cross product of two basis vectors.
+0x801E67F8, function start — GearHelperFindFirstSelectedModelIndex; returns the index of the least-significant set bit in the low eight bits of the current model-selection mask or eight when none is set.
+0x801E6830, function start — GearHelperResolveModelSelectorMask; resolves special model-selector codes to a concrete model index and writes the corresponding one-bit selection mask.
+0x801E6910, function start — GearHelperResolveAnimationScript; resolves an animation-script selector through the model's primary or extended script table and reports the selector's high-bit flag.
+0x801E6974, function start — GearHelperQueueJointTransformInterpolation; allocates or reuses a pooled interpolation record for a joint's scale rotation or translation channel and optionally applies it recursively to descendants.
+0x801E6D94, function start — GearHelperSetJointSubtreeActive; sets a joint's active flag from the command low bit and optionally propagates the setting through all descendants.
+0x801E6E48, function start — GearHelperCreateSpriteAttachmentTask; creates and configures a sprite task whose callback tracks a selected model joint using the supplied transform and animation parameters.
+0x801E6F64, function start — GearHelperUpdateSpriteAttachmentTask; transforms the attachment offset through its selected model joint then updates fixed-point task coordinates and invokes the task-specific update callback.
+0x801E7094, function start — GearHelperSetJointTransformChannel; replaces or adds a joint's scale rotation or translation vector and optionally propagates the operation through its descendants.
+0x801E7298, function start — GearHelperSyncRootJointVerticalPosition; fallthrough-prefix root that captures the model's cached vertical position before continuing into 0x801E729C to synchronize the skeleton root.
+0x801E729C, function start — GearHelperSyncRootJointVerticalPositionInterior; interior/fallthrough root that copies the preloaded vertical position into the root joint translation when external attachment control is disabled.
+0x801E72CC, function start — GearHelperGetModelJointMatrix; resolves a model joint matrix.
+0x801E7378, function start — GearHelperSetDirectAnimationMode; stores the low input bit as the global animation-path mode that selects direct packet updates instead of pooled packet blending.
+0x801E738C, function start — GearHelperInitialize; initializes the shared Gear model helper.
+0x801E742C, function start — GearHelperLoadModelSlot; validates and allocates a model slot then constructs its mesh skeleton packets render primitives scripts and auxiliary animation objects from the supplied resource bundle.
+0x801E7D14, function start — GearHelperUpdateAndRenderModels; advances helper timing and lighting then updates scripts transforms attachments and rendering for every loaded model before drawing transient helper vertices.
+0x801E7FD4, function start — GearHelperShutdown; frees all ten model slots then releases the shared interpolation pool and transient vertex buffer.
+0x801E8030, function start — GearHelperFreeModelSlot; releases one model slot's mesh skeleton packet data auxiliary arrays and owned resources before clearing the global slot.
+0x801E8330, function start — GearHelperStartSelectedModelAnimation; installs the active model index and selection mask then starts the requested animation using that model as both source and target.
+0x801E8394, function start — GearHelperStartModelAnimationFromSource; installs the target model and selection mask then starts the requested animation using another model's script tables.
+0x801E8430, function start — GearHelperComputeModelHeight; returns the model's vertical extent after applying its root scale and overall fixed-point scale.
+0x801E8480, function start — GearHelperComputeModelHorizontalExtent; returns the model's orientation-dependent horizontal extent after applying the selected root-axis scale and overall fixed-point scale.
+0x801E8510, function start — GearHelperInitializeModelAuxObjects; initializes model auxiliary objects.

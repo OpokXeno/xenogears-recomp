@@ -1,0 +1,62 @@
+# image-id: movie-str-lib-overlay
+# annotated_functions/total_functions: 53/53
+# Total basis: whole-image AOT range manifest.
+# sha256: 2a8469095fd33daef61dbbf09d4f106ba1d72904a502763cb89057cbb615a440
+# load-address: 0x801d3000
+# identity-source: annotations/overlays/disc1-images.toml
+# source-record-id: movie-str-lib-image
+# format: address, note
+
+0x801D30C4, function start — MovieStrMdecOutputCallback; uploads decoded strips to VRAM and completes frame-buffer swaps.
+0x801D3538, function start — MovieStrLibraryInitialize; allocates decode output and STR ring buffers for the requested format.
+0x801D37CC, function start — MovieStrStartPlayback; configures callbacks display bounds audio mode and the initial CD stream.
+0x801D3B00, function start — MovieStrAcquireNextFrame; obtains the next STR frame and updates dimensions from its header.
+0x801D3D54, function start — MovieStrDecodeNextFrame; VLC-decodes a frame and starts its MDEC input and output transfers.
+0x801D3F7C, function start — MovieStrUpdatePlayback; advances decoding handles end conditions and restarts stalled streams.
+0x801D41AC, function start — MovieStrStartCdStream; resets stream state seeks to the requested sector and begins reading.
+0x801D4318, function start — MovieStrStopPlayback; stops CD and MDEC activity and removes streaming callbacks.
+0x801D43B0, function start — MovieStrLibraryShutdown; stops playback and frees all resident movie buffers.
+0x801D444C, function start — MovieStrBuildVlcTable; expands the packed Psy-Q VLC lookup table.
+0x801D4534, function start — MovieStrDecDctReset; resets callbacks when needed and reinitializes the MDEC hardware.
+0x801D456C, function start — MovieStrDecDctGetEnvironment; copies the current quantization and IDCT environment.
+0x801D45F8, function start — MovieStrDecDctPutEnvironment; installs quantization tables and uploads them to the MDEC.
+0x801D4694, function start — MovieStrDecDctBufferSize; returns the encoded MDEC word count from a bitstream header.
+0x801D46A0, function start — MovieStrDecDctInput; applies output-format flags and starts MDEC input.
+0x801D471C, function start — MovieStrDecDctOutput; starts an MDEC output transfer for the requested buffer and size.
+0x801D473C, function start — MovieStrDecDctInputSync; waits for MDEC input or reports its busy state.
+0x801D4778, function start — MovieStrDecDctOutputSync; waits for MDEC output or reports its busy state.
+0x801D47B4, function start — MovieStrDecDctInputCallback; registers the MDEC input DMA callback.
+0x801D47D8, function start — MovieStrDecDctOutputCallback; registers the MDEC output DMA callback.
+0x801D47FC, function start — MovieStrResetMdecHardware; aborts MDEC DMA and optionally reloads default decode tables.
+0x801D48F8, function start — MovieStrStartMdecInputDma; writes the MDEC command and programs its input DMA channel.
+0x801D498C, function start — MovieStrStartMdecOutputDma; programs the MDEC output DMA channel.
+0x801D4A1C, function start — MovieStrWaitMdecInput; waits for MDEC input readiness with timeout recovery.
+0x801D4AB4, function start — MovieStrWaitMdecOutput; waits for MDEC output DMA completion with timeout recovery.
+0x801D4B4C, function start — MovieStrReadMdecStatus; returns the MDEC status register.
+0x801D4B64, function start — MovieStrHandleMdecTimeout; reports MDEC and DMA state before resetting the decoder.
+0x801D4C98, function start — MovieStrSetVlcOutputLimit; sets the primary VLC decoder output limit and returns its prior value.
+0x801D4CB8, function start — MovieStrSetDefaultVlcOutputLimit; restores the primary VLC limit to 0xFFFFFF.
+0x801D4CC8, function start — MovieStrVlcDecode; decodes STR VLC and Huffman coefficients into MDEC run-length codes.
+0x801D4FD4, function start — MovieStrSaveVlcDecodeState; saves primary VLC continuation state when the output limit is reached.
+0x801D5050, function start — MovieStrSetDefaultVlc2OutputLimit; restores the table-based VLC limit to 0xFFFFFF.
+0x801D5060, function start — MovieStrVlcDecodeWithTable; decodes VLC coefficients using an expanded lookup table.
+0x801D5368, function start — MovieStrSaveVlcTableDecodeState; saves table-based VLC continuation state.
+0x801D53BC, function start — MovieStrNoOpPaddingEntry; contains the isolated NOP discovered as an entry.
+0x801D53C0, function start — MovieStrPrepareSpuAdpcmBlock; normalizes PCM samples and selects their ADPCM shift.
+0x801D5544, function start — MovieStrEncodeSpuAdpcmBlocks; packs PCM samples and control flags into SPU ADPCM blocks.
+0x801D57DC, function start — MovieStrEncodeSpuPcm; dispatches an ENCSPU environment to the SPU ADPCM encoder.
+0x801D583C, function start — MovieStrSetRingBuffer; installs the STR ring address and size and clears its state.
+0x801D586C, function start — MovieStrStartCdRead2; issues CD Setmode and ReadS commands and installs streaming callbacks.
+0x801D5900, function start — MovieStrCdDataCallback; forwards CD data callbacks to the STR interrupt handler.
+0x801D5920, function start — MovieStrClearRingBuffer; resets STR ring indices flags and slot states.
+0x801D5980, function start — MovieStrUnsetRingBuffer; disables CD streaming callbacks and DMA state.
+0x801D5A04, function start — MovieStrCdDataReadyCallback; marks a completed ring frame ready and records its metadata.
+0x801D5A94, function start — MovieStrGetBackLocation; returns the last frame number and the following CD location.
+0x801D5AF4, function start — MovieStrSetStream; resets STR assembly state and installs stream completion callbacks.
+0x801D5B7C, function start — MovieStrFreeRingBuffer; releases the ring slots belonging to a consumed frame.
+0x801D5C34, function start — MovieStrClearRingSlots; marks a contiguous range of STR ring slots free.
+0x801D5C70, function start — MovieStrGetNextFrame; claims the next completed frame and returns its payload and header.
+0x801D5D34, function start — MovieStrSetStreamMask; stores STR stream matching and frame-bound parameters.
+0x801D5D54, function start — MovieStrCdInterrupt; validates incoming STR sectors and assembles their payloads in the ring.
+0x801D66C4, function start — MovieStrCopyWords; copies a requested number of words between sector buffers.
+0x801D66F8, function start — MovieStrStartCdDma; waits for availability and programs a CD-ROM DMA transfer.

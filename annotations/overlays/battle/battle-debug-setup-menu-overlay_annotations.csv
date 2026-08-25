@@ -1,0 +1,12 @@
+# image-id: battle-debug-setup-menu-overlay
+# annotated_functions/total_functions: 3/3
+# Total basis: whole-image AOT range manifest.
+# sha256: 2bc183a361781237723615b35ce5d5b3e5547fc919d6cda1348a8dadec99a2ea
+# load-address: 0x801e0000
+# identity-source: annotations/overlays/disc1-images.toml
+# source-record-id: battle-debug-setup-menu-image
+# format: address, note
+
+0x801E0124, function start — BattleSetupMenuInitialize; configures display environments and initializes battle setup-menu selections.
+0x801E0238, function start — BattleSetupMenuRun; runs the interactive scene party Gear event and file selection menu.
+0x801E0A34, function start — BattleSetupMenuMain; applies menu choices loads selected battle resources and seeds combatant state.

@@ -1,9 +1,9 @@
 # image-id: movie-overlay
-# annotated_functions/total_functions: 27/27
-# Total basis: union of Ghidra functions and recovered callbacks/entries.
+# annotated_functions/total_functions: 34/34
+# Total basis: whole-image AOT range manifest, including authenticated overlapping roots.
 # sha256: 50e1a9d9e08b90eed0c2da1c289507e71cbf51749893a92f457ce79a59701f9a
 # load-address: 0x8006faf0
-# identity-source: native_renderer/xg_render_manifest.toml
+# identity-source: annotations/overlays/disc1-images.toml
 # source-record-id: movie-image
 # format: address, note
 
@@ -12,6 +12,7 @@
 0x800712C4, function start — MovieAdvanceCdReadVerification; verifies asynchronous readback data and records mismatches.
 0x80071BA0, function start — MovieQueueRandomSectorRead; allocates and queues a random-sector test read.
 0x80071C34, function start — MovieStartCdReadTestOperation; starts a selected CD stress operation.
+0x80072428, function start — MovieAdvanceCdStressVSyncClock; increments the CD stress monitor's VSync counter and converts each 60 ticks into one elapsed second.
 0x80072480, function start — MovieRunDiscChangeTest; runs the interactive disc-change diagnostic.
 0x8007293C, function start — MovieReinitializeCdAfterDiscChange; resets CD state after media replacement.
 0x800729A8, function start — MovieReadHostFile; reads a development host file into memory.
@@ -38,6 +39,9 @@
 0x80074B58, function start — MovieClearFramebuffer; clears the full 640x480 VRAM rectangle.
 0x80074BA4, function start — MovieFindStrFrameSector; finds the sector containing a requested STR frame.
 0x8007519C, function start — MovieFindLastStrFrameNumber; reads the final valid STR frame number.
+0x800753B8, function start — MovieLoadSoundEffectBanks; loads main_se.wd, bat_se.wd, and gear_se.wd from host storage and transfers each WDS bank.
+0x8007548C, function start — MovieLoadBattleAudio; loads and transfers battle2.wd, then loads battle2.smd and stores its sequence handle.
+0x80075508, function start — MoviePlayBattleMusic; starts the loaded battle music sequence at full volume.
 0x80075534, function start — MovieRunCdSectorMonitor; displays and navigates raw sector contents.
 0x80075D4C, function start — MovieGetFatEntrySize; decodes a filesystem entry size.
 0x80075D8C, function start — MovieRunFatBrowser; displays filesystem entries and paths.
@@ -51,3 +55,6 @@
 0x80076834, call site — shuts down the resident STR player.
 0x800768D8, function start — MovieDecodeSliceCallback; tracks decode progress and swaps frame state.
 0x800769A4, function start — MoviePollSkipInput; handles playback skip and audio fade countdown.
+0x80076AF0, function start — MovieInitGteViewState; configures projection, screen center, color state, and matrices used by the Movie view transform.
+0x80076C68, function start — MovieApplyGteViewTransform; rebuilds the view matrix and installs it as the current GTE rotation and translation matrix.
+0x80076CA4, function start — MovieBuildGteViewTransform; derives camera angles, distance, and translation from eye and target globals and composes the look-at matrix.

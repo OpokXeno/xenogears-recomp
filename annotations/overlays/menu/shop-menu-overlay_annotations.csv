@@ -1,9 +1,9 @@
 # image-id: shop-menu-overlay
-# annotated_functions/total_functions: 100/118
-# Total basis: union of Ghidra functions and recovered callbacks/entries.
+# annotated_functions/total_functions: 118/118
+# Total basis: whole-image AOT range manifest, including authenticated overlapping roots.
 # sha256: 7890e14bcabddcf85368de10783ecff8daa166dc5ac254e06db5e27959cab4cf
 # load-address: 0x801c5000
-# identity-source: native_renderer/xg_render_manifest.toml
+# identity-source: annotations/overlays/disc1-images.toml
 # source-record-id: shop-menu-image
 # format: address, note
 
@@ -22,6 +22,10 @@
 0x801C54B4, function start — ShopMenuLoadResources; loads and decompresses shop resources.
 0x801C58F4, function start — ShopMenuInitialize; initializes characters and loads resources.
 0x801C5A6C, function start — ShopMenuResetRenderContext; resets double-buffer state.
+0x801C5A7C, function start — ShopMenuInitializeStringFt4Pair; initializes both textured quads of a menu string from its texture, palette, color, and translucency attributes.
+0x801C5CBC, function start — ShopMenuInitializeMenuStringGroup; renders paired strings into a shared buffer, initializes their primitives, and uploads each completed row to VRAM.
+0x801C5E6C, function start — ShopMenuUploadSmallVramImage; allocates and uploads a zeroed 16x1 VRAM image containing an initialized 0x7FFF pixel.
+0x801C5EE8, function start — ShopMenuInitializeTextResources; uploads the palette, allocates the shared text buffer, initializes four primary string pairs, and uploads the auxiliary image.
 0x801C5F44, function start — ShopMenuInitializeWindowBorders; resolves border texture metadata.
 0x801C604C, function start — ShopMenuMovePointerCursor; moves the pointer and highlight panel.
 0x801C6430, function start — ShopMenuClearSelectionFlags; clears selection and render flags.
@@ -84,20 +88,33 @@
 0x801CB894, function start — ShopMenuConfirmationWindowGetChoice; runs yes/no or auto-advance input.
 0x801CBA50, function start — ShopMenuConfirmationWindow; executes one or two confirmation prompts.
 0x801CBB08, function start — ShopMenuFree; tears down resources and menu state.
+0x801CBC88, function start — ShopMenuConfigureAuxTextGroup; initializes an auxiliary string group when enabled or clears its per-entry render flags when disabled.
+0x801CBCF0, function start — ShopMenuPositionSelectionString; positions and activates a selected auxiliary menu string using the current layout tables.
 0x801CC024, function start — ShopMenuInitializeShopModeSelectionMenu; initializes buy, sell, and exit choices.
+0x801CC278, function start — ShopMenuInitializeSubmenu; progressively builds both submenu text groups and records the number of available choices.
 0x801CC54C, function start — ShopMenuUpdateShopModeSelectionMenu; rebuilds mode cursors and text.
+0x801CC720, function start — ShopMenuUpdateSubmenuTextures; rebuilds submenu strings with the selected option's active texture and moves the selection pointer.
 0x801CC97C, function start — ShopMenuShopModeMenuHandleSelectedOption; dispatches buy, sell, or exit.
 0x801CCAD8, function start — ShopMenuShopModeMenuMain; runs the buy, sell, and exit menu.
 0x801CCD28, function start — ShopMenuMain; manages the complete shop submenu lifetime.
+0x801CCE1C, function start — ShopMenuComputeCharacterStats; derives and clamps the nine displayed combat statistics for one character.
+0x801CCFF4, function start — ShopMenuRenderShopGraphics; queues active shop portraits, descriptions, prices, quantities, statistics, equip markers, and highlights.
 0x801CD404, function start — ShopMenuSetStatChangeColor; colors increasing or decreasing stats.
 0x801CD5D0, function start — ShopMenuUpdateCharacterPortraits; rebuilds available portraits.
 0x801CD6F8, function start — ShopMenuUpdateBuyMenuExplanationGraphics; builds buy-screen labels.
 0x801CD7E4, function start — ShopMenuUpdateSellMenuExplanationGraphics; builds sell-screen labels.
 0x801CD8D0, function start — ShopMenuUpdateGoldGraphics; builds price, total, and resulting-gold digits.
 0x801CDBA0, function start — ShopMenuGetCharacterEquippedItemFlags; finds characters equipping an item.
+0x801CDD14, function start — ShopMenuUpdateBuyItemListGraphics; rebuilds eight visible buy rows with names, selected quantities, prices, and availability flags.
+0x801CE480, function start — ShopMenuComputeEquipmentStatChanges; compares a candidate item with current equipment and records absolute stat deltas and improvement flags.
+0x801CE8D8, function start — ShopMenuLookupByteByKey; searches parallel key and value arrays and returns the matching value or zero.
+0x801CE91C, function start — ShopMenuUpdateOwnedItemQuantityGraphics; looks up and displays the selected item's existing inventory quantity.
+0x801CEB3C, function start — ShopMenuUpdateBuyItemDetails; rebuilds description, equip markers, stat comparisons, and owned quantity, then returns the unit price.
 0x801CF2A0, function start — ShopMenuHandleBoughtItems; commits quantities and resulting gold.
 0x801CF678, function start — ShopMenuSetFinalPriceGraphics; builds final-price digits.
 0x801CF780, function start — ShopMenuBuyMenu; runs quantity selection and purchase confirmation.
+0x801CFF58, function start — ShopMenuUpdateSellItemDetails; rebuilds description, equip markers, and stat presentation, then returns the half-price sale value.
+0x801D05BC, function start — ShopMenuUpdateSellItemListGraphics; rebuilds eight visible sell rows with names, quantities, prices, and render state.
 0x801D0C18, function start — ShopMenuHandleSoldItems; commits sold items and resulting gold.
 0x801D0E68, function start — ShopMenuSellMenu; runs the generic inventory sell loop.
 0x801D1658, function start — ShopMenuSellEquipmentMenu; runs the equipment sell flow.
@@ -107,3 +124,4 @@
 0x801D1968, function start — ShopMenuClearSellScreenState; clears sell-screen state and optional resources.
 0x801D1B18, function start — ShopMenuSellModeMenuHandleSelectedOption; dispatches a sell category.
 0x801D1CA4, function start — ShopMenuSellModeMenu; runs sell-category selection.
+0x801D1F10, function start — ShopMenuFreeTransactionScreen; frees item-list windows, scrollbar, and cursor after a buy or sell transaction screen.

@@ -1,12 +1,13 @@
 # image-id: gear-shop-menu-overlay
-# annotated_functions/total_functions: 125/155
-# Total basis: union of Ghidra functions and recovered callbacks/entries.
+# annotated_functions/total_functions: 156/156
+# Total basis: whole-image AOT range manifest, including authenticated overlapping roots.
 # sha256: c7a1982f0ea624c81fd0f85e1a1335c7517723f12ba3e2d08395842392423691
 # load-address: 0x801c5000
-# identity-source: native_renderer/xg_render_manifest.toml
+# identity-source: annotations/overlays/disc1-images.toml
 # source-record-id: gear-shop-menu-image
 # format: address, note
 
+0x801C511C, function start — GearShopMenuGetRandomRangeValue; returns a random 16-bit value in the requested inclusive range while handling zero and 0xFFFF sentinels.
 0x801C51B8, function start — GearShopMenuSetFt4Rect; assigns matching XY and UV rectangles.
 0x801C5228, function start — GearShopMenuIsCharacterFlagSet; tests a character availability bit.
 0x801C5244, function start — GearShopMenuGetCharacterBitMask; returns a character bit mask.
@@ -26,13 +27,16 @@
 0x801C5B08, function start — GearShopMenuFilterPartyMembers; retains unlocked members with Gears.
 0x801C5C98, function start — GearShopMenuResetRenderContext; resets double-buffer render state.
 0x801C5CA8, function start — GearShopMenuInitializeStringFt4Pair; initializes string glyph quads.
+0x801C5EE8, function start — GearShopMenuInitializeMenuStringArray; renders pairs of strings into a VRAM buffer and initializes their double-buffered glyph quads.
 0x801C6098, function start — GearShopMenuUploadSmallVramImage; uploads a small initialized image.
 0x801C6114, function start — GearShopMenuInitializeTextResources; initializes menu text resources.
 0x801C6170, function start — GearShopMenuInitializeWindowBorders; resolves border texture metadata.
+0x801C6278, function start — GearShopMenuMovePointerCursor; positions the pointer cursor and optionally rebuilds its highlighted rectangle and border lines.
 0x801C665C, function start — GearShopMenuClearManagerFlags; clears manager selection and render flags.
 0x801C668C, function start — GearShopMenuSetPolyGradientColor; configures polygon gradient colors.
 0x801C6708, function start — GearShopMenuInitializeBackgrounds; initializes selection and dimming primitives.
 0x801C6A54, function start — GearShopMenuShopDataManager; loads or frees Gear shop inventory state.
+0x801C6E74, function start — GearShopMenuInitializeShopData; loads the selected shop's item lists and initializes item-status and auxiliary graphics.
 0x801C7604, function start — GearShopMenuSetVertices; builds screen-centered quad vertices.
 0x801C765C, function start — GearShopMenuSetWindowBorderPrimitive; configures a border primitive.
 0x801C76A4, function start — GearShopMenuUpdateScrollBarHandle; updates scroll-handle geometry.
@@ -78,7 +82,10 @@
 0x801CB3D0, function start — GearShopMenuRender; composes Gear shop graphics.
 0x801CB498, function start — GearShopMenuPlaySoundEffect; submits a Gear shop sound effect.
 0x801CB4E4, function start — GearShopMenuPollInput; maps controller state to menu commands.
+0x801CB690, function start — GearShopMenuInitializeTransitionInterpolation; calculates normalized fixed-point steps for interpolating the preview camera's X, Y, and Z coordinates.
+0x801CBA2C, function start — GearShopMenuUpdateTransitionEffect; advances active preview-camera coordinates toward their targets and clears each completed transition axis.
 0x801CBDA0, function start — GearShopMenuUpdateTransforms; advances menu transition transforms.
+0x801CBE60, function start — GearShopMenuRenderDebugValues; renders the debug X, Y, Z, angle, Gear, and scale values when menu debugging is enabled.
 0x801CC1C4, function start — GearShopMenuUpdateAndRender; runs input, rendering, and OT submission.
 0x801CC31C, function start — GearShopMenuInitializePointerCursors; initializes pointer cursors.
 0x801CC4DC, function start — GearShopMenuFreePointerCursors; disables and frees pointer cursors.
@@ -101,11 +108,19 @@
 0x801CE024, function start — GearShopMenuMain; manages the complete Gear shop lifetime.
 0x801CE1D0, function start — GearShopMenuShoulderButtonUiInitialize; initializes shoulder-button hints.
 0x801CE2E8, function start — GearShopMenuShoulderButtonUiFree; frees shoulder-button hints.
+0x801CE32C, function start — GearShopMenuRenderShopScreen; renders active item rows, descriptions, prices, quantities, portraits, stat changes, and transaction text.
 0x801CE7E0, function start — GearShopMenuRenderHelperModels; renders Gear preview helper models.
+0x801CE82C, function start — GearShopMenuRenderGearPreviewUi; renders active Gear-preview effects, stat labels, numeric values, and Gear name.
+0x801CEA68, function start — GearShopMenuUpdateDualPreviewEffects; advances and rebuilds two independently positioned animated preview-effect sequences.
+0x801CEEA8, function start — GearShopMenuUpdatePreviewEffect; advances the central preview-effect animation and rebuilds its current textured frame.
 0x801CF184, function start — GearShopMenuUpdatePreviewAnimation; updates Gear preview animation.
 0x801CF33C, function start — GearShopMenuRenderPreviewEffects; renders Gear preview effects.
 0x801CF38C, function start — GearShopMenuUploadGearName; uploads the selected Gear name.
+0x801CF448, function start — GearShopMenuUpdateGearStatsGraphics; builds Gear name, HP, fuel, weight, and related numeric graphics for the current preview.
 0x801CF9BC, function start — GearShopMenuLoadGearModelResources; loads Gear preview model resources.
+0x801CFAB8, function start — GearShopMenuInitializeGearPreviewModel; configures a helper-model slot for a Gear, applies Gear-specific transforms, and refreshes its displayed stats.
+0x801CFC60, function start — GearShopMenuStartGearPreviewTransition; loads the standard starting X coordinate before falling through into the preview-transition initializer.
+0x801CFC68, function start — GearShopMenuStartGearPreviewTransitionWithLoadedX; uses a preloaded starting X coordinate, activates preview animations, and waits for their opening states.
 0x801CFF18, function start — GearShopMenuInitializePreviewTransition; initializes preview transition state.
 0x801D0054, function start — GearShopMenuSetDigitColor; colors numeric display glyphs.
 0x801D0220, function start — GearShopMenuUpdateCharacterPortraits; rebuilds available portraits.
@@ -113,22 +128,38 @@
 0x801D0398, function start — GearShopMenuChangeCurrentGear; changes the selected character Gear.
 0x801D04E8, function start — GearShopMenuUpdateBuyExplanationGraphics; builds buy-screen labels.
 0x801D05EC, function start — GearShopMenuUpdateSellExplanationGraphics; builds sell-screen labels.
+0x801D06D8, function start — GearShopMenuUpdateTransactionGraphics; builds gold-before, transaction total, gold-after, and optional unit-price graphics.
 0x801D0C20, function start — GearShopMenuSetFinalPriceGraphics; builds final-price digits.
+0x801D0D4C, function start — GearShopMenuUpdateCurrentGoldGraphics; builds the current-gold digits and currency marker used by the fuel tune-up screen.
 0x801D0EC8, function start — GearShopMenuClearSellScreenState; clears sell-screen state.
+0x801D1078, function start — GearShopMenuGetItemEquippedGearFlags; returns the combined Gear equip flags for characters whose Gears currently contain the specified item.
+0x801D1304, function start — GearShopMenuUpdateSellItemPreview; builds a sell item's description, half-price value, and equipped-character indicators.
+0x801D18F8, function start — GearShopMenuUpdateSellItemListGraphics; builds up to eight visible sell-list rows with names, prices, and inventory quantities.
+0x801D1F20, function start — GearShopMenuHandleSoldItems; credits the sale proceeds and removes the selected quantities from the supplied inventory arrays.
 0x801D2054, function start — GearShopMenuSellMenu; runs the generic Gear inventory sell loop.
 0x801D2784, function start — GearShopMenuSellWeaponsMenu; runs weapon selling.
 0x801D27C4, function start — GearShopMenuSellPartsMenu; runs Gear-parts selling.
 0x801D2804, function start — GearShopMenuSellModeMenuHandleSelectedOption; dispatches a sell category.
+0x801D2950, function start — GearShopMenuUpdateEquippedPartGraphics; displays the currently equipped armor, frame, or engine corresponding to a tune-up category.
+0x801D2B74, function start — GearShopMenuUpdateBuyItemListGraphics; builds eight purchase or tune-up rows, marks affordability and compatibility, and returns the current part's trade-in value.
 0x801D3558, function start — GearShopMenuComputeEquipmentStatChanges; computes item stat deltas.
 0x801D3A3C, function start — GearShopMenuLookupByteByKey; performs a keyed byte lookup.
+0x801D3A80, function start — GearShopMenuUpdateItemQuantityGraphics; looks up and displays the inventory quantity held for the selected weapon or accessory.
 0x801D3C78, function start — GearShopMenuUpdateItemPreview; updates selected item preview state.
+0x801D44FC, function start — GearShopMenuHandleBoughtItems; deducts the final gold amount and equips or adds all selected Gear parts to inventory.
 0x801D4888, function start — GearShopMenuIsTuneUpUpgrade; tests whether a tune-up improves equipment.
+0x801D498C, function start — GearShopMenuBuyOrTuneUpMenu; runs the shared scrolling, quantity, price, confirmation, purchase, and tune-up item loop.
+0x801D5398, function start — GearShopMenuFuelTuneUpMenu; calculates the refueling price, runs confirmation prompts, deducts gold, and refills the Gear.
 0x801D573C, function start — GearShopMenuExitSubmenu; exits the active Gear shop submenu.
 0x801D57A8, function start — GearShopMenuDispatchTuneUpOption; dispatches the selected tune-up.
+0x801D5828, function start — GearShopMenuSubmenuMain; runs the active submenu and dispatches Buy, Sell, Tune Up, fuel, and Gear-selection actions.
+0x801D5D38, function start — GearShopMenuInitializePreviewResources; initializes the Gear-preview helper system, allocates model slots, selects the first available Gear, and loads its resources.
 0x801D5EB8, function start — GearShopMenuFreePreviewResources; frees Gear preview resources.
 0x801D5F94, function start — GearShopMenuComputeDisplayStats; computes displayed Gear statistics.
 0x801D6150, function start — GearShopMenuRecomputeGearStats; recomputes aggregate Gear stats.
 0x801D61B8, function start — GearShopMenuApplyFrameStats; applies frame statistics.
 0x801D6250, function start — GearShopMenuApplyArmorStats; applies armor statistics.
 0x801D62A4, function start — GearShopMenuApplyEngineStats; applies engine statistics.
+0x801D6334, function start — GearShopMenuApplyAccessoryStats; aggregates the Gear's three accessories into stat bonuses, effect masks, and related pilot flags.
+0x801D6738, function start — GearShopMenuApplyWeaponStats; applies weapon attributes to the Gear, including the extra weapon slots used by special Gears.
 0x801D690C, function start — GearShopMenuComputeWeightPenalty; computes equipment weight penalties.

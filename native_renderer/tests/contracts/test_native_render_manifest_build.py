@@ -175,6 +175,11 @@ class NativeRenderManifestBuildTests(unittest.TestCase):
                     re.compile(r"MANIFEST_TOOL.{0,50}metadata-declared", re.DOTALL),
                 )
                 self.assertNotIn("OVERLAYS_DIR", wrapper)
+                self.assertIn("-DXG_RENDER_VALIDATE_OVERLAYS=OFF", wrapper)
+                self.assertIn("BUILD_JOBS", wrapper)
+                self.assertIn("16", wrapper)
+                for disc_name in ("disc1.cue", "disc1.bin", "disc1.iso"):
+                    self.assertIn(disc_name, wrapper)
                 self.assertRegex(
                     wrapper,
                     re.compile(r"PSX_GAME_EXTRA_IDENTITY_SHA256.{0,120}GAME.*IDENTITY", re.DOTALL | re.IGNORECASE),
@@ -183,6 +188,14 @@ class NativeRenderManifestBuildTests(unittest.TestCase):
                     wrapper,
                     re.compile(r"PSX_GAME_MANIFEST_DIGEST_SHA256.{0,120}MANIFEST.*IDENTITY", re.DOTALL | re.IGNORECASE),
                 )
+
+    def test_overlay_codegen_uses_a_portable_bounded_pool(self) -> None:
+        cmake = ROOT_CMAKE.read_text(encoding="utf-8")
+
+        self.assertIn("set(XG_OVERLAY_CODEGEN_JOBS 2 CACHE STRING", cmake)
+        self.assertIn("tools/run_with_job_pool.py", cmake)
+        self.assertNotIn("CMAKE_GENERATOR MATCHES", cmake)
+        self.assertGreaterEqual(cmake.count('"${XG_OVERLAY_JOB_RUNNER}"'), 8)
 
     def test_repository_forces_lf_for_hashed_tracked_files(self) -> None:
         # The manifest's pinned identities are byte hashes, not text hashes.

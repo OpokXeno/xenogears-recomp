@@ -1,0 +1,13 @@
+# image-id: battle-green-framebuffer-grid-overlay
+# annotated_functions/total_functions: 4/4
+# Total basis: whole-image AOT range manifest.
+# sha256: d5156aab0158dc55a629fb3ddff5f09f21ee8053ce8ffd06350e12490482d6dd
+# load-address: 0x801fc000
+# identity-source: annotations/overlays/disc1-images.toml
+# source-record-id: battle-green-framebuffer-grid-image
+# format: address, note
+
+0x801FC000, function start — UpdateGreenFramebufferTileGrid; increments the task age and invokes its deletion callback when controller two presses the exit button.
+0x801FC064, function start — DrawGreenFramebufferTileGrid; projects and submits a green-tinted 16 by 16 grid sampling a 128 by 128 framebuffer region.
+0x801FC278, function start — DeleteGreenFramebufferTileGrid; unregisters both work-list tasks releases the grid allocation and restores projection-depth shift state.
+0x801FC2C0, function start — CreateGreenFramebufferTileGrid; allocates the task and builds both textured triangles for each cell of the double-buffered framebuffer grid.

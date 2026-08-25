@@ -11,6 +11,11 @@
     ReleaseNoOpt keeps NDEBUG but uses -O0 and disables developer tooling.
 .PARAMETER Generator
     CMake generator. Auto-detected if omitted (Ninja or Visual Studio).
+.PARAMETER DiscImage
+    Disc 1 CUE, BIN, or ISO path. Auto-detected under .\game when omitted.
+.PARAMETER BuildJobs
+    Maximum parallel build jobs. Defaults to BUILD_JOBS, CMAKE_BUILD_PARALLEL_LEVEL,
+    or at most 16 logical processors.
 .EXAMPLE
     .\build.ps1
     .\build.ps1 -BuildDir build-dbg -BuildType Debug
@@ -22,15 +27,33 @@
       - SDL3 3.4+ development library (vcpkg, MSYS2, or manually)
       - Python 3.11+
       - For source builds, place your legally obtained PlayStation BIOS dump at .\psxrecomp\bios\SCPH1001.BIN
-      - Place your legally owned Xenogears (Disc 1) EXE at .\game\slus_006.64
+      - Place your legally owned Xenogears Disc 1 at .\game\disc1.cue, disc1.bin, or disc1.iso
+      - Place its EXE at .\game\slus_006.64; extracted overlay binaries are not required
 #>
 param(
     [string]$BuildDir = "build",
     [string]$BuildType = "Release",
-    [string]$Generator = ""
+    [string]$Generator = "",
+    [string]$DiscImage = "",
+    [int]$BuildJobs = 0
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($BuildJobs -le 0) {
+    $ConfiguredBuildJobs = if ($env:BUILD_JOBS) {
+        $env:BUILD_JOBS
+    }
+    elseif ($env:CMAKE_BUILD_PARALLEL_LEVEL) {
+        $env:CMAKE_BUILD_PARALLEL_LEVEL
+    }
+    else {
+        [Math]::Min(16, [Environment]::ProcessorCount)
+    }
+    if (-not [int]::TryParse($ConfiguredBuildJobs, [ref]$BuildJobs) -or $BuildJobs -le 0) {
+        throw "BUILD_JOBS must be a positive integer"
+    }
+}
 
 function Initialize-MSVCEnvironment {
     if (Get-Command cl.exe -ErrorAction SilentlyContinue) {
@@ -76,7 +99,8 @@ function Initialize-MSVCEnvironment {
 $RuntimeBuildType = $BuildType
 $RuntimeCMakeExtraArgs = @(
     "-DBUILD_TESTING=OFF",
-    "-DPSX_SDL_BACKEND=SDL3"
+    "-DPSX_SDL_BACKEND=SDL3",
+    "-DXG_RENDER_VALIDATE_OVERLAYS=OFF"
 )
 if ($BuildType -eq "ReleaseNoOpt") {
     $RuntimeBuildType = "Release"
@@ -94,6 +118,22 @@ $RECOMPILER_BUILD = Join-Path $RECOMPILER_DIR "build"
 $MANIFEST_TOOL = Join-Path $ROOT "tools/native_render_manifest.py"
 $RENDER_MANIFEST = Join-Path $ROOT "native_renderer/xg_render_manifest.toml"
 $GAME_EXE = Join-Path $ROOT "game/slus_006.64"
+if (-not $DiscImage) {
+    foreach ($CandidateName in @("disc1.cue", "disc1.bin", "disc1.iso")) {
+        $Candidate = Join-Path $ROOT "game/$CandidateName"
+        if (Test-Path -LiteralPath $Candidate -PathType Leaf) {
+            $DiscImage = $Candidate
+            break
+        }
+    }
+}
+elseif (-not [System.IO.Path]::IsPathRooted($DiscImage)) {
+    $DiscImage = Join-Path $ROOT $DiscImage
+}
+if (-not $DiscImage -or -not (Test-Path -LiteralPath $DiscImage -PathType Leaf)) {
+    throw "Xenogears Disc 1 image not found. Place disc1.cue, disc1.bin, or disc1.iso under $ROOT\game, or pass -DiscImage."
+}
+$DiscImage = (Resolve-Path -LiteralPath $DiscImage).Path
 $PYTHON = Get-Command python3 -ErrorAction SilentlyContinue
 if (-not $PYTHON) {
     $PYTHON = Get-Command python -ErrorAction SilentlyContinue
@@ -153,7 +193,7 @@ Write-Host "==> Building recompiler..."
     -DPSX_GAME_EXTRA_IDENTITY_SHA256=$GAME_IDENTITY_SHA256 `
     -DPSX_GAME_MANIFEST_DIGEST_SHA256=$MANIFEST_IDENTITY_SHA256
 if ($LASTEXITCODE -ne 0) { throw "Recompiler configuration failed" }
-& cmake --build $RECOMPILER_BUILD --config Release
+& cmake --build $RECOMPILER_BUILD --config Release --parallel $BuildJobs
 if ($LASTEXITCODE -ne 0) { throw "Recompiler build failed" }
 
 $BIOS_RECOMPILER_BIN = Join-Path $RECOMPILER_BUILD "Release/psxrecomp-bios.exe"
@@ -206,13 +246,15 @@ try {
         "-B", $BUILD_DIR,
         "-DCMAKE_BUILD_TYPE=$RuntimeBuildType",
         "-DPSX_RECOMP_UI=ON",
-        "-DRECOMP_UI_ROOT=$(Join-Path $ROOT 'recomp-ui')"
+        "-DRECOMP_UI_ROOT=$(Join-Path $ROOT 'recomp-ui')",
+        "-DXG_DISC_IMAGE=$DiscImage",
+        "-DXG_RECOMPILER_EXECUTABLE=$RECOMPILER_BIN"
     )
     $RUNTIME_CMAKE_ARGS += $CMakeGeneratorArgs
     $RUNTIME_CMAKE_ARGS += $RuntimeCMakeExtraArgs
     & cmake @RUNTIME_CMAKE_ARGS
     if ($LASTEXITCODE -ne 0) { throw "Runtime configuration failed" }
-    & cmake --build $BUILD_DIR --config $RuntimeBuildType --target psx-runtime
+    & cmake --build $BUILD_DIR --config $RuntimeBuildType --target psx-runtime --parallel $BuildJobs
     if ($LASTEXITCODE -ne 0) { throw "Runtime build failed" }
 }
 finally {

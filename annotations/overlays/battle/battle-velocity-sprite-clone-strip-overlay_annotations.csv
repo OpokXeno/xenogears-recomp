@@ -1,0 +1,14 @@
+# image-id: battle-velocity-sprite-clone-strip-overlay
+# annotated_functions/total_functions: 5/5
+# Total basis: whole-image AOT range manifest.
+# sha256: d93be18b501cfeb18586928ee78a378e0f62a5c0f3fafbc2492285e0a59e8067
+# load-address: 0x801fc000
+# identity-source: annotations/overlays/disc1-images.toml
+# source-record-id: battle-velocity-sprite-clone-strip-image
+# format: address, note
+
+0x801FC000, function start — MeasureSpriteFrameBounds; scans all sprite frame rectangles and returns their count dimensions and minimum and maximum local bounds.
+0x801FC0EC, function start — UpdateVelocityWrappedSpriteCloneStrip; converts actor displacement into the clone strip's accumulated scrolling offset while cancelling normal actor movement.
+0x801FC168, function start — DrawSpriteCloneAtHorizontalOffset; projects each sprite frame at a supplied offset while preserving UV orientation flipping and ordering depth.
+0x801FC508, function start — DrawVelocityWrappedSpriteCloneStrip; repeats complete sprite clones one measured width apart in both directions until they cover the screen.
+0x801FC7B0, function start — CreateVelocityWrappedSpriteCloneStrip; registers the actor-owned effect marks its actor flag and clears the accumulated wrap offset.
