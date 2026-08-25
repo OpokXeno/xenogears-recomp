@@ -1,6 +1,6 @@
 # Seeds for Slus 006 (SLUS-00664)
 # JAL targets: 589
-# Total seeds: 644
+# Total seeds: 660
 # Function-start seeds for the recompiler.
 # One 0x-prefixe address per line. Lines starting with # are ignored.
 # The recompiler also discovers functions dynamically from entry_pc, so this
@@ -653,3 +653,19 @@
 0x8003BFA0  # verified: decomp `SoundSpuIRQHandler` (system/sound.c — installed via SpuSetIRQCallback, interrupt-context entry invisible to JAL walker); bytes absent from generated C
 0x8002E470  # verified: focused Ghidra audit `RenderFlatTriangleNearestMode`; indirect field-model handler entry initializes triangle packet stride/depth mode before shared body at 0x8002E490; no dispatch case before promotion
 0x8002E8DC  # verified: focused Ghidra audit `RenderFlatTriangleNearest`; indirect field-model handler entry initializes triangle packet stride/depth mode before shared body at 0x8002E8FC; no dispatch case before promotion
+0x80022E8C  # verified: Ghidra PARAM xref at 0x80024880 installs `TickAnimationTaskWithFrameCounter` as a work-list callback; no exact dispatch entry before promotion
+0x8002E448  # verified: resident model-renderer tables at 0x8004FED0/0x8004FF70 contain this exact `ModelRenderPolyGT3ByNearestDepth` handler pointer
+0x8002E64C  # verified: resident model-renderer tables at 0x80050010/0x800500B0 contain this exact `RenderGouraudTexturedQuadFarthest` handler pointer
+0x8002E8B4  # verified: resident model-renderer tables at 0x8004FED4/0x8004FF74 contain this exact `RenderGouraudTexturedTriangleNearest` handler pointer
+0x8002EAB8  # verified: resident model-renderer tables at 0x80050014/0x800500B4 contain this exact `RenderGouraudTexturedQuadNearest` handler pointer
+0x8002ED20  # verified: resident model-renderer table at 0x8004FE54 contains this exact `RenderFlatTriangleFarthest` handler pointer
+0x8002EF0C  # verified: resident model-renderer tables at 0x8004FE88/0x8004FF28 contain this exact `RenderFlatTexturedTriangleAverageDepthCue` handler pointer
+0x8002F0E4  # verified: resident model-renderer tables at 0x8004FE8C/0x8004FF2C contain this exact `RenderFlatTexturedTriangleNearestDepthCue` handler pointer
+0x8002F2E0  # verified: resident model-renderer table at 0x8004FE7C contains this exact `RenderNormalLitTexturedTriangles` handler pointer
+0x8002F4B4  # verified: resident model-renderer table at 0x8004FECC contains this exact `RenderFlatTexturedTriangleModeOne` handler pointer
+0x8002F6B4  # verified: resident model-renderer table at 0x8004FEA4 contains this exact `RenderGouraudLitTriangles` handler pointer
+0x8002F8D0  # verified: resident model-renderer table at 0x8004FF94 contains this exact `RenderFlatTexturedQuadModeOne` handler pointer
+0x8002FAE8  # verified: resident model-renderer table at 0x8004FFBC contains this exact `RenderNormalLitTexturedQuads` handler pointer
+0x8002FCFC  # verified: resident model-renderer tables at 0x8004FFC8/0x80050068 contain this exact `RenderFlatTexturedQuadAverageDepthCue` handler pointer
+0x8002FF0C  # verified: resident model-renderer tables at 0x8004FFCC/0x8005006C contain this exact `RenderFlatTexturedQuadNearestDepthCue` handler pointer
+0x8003014C  # verified: Ghidra DATA xref at 0x80030588 installs `StepValueTowardTarget` as the per-object update callback; no exact dispatch entry before promotion
