@@ -78,7 +78,7 @@ __pycache__/
 # ---- Docs runtime artifacts (burndown dumps — large RAM snapshots) ----------
 docs/burndown/*.json
 docs/*
-!docs/field-scripting.md
+!docs/xenogears
 
 # ---- Probe / scratch directories --------------------------------------------
 probes/
@@ -101,6 +101,7 @@ tools/*
 !tools/census_disc_overlays.py
 !tools/test_census_disc_overlays.py
 !tools/extract_disc_overlays.py
+!tools/audio-extractor-bundle
 !tools/finalize_static_overlays.py
 !tools/test_finalize_static_overlays.py
 !tools/run_with_job_pool.py
