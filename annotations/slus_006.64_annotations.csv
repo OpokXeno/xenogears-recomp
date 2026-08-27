@@ -562,55 +562,55 @@
 0x800379C8, ScreenPrintf — Forwards a format string and variadic arguments to the active on-screen font renderer.
 0x800379D0, GraphicsInitializationNoOp — Returns immediately without reading or modifying runtime state.
 0x800379D8, LoadPairedArchiveResources — Validates an index then allocates and pins aligned buffers for entries 2n+6 and 2n+k+7 and queues both reads.
-0x80037B88, SoundInitialize — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x80037DC0, SoundReset — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x80037E8C, SoundEnableAllSpuChannels — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x80037EE4, SoundMuteAllSpuChannels — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x80037B88, InitializeSoundSubsystem — Initializes the sound heap and SPU RAM allocator clears driver registries and voice state then installs the timer-driven sequencer and permanent 16-track SEDS manager.
+0x80037DC0, ResetSoundSubsystem — Stops active managers and voices clears loaded WDS and SEDS registries and resets SPU transfer and global sound state.
+0x80037E8C, EnableAllSpuVoices — Clears the global mute state and marks active tracks so their voice parameters are refreshed.
+0x80037EE4, MuteAllSpuVoices — Mutes sequence output and schedules active physical SPU voices for release.
 0x80037F44, SoundEnableEventProcessing — Enables the sound event and sets its enabled flag only when currently disabled.
 0x80037F88, SoundDisableEventProcessing — Disables the sound event and clears its enabled flag only when currently enabled.
-0x80037FD8, SoundLoadWdsFile — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x80037FD8, LoadAndRegisterWdsBank — Allocates SPU RAM uploads a complete WDS ADPCM payload copies its header and preset table records the actual SPU base address and links the bank by WDS ID.
 0x800380D0, SoundLoadPartialWdsFile — Rejects duplicate WDS IDs then reserves SPU memory and queues available sample bytes before retaining and linking the copied header.
-0x800381F4, SoundSpuMemoryAllocateWDS — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x80038264, SoundWdsSetTransferParamters — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003827C, SoundTransferWdsPart — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x80038310, SoundFreeWdsEntry — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x800383EC, SoundFindWdsEntry — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x80038428, SoundAddSedsEntry — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x800381F4, AllocateWdsSpuMemory — Validates WDS sizing and reserves either its configured SPU address or a suitably sized free block for the ADPCM payload.
+0x80038264, ConfigurePartialWdsTransfer — Stores the source offset and remaining byte count used to continue a partial WDS upload.
+0x8003827C, ContinuePartialWdsTransfer — Queues the next available portion of a partial WDS ADPCM upload and advances its retained transfer state.
+0x80038310, FreeWdsBank — Unlinks a loaded WDS bank releases its SPU RAM allocation and frees the retained header and preset table.
+0x800383EC, FindWdsBankById — Returns the loaded WDS bank with the requested numeric ID or null when that ID is not registered.
+0x80038428, RegisterSedsBank — Validates a SEDS resource rejects duplicate IDs and links the bank into the global sound-effect registry without creating a private manager.
 0x8003852C, SoundRemoveSedsEntry — Stops channels using the target SEDS ID then unlinks the matching entry and reports absent or invalid data.
 0x80038624, SoundClearSedsEntries — Stops active sound-effect elements and clears the loaded SEDS list head.
 0x8003864C, SoundFindSedsEntry — Returns the loaded SEDS entry whose 16-bit ID matches the supplied entry or null when absent.
 0x8003869C, SoundStopAllPlayback — Releases voices from enabled managers and aborts all currently active sound elements.
 0x800386C4, SoundSetOutputMode — Replaces output-mode flags from a mode value and reapplies master and reverb settings while recalculating active channel volumes.
 0x80038824, SoundGetOutputMode — Decodes the sound output flags and returns mode 0 for normal output or mode 1 or 2 for the two alternate channel modes.
-0x8003885C, SoundSetupCdMix — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003885C, ConfigureSpuCdMix — Configures the SPU's stereo CD input volume and optional send to global reverb for XA and movie audio.
 0x800388D4, SoundSetAutoReverbEnabled — Sets or clears automatic application of per-manager reverb settings.
 0x8003890C, SoundSetManagerPlaybackEnabled — Clears the manager inhibit bit when enabling playback and sets it when disabling playback.
-0x80038934, SoundSetReverbModeWithAllocation — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x80038AD4, SoundInitiateReverbWorkAreaTransfer — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x80038B4C, SoundExecuteReverbWorkAreaTransfer — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x80038C68, SoundSetMasterVolumeWithFade — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x80038D18, SoundSetCdVolumeWithFade — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x80038DB4, SoundSetCdAttr — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x80038DF4, SoundApplyVolumeSettings — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x80038E6C, SoundSetVolumeWithPhase — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x80038EC0, SoundHeapInitialize — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x80038F18, SoundHeapAllocate — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x80038934, SetReverbModeDepthDelayFeedback — Applies global SPU reverb mode depth delay and feedback preserving the mode for -1 and reallocating and clearing reverb work RAM when the mode changes.
+0x80038AD4, BeginReverbWorkAreaTransfer — Suspends reverb and prepares the asynchronous SPU transfer used when replacing or clearing global reverb work RAM.
+0x80038B4C, ExecuteReverbWorkAreaTransfer — Performs the pending reverb work-area transfer and restores the configured global reverb state afterward.
+0x80038C68, SetSpuMasterVolumeFade — Sets or interpolates the common SPU master volume toward the requested level.
+0x80038D18, SetSpuCdVolumeFade — Sets or interpolates the stereo SPU CD-input volume used by XA and movie streams.
+0x80038DB4, SetSpuCdInputAttributes — Enables or disables CD input and its reverb send then marks common SPU attributes for refresh.
+0x80038DF4, ApplyCommonSpuVolumes — Converts current master and CD volume state into pending left and right SPU common-volume attributes.
+0x80038E6C, InitializeVolumeInterpolator — Initializes an immediate or phased fixed-point transition between current and target volume values.
+0x80038EC0, InitializeSoundHeap — Initializes the driver-owned main-RAM heap used for WDS headers managers tracks and auxiliary sequence state.
+0x80038F18, AllocateSoundHeapBlock — Allocates aligned cleared memory from the first suitable gap in the sound heap.
 0x80039024, AllocateSoundHeapFromHighEnd — Allocates aligned cleared memory from the high end of the last fitting sound-heap gap and re-enables sound events only after success.
-0x80039144, SoundHeapFree — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x80039144, FreeSoundHeapBlock — Removes a sound-heap allocation and makes its aligned span available for later banks or managers.
 0x800391CC, SoundHeapGetLargestFreeSpan — Scans every heap gap and returns the largest available span rounded down to 16 bytes.
-0x80039248, SoundHeapSetBlockMemory — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x800392EC, SoundHeapClearBlockMemory — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x80039360, SoundSpuMemoryInitialize — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x800393B8, SoundSpuMemoryAllocateBlock — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x80039248, CopyIntoSoundHeapBlock — Copies resource metadata into a sound-heap allocation while preserving the allocator's block bookkeeping.
+0x800392EC, ClearSoundHeapBlock — Clears the payload area of a sound-heap allocation without destroying its allocator metadata.
+0x80039360, InitializeSpuRamAllocator — Initializes the linked SPU RAM allocation map used by WDS sample banks and reverb work areas.
+0x800393B8, AllocateSpuRamBlock — Reserves a suitably sized free SPU RAM span and returns its hardware address or zero on failure.
 0x800394B8, SoundSpuMemoryAllocateBlockFromTop — Allocates a suitably sized SPU RAM block from the upper end of a free gap and returns its SPU address or zero on failure.
-0x800395B8, SoundSpuMemoryAllocateBlockAtAddress — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x800396E0, SoundSpuMemoryFreeBlock — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x800395B8, AllocateSpuRamBlockAtAddress — Reserves a free SPU RAM span at the requested hardware address when it fits without overlapping another allocation.
+0x800396E0, FreeSpuRamBlock — Releases the SPU RAM allocation beginning at the requested hardware address.
 0x80039748, SoundSpuMemorySetBlockCategory — Finds the SPU RAM block at the requested address and updates its one-byte category when present.
 0x8003977C, SoundSpuMemoryGetIdleStatus — Returns zero unconditionally.
-0x80039784, SoundSpuMemoryGetFreeBlock — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x800397C0, SoundSpuMemoryFindBlock — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x800397FC, SoundAllocateAndStartAudioManager — Allocates playback state for SEDS data then starts it with the requested initial level and transition duration.
-0x80039850, SoundAllocateAudioManagerForSeds — Allocates and initializes playback state sized for the SEDS channel count and optional script table then links it into the active list.
+0x80039784, FindFreeSpuRamBlock — Returns a free SPU RAM allocation record suitable for the requested size.
+0x800397C0, FindSpuRamBlockByAddress — Returns the allocation record beginning at the requested SPU hardware address.
+0x800397FC, CreateAndStartSmdsManager — Creates a dedicated manager for an SMDS score then starts it with the requested initial volume and transition duration.
+0x80039850, CreateSmdsManager — Allocates an SMDS manager sized for its track count expands optional percussion mappings initializes its tracks and links it into the active-manager list.
 0x80039910, SoundInitializeAudioManagerInPlace — Clears caller-provided storage and initializes playback state within it while marking the storage as externally owned.
 0x800399D4, DestroyAudioManager — Stops an active audio manager then removes it from the global list and frees its linked allocations and owned manager block.
 0x80039A80, SoundStartAudioManager — Resets playback channels and interpolation state then applies the requested initial level transition and marks playback running.
@@ -619,24 +619,24 @@
 0x80039C8C, SoundFadeOutAudioManager — Transitions an audio manager’s playback level to zero over the requested number of updates.
 0x80039CC4, SoundStopAllActiveAudioManagers — Clears the running flag and releases every assigned voice for each active audio manager.
 0x80039D24, SoundImmediateReturnControlEntry — Returns immediately without reading arguments or changing state.
-0x80039D2C, SoundSetSedDispatchEnabled — Enables SED event dispatch or stops all pooled SED voices before disabling dispatch.
-0x80039D78, SoundSetOrGetSedVoiceLimit — Optionally clamps the pooled SED voice limit to an even value from 4 through 16 and always returns the current limit.
-0x80039DB8, SoundDispatchSedEventOnLastVoicePair — Dispatches an enabled SED event through the final pooled voice pair using the default amplitude parameters.
-0x80039E18, SoundDispatchSedEventOnVoicePair12 — Dispatches an enabled SED event through voice pair 12 using the default amplitude parameters.
+0x80039D2C, SetSedsDispatchEnabled — Enables SEDS effect dispatch or stops all pooled SEDS tracks before disabling it.
+0x80039D78, SetOrGetSedsTrackLimit — Optionally clamps the permanent SEDS track limit to an even value from 4 through 16 and always returns the current limit.
+0x80039DB8, PlaySedsEffectOnLastVoicePair — Starts an enabled SEDS effect through the final pooled track pair using default volume and pan.
+0x80039E18, PlaySedsEffectOnVoicePair12 — Starts an enabled SEDS effect through the pair mapped to physical voice 12 using default volume and pan.
 0x80039E60, PlayDefaultStereoSoundEffect — When sound effects are enabled selects two channels and starts the requested effect at volume 0x6000 and pan 0x4000.
-0x80039EC4, SoundDispatchSedEventOnSelectedVoicePair — Normalizes a voice-pair selector and dispatches an enabled SED event through that pair with default amplitude parameters.
-0x80039F9C, SoundDispatchSedEventWithAmplitudeRange — Normalizes a voice-pair selector and dispatches an enabled SED event with two signed eight-bit amplitude parameters converted to fixed point.
-0x80039FF8, SoundStopAllSedVoices — Releases every active voice in the pooled SED audio manager and clears its active-channel mask.
-0x8003A094, SoundStopSedVoicesByBankId — Stops every active pooled SED voice whose recorded bank identifier matches the supplied SEDS identifier.
-0x8003A20C, SoundStopSelectedSedVoicePair — Normalizes a pair selector then stops both pooled SED voices belonging to that pair.
+0x80039EC4, PlaySedsEffectOnSelectedVoicePair — Normalizes a pair selector and starts an enabled SEDS effect through that pooled track pair with default volume and pan.
+0x80039F9C, PlaySedsEffectWithMixOffsets — Normalizes a pair selector and starts an enabled SEDS effect with two signed eight-bit mix operands converted to fixed point.
+0x80039FF8, StopAllSedsEffects — Releases every active voice in the permanent SEDS manager and clears its active-track mask.
+0x8003A094, StopSedsEffectsByBankId — Stops every active pooled SEDS track whose recorded bank identifier matches the supplied SEDS ID.
+0x8003A20C, StopSelectedSedsVoicePair — Normalizes a pair selector then stops both pooled SEDS tracks in that pair.
 0x8003A2D4, SoundImmediateReturnVoiceEntry — Returns immediately without reading arguments or changing state.
 0x8003A2DC, SoundImmediateReturnChannelEntry — Returns immediately without reading arguments or changing state.
-0x8003A344, SoundSetSedVoicePairVolumeImmediate — Sets the fixed-point volume of both active voices in a selected pair and marks their volume state dirty.
-0x8003A3B8, SoundFadeSedVoicesById — Starts a fixed-duration volume transition on every active pooled SED voice matching the requested playback identifier.
-0x8003A450, SoundFadeSedVoicePairVolume — Starts a fixed-duration volume transition on both active voices in a selected pair.
-0x8003A4FC, SoundSetSedVoicesByIdVolumeImmediate — Sets the fixed-point volume of every active pooled SED voice matching the requested playback identifier.
-0x8003A55C, SoundSetSedVoicePairPanImmediate — Sets the fixed-point pan value of both active voices in a selected pair and marks their volume state dirty.
-0x8003A5D0, SoundGetActiveSedVoiceMask — Returns a bit mask of active pooled SED voices optionally restricted to a requested playback identifier.
+0x8003A344, SetSedsVoicePairVolume — Sets the fixed-point volume of both active tracks in a selected SEDS pair and marks their voice volumes dirty.
+0x8003A3B8, FadeSedsEffectsByPlaybackId — Starts a fixed-duration volume transition on every active pooled SEDS track matching the playback identifier.
+0x8003A450, FadeSedsVoicePairVolume — Starts a fixed-duration volume transition on both active tracks in a selected SEDS pair.
+0x8003A4FC, SetSedsEffectsByPlaybackIdVolume — Immediately sets the fixed-point volume of every active pooled SEDS track matching the playback identifier.
+0x8003A55C, SetSedsVoicePairPan — Sets the fixed-point pan of both active tracks in a selected SEDS pair and marks their voice volumes dirty.
+0x8003A5D0, GetActiveSedsVoiceMask — Returns the physical-voice mask used by active pooled SEDS tracks optionally restricted to a playback identifier.
 0x8003A65C, RecycleAndSelectSoundEffectChannels — Releases channels already playing the requested effect and selects a contiguous free or lowest-priority channel range.
 0x8003A82C, SoundIsAudioManagerRunning — Returns the audio manager’s running flag as zero or one.
 0x8003A838, SoundSetAudioManagerTempoScale — Sets or interpolates the playback tempo scale and immediately recalculates the effective tick rate when no duration is requested.
@@ -653,152 +653,152 @@
 0x8003ADCC, SoundSaveAudioManagerSnapshot — Allocates storage for current playback state then copies that state and marks a snapshot available.
 0x8003AE84, SoundRestoreAudioManagerSnapshot — Releases current voices then restores saved playback state while preserving the current timeline position and reactivating eligible channels.
 0x8003AF24, SoundArmAudioManagerPositionControl — Records a target sequence position and marks it pending then releases assigned voices and resets the primary playback interpolator to full scale.
-0x8003AFA0, MarkEligibleAudioElementsForUpdate — Sets status bit 0 on each element whose active flags contain 0x101 and exclude both bits in mask 0x30.
-0x8003AFFC, SoundAbortAllVoices — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003B060, SoundReleaseAllVoices — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003B0AC, SoundBuildAudioManagerScriptOffsetTable — Expands packed script-index records into absolute script offsets stored after the audio manager’s channel data.
-0x8003B148, SoundCreateSedVoicePool — Creates the global pooled SED audio manager with an even channel count and assigns sequential voice numbers and descending priorities.
+0x8003AFA0, MarkEligibleTracksForUpdate — Sets the pending-update bit on each active track that is not paused held or otherwise excluded by track state mask 0x30.
+0x8003AFFC, AbortAllManagerVoices — Immediately aborts every physical SPU voice currently assigned to tracks in the manager.
+0x8003B060, ReleaseAllManagerVoices — Requests release of every physical SPU voice currently owned by tracks in the manager.
+0x8003B0AC, ExpandSmdsPercussionMappings — Expands sparse SMDS percussion patch records into the manager's 96-entry note-to-preset pitch and pan lookup table.
+0x8003B148, CreatePermanentSedsManager — Creates the permanent even-sized SEDS track pool and maps its tracks to sequential high-priority physical voices ending at SPU voice 23.
 0x8003B1FC, SoundDestroyAudioManager — Removes an audio manager from the active list and releases its heap allocation.
-0x8003B22C, SoundInitializeAudioManagerFromSoundFile — Copies sequence identifiers and reverb settings into the manager then applies enabled reverb and initializes playback state.
+0x8003B22C, InitializeSmdsManagerFromHeader — Copies SMDS tempo track WDS and global reverb defaults into its manager applies enabled reverb state and initializes manager timing.
 0x8003B32C, SoundInitializeDefaultAudioManager — Assigns default sequence identifiers volume limits and reverb selection before initializing playback state.
-0x8003B370, SoundInitializeAudioManager — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003B424, SoundInitializeAudioManagerElements — Initializes every track from its sequence offset with timing pitch instrument voice and playback defaults while disabling empty tracks.
-0x8003B644, StartSedSoundVoices — Resolves the requested sound bank and sample data then initializes selected voices with scripts instrument parameters volume pan ownership and channel assignments.
+0x8003B370, InitializeSoundManagerState — Resets a manager's timing counters tempo scale volume pitch pan automation masks and linked allocations to their playback defaults.
+0x8003B424, InitializeSmdsTracks — Initializes every SMDS track from its script offset and default WDS ID loads preset zero when available and disables tracks with zero offsets.
+0x8003B644, StartSedsEffect — Resolves a registered SEDS bank and effect entry then initializes its two pooled tracks with scripts volume pan WDS state ownership and physical voice assignments.
 0x8003B930, FreeAudioManagerLinkedAllocations — Detaches and frees every sound-heap block in an audio manager’s secondary allocation chain.
-0x8003B97C, SoundCopyAudioManagerData — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003B9E4, SoundAddAudioManagerToList — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003BA38, SoundRemoveAudioManagerFromList — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003BB08, SoundSetFlagsOnActiveAudioElements — ORs the supplied flags into every currently active track.
-0x8003BB40, SoundCalculateAudioManagerSize — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003BB64, SoundOnTransferCallback — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003BC10, SoundQueueSpuWriteCommand — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003BC34, SoundQueueSpuReadCommand — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003B97C, CopySoundManagerState — Copies a manager state region while preserving allocator and active-list ownership fields.
+0x8003B9E4, LinkSoundManager — Appends a manager to the global active-manager linked list under sound-event exclusion.
+0x8003BA38, UnlinkSoundManager — Removes a manager from the global active-manager linked list under sound-event exclusion.
+0x8003BB08, MarkActiveTracksDirty — ORs the supplied pending-update flags into every active track in a manager.
+0x8003BB40, CalculateSoundManagerSize — Returns 0x94 bytes of manager state plus 0x158 bytes for each logical track.
+0x8003BB64, CompleteSoundTransferCommand — Advances the eight-entry asynchronous SPU transfer queue after the active command's callback fires.
+0x8003BC10, QueueSpuWriteCommand — Queues an asynchronous main-RAM-to-SPU transfer with its completion callback.
+0x8003BC34, QueueSpuReadCommand — Queues an asynchronous SPU-to-main-RAM transfer with its completion callback.
 0x8003BC58, SoundQueueSpuReadDecodedDataAll — Queues an asynchronous transfer that reads all decoded SPU capture data and invokes the supplied completion callback.
 0x8003BC7C, SoundQueueSpuReadDecodedDataCdOnly — Queues an asynchronous transfer that reads CD-only decoded SPU capture data and invokes the supplied completion callback.
-0x8003BCA0, SoundQueueTransferCommand — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003BDBC, SoundTransferQueueSync — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003BCA0, QueueSoundTransferCommand — Adds a read or write request to the driver's eight-entry SPU transfer queue and starts processing when idle.
+0x8003BDBC, SynchronizeSoundTransferQueue — Waits until every queued SPU transfer command has completed.
 0x8003BDF4, SoundTransferNoOp — Returns immediately without changing transfer state.
 0x8003BDFC, WaitOrQuerySoundTransfer — Optionally waits for SPU transfer processing to finish and otherwise returns the active transfer command type while processing remains busy.
-0x8003BE68, SoundProcessTransferCommand — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003C010, SoundSetSpuIrqCallback — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003C020, SoundUpdateSequencer — Advances volume fades and active sequences from the hardware timer then updates voices and commits pending SPU state.
-0x8003C484, SoundTickInterpolator — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003C4C4, SoundAdvanceTrackTimingAndSlides — Advances manager timing and active pitch volume and pan slides while decrementing note and gate durations and marking transitions.
-0x8003C6E8, SoundProcessReadyTrackScripts — Interprets commands for ready tracks then starts notes or rests and computes their duration gate pitch and modulation state.
-0x8003CC84, SoundConfigurePercussionNote — Selects the percussion mapping for a note and applies its instrument pitch and pan values.
-0x8003CD00, SoundScriptDefaultHandler — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003CD08, SoundScriptRest — Reads a duration then marks the track as resting and awaiting duration processing.
-0x8003CD30, SoundScriptFermata — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003CD4C, SoundScriptNop3 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003CD54, SoundScriptSavePositionIfSelectorMatches — Saves the next script position and current octave when the operand matches the manager selector.
-0x8003CD7C, SoundScriptDefaultSkip3 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003CD84, SoundScriptNop4 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003CD8C, SoundScriptReturnOrEndTrack — Returns to a saved position and restores its octave or releases the assigned voice and deactivates the track when no position is saved.
-0x8003CE04, SoundScriptSaveOctaveAndIP — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003CE18, SoundScriptSetOctave — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003CE38, SoundScriptRaiseOctave — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003CE50, SoundScriptLowerOctave — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003CE68, SoundScriptSetTimeSignature — Loads the timing numerator and denominator then derives and resets the manager tick divisors and counters.
-0x8003CE9C, SoundScriptSetTimingCycleState — Loads two timing-cycle values and resets the current timing divisor from the manager baseline.
-0x8003CEC0, SoundScriptSetManagerUnk1a — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003CED4, SoundScriptAddManagerUnk1a — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003CEF0, SoundScriptBeginLoop — Pushes a loop frame containing the repeat count continuation position and current octave.
-0x8003CF38, SoundScriptEndLoop — Repeats the current loop with its saved octave until its count expires then pops the loop frame.
-0x8003CFA4, SoundScriptBreakLoopOnFinalIteration — Jumps past the current loop and restores its saved octave when the final iteration has been reached.
-0x8003CFF0, SoundScriptPlaySoundEffectDefaultMix — Starts the identified sound effect at volume 127 and centered pan then advances past three operand bytes.
-0x8003D034, SoundScriptStopSoundEffect — Stops every active sound-effect track matching the supplied 16-bit identifier.
-0x8003D070, SoundScriptJumpToSoundEntry — Selects a sound bank by the track bank identifier and redirects execution through its indexed sequence-offset table.
-0x8003D0E8, SoundScriptSetTempo — Replaces the manager tempo with the operand and immediately recomputes its scaled tick increment.
-0x8003D110, SoundScriptAddTempo — Adds a signed operand to the fixed-point tempo and clears the cached tick increment.
-0x8003D13C, SoundScriptSlideTempo — Sets a target tempo and computes a per-tick step that reaches it over the requested duration.
-0x8003D17C, SoundScriptSetSequenceVolume — Replaces the sequence volume and marks every active track for volume recalculation.
-0x8003D1BC, SoundScriptFadeSequenceVolume — Computes and starts a sequence-volume transition to the requested target over the requested duration multiplied by 32 ticks.
-0x8003D208, SoundScriptSetUnk62 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D21C, SoundScriptAssignSpuVoice — Releases the track’s previous SPU voice and assigns the requested valid voice number.
-0x8003D298, SoundScriptSetInstrument — Loads the requested instrument’s sample addresses ADSR settings and tuning into the track.
-0x8003D2D0, SoundScriptAccumulateTrackControlValue — Adds a nonzero operand to the track’s persistent control byte or clears that byte when the operand is zero.
-0x8003D300, SoundScriptEnablePercussion — Enables percussion-note mapping when percussion data is available.
-0x8003D328, SoundScriptPercussionOff — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D340, SoundScriptSetActiveFlag800 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D358, SoundScriptClearActiveFlag800 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D370, SoundScriptEnablePitchModulation — Enables SPU pitch modulation for eligible odd-numbered voices.
-0x8003D3A4, SoundScriptDisablePitchModulation — Disables SPU pitch modulation for eligible odd-numbered voices.
-0x8003D3D8, SoundScriptSetNoiseClock — Sets the manager noise clock then enables noise generation for the track’s voice.
-0x8003D438, SoundScriptAddNoiseClock — Adds the operand to the manager noise clock modulo 64 then enables noise generation for the track’s voice.
-0x8003D4A4, SoundScriptSetVoiceFlags2000AndMode — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D4C4, SoundScriptSetVoiceFlags2000ClearMode — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D4E4, SoundScriptSetReverbParameters — Updates reverb depth delay and feedback while retaining the current reverb mode and reallocating its work area when required.
-0x8003D53C, SoundScriptEnableVoiceReverbIfAllowed — Enables reverb routing for the track’s voice when manager and interrupt-state restrictions permit it.
-0x8003D59C, SoundScriptSetVoiceFlags4000ClearMode — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D5BC, SoundScriptSkip3 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D5C4, SoundScriptNop — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D5CC, SoundScriptNop2 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D5D4, SoundScriptCallE5BC — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D60C, SoundScriptSetAdsrModes — Loads attack sustain and release modes and marks every ADSR component for refresh.
-0x8003D640, SoundScriptSetAttackTime — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D65C, SoundScriptSetDecayTime — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D678, SoundScriptSetSustain — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D694, SoundScriptSetRelease — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D6B4, SoundScriptSetSustainLevel — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D6D0, SoundScriptSetAdsrDRAndSR — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D6F8, SoundScriptSetAttackMode — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D714, SoundScriptSetSustainMode — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D730, SoundScriptSetReleaseMode — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D74C, SoundScriptSetUnk6E — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D770, SoundScriptAddUnk6E — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D79C, SoundScriptAddFinePitchOffset — Adds the signed operand multiplied by eight to the track pitch offset and marks pitch dirty.
-0x8003D7C8, SoundScriptAddWidePitchOffset — Adds the signed 16-bit operand to the track pitch offset and marks pitch dirty.
-0x8003D7FC, SoundScriptStartPitchSlide — Starts a per-tick pitch slide using the requested duration and signed pitch delta or disables the slide when either is zero.
-0x8003D854, SoundScriptToggleUnk04Bit2 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D86C, SoundScriptClearUnk04Bit1 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003D884, SoundScriptSetPortamentoDuration — Stores the portamento duration and enables automatic note-to-note glides when nonzero.
-0x8003D8B8, SoundScriptStartTrianglePitchLfo — Initializes and activates a triangle-wave pitch oscillator from depth speed and phase operands.
-0x8003D9A4, SoundScriptStartSelectablePitchLfo — Initializes and activates a pitch oscillator with operand-selected waveform direction depth speed and phase.
-0x8003DAB0, SoundScriptSetPitchLfoRate — Converts the operand into a reciprocal oscillator step and applies it to both pitch-LFO phase counters.
-0x8003DAEC, SoundScriptSetUnkCEAndF6 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003DB0C, SoundScriptClearUnkCEAndF6 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003DB2C, SoundScriptSetVolume — Replaces the track volume immediately cancels active volume ramps and marks volume dirty.
-0x8003DB58, SoundScriptAddVolumeDelta — Adds a signed 8-bit Q8.24 volume delta and marks volume recomputation while cancelling active volume ramps.
-0x8003DB98, SoundScriptStartTargetVolumeRamp — Computes a per-tick Q8.24 step toward a signed target volume over the requested duration and enables the primary ramp mode.
-0x8003DBE4, SoundScriptStartSecondaryVolumeRamp — Captures the current signed volume level and computes a second ramp mode toward a signed target over the requested duration.
-0x8003DC50, SoundScriptConfigureTriangleTremolo — Initializes the volume modulation slot with a triangle-wave generator whose depth speed and phase derive from three command bytes.
-0x8003DD24, SoundScriptConfigureWaveformTremolo — Initializes the volume modulation slot with a selected waveform depth period polarity and phase configuration.
-0x8003DE18, SoundScriptSetTremoloDepthRate — Converts an encoded duration into the current and incremental tremolo-depth values.
-0x8003DE54, SoundScriptSetUnkCEAndUnk116 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003DE74, SoundScriptClearUnkCEAndUnk116 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003DE94, SoundScriptSetUnk74 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003DEB4, SoundScriptAddPanDelta — Adds a signed 8-bit Q8.8 delta to the channel pan value and marks pan recomputation.
-0x8003DEE4, SoundScriptStartPanRamp — Computes a Q8.8 pan step toward a signed target over the requested duration and enables pan interpolation.
-0x8003DF3C, SoundScriptSetAutoPanDepthRate — Converts an encoded duration into the current and incremental auto-pan depth values.
-0x8003DF78, SoundScriptConfigureTriangleAutoPan — Initializes the pan modulation slot with an alternating triangle-wave generator and command-defined depth speed and phase.
-0x8003E04C, SoundScriptConfigureWaveformAutoPan — Initializes the pan modulation slot with a selected waveform depth period polarity and phase configuration.
-0x8003E140, SoundScriptSetUnkCEAndUnk136 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003E160, SoundScriptDisableAutoPan — Clears the pan-modulation ownership flag and disables the configured auto-pan slot.
-0x8003E180, SoundScriptConfigureModulator — Selects one of four modulation slots and assigns its waveform output type polarity and initial control values.
-0x8003E1F8, SoundScriptSetModulatorAmplitude — Computes the selected modulator's amplitude and per-tick step from a three-byte signed control value.
-0x8003E308, SoundScriptSetModulatorDepthRate — Sets the selected modulator's depth index and derives its current and incremental depth values from an encoded duration.
-0x8003E358, SoundScriptNop5 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003E360, SoundScriptEnableModulator — Resets the selected modulation slot then marks both the slot and its channel mask active.
-0x8003E40C, SoundScriptDisableModulator — Disables the selected modulation slot and removes its bit from the channel modulation mask.
-0x8003E44C, SoundScriptSelectBankAndInstrument — Selects a wave bank with fallback to the first loaded bank then loads the requested instrument parameters.
-0x8003E4BC, SoundScriptSetTempoMultiplier — Applies an 8-bit tempo multiplier to the base tempo and initializes the manager's Q8.24 tempo accumulator.
-0x8003E4F0, SoundScriptSelectWaveBank — Selects a wave bank with fallback to the first loaded bank and stores it for subsequent instrument resolution.
-0x8003E54C, SoundScriptRetireEndedVoice — Tests the assigned SPU voice envelope and releases and deactivates the channel when its envelope reaches zero.
-0x8003E5BC, ConfigureAudioElementInstrument — Loads an indexed instrument preset into an audio element including sample addresses ADSR parameters priority and its voice-refresh flag.
-0x8003E680, unk_SoundSetFlagsOnActiveVoices — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003E6C0, SoundSetFlagsOnActiveVoices — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003E700, SoundClearVoiceDataPointers — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003E724, SoundAssignVoiceToChannelAndStop — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003E7E0, SoundAssignVoiceToChannel — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003E83C, SoundReleaseVoiceFromChannel — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003E8A4, SoundAbortVoiceOnChannel — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003E900, SoundCommitVoiceUpdates — Writes pending volume pitch sample-address ADSR and mode changes for all 24 voices then commits FM noise reverb and key-on masks.
-0x8003EB5C, SoundCommitVoiceStops — Forces a fast release rate on voices awaiting termination then commits and clears the accumulated key-off masks.
-0x8003EBF0, SoundProcessElementVoiceRequests — Resolves active elements' modulated volume pan and pitch then services their pending channel assignment and stop requests.
-0x8003EEA0, ConvertSoundNoteToSpuPitch — Converts a signed note accumulator into a 14-bit SPU pitch value using octave and pitch lookup tables.
-0x8003EF04, SoundAssignVoiceToChannelAndPlay — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003EFA0, SoundStopVoiceOnChannel — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003EFE4, SoundTickElementModulators — Advances four enabled modulators per active element and accumulates their signed pitch volume and pan contributions.
+0x8003BE68, ProcessSoundTransferCommand — Configures and starts the active queued SPU read or write operation or completes immediate command types.
+0x8003C010, SetSoundSpuIrqCallback — Stores the driver callback invoked after its SPU IRQ bookkeeping completes.
+0x8003C020, SoundSequencerCallback240Hz — Runs the 240 Hz sound callback committing prior voice writes advancing manager ticks interpreting ready tracks updating modulators staging new parameters and committing key-offs.
+0x8003C484, AdvanceSoundInterpolator — Advances one fixed-point manager or common-volume interpolator toward its target and disables it on arrival.
+0x8003C4C4, AdvanceSequencerLogicalTick — Advances per-tick pitch volume and pan slides decrements note and gate durations requests gate key-offs and marks tracks ready for interpretation.
+0x8003C6E8, InterpretReadySequenceTracks — Executes untimed bytecode for ready tracks then handles the next note rest or tie including duration gate lookahead pitch and modulator restart state.
+0x8003CC84, ApplyPercussionNoteMapping — Resolves a percussion note through the SMDS mapping table then loads its WDS preset and mapped pitch and pan.
+0x8003CD00, HandleReservedSequenceOpcode — Returns without changing track state for reserved one-byte sequence opcodes.
+0x8003CD08, HandleSequenceOpcode80Rest — Reads a duration then requests key-off and marks the track as resting until that duration expires.
+0x8003CD30, HandleSequenceOpcode81Tie — Waits for the encoded duration without starting or releasing a voice so a preceding note can remain continuous.
+0x8003CD4C, HandleSequenceOpcode8ANoOp — Implements retail opcode 0x8A as a one-byte no-op.
+0x8003CD54, HandleSequenceOpcode8D — Conditionally updates the saved sequence position and octave when the operand matches manager state.
+0x8003CD7C, HandleSequenceOpcode8ENoOp — Implements retail opcode 0x8E by skipping its three operands without changing playback state.
+0x8003CD84, HandleSequenceOpcode8FNoOp — Implements retail opcode 0x8F as a one-byte no-op.
+0x8003CD8C, HandleSequenceReturnOrEndTrack — Handles opcode 0x90 by jumping to the saved repeat point and restoring its octave or releasing the voice and ending the track when none exists.
+0x8003CE04, HandleSequenceSaveReturnPoint — Handles opcode 0x91 by saving the next instruction and current octave as the song-repeat point.
+0x8003CE18, HandleSequenceOpcode94SetOctave — Sets the track base note to the operand multiplied by 12 semitones.
+0x8003CE38, HandleSequenceOpcode95RaiseOctave — Raises the track base note by 12 semitones.
+0x8003CE50, HandleSequenceOpcode96LowerOctave — Lowers the track base note by 12 semitones.
+0x8003CE68, HandleSequenceOpcode97 — Configures manager bar and beat timing values including the divisor 192 divided by the second operand.
+0x8003CE9C, HandleSequenceOpcodeF9 — Updates manager bar and beat bookkeeping counters and resets the current timing divisor.
+0x8003CEC0, HandleSequenceOpcodeA4 — Replaces an otherwise unidentified manager state byte from the operand.
+0x8003CED4, HandleSequenceOpcodeA5 — Adds the operand to an otherwise unidentified manager state byte.
+0x8003CEF0, HandleSequenceBeginLoop — Handles opcode 0x98 by pushing a counted-loop frame with its continuation position and current octave.
+0x8003CF38, HandleSequenceEndLoop — Handles opcode 0x99 by repeating with the saved octave until the count expires then popping the loop frame.
+0x8003CFA4, HandleSequenceBreakLoopFinal — Handles opcode 0x9A by taking the alternate ending only on the final loop iteration.
+0x8003CFF0, HandleSequenceOpcode9CPlaySedsEffect — Starts the identified SEDS effect at volume 127 and centered pan.
+0x8003D034, HandleSequenceOpcode9DStopSedsEffect — Stops every active SEDS track matching the supplied 16-bit playback identifier.
+0x8003D070, HandleSequenceOpcode9EExternalCallback — Transfers execution to an entry in an external registered SEDS group selected by the command's group and entry operands.
+0x8003D0E8, HandleSequenceOpcodeA0SetTempo — Replaces the manager tempo byte and immediately recomputes its scaled tick increment.
+0x8003D110, HandleSequenceOpcodeA1AddTempo — Adds a signed operand to fixed-point tempo state and invalidates the cached tick increment.
+0x8003D13C, HandleSequenceOpcodeA2SlideTempo — Sets a target tempo and computes the logical-tick step needed to reach it over the requested duration.
+0x8003D17C, HandleSequenceOpcodeA6SetManagerVolume — Replaces manager volume with the operand shifted into Q8.24 and marks every active track's volume dirty.
+0x8003D1BC, HandleSequenceOpcodeA7FadeManagerVolume — Starts a manager-volume transition toward the requested target over the encoded duration.
+0x8003D208, HandleSequenceOpcodeA9SetGateMode — Sets the gate-length mode used to derive note key-off timing from each encoded duration.
+0x8003D21C, HandleSequenceOpcodeAAReassignSpuVoice — Releases the track's previous physical SPU voice and assigns the requested valid voice number.
+0x8003D298, HandleSequenceOpcodeACLoadPreset — Selects and loads a preset from the track's current WDS including sample addresses signed-Q8 tuning and ADSR state.
+0x8003D2D0, HandleSequenceOpcodeADDurationAdjust — Adds the signed operand to the persistent duration adjustment or resets it when the operand is zero.
+0x8003D300, HandleSequenceOpcodeAEEnablePercussion — Enables SMDS percussion-note mapping when the manager has a percussion table.
+0x8003D328, HandleSequenceOpcodeAFDisablePercussion — Disables percussion-note mapping so subsequent notes use normal melodic pitch handling.
+0x8003D340, HandleSequenceOpcodeB0EnableNoteHold — Enables persistent note hold so following timed events do not automatically release the current voice.
+0x8003D358, HandleSequenceOpcodeB1DisableNoteHold — Disables persistent note hold.
+0x8003D370, HandleSequenceOpcodeB2EnableFm — Enables SPU pitch modulation for an eligible physical voice paired with its preceding voice.
+0x8003D3A4, HandleSequenceOpcodeB3DisableFm — Disables SPU pitch modulation for the track's physical voice.
+0x8003D3D8, HandleSequenceOpcodeB4SetNoiseClock — Sets the global SPU noise clock and enables noise as the track's voice source.
+0x8003D438, HandleSequenceOpcodeB5AddNoiseClock — Adds the operand to the global SPU noise clock modulo 64 and enables noise for the track.
+0x8003D4A4, HandleSequenceOpcodeB6EnableNoise — Enables noise for the track without changing the global SPU noise clock.
+0x8003D4C4, HandleSequenceOpcodeB7DisableNoise — Disables noise for the track while marking the global voice-noise mask dirty.
+0x8003D4E4, HandleSequenceOpcodeB8SetReverbParameters — Updates global reverb depth delay and feedback while retaining the current reverb mode.
+0x8003D53C, HandleSequenceOpcodeBAEnableReverb — Enables the track voice's send to global SPU reverb when manager state permits it.
+0x8003D59C, HandleSequenceOpcodeBBDisableReverb — Disables the track voice's send to global SPU reverb.
+0x8003D5BC, HandleSequenceOpcodeBCNoOp — Implements retail opcode 0xBC by skipping its three operands without changing playback state.
+0x8003D5C4, HandleSequenceOpcodeBDNoOp — Implements retail opcode 0xBD as a one-byte no-op.
+0x8003D5CC, HandleSequenceOpcodeBENoOp — Implements retail opcode 0xBE as a one-byte no-op.
+0x8003D5D4, HandleSequenceOpcodeC0ReloadInstrument — Reloads the current WDS preset so its sample addresses signed-Q8 tuning and ADSR parameters replace the track's staged instrument state.
+0x8003D60C, HandleSequenceOpcodeC1SetAdsrModes — Replaces attack sustain and release shape modes from the command operands and marks all ADSR components dirty.
+0x8003D640, HandleSequenceOpcodeC2SetAttackRate — Replaces the WDS-derived SPU attack rate for subsequent voice starts.
+0x8003D65C, HandleSequenceOpcodeC3SetDecayRate — Replaces the WDS-derived SPU decay rate for subsequent voice starts.
+0x8003D678, HandleSequenceOpcodeC4SetSustainRate — Replaces the WDS-derived SPU sustain rate for subsequent voice starts.
+0x8003D694, HandleSequenceOpcodeC5SetReleaseRate — Replaces the WDS-derived SPU release rate for subsequent voice starts.
+0x8003D6B4, HandleSequenceOpcodeC6SetSustainLevel — Replaces the WDS-derived SPU sustain level for subsequent voice starts.
+0x8003D6D0, HandleSequenceOpcodeC7SetDecayAndSustain — Replaces the SPU decay rate and sustain level together.
+0x8003D6F8, HandleSequenceOpcodeC8SetAttackMode — Replaces the attack mode bits for subsequent voice starts.
+0x8003D714, HandleSequenceOpcodeC9SetSustainMode — Replaces the sustain direction and shape mode bits for subsequent voice starts.
+0x8003D730, HandleSequenceOpcodeCASetReleaseMode — Replaces the release mode bits for subsequent voice starts.
+0x8003D74C, HandleSequenceOpcodeD0SetPitchOffset — Sets the signed track pitch offset in one-eighth-semitone steps.
+0x8003D770, HandleSequenceOpcodeD1AddPitchOffset — Adds a signed one-eighth-semitone delta to the track pitch offset.
+0x8003D79C, HandleSequenceOpcodeD2AddFinePitchOffset — Adds a signed one-thirty-second-semitone delta to the track pitch offset.
+0x8003D7C8, HandleSequenceOpcodeD3AddQ8PitchOffset — Adds the command's signed 16-bit big-endian Q8 semitone delta to the track pitch offset.
+0x8003D7FC, HandleSequenceOpcodeD4StartPitchSlide — Starts a logical-tick pitch slide by a signed semitone delta over the requested duration.
+0x8003D854, HandleSequenceOpcodeD5ToggleContinuousSlide — Toggles continuous pitch-slide mode.
+0x8003D86C, HandleSequenceOpcodeDCCancelPitchSlide — Cancels active pitch slide and portamento state.
+0x8003D884, HandleSequenceOpcodeD6SetPortamento — Sets the glide duration used to connect future note changes or disables portamento when zero.
+0x8003D8B8, HandleSequenceOpcodeD8ConfigurePitchModulator — Configures standard pitch modulation in slot zero from depth speed and phase operands.
+0x8003D9A4, HandleSequenceOpcodeD9ConfigurePitchModulator — Configures general pitch modulation in slot zero with operand-selected waveform direction depth speed and phase.
+0x8003DAB0, HandleSequenceOpcodeD7SetPitchModulatorRamp — Sets the pitch modulator's ramp-in rate from the encoded operand.
+0x8003DAEC, HandleSequenceOpcodeDAEnablePitchModulator — Reinitializes and enables pitch-modulator slot zero.
+0x8003DB0C, HandleSequenceOpcodeDBDisablePitchModulator — Disables pitch-modulator slot zero.
+0x8003DB2C, HandleSequenceOpcodeE0SetVolume — Replaces track volume immediately cancels the active volume slide and marks volume dirty.
+0x8003DB58, HandleSequenceOpcodeE1AddVolume — Adds a signed track-volume delta cancels the active volume slide and marks volume dirty.
+0x8003DB98, HandleSequenceOpcodeE2SlideVolume — Computes a logical-tick Q8.24 step toward the signed target volume over the requested duration.
+0x8003DBE4, HandleSequenceOpcodeF8PerNoteVolumeSweep — Captures a per-note starting volume and computes its sweep toward the target over the requested duration.
+0x8003DC50, HandleSequenceOpcodeE4ConfigureVolumeModulator — Configures standard volume modulation in slot one from depth speed and phase operands.
+0x8003DD24, HandleSequenceOpcodeE5ConfigureVolumeModulator — Configures general volume modulation in slot one with selected waveform period polarity and phase.
+0x8003DE18, HandleSequenceOpcodeE3SetVolumeModulatorRamp — Sets the volume modulator's ramp-in rate from the encoded operand.
+0x8003DE54, HandleSequenceOpcodeE6EnableVolumeModulator — Reinitializes and enables volume-modulator slot one.
+0x8003DE74, HandleSequenceOpcodeE7DisableVolumeModulator — Disables volume-modulator slot one.
+0x8003DE94, HandleSequenceOpcodeE8SetPan — Sets track pan and cancels the active pan slide.
+0x8003DEB4, HandleSequenceOpcodeE9AddPan — Adds a signed Q8.8 delta to track pan and marks voice volume for recomputation.
+0x8003DEE4, HandleSequenceOpcodeEASlidePan — Computes the Q8.8 pan step toward a signed target while preserving the retail terminal-delta behavior.
+0x8003DF3C, HandleSequenceOpcodeEBSetPanModulatorRamp — Sets the pan modulator's ramp-in rate from the encoded operand.
+0x8003DF78, HandleSequenceOpcodeECConfigurePanModulator — Configures standard pan modulation in slot two from depth speed and phase operands.
+0x8003E04C, HandleSequenceOpcodeEDConfigurePanModulator — Configures general pan modulation in slot two with selected waveform period polarity and phase.
+0x8003E140, HandleSequenceOpcodeEEEnablePanModulator — Reinitializes and enables pan-modulator slot two.
+0x8003E160, HandleSequenceOpcodeEFDisablePanModulator — Disables pan-modulator slot two.
+0x8003E180, HandleSequenceOpcodeF0ConfigureModulator — Selects one of four slots and configures its waveform target polarity and initial control state.
+0x8003E1F8, HandleSequenceOpcodeF1SetModulatorAmplitude — Sets the selected modulator's period and signed amplitude from the command operands.
+0x8003E308, HandleSequenceOpcodeF2SetModulatorDelayRamp — Sets the selected modulator's startup delay and ramp-in rate.
+0x8003E358, HandleSequenceOpcodeF5NoOp — Implements retail opcode 0xF5 by skipping its one operand without changing playback state.
+0x8003E360, HandleSequenceOpcodeF6EnableModulator — Reinitializes and enables the selected general modulator slot.
+0x8003E40C, HandleSequenceOpcodeF7DisableModulator — Disables the selected general modulator slot and removes it from the track's active mask.
+0x8003E44C, HandleSequenceOpcodeFCSelectWdsPreset — Selects a WDS ID with fallback to the first loaded bank and immediately loads the requested preset.
+0x8003E4BC, HandleSequenceOpcodeFDSetTempoScale — Sets the manager tempo scale to the operand shifted by eight and leaves it unchanged when the operand is zero.
+0x8003E4F0, HandleSequenceOpcodeFESelectWds — Selects a WDS ID with fallback to the first loaded bank without reloading the current preset.
+0x8003E54C, HandleSequenceOpcodeFFRetireEndedVoice — Checks the assigned SPU envelope and releases ownership and deactivates the track after the voice reaches zero.
+0x8003E5BC, LoadInstrumentVoiceParameters — Loads an indexed 16-byte WDS preset into a track including sample start and loop addresses signed-Q8 tuning and ADSR parameters then marks the instrument state dirty.
+0x8003E680, MarkActiveTracksForParameterUpdate — ORs the supplied volume or pitch update flags into every active track in a manager.
+0x8003E6C0, MarkActiveVoicesForRegisterUpdate — ORs the supplied hardware-register dirty flags into every active track's staged voice state.
+0x8003E700, ClearSpuVoiceOwners — Clears all 24 entries in the physical SPU voice-owner table.
+0x8003E724, ClaimSpuVoiceAndStopPreviousOwner — Claims an eligible physical SPU voice by priority while scheduling the previous owner for key-off and cancelling a pending key-on.
+0x8003E7E0, ClaimSpuVoice — Associates an eligible physical SPU voice with a track according to the driver's ownership and priority rules.
+0x8003E83C, ReleaseSpuVoiceOwnership — Releases a physical SPU voice only when the requesting track is still its recorded owner.
+0x8003E8A4, AbortOwnedSpuVoice — Schedules immediate termination and cancels pending key-on when the requesting track still owns the physical SPU voice.
+0x8003E900, CommitPendingSpuVoiceWrites — Commits dirty volume pitch sample-address and ADSR fields for all 24 voices rebuilds FM noise and reverb masks then writes pending key-ons.
+0x8003EB5C, CommitPendingSpuVoiceKeyOffs — Applies fast linear release to voices awaiting termination then writes and clears the pending SPU key-off masks.
+0x8003EBF0, StageTrackVoiceParameters — Derives each active track's gain pan and signed-Q8 pitch from preset tuning note and modulation then stages SPU voice writes and key requests.
+0x8003EEA0, ConvertQ8SemitoneToSpuPitch — Converts a signed-Q8 semitone value into the 14-bit SPU pitch register using C60 as unity pitch and the driver's octave and fractional-semitone lookup tables.
+0x8003EF04, AssignAndKeyOnSpuVoice — Arbitrates physical voice ownership by priority requests fast release of a displaced owner and schedules key-on for the winning track.
+0x8003EFA0, ScheduleSpuVoiceKeyOff — Schedules key-off only when the requesting track still owns the physical SPU voice.
+0x8003EFE4, UpdateTrackModulators — Advances all four enabled track modulators at 240 Hz and accumulates their signed pitch volume and pan contributions.
 0x8003F190, SoundModulatorDisable — Clears the modulation slot's enabled bit.
 0x8003F1A4, SoundModulatorTickUnipolarSquare — Reloads the period at expiration and toggles the output between zero and the configured amplitude.
 0x8003F1EC, SoundModulatorTickBipolarSquare — Reloads the period at expiration and alternates the output between positive and negative amplitude.
@@ -809,23 +809,23 @@
 0x8003F3C0, SoundModulatorTickBipolarRandomHold — Samples a random amplitude spanning negative through positive full scale at each period boundary and holds it.
 0x8003F42C, SeedSoundModulatorRandom — Replaces the modulation random-number state with the supplied seed.
 0x8003F43C, GenerateSoundRandom15 — Advances the sound subsystem’s xorshift seed and returns its low 15 bits.
-0x8003F468, SoundSetVoiceKeyOn — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003F484, SoundSetVoiceKeyOff — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003F4A0, SoundSetReverbVoices — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003F4BC, SoundUnkDebugNoReturn_8003F4BC — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003F4C4, SoundSetVoiceStartAddress — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
-0x8003F4E0, SoundSetVoiceLoopAddress — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003F4FC, SoundSetVoiceVolume — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003F518, SoundSetVoicePitch — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003F530, SoundSetVoiceAdsrAttackModeAndRate — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003F560, SoundSetVoiceAdsrDecayShift — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003F588, SoundSetVoiceAdsrSustainRateAndDirection — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003F5BC, SoundSetVoiceAdsrReleaseShiftAndMode — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003F5EC, SoundSetVoiceAdsrSustainLevel — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003F614, SoundValidateFile — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003F67C, SoundUnkDebug0 — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003F684, SoundFileComputeChecksum — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
-0x8003F6B0, SoundHandleError — sound driver (SPU/sequenced) (decomp: ladysilverberg/xenogears-decomp, system/sound.c)
+0x8003F468, SetPendingSpuVoiceKeyOn — Adds the supplied physical voices to the driver's pending 24-bit SPU key-on mask.
+0x8003F484, SetPendingSpuVoiceKeyOff — Adds the supplied physical voices to the driver's pending 24-bit SPU key-off mask.
+0x8003F4A0, SetPendingSpuReverbVoices — Replaces the pending 24-bit mask selecting which physical voices send to global SPU reverb.
+0x8003F4BC, SoundDriverNoOp — Returns immediately without reading arguments or changing sound state.
+0x8003F4C4, SetStagedVoiceStartAddress — Stores a physical voice's WDS ADPCM start address and marks that SPU register dirty.
+0x8003F4E0, SetStagedVoiceLoopAddress — Stores a physical voice's WDS ADPCM repeat address and marks that SPU register dirty.
+0x8003F4FC, SetStagedVoiceVolume — Stores a physical voice's left and right volume and marks both SPU registers dirty.
+0x8003F518, SetStagedVoicePitch — Stores a physical voice's 14-bit SPU pitch value and marks the pitch register dirty.
+0x8003F530, SetStagedVoiceAdsrAttack — Stores a physical voice's attack shape and rate and marks its ADSR register dirty.
+0x8003F560, SetStagedVoiceAdsrDecay — Stores a physical voice's decay rate and marks its ADSR register dirty.
+0x8003F588, SetStagedVoiceAdsrSustain — Stores a physical voice's sustain shape direction and rate and marks its ADSR register dirty.
+0x8003F5BC, SetStagedVoiceAdsrRelease — Stores a physical voice's release shape and rate and marks its ADSR register dirty.
+0x8003F5EC, SetStagedVoiceAdsrSustainLevel — Stores a physical voice's sustain level and marks its ADSR register dirty.
+0x8003F614, ValidateSedsResource — Validates a SEDS resource's magic checksum and expected format marker and returns a driver error code.
+0x8003F67C, SoundDriverReturnZero — Returns zero unconditionally without reading arguments or changing sound state.
+0x8003F684, ComputeSedsResourceChecksum — Sums little-endian 32-bit words across the SEDS resource's declared size for registration-time validation.
+0x8003F6B0, ReportSoundDriverError — Records or dispatches a sound-driver error code produced by resource transfer allocation or playback validation.
 0x8003F738, RotMatrix — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
 0x8003F8B0, rcos — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
 0x8003F8CC, rsin — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
