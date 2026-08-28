@@ -4,8 +4,8 @@ The Field system runs the explorable maps and scripted scenes in Xenogears. It
 loads one map bundle, creates its actors, executes their routines, and coordinates
 input, movement, camera control, dialogue, menus, encounters, and transitions.
 
-This documentation describes the USA Disc 1 Field implementation. All function
-names are descriptive names assigned by this project.
+This documentation describes the USA Disc 1 Field system. All function names
+are descriptive names assigned by this project.
 
 ## Reading Order
 

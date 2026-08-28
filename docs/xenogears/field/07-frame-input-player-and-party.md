@@ -206,6 +206,11 @@ trailing slots contain `0xFF`; a full three-member party has no terminator:
 | 1 | `0x80062594` |
 | 2 | `0x80062598` |
 
+The valid persistent domain is character ID `0..10` or sentinel `0xFF`.
+`GamePartyCharactersInitializeSkins` at Resident `0x8001AD4C` and
+`GamePartyGearsInitializeSkins` at Resident `0x8001AEB8` only remove `0xFF`;
+they retain every other byte without checking the eleven-character domain.
+
 Two actor maps are maintained:
 
 | Base | Purpose |
@@ -236,6 +241,29 @@ Three staging slots hold the active party resources:
 | Destination slot | `0x800ADBCC` |
 | Temporary allocation | `0x800ADBC0` |
 | Load state | `0x800ADBC4`; `0xFF` is idle |
+
+`FieldPartyAllocateSkinDataBuffers` at `0x80077C88` allocates and pins three
+fixed `0x14000`-byte output buffers. Full-party synchronization selects an
+archive member for each retained ID, reads compressed data into temporary
+storage, and `GamePartySyncStreamedData` at Resident `0x8001B3A8` calls resident
+LZSS `0x80032EB4` with no destination-capacity argument.
+
+Character skin initialization maps `party_id` directly to logical archive
+member `party_id + 5`. Gear skin initialization first passes the unchecked ID
+to `GameCharacterGetGearID` at Resident `0x8001ACF0`, which indexes the
+eleven-record character array directly; IDs `11..254` therefore read beyond the
+array. The archive size/read helpers reject nonpositive IDs and sizes but do not
+bound the logical member to the current skin group.
+
+This permits a valid archive member of another type to reach the LZSS consumer.
+On Disc 1, character ID 163 selects logical member 168, whose first bytes
+`73 65 64 73` become little-endian expanded size `0x73646573`. Its first
+back-reference also points before produced history. The fixed output capacity,
+compressed extent, selected member domain, expanded size, and back-reference
+history are all outside the checks performed before decompression. This
+character path is reachable only when a later Field synchronization rebuilds
+character skins; the immediate mode-2 return after an accepted save reuses
+pre-Menu compact resource IDs instead.
 
 The asynchronous flow is:
 
@@ -317,6 +345,11 @@ Mount-state application is available only while the map's Gear mode is active.
 | `0x80074700` | Poll and merge Field controller state |
 | `0x80077DAC` | Per-frame reset, input, and persistence boundary |
 | `0x80077E88` | Field main loop |
+| `0x80077C88` | Allocate three fixed `0x14000` party skin buffers |
+| Resident `0x8001ACF0` | Read a character's Gear ID by direct character-record index |
+| Resident `0x8001AD4C` | Select character skin members from non-`0xFF` party IDs |
+| Resident `0x8001AEB8` | Select Gear skin members through character Gear IDs |
+| Resident `0x8001B3A8` | Decompress synchronized party resources into fixed buffers |
 | `0x8008110C` | Ordered actor simulation passes |
 | `0x800815F0` | Copy delayed leader state to followers |
 | `0x80081C54` | Record leader history |

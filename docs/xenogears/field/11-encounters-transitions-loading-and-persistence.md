@@ -223,7 +223,8 @@ Menus do not require a complete Field exit. `FieldLoadAndOpenMenu` at
 1. Suspends ordinary Field progression.
 2. Preserves transient Field work needed after return.
 3. Loads and runs the selected menu mode.
-4. Reinstalls the three compact party resource slots.
+4. Synchronizes mode-1 party resources or reinstalls the three pre-Menu compact
+   resource IDs for mode 2.
 5. Restores Field runtime state.
 6. Clears the menu request and resumes the same Field loop.
 
@@ -243,6 +244,14 @@ Menu opcodes queue modes rather than calling menu code directly:
 
 The open opcode yields after queuing. `FE 87` rewinds and yields while the menu
 remains active, then advances when the in-place restore is complete.
+
+An accepted mode-2 load restores persistent party IDs but does not feed them to
+the skin initializers during this immediate return. The request is not mode 1,
+so `FieldLoadAndOpenMenu` reloads the compact resource IDs retained before Menu.
+A later `FieldExecuteMapLoadTransition` calls party skin/data synchronization,
+where reentry state, body type, and character/Gear mode decide whether restored
+party IDs are converted into archive members. Invalid restored IDs are therefore
+a conditional later-transition input, not an immediate mode-2 decompression.
 
 `FieldAreaMapRun` at `0x800ABA98` selects a configuration keyed by the current
 Field, captures the required display rectangle, presents the area map until

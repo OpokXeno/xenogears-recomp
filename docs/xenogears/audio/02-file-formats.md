@@ -43,7 +43,7 @@ adpcm_offset + adpcm_size
 | `0x14` | 4 | ADPCM size | Encoded sample bytes; nonzero and multiple of 16 |
 | `0x18` | 4 | ADPCM offset | Must equal header size |
 | `0x1C` | 2 | count minus one | Actual preset count is value plus one |
-| `0x1E` | 2 | allocator auxiliary value | Passed to the SPU allocator, whose retail implementation ignores it; zero in all 120 WDS resources |
+| `0x1E` | 2 | allocator auxiliary value | Passed to the SPU allocator, whose retail path ignores it; zero in all 120 WDS resources |
 | `0x20` | 2 | WDS ID | Numeric bank ID used by sequences |
 | `0x22` | 6 | reserved | Never read by the driver and zero in all 120 WDS resources |
 | `0x28` | 4 | configured SPU address | Address requested by the original bank loader; it is separate from resource-relative offsets |

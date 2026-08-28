@@ -61,7 +61,7 @@ that field is nonzero; once present, every channel-pointer pair and the trailing
 restore-pointer pair are rebased without null tests. Its normalized function hash is
 `2118815923afd7ddc86931fb7b2b12d032a65242386fa94964e9214ab72e0bd7`.
 
-An implementation should validate before relocating:
+Valid archives satisfy these bounds before retail relocation:
 
 ```text
 archive_size >= 0x10 + num_model_parts * 0x38
@@ -159,8 +159,8 @@ next = group + 4 + count * 8
 ```
 
 Triangle families still consume four indices. Retail handlers choose the
-three relevant words; therefore a reimplementation must retain the fourth
-word and must not compact triangle descriptors to six bytes.
+three relevant words, but the fourth word remains part of each eight-byte
+triangle descriptor.
 
 The sum of all group counts must equal `primitive_count`. Rejecting a mismatch
 early prevents the display-list and packet cursors from becoming
@@ -375,14 +375,14 @@ transform and scene setup.
 
 ### 4.3 Retail write-order quirks
 
-Timing-faithful implementations must preserve these observed side effects:
+Retail write order has these observed side effects:
 
 - Depth-cued quad handlers can write the first projected XY word before a
   right-edge screen rejection. The rejected packet is not linked into the OT,
   but packet memory has changed.
-- The retail path reads `LZCR` at a point where a clean-room implementation
-  would normally inspect the GTE `FLAG` register. This is authenticated retail
-  behavior, not a documentation typo.
+- The retail path reads `LZCR` where the surrounding GTE sequence would
+  ordinarily suggest the `FLAG` register. This is retail behavior, not a
+  documentation typo.
 - Packet cursors are masked/normalized before writes by several handlers.
 - A rejected primitive does not increment the emitted-primitive counter.
 - Family `0x08` receives the corrected packet tag only on the rendering path.

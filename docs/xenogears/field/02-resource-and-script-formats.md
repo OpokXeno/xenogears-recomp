@@ -43,8 +43,8 @@ Each stream begins with a little-endian target size:
 +0x04       control groups and tokens
 ```
 
-The decoder uses a 4096-byte ring with initial cursor `0xFEE`. Control bits are
-processed from bit 0 through bit 7:
+The resident decoder uses already-produced destination bytes as history.
+Control bits are processed from bit 0 through bit 7:
 
 | Control bit | Token |
 |---:|---|
@@ -56,20 +56,26 @@ Back-reference decoding is:
 ```text
 distance = low | ((high_length & 0x0F) << 8)
 length   = (high_length >> 4) + 3
-source   = (ring_cursor - distance) & 0xFFF
+source   = output_cursor - distance
 ```
 
-Decoding stops after producing the target length.
+References copy one byte at a time, so overlapping copies consume bytes emitted
+by the same token. Resident `0x80032EB4` checks `output_cursor == output_end`
+only before each eight-token control group; it performs no per-token or per-byte
+output check and receives no compressed-input size. Valid Field streams produce
+their target length without crossing it and keep compressed reads inside the
+enclosing loaded input extent; the resident decoder enforces neither condition.
 
 The Field loader allocates `declared_size + 0x10` for an inner section. For the
 script section, the stream target can exceed the declared size by up to seven
 bytes. Those bytes remain live and can contain final instruction operands or
-alignment. A correct loader therefore:
+alignment. The loaded section has these invariants:
 
 1. Allows compressed input to continue beyond the next section offset while
    producing the declared LZSS target.
-2. Requires the target to fit within `declared_size + 0x10`.
-3. Preserves the complete target in memory.
+2. Has a target no larger than `declared_size + 0x10`.
+3. Produces no literal or reference byte beyond that target.
+4. Keeps the complete target live in memory.
 
 ## 3. Entity Initialization Record
 
@@ -383,9 +389,9 @@ to its encoded length.
   marker; an editor can treat it as unused only after proving that routine is
   never started.
 
-## 14. Validation Rules
+## 14. Valid Resource Invariants
 
-A safe parser must verify:
+Valid Field resources satisfy:
 
 1. The outer header covers every size and offset field.
 2. Section offsets are ordered and begin inside the container.

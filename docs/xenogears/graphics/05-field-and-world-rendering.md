@@ -2,8 +2,8 @@
 
 ## 1. Scope
 
-This document is an implementation catalog for the original PlayStation Field
-and World Map renderers. It records frame ownership, ordering-table topology,
+This document catalogs the original PlayStation Field and World Map renderers.
+It records frame ownership, ordering-table topology,
 packet producers, packet limits, depth rules, and asset sources. Packet counts
 are per active frame unless a row explicitly describes double-buffered storage.
 
@@ -193,9 +193,9 @@ uses these record codes and packet sizes:
 | `16` | Environment-mapped `POLY_FT3` | `0x20` |
 
 The duplicate code families select different raster and depth callbacks while
-retaining the same packet grammar. A model implementation must retain resource
-group cursors, family-specific culling and lighting, packet-buffer cursors,
-attribute words, and the family-selected depth shift.
+retaining the same packet grammar. Their complete state includes resource group
+cursors, family-specific culling and lighting, packet-buffer cursors, attribute
+words, and the family-selected depth shift.
 
 ### 3.6 Transitions And Framebuffer Paths
 
@@ -446,9 +446,9 @@ the `SZ3>>4` rule listed above.
 The Mode 16 scanline warp is the direct-OT exception. Its task owns its packet
 buffers and writes bucket zero without passing through the model producer.
 
-## 5. Implementation Invariants
+## 5. Rendering Invariants
 
-An implementation of these paths must retain these boundaries:
+These paths retain the following boundaries:
 
 1. Field primary, secondary, and compact OTs are separate domains joined only
    by `FieldAddPrimitives` before presentation.

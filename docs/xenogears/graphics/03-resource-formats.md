@@ -5,7 +5,7 @@
 This chapter specifies the retail binary formats that carry graphics data in
 Xenogears: compressed bundles, TIM images, direct VRAM uploads, Field and World
 resources, Battle and Battling terrain, fonts, UI atlases, and STR video. It is
-written as an implementation contract. Detailed model primitives, sprite frame
+written as a binary and runtime contract. Detailed model primitives, sprite frame
 records, animation bytecode, and Gear skeletons are specified in
 [Models, Sprites, And Animation](04-models-sprites-and-animation.md).
 
@@ -68,13 +68,21 @@ distance = lo | ((hi_len & 0x0F) << 8)
 length   = (hi_len >> 4) + 3
 ```
 
-The history is a 4096-byte zero-filled circular window with initial write
-cursor `0xFEE`. Copy one byte at a time so overlapping references can consume
-bytes emitted by the same token. Stop after exactly `expanded_size` output
-bytes. Impose the expanded-size output limit before allocating memory. The
-compressed-input bound is the enclosing loaded extent, not necessarily the next
-logical packet-member offset; reject token input only when it exceeds that
-enclosing extent.
+Resident `0x80032EB4` uses already-produced destination bytes as history:
+
+```text
+source = output_cursor - distance
+```
+
+It copies one byte at a time, so overlapping references can consume bytes
+emitted by the same token. It tests `output_cursor == output_end` only before
+each eight-token control group, then processes the group without per-token or
+per-byte output bounds. The enclosing loaded extent, not necessarily the next
+logical packet-member offset, is the available compressed-input boundary.
+Format-valid streams keep every literal and reference within `expanded_size`,
+keep `expanded_size` within the destination capacity, and satisfy
+`1 <= distance <= bytes_already_produced`. Resident code enforces none of those
+three bounds.
 
 ### 2.2 Compressed packet archive
 
@@ -804,8 +812,8 @@ reads it afterward. Across one disc there are 294,912 triples and 1,571 distinct
 values. Components range from 0 through 576; `(288,288,288)` occurs 203,134
 times, with other grayscale and channel-specific combinations. These
 observable distributions identify fixed-point color-like coefficients. Since
-the renderer does not consume them, an implementation preserves the three
-halfwords per cell without applying them to lighting.
+the renderer does not consume them, the three halfwords per cell remain stored
+but do not participate in lighting.
 
 ### 6.9 Other World graphical sections
 
@@ -1200,13 +1208,16 @@ larger than the sector envelope. Submit only `demuxed_size` bytes to MDEC.
 Every reviewed video frame is 320 by 224, uses magic `0x0160` and type `0x8001`,
 and has a complete set of sector indices.
 
-## 12. Implementation Checklist
+## 12. Resource Invariants
 
-An implementation should process resources in this order:
+Valid resources satisfy these relationships before their retail consumers use
+them:
 
 1. Bound the enclosing loaded disc extent, including retained sector padding,
    before testing an inner signature.
-2. If LZSS is expected, validate its expanded size before allocation.
+2. If LZSS is expected, validate the selected member's resource domain, its
+   expanded size against destination capacity, its compressed extent, and every
+   back-reference against produced history before decoding.
 3. Validate count arithmetic and every relative offset as a start within its
    owning extent; do not use the next packet-member offset as a hard LZSS input
    bound.
