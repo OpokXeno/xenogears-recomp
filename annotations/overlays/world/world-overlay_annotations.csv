@@ -81,8 +81,8 @@
 0x80075030, function start — WorldMapInitializeAnimatedTextureSet2; initializes the second animated texture set.
 0x800750DC, function start — WorldMapFreeAnimatedTextureSet2; frees the second animated texture set.
 0x80075104, function start — WorldMapUpdateAnimatedTextureSet2; advances the second animated texture set.
-0x80075228, function start — WorldMapInitializeAmbientEventSchedule; initializes randomized ambient event countdowns.
-0x8007528C, function start — WorldMapUpdateAmbientEventSchedule; advances and reports expired ambient events.
+0x80075228, function start — WorldMapInitializeEncounterSchedule; clears sixteen encounter countdowns, activates one countdown, and sets the travel interval to 384 or 768 movement updates according to World mode.
+0x8007528C, function start — WorldMapUpdateEncounterSchedule; generates distinct countdowns in 1..interval, decrements them on accepted movement updates, and records the number of expired encounter countdowns.
 0x80075460, function start — WorldMapSaveRuntimeState; saves transient World Map state.
 0x8007565C, function start — WorldMapRestoreRuntimeState; restores transient World Map state.
 0x800758C0, function start — WorldMapPrepareForMenu; snapshots transient travel state then frees volatile render resources and preserves the framebuffer while transitioning into the menu.

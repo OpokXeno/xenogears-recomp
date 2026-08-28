@@ -15,18 +15,18 @@
 0x801DE69C, function start — BattleResultBuildPartyLabels; builds the labels used by each party summary row.
 0x801DEA18, function start — BattleResultBuildPartyValues; formats the principal values shown for each party member.
 0x801DEDC0, function start — BattleResultBuildPartyLevels; formats party level values and associated summary primitives.
-0x801DF270, function start — BattleResultBuildExperienceValues; builds current experience and threshold glyphs for each party member.
+0x801DF270, function start — BattleResultBuildExperienceValues; formats cumulative Physical and Ether EXP values for each party member.
 0x801DF4C0, function start — BattleResultBuildExperienceGains; builds earned-experience glyphs for each party member.
-0x801DF710, function start — BattleResultBuildProgressLabels; builds the labels for a character progression panel.
-0x801DF840, function start — BattleResultBuildCharacterHeader; builds the selected character progression header.
-0x801DF910, function start — BattleResultBuildProgressValues; formats values displayed in the progression panel.
-0x801DFA38, function start — BattleResultBuildProgressArrows; builds arrows separating previous and updated values.
-0x801DFAA8, function start — BattleResultBuildProgressBars; builds normalized progress-bar fill primitives.
-0x801DFD58, function start — BattleResultBuildProgressFrames; builds the borders and backgrounds for progress bars.
+0x801DF710, function start — BattleResultInitializeProgressBarPair; initializes two color-coded gradient primitives used by one progression bar.
+0x801DF840, function start — BattleResultColorProgressDeltaGlyphs; colors progression-delta glyph primitives according to increase or decrease direction.
+0x801DF910, function start — BattleResultComputeProgressBarSegments; computes the old value absolute delta direction glyph and normalized before-and-delta bar widths.
+0x801DFA38, function start — BattleResultFindProgressScaleMaximum; returns the maximum across seven saved and seven updated stat values for the selected party member.
+0x801DFAA8, function start — BattleResultBuildProgressPanelLabels; builds the selected character heading and the progression panel stat labels and colors.
+0x801DFD58, function start — BattleResultBuildPhysicalLevelValue; formats the saved Physical Level used as the before value in the progression comparison.
 0x801DFE6C, function start — BattleResultBuildSingleProgressValue; formats a short standalone progression value.
 0x801DFF50, function start — BattleResultBuildProgressDeltas; computes and formats signed differences between old and new values.
-0x801E0184, function start — BattleResultBuildProgressFooter; builds the remaining progression-panel text and glyphs.
-0x801E03B8, function start — BattleResultClearProgressBars; resets the progression-bar fill primitives.
+0x801E0184, function start — BattleResultBuildEtherLevelDelta; computes and formats the direction and absolute change from saved to updated Ether Level.
+0x801E03B8, function start — BattleResultBuildLevelComparison; builds the saved Physical and Ether Level values and their updated deltas.
 0x801E03FC, function start — BattleResultBuildComparisonBars; compares two value sets and builds scaled before-and-after bars.
 0x801E09C0, function start — BattleResultSendSoundCommand; forwards a command to the resident sound-command service.
 0x801E09F4, function start — BattleResultStartAudioSequence; issues the one-time sound commands used when results begin.
@@ -46,15 +46,15 @@
 0x801E1FB8, function start — BattleResultRunSequence; allocates result UI data runs each result screen and releases it.
 0x801E211C, function start — BattleResultLoadResources; loads and prepares the archive resources required by the result sequence.
 0x801E2280, function start — BattleResultProcessRewards; totals encounter experience and currency applies rewards and runs the result UI.
-0x801E24B0, function start — BattleResultUpdateMatchedEntityRecords; matches encounter entries and copies their result values.
+0x801E24B0, function start — BattleResultReconcileBattleItemQuantities; matches compact Battle item IDs against persistent inventory and copies their remaining quantities.
 0x801E252C, function start — BattleResultFinalize; processes post-battle results and releases Battle resources before returning to game flow.
 0x801E2794, function start — BattleResultApplyPostBattleProgression; coordinates experience unlock drop and persistent-state updates.
-0x801E2888, function start — BattleResultSyncPartyState; copies surviving party and Gear state into persistent records.
-0x801E2ACC, function start — BattleResultDistributeExperience; distributes earned experience and records level changes for the active party.
-0x801E2EB0, function start — BattleResultComputeExperienceShares; derives progression-counter gains from battle experience and modifiers.
+0x801E2888, function start — BattleResultSyncPartyState; copies represented occupied party members and associated Gear state into persistent records and persists defeated or removed characters at one HP.
+0x801E2ACC, function start — BattleResultDistributeExperience; distributes EXP across eligible active and benched roster members on both tracks and records active-party level changes.
+0x801E2EB0, function start — BattleResultComputeExperienceGains; computes Physical and Ether EXP gains for one active or benched recipient under the applicable split and equipment modifiers.
 0x801E308C, function start — BattleResultApplyLevelUps; advances both experience tracks and applies every resulting level increase.
-0x801E335C, function start — BattleResultApplyPrimaryStatGrowth; increases maximum HP and primary combat stats after a level gain.
-0x801E3500, function start — BattleResultApplySecondaryStatGrowth; increases maximum MP and secondary combat stats after a level gain.
+0x801E335C, function start — BattleResultApplyPhysicalLevelStatGrowth; increases maximum HP Attack Defence Hit and Evade after a Physical Level gain.
+0x801E3500, function start — BattleResultApplyEtherLevelStatGrowth; increases maximum MP Ether and Ether Defence after an Ether Level gain.
 0x801E3610, function start — BattleResultRollStatGrowth; applies randomized bounded growth toward a stat level target.
 0x801E3700, function start — BattleResultRollMaxHpGrowth; applies randomized level-based maximum-HP growth capped at 999.
 0x801E38CC, function start — BattleResultRollMaxMpGrowth; applies randomized level-based maximum-MP growth capped at 99.

@@ -11,16 +11,16 @@
 0x801E563C, function start — BattleEventShutdown; frees event allocations, sequence state, and loaded music.
 0x801E5768, function start — BattleEventGetBytecodeOffset; returns the highest active script slot's bytecode offset.
 0x801E57C4, function start — BattleEventFindFreeScriptSlot; finds a free secondary script slot.
-0x801E57F8, function start — BattleEventLoadArguments; decodes immediate and variable script arguments.
+0x801E57F8, function start — BattleEventDecodeOperands; decodes type-mask and v15 immediate/variable script operands.
 0x801E58EC, function start — BattleEventEvaluateCondition; dispatches comparison, bit-test, and boolean operators.
 0x801E5A98, function start — BattleEventResolveEntityIndex; maps script character identifiers to battle entity slots.
 0x801E5B00, function start — BattleEventSetupDialogCursor; builds and enables the animated dialogue cursor polygon.
 0x801E5C1C, function start — BattleEventOpcode00EndScript; ends the active script and resets its primary slot.
 0x801E5CE4, function start — BattleEventOpcode01Jump; performs an unconditional bytecode jump.
-0x801E5D24, function start — BattleEventOpcode02JumpIf; evaluates a condition and performs a conditional jump.
+0x801E5D24, function start — BattleEventOpcode02JumpUnless; evaluates typed operands and jumps to the false target when the condition is false.
 0x801E5DCC, function start — BattleEventOpcode03StartScript; starts a target entity script in a free secondary slot.
-0x801E5EF8, function start — BattleEventOpcode04WaitScriptDone; starts a tagged script and waits for entry completion.
-0x801E5F8C, function start — BattleEventOpcode05WaitScript; starts a tagged script and waits until its slot disappears.
+0x801E5EF8, function start — BattleEventOpcode04StartScriptAndWaitForEntry; starts a packed entry on the target entity and waits for its current-entry acknowledgement.
+0x801E5F8C, function start — BattleEventOpcode05StartScriptAndWaitForCompletion; starts a packed entry on the target entity and waits until its tag leaves every target slot and the current entry.
 0x801E6084, function start — BattleEventOpcode06SetVariable; assigns a decoded value to a script variable.
 0x801E60E8, function start — BattleEventOpcode07SetVariableTrue; sets a script variable to one.
 0x801E6118, function start — BattleEventOpcode08SetVariableFalse; clears a script variable.
@@ -36,76 +36,76 @@
 0x801E64C4, function start — BattleEventOpcode12ShiftVariableLeft; left-shifts a script variable.
 0x801E6534, function start — BattleEventOpcode13ShiftVariableRight; logically right-shifts a 16-bit variable.
 0x801E65A4, function start — BattleEventOpcode14RandomVariable; stores a random 15-bit value.
-0x801E65FC, function start — BattleEventOpcode15RandomRangeVariable; stores a random value below a scripted limit.
+0x801E65FC, function start — BattleEventOpcode15RandomRangeVariable; stores a random value in the inclusive range zero through the fixed scripted upper bound.
 0x801E6660, function start — BattleEventOpcode16MultiplyVariable; multiplies decoded operands into a variable.
 0x801E66D8, function start — BattleEventOpcode17DivideVariable; performs unsigned division into a variable.
 0x801E6750, function start — BattleEventLoadDialogPortrait; loads and configures a normal or mirrored portrait texture.
 0x801E6CE8, function start — BattleEventDisplayDialog; runs the battle dialogue window, text, cursor, input, and teardown state machine.
 0x801E71D4, function start — BattleEventOpcode18ShowDialog; displays dialogue using the current entity portrait.
-0x801E7230, function start — BattleEventOpcode19ShowDialogAlternate; displays dialogue with explicit portrait and flags.
+0x801E7230, function start — BattleEventOpcode19ShowDialogWithPortrait; displays blocking dialogue with an explicit portrait ID and dialog flags.
 0x801E7278, function start — BattleEventOpcode1ASetDialogParameters; configures dialogue geometry and flags.
-0x801E7314, function start — BattleEventOpcode1BSetPortrait; sets an entity portrait and resolves party aliases.
+0x801E7314, function start — BattleEventOpcode1BSetPortrait; sets the current entity portrait, with operands 0xF3..0xFF indexing bytes from the resident party-ID array base.
 0x801E7358, function start — BattleEventOpcode1CSetCameraMode2; selects battle camera mode two.
 0x801E736C, function start — BattleEventOpcode1DSetCameraMode1; selects battle camera mode one.
-0x801E7380, function start — BattleEventOpcode1EFadeOut; creates a white battle fader.
-0x801E73D4, function start — BattleEventOpcode1FFadeIn; creates a black battle fader.
+0x801E7380, function start — BattleEventOpcode1EFadeToWhite; creates or retargets a white Battle fader for the scripted duration.
+0x801E73D4, function start — BattleEventOpcode1FFadeToBlack; creates or retargets a black Battle fader for the scripted duration.
 0x801E7424, function start — BattleEventOpcode49SetReturnMode; sets the special return-to-field mode.
-0x801E746C, function start — BattleEventOpcode20EndBattle; requests event battle termination.
-0x801E748C, function start — BattleEventOpcode21SetBattleRunning; sets the battle-event-running flag.
+0x801E746C, function start — BattleEventOpcode20StopForFinalHandoff; stops the Event VM and permits the final Event handoff while central Battle continues until result or cancellation.
+0x801E748C, function start — BattleEventOpcode21SetSilentResult; sets the resident flag selecting silent Result presentation.
 0x801E74A0, function start — BattleEventOpcode22PauseEvent; enters the event pause state.
-0x801E74B8, function start — BattleEventOpcode37StartBattle; marks and starts an event battle.
+0x801E74B8, function start — BattleEventOpcode37EndBattleSuccessfully; sets result 0x01, sets the cancellation byte, and stops the Event VM.
 0x801E74E0, function start — BattleEventOpcode23SetupMecha; runs asynchronous mecha setup and load completion.
 0x801E75F0, function start — BattleEventOpcode38PlayMechaAnimation; starts a selected mecha animation.
-0x801E7660, function start — BattleEventOpcode4ADisablePlayerControl; disables resident player control.
+0x801E7660, function start — BattleEventOpcode4AActivateSlot0GearHyper; activates Gear Hyper mode for party slot zero.
 0x801E7684, function start — BattleEventOpcode4BMarkCharacterDead; marks a resolved battle entity as dead.
 0x801E7700, function start — BattleEventOpcode24SetBattleTransition; configures battle initialization and transition effects.
-0x801E775C, function start — BattleEventOpcode25EnableBattleMenu; enables the battle menu.
+0x801E775C, function start — BattleEventOpcode25SetExitMode3Request; sets the resident exit-mode request used for Event-controlled mode three.
 0x801E7770, function start — BattleEventOpcode26SetFieldReturn; configures destination field and world-map return state.
 0x801E77E4, function start — BattleEventOpcode27PlayMovie; configures movie playback, fading, and return mode.
-0x801E786C, function start — BattleEventOpcode28PlaySound; submits scripted parameters to the battle effect routine.
+0x801E786C, function start — BattleEventOpcode28CreateFader; calls BattleCreateFader with encoded duration, mode, and RGB values.
 0x801E78A8, function start — BattleEventOpcode29SetCameraTarget; applies a scripted target vector to the battle camera.
 0x801E7914, function start — BattleEventOpcode35CreateSprite; decompresses a sprite bundle and creates an event sprite.
-0x801E79E0, function start — BattleEventOpcode2APlayAnimation; applies an animation to an event-created sprite.
+0x801E79E0, function start — BattleEventOpcode2APlaySpriteAnimation; applies an animation to the selected Event-created sprite.
 0x801E7A5C, function start — BattleEventDestroyEntitySprite; destroys a script entity sprite and releases its bundle.
 0x801E7B08, function start — BattleEventOpcode36DestroySprite; invokes event sprite destruction.
 0x801E7B2C, function start — BattleEventOpcode40DestroySpriteAndReset; destroys a sprite and resets camera disposal state.
 0x801E7B58, function start — BattleEventOpcode2BWait; initializes and polls an entity frame countdown.
 0x801E7C0C, function start — BattleEventOpcode2CSetPriority; updates entity execution priority and queue position.
 0x801E7CD0, function start — BattleEventLoadMusic; replaces and initializes the selected event music file.
-0x801E7DE4, function start — BattleEventPlayLoadedMusic; starts loaded music with volume control.
+0x801E7DE4, function start — BattleEventSetLoadedMusicVolume; updates the loaded Event music volume over a transition interval.
 0x801E7E14, function start — BattleEventOpcode2DLoadMusic; loads event music at full volume.
-0x801E7E5C, function start — BattleEventOpcode2ELoadMusicQuiet; loads event music at zero volume.
-0x801E7EA4, function start — BattleEventOpcode2FPlayLoadedMusic; starts loaded music with scripted parameters.
-0x801E7F08, function start — BattleEventOpcode30StopMusic; fades or stops loaded event music.
+0x801E7E5C, function start — BattleEventOpcode2ELoadMusicMuted; loads Event music with initial volume zero.
+0x801E7EA4, function start — BattleEventOpcode2FSetLoadedMusicVolume; sets loaded Event music volume over a scripted transition and saves the volume for restoration.
+0x801E7F08, function start — BattleEventOpcode30SetLoadedMusicMuted; mutes loaded music when the operand is nonzero or restores the saved volume when it is zero.
 0x801E7F70, function start — BattleEventOpcode31PlaySoundEffect; selects a sequence bank and starts a sound effect.
-0x801E7FF4, function start — BattleEventOpcode41PlaySong; selects a sequence bank and starts a song.
+0x801E7FF4, function start — BattleEventOpcode41PlaySequenceEntry; selects the Event or resident sequence bank and plays a sequence entry at scripted volume.
 0x801E8074, function start — BattleEventOpcode32NoOperation; consumes a one-byte no-op opcode.
-0x801E807C, function start — BattleEventOpcode33StopBattleMusic; stops and frees the loaded event music instance.
+0x801E807C, function start — BattleEventOpcode33StopLoadedMusic; stops and frees the Event-loaded music instance when active.
 0x801E80E8, function start — BattleEventOpcode34NoOperation; consumes the second one-byte no-op opcode.
-0x801E80F0, function start — BattleEventOpcode39TransformToGear; performs character-to-Gear transformation state changes.
-0x801E818C, function start — BattleEventOpcode3ASetEntityCamera; rebinds a resolved entity camera animation.
+0x801E80F0, function start — BattleEventOpcode39TransformPartyLeaderToGear; assigns Gear ID zero to party slot zero and switches its actor, command, HUD, and Battle state to Gear mode.
+0x801E818C, function start — BattleEventOpcode3ASetEntityCameraAnimation; binds the scripted camera-animation ID to the resolved entity sprite.
 0x801E81EC, function start — BattleEventOpcode3BHideEntity; applies the entity's stashed idle animation state.
 0x801E823C, function start — BattleEventOpcode3CShowEntity; resets sprite frame state and clears hidden bits.
-0x801E828C, function start — BattleEventOpcode3DSetEntityFlip; clears the sprite flip-transition counter.
+0x801E828C, function start — BattleEventOpcode3DClearAnimationSyncCounter; clears the resolved sprite actor's animation-script synchronization counter at offset 0x9E.
 0x801E82DC, function start — BattleEventOpcode3EMoveEntity; starts and polls normal event sprite movement.
 0x801E83C0, function start — BattleEventOpcode3FMoveEntityAlternate; starts and polls alternate eased movement.
 0x801E84A4, function start — BattleEventOpcode45LoadCharacterSprite; asynchronously replaces a character sprite bundle.
 0x801E8600, function start — BattleEventOpcode46SwapCharacterSprite; prepares and commits a sprite-state swap.
-0x801E86AC, function start — BattleEventOpcode47ResetInputState; resets resident battle input state.
-0x801E86D0, function start — BattleEventOpcode42DisableBattleRendering; disables battle scene rendering.
-0x801E86F4, function start — BattleEventOpcode43EnableBattleRendering; enables battle scene rendering.
-0x801E8718, function start — BattleEventOpcode44ResetAllSprites; clears event state across all battle sprites.
-0x801E8750, function start — BattleEventOpcode48SetMusicVolume; updates event music volume and pan.
+0x801E86AC, function start — BattleEventOpcode47ClearAnimationData; finishes disc transfer and releases temporary animation resources.
+0x801E86D0, function start — BattleEventOpcode42InitializeGearTurnUi; initializes the Gear turn UI for party slot zero.
+0x801E86F4, function start — BattleEventOpcode43FreeTurnRenderWorkspace; frees the turn-render and UI workspace for party slot zero.
+0x801E8718, function start — BattleEventOpcode44ClearResidentSpriteAliveFlags; clears the alive flag on each of the eleven resident sprite tasks.
+0x801E8750, function start — BattleEventOpcode48PlayIndexedAudioClipBlocking; plays the selected clip group and clip index through the blocking resident audio helper.
 0x801E879C, function start — BattleEventUpdate; schedules entities and dispatches the 76 event bytecodes.
 0x801E93E8, function start — BattleEventSpriteAnimationComplete; clears asynchronous state and restores animation zero.
 0x801E9430, function start — BattleEventSetSpriteCameraAnimation; rebinds sprite camera animation and completion callback.
 0x801E950C, function start — BattleEventHideSpriteEntity; reapplies a sprite's stashed idle animation.
 0x801E9550, function start — BattleEventShowSpriteEntity; clears frame wait and hidden render state.
-0x801E958C, function start — BattleEventSetSpriteFlip; clears the active flip-transition counter.
+0x801E958C, function start — BattleEventClearSpriteAnimationSyncCounter; clears the sprite actor's animation-script synchronization counter at offset 0x9E.
 0x801E95B0, function start — BattleEventNormalizeSpriteAnimation; resolves a valid stored camera animation.
 0x801E95E4, function start — BattleEventStartSpriteMove; initializes linear sprite movement and completion state.
 0x801E9694, function start — BattleEventStartSpriteMoveAlternate; initializes alternate eased sprite movement.
-0x801E9700, function start — BattleEventPrepareSpriteSwap; marks and configures the source sprite for swapping.
+0x801E9700, function start — BattleEventPrepareSpriteSwap; marks and configures the destination sprite for swapping.
 0x801E9760, function start — BattleEventCommitSpriteSwap; transfers sprite state and repairs callbacks.
 0x801E9894, function start — BattleEventStartCharacterSpriteLoad; begins asynchronous character sprite replacement.
 0x801E9958, function start — BattleEventSetSpriteAnimation; applies an animation to an embedded sprite actor.

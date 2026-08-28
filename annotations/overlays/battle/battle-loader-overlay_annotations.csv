@@ -9,12 +9,12 @@
 
 0x801E4048, function start — BattleLoaderResetVisualEntityState; clears loader globals and initializes eleven visual-entity records from the selected party and character-versus-Gear state.
 0x801E4160, function start — BattleLoaderConfigureEntityLayout; builds party and enemy slot mappings and resolves each active entity's initial arena position.
-0x801E4870, function start — BattleLoaderLoadEnemyDefinitions; copies eight selected enemy definitions relocates their script pointers and clears enemy script variables.
-0x801E4AC0, function start — BattleLoaderInitializePartyDisplayState; applies initial party status and selects AP fuel or hidden HUD displays from character and Gear state.
-0x801E4CD0, function start — BattleLoaderBuildBattleInventory; clamps quantities removes empty entries and compacts usable character and Gear items into Battle inventory arrays.
+0x801E4870, function start — BattleLoaderLoadEnemyDefinitions; copies one selected enemy definition into each occupied enemy slot relocates its four script entries and clears that slot's script-variable banks and interpreter state.
+0x801E4AC0, function start — BattleLoaderInitializePartyDisplayState; initializes party combat statistics and selects character AP Gear fuel or hidden HUD display modes while recording enemy Gear display state.
+0x801E4CD0, function start — BattleLoaderBuildBattleInventory; clamps persistent item quantities clears zero-quantity IDs and compacts usable consumables and Billy ammunition into separate Battle arrays.
 0x801E4E7C, function start — BattleLoaderInitializeTurnOrder; randomizes entity indices applies immediate-readiness flags and normalizes initial readiness timers.
 0x801E5014, function start — BattleLoaderInitializeCommandsAndTargets; installs party command layouts computes facing targets and enforces no-Gear and no-escape restrictions.
-0x801E5384, function start — BattleLoaderLoadPartyResources; copies party and Gear statistics decompresses combat UI resources uploads portraits and queues encounter configuration files.
+0x801E5384, function start — BattleLoaderLoadPartyResources; selects active party members copies character and Gear records expands their action data and common Battle resources uploads portraits and queues the selected enemy definition and visual pair.
 0x801E5840, function start — BattleLoaderRunInitializationPhase; dispatches the four staged Battle initialization phases from core resources through HUD creation.
 0x801E5924, function start — BattleLoaderInitializeHudPrimitives; initializes textured gauges AP and fuel polygons font palettes and line primitives for the party HUD.
 0x801E5D2C, function start — BattleLoaderInitializeOverlayPrimitives; creates paired semitransparent quads and draw-mode packets used by Battle UI overlays.

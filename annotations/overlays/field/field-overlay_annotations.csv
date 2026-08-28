@@ -131,7 +131,7 @@
 0x80077884, function start — FieldMechaBeginResourceLoad; allocates the mecha overlay and paired resources for each registered mecha, builds a terminated archive batch, and starts loading it.
 0x80077AB4, function start — FieldMechaFinalizeResourceLoad; waits for mecha resources, activates the overlay, initializes every registered mecha, releases temporary data, and caches each scale.
 0x80077C60, function start — FieldMechaLoadAndRegisterAll; starts and completes loading and registration of all field mechas.
-0x80077C88, function start — FieldPartyAllocateSkinDataBuffers; allocates party skin buffers.
+0x80077C88, function start — FieldPartyAllocateSkinDataBuffers; allocates and pins three fixed 0x14000-byte party skin output buffers.
 0x80077D2C, function start — FieldPartyFreeSkinDataBuffers; frees party skin buffers.
 0x80077DAC, function start — FieldPerFrameReset; records frame timing, clears and swaps the ordering table, polls input, emits the optional render marker, and synchronizes persistent field state.
 0x80077E10, function start — FieldPlayerJumpTransitionBlockPredicate; returns -1 while guarded transition state is active and the controlled actor is jumping, otherwise returns zero.
@@ -150,7 +150,7 @@
 0x800798BC, function start — FieldRefreshMenuActivationBlock; blocks menu activation when controlled-actor resources are absent or carry status bits 0x40 or 0x80, then applies any non-0xFF override.
 0x8007995C, function start — FieldMoveImageAndSync; moves a VRAM image and synchronizes drawing.
 0x8007999C, function start — FieldRenderSyncAndFlush; synchronizes and flushes Field rendering.
-0x800799D4, function start — FieldLoadAndOpenMenu; suspends field presentation, rearranges VRAM, loads and runs the selected menu, then restores field graphics, party resources, and render state.
+0x800799D4, function start — FieldLoadAndOpenMenu; coordinates an in-place modal Menu handoff by preserving transient Field and framebuffer state, rearranging VRAM, loading and running the selected Menu mode, consuming a mode-2 result when applicable, rebuilding Field display, graphics, GTE, and per-frame state, reallocating the party skin buffers, synchronizing mode-1 party changes or reloading the three pre-Menu compact resource IDs for mode 2, clearing the request, and resuming the same Field loop.
 0x8007A44C, function start — FieldClampPolyFT4UVs; clamps POLY_FT4 texture coordinates.
 0x8007A5C4, function start — FieldCompassInitializeShadowQuads; initializes four semitransparent compass-shadow quads with their vertices, texture coordinates, palette, and duplicate render packets.
 0x8007A7F4, function start — FieldInitializeIndexedCompassQuad; initializes a double-buffered compass quad from indexed position, texture, palette, and draw-mode tables.
@@ -931,7 +931,7 @@
 0x800A5774, function start — FieldSetVramStpBits; sets bit 15 across a VRAM strip.
 0x800A5884, function start — FieldPrepareZoomFadeImage; prepares zoom packets and VRAM strips.
 0x800A5924, function start — FieldProcessScriptedTransitionRequest; services pending fade, hold, and radial mosaic transition modes, renders their frames, restores saved video memory, and clears the request.
-0x800A5C40, function start — FieldExecuteMapLoadTransition; tears down outgoing map resources, loads and installs the staged destination map, initializes or restores its actors, presents the selected transition sequence, and restores ordinary Field progression and transition defaults.
+0x800A5C40, function start — FieldExecuteMapLoadTransition; stops ordinary progression, persists party and core Field state, tears down outgoing map resources, loads and installs the staged destination map, runs party skin and data synchronization in which resident reentry state, map body-mode bits, and character-versus-Gear selection determine whether compact resource IDs are retained or rebuilt from current party identities, initializes or restores destination actors, presents the selected transition sequence, and restores ordinary Field progression and transition defaults.
 0x800A6408, function start — FieldZoomFadeEffectUpdate; updates and emits the Field zoom/fade effect.
 0x800A6490, instruction site — native Field zoom substitution seam within function 0x800A6408.
 0x800A663C, function start — FieldZoomFadeEffectInitialize; initializes Field zoom/fade packets.

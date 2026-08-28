@@ -11,13 +11,13 @@
 0x801C50B0, function start — ShopMenuIsCharacterFlagSet; tests a character availability bit.
 0x801C50CC, function start — ShopMenuGetCharacterBitMask; returns a character bit mask.
 0x801C50E8, function start — ShopMenuParseNumberToString; converts a number to display digits.
-0x801C5194, function start — ShopMenuUnk32CManager; allocates or frees MenuUnk2.
+0x801C5194, function start — ShopMenuManageResourceState; allocates or frees the primary resource workspace.
 0x801C51F8, function start — ShopMenuSetManager; allocates or frees menu-manager state.
 0x801C525C, function start — ShopMenuSelectionMenuManager; allocates or frees selection state.
-0x801C52C0, function start — ShopMenuUnk354Manager; allocates or frees state at 0x354.
+0x801C52C0, function start — ShopMenuManageTextBatchState; allocates or frees text-batch state.
 0x801C5324, function start — ShopMenuDressingRoomManager; allocates or frees dressing-room state.
-0x801C5388, function start — ShopMenuUnk348Manager; allocates or frees background state.
-0x801C53EC, function start — ShopMenuUnk1E20Manager; allocates or frees extended state.
+0x801C5388, function start — ShopMenuManageOverlayPacketState; allocates or frees overlay packet state.
+0x801C53EC, function start — ShopMenuManageExtendedDisplayState; allocates or frees extended display state.
 0x801C5450, function start — ShopMenuShopManager; allocates or frees shop-specific state.
 0x801C54B4, function start — ShopMenuLoadResources; loads and decompresses shop resources.
 0x801C58F4, function start — ShopMenuInitialize; initializes characters and loads resources.
@@ -110,14 +110,14 @@
 0x801CE8D8, function start — ShopMenuLookupByteByKey; searches parallel key and value arrays and returns the matching value or zero.
 0x801CE91C, function start — ShopMenuUpdateOwnedItemQuantityGraphics; looks up and displays the selected item's existing inventory quantity.
 0x801CEB3C, function start — ShopMenuUpdateBuyItemDetails; rebuilds description, equip markers, stat comparisons, and owned quantity, then returns the unit price.
-0x801CF2A0, function start — ShopMenuHandleBoughtItems; commits quantities and resulting gold.
+0x801CF2A0, function start — ShopMenuHandleBoughtItems; stores staged resulting gold capped at 9999999, adds each staged purchase to every matching inventory stack capped at 99, and uses the first empty slot only when no match exists; if neither exists, gold remains committed and insertion is skipped.
 0x801CF678, function start — ShopMenuSetFinalPriceGraphics; builds final-price digits.
 0x801CF780, function start — ShopMenuBuyMenu; runs quantity selection and purchase confirmation.
 0x801CFF58, function start — ShopMenuUpdateSellItemDetails; rebuilds description, equip markers, and stat presentation, then returns the half-price sale value.
 0x801D05BC, function start — ShopMenuUpdateSellItemListGraphics; rebuilds eight visible sell rows with names, quantities, prices, and render state.
-0x801D0C18, function start — ShopMenuHandleSoldItems; commits sold items and resulting gold.
+0x801D0C18, function start — ShopMenuHandleSoldItems; stores staged gold capped at 9999999, subtracts each staged count bytewise from every matching persistent stack or clears the selected equipped Accessory slot, and clears an inventory ID only at exact zero; duplicate-stack underflow wraps.
 0x801D0E68, function start — ShopMenuSellMenu; runs the generic inventory sell loop.
-0x801D1658, function start — ShopMenuSellEquipmentMenu; runs the equipment sell flow.
+0x801D1658, function start — ShopMenuSellEquipmentMenu; sells the selected character's three equipped Accessory slots through working quantities of one; it does not enumerate equipped weapons.
 0x801D18A8, function start — ShopMenuSellAccessoriesMenu; sells accessories through the generic flow.
 0x801D18E8, function start — ShopMenuSellWeaponsMenu; sells weapons through the generic flow.
 0x801D1928, function start — ShopMenuSellItemsMenu; sells consumables through the generic flow.

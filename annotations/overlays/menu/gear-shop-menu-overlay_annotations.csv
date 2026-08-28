@@ -14,15 +14,15 @@
 0x801C5260, function start — GearShopMenuGetGearEquipFlags; resolves Gear equip flags.
 0x801C527C, function start — GearShopMenuGearCanEquip; tests whether a character can equip a Gear item.
 0x801C5298, function start — GearShopMenuParseNumberToString; converts a number to display digits.
-0x801C5344, function start — GearShopMenuUnk2Manager; allocates or frees MenuUnk2 state.
-0x801C53A8, function start — GearShopMenuManagerManager; allocates or frees menu-manager state.
+0x801C5344, function start — GearShopMenuManageResourceState; allocates or frees the primary resource workspace.
+0x801C53A8, function start — GearShopMenuManageCoreState; allocates or frees core manager state.
 0x801C540C, function start — GearShopSelectionMenuManager; allocates or frees selection-menu state.
-0x801C5470, function start — GearShopMenuUnk5Manager; allocates or frees auxiliary menu state.
+0x801C5470, function start — GearShopMenuManageTextBatchState; allocates or frees text-batch state.
 0x801C54D4, function start — GearShopMenuDressingRoomManager; allocates or frees dressing-room state.
-0x801C5538, function start — GearShopMenuUnk1Manager; allocates or frees background and cursor state.
-0x801C559C, function start — GearShopMenuUnk7Manager; allocates or frees extended menu state.
+0x801C5538, function start — GearShopMenuManageOverlayPacketState; allocates or frees overlay packet state.
+0x801C559C, function start — GearShopMenuManageExtendedDisplayState; allocates or frees extended display state.
 0x801C5600, function start — GearShopMenuShopManager; allocates or frees Gear shop state.
-0x801C5664, function start — GearShopMenuUnk8Manager; allocates or frees MenuUnk8 state.
+0x801C5664, function start — GearShopMenuManagePreviewState; allocates or frees preview state.
 0x801C56C8, function start — GearShopMenuLoadResources; loads and decompresses Gear shop resources.
 0x801C5B08, function start — GearShopMenuFilterPartyMembers; retains unlocked members with Gears.
 0x801C5C98, function start — GearShopMenuResetRenderContext; resets double-buffer render state.
@@ -135,7 +135,7 @@
 0x801D1078, function start — GearShopMenuGetItemEquippedGearFlags; returns the combined Gear equip flags for characters whose Gears currently contain the specified item.
 0x801D1304, function start — GearShopMenuUpdateSellItemPreview; builds a sell item's description, half-price value, and equipped-character indicators.
 0x801D18F8, function start — GearShopMenuUpdateSellItemListGraphics; builds up to eight visible sell-list rows with names, prices, and inventory quantities.
-0x801D1F20, function start — GearShopMenuHandleSoldItems; credits the sale proceeds and removes the selected quantities from the supplied inventory arrays.
+0x801D1F20, function start — GearShopMenuHandleSoldItems; stores staged gold capped at 9999999, subtracts each staged count bytewise from every matching slot in the supplied Gear Weapon or Gear Part arrays, and clears an ID only at exact zero; duplicate-stack underflow wraps.
 0x801D2054, function start — GearShopMenuSellMenu; runs the generic Gear inventory sell loop.
 0x801D2784, function start — GearShopMenuSellWeaponsMenu; runs weapon selling.
 0x801D27C4, function start — GearShopMenuSellPartsMenu; runs Gear-parts selling.
@@ -146,10 +146,10 @@
 0x801D3A3C, function start — GearShopMenuLookupByteByKey; performs a keyed byte lookup.
 0x801D3A80, function start — GearShopMenuUpdateItemQuantityGraphics; looks up and displays the inventory quantity held for the selected weapon or accessory.
 0x801D3C78, function start — GearShopMenuUpdateItemPreview; updates selected item preview state.
-0x801D44FC, function start — GearShopMenuHandleBoughtItems; deducts the final gold amount and equips or adds all selected Gear parts to inventory.
-0x801D4888, function start — GearShopMenuIsTuneUpUpgrade; tests whether a tune-up improves equipment.
+0x801D44FC, function start — GearShopMenuHandleBoughtItems; stores staged resulting gold; Gear Part and Gear Weapon buys add staged quantities to every matching stack capped at 99 or use the first empty slot only when no match exists, while tune-up replaces the selected Gear's Armor, Frame, or Engine ID; gold remains committed if a buy has no destination.
+0x801D4888, function start — GearShopMenuIsTuneUpUpgrade; returns whether the candidate component ID is greater than the current component ID, selecting the one-prompt upgrade path versus the lower-or-equal two-prompt warning path.
 0x801D498C, function start — GearShopMenuBuyOrTuneUpMenu; runs the shared scrolling, quantity, price, confirmation, purchase, and tune-up item loop.
-0x801D5398, function start — GearShopMenuFuelTuneUpMenu; calculates the refueling price, runs confirmation prompts, deducts gold, and refills the Gear.
+0x801D5398, function start — GearShopMenuFuelTuneUpMenu; runs Fuel and HP service, charging 10 times the greater of one or missing Fuel divided by 100 for full service, offering gold-based partial Fuel otherwise, filling HP on accepted service even when Fuel is already full or only 1..9G is available, and writing nothing on rejection or the already-full information path.
 0x801D573C, function start — GearShopMenuExitSubmenu; exits the active Gear shop submenu.
 0x801D57A8, function start — GearShopMenuDispatchTuneUpOption; dispatches the selected tune-up.
 0x801D5828, function start — GearShopMenuSubmenuMain; runs the active submenu and dispatches Buy, Sell, Tune Up, fuel, and Gear-selection actions.

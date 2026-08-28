@@ -9,8 +9,8 @@
 
 0x801C531C, function start — MenuExecuteSelection; dispatches the selected central-menu action.
 0x801C55A0, function start — MainMenuExecute; runs navigation and selection for the seven-entry menu.
-0x801C57A4, function start — LoadSaveGameMenuExecute; runs the title load/save menu.
-0x801C58EC, function start — RunLoadSaveTitleSelectionLoop; runs the three-entry load/save title menu with wrapping navigation, selection updates, confirmation dispatch, and a 600-frame Disc 1 timeout.
+0x801C57A4, function start — LoadSaveGameMenuExecute; runs the mode-6 card-sensitive save prompt and action flow, then enforces the recorded zero-based disc request before exit.
+0x801C58EC, function start — RunLoadSaveTitleSelectionLoop; runs the wrapped New Game, Continue, and Sound title selector, dispatches confirmed actions, and only on Disc 1 exits to idle-attract when the strict counter-greater-than-600 condition is reached on rendered iteration 601.
 0x801C5B54, function start — ToggleMemoryCardWorkspaceAllocation; allocates and clears 0x5034 bytes for memory-card state when enabled and releases that storage when disabled.
 0x801C5BB8, function start — ToggleMenuPresentationAllocation; allocates and clears 0x6C bytes for shared presentation state when enabled and releases that storage when disabled.
 0x801C5C1C, function start — ToggleMainMenuEntryAllocation; allocates and clears 0x1194 bytes for main-menu entries when enabled and releases that storage when disabled.
@@ -22,7 +22,7 @@
 0x801C5E74, function start — TogglePartyCardAllocation; allocates and clears three 0x127C-byte party-card workspaces when enabled and releases all three when disabled.
 0x801C5F10, function start — DrawMenuPrimaryElements; dispatches the primary menu draw group.
 0x801C5FE4, function start — MenuMainLoopShutdown; renders final frames and releases menu resources.
-0x801C62A8, function start — MenuOverlayEntry; initializes and dispatches normal or load-game operation.
+0x801C62A8, function start — MenuOverlayEntry; performs common setup, dispatches mode 0 normal-menu, mode 2 title/load, or mode 6 save/disc control, then converges on common shutdown.
 0x801C6400, function start — SetupMenuModeSpecificElements; initializes mode-specific presentation.
 0x801C65F4, function start — ProcessMenuDebugSelector; implements the development submenu selector.
 0x801C6AA0, function start — InitMenuGlobals; initializes selection, party availability, and shared resources.
@@ -50,8 +50,8 @@
 0x801C8640, function start — TestAscendingBitMask16; isolates the indexed least-to-most-significant bit from a 16-bit value.
 0x801C865C, function start — TestDescendingBitMask16; isolates the indexed most-to-least-significant bit from a 16-bit value.
 0x801C8678, function start — TestAscendingBitMask32; isolates the indexed least-to-most-significant bit from a 32-bit value.
-0x801C8694, function start — SetupInfoCardAnimation; initializes one party-card transition.
-0x801C87C4, function start — CloseMemoryCardEvents; closes four memory-card events inside a critical section.
+0x801C8694, function start — EnsureRequestedDiscLoaded; maps the request low byte from a zero-based to a one-based disc number, returns if that disc is already loaded, otherwise loops non-cancellable prompt and marker validation with 29-frame failure waits until the expected disc is inserted, then reloads both indexes; requests outside 0..1 cannot complete.
+0x801C87C4, function start — ConsumeMemoryCardEventDeliveries; calls UnDeliverEvent for the complete, error, timeout, and new-device memory-card events without closing their handles.
 0x801C881C, function start — WaitAndConsumeMemoryCardEvent; polls until new-device, error, I/O-complete, or timeout occurs, consumes all four event deliveries, and returns code 3, 1, 0, or 2 respectively.
 0x801C891C, function start — RequestMemoryCardInfoStatus; starts a card-information request and maps its completion to success 0, error -3, timeout -1, or new-device -2.
 0x801C8960, function start — FinalizeMemoryCardEventHandles; renders one frame and closes all four memory-card event handles inside a critical section.
@@ -59,12 +59,12 @@
 0x801C8BEC, function start — PeriodicallyRefreshMemoryCardPorts; advances the active scan timer, reprobes both ports when its interval expires, clears the aggregate-card flag when neither responds, and resets the timer.
 0x801C8CA4, function start — ShowMemoryCardAccessDelay; enables the card-access indicator for 59 rendered frames when the selected port is responsive and then disables it.
 0x801C8D1C, function start — MakeSaveBlockDisplay; displays memory-card block activity.
-0x801C8D78, function start — EnumerateMemoryCardDirectory; clears one port's cached mappings, enumerates up to sixteen directory entries, copies their metadata, and records the resulting file count.
+0x801C8D78, function start — EnumerateMemoryCardDirectory; clears one port's cached mappings, copies every firstfile and nextfile result into 0x5C-byte cache records without enforcing the 16-record cache bound, and records the resulting file count.
 0x801C8EE8, function start — EnumerateRequestedMemoryCardDirectories; enumerates each pending port once according to the active scan mode and marks aggregate card availability when requested.
 0x801C9038, function start — ReadMemoryCardTitleFrame; opens a card file, reads exactly 0x200 bytes into the destination, closes it, and reports success only for a complete read.
-0x801C90B0, function start — LoadMemoryCardSaveHeader; builds a card path from the port and directory name, reads its 0x200-byte title frame, and registers the entry once per occupied block.
-0x801C9270, function start — MarkMatchingGameSavesOnCard; clears one port's validity flags, compares displayed filenames with the game save prefix, marks matching saves, and records their save-slot numbers.
-0x801C93A8, function start — ScanMemoryCardsAndSaveSlots; refreshes cards, save headers, icons, and slots.
+0x801C90B0, function start — LoadMemoryCardSaveHeader; reads a 0x200-byte title frame and registers one owner byte per unvalidated declared block using a per-port count accumulated across files without an owner-map bound.
+0x801C9270, function start — MarkMatchingGameSavesOnCard; clears one port's 16-byte occupancy row, matches the 12-byte game prefix, and writes byte one at an unvalidated payload save-number index.
+0x801C93A8, function start — ScanMemoryCardsAndSaveSlots; coordinates a stable two-port scan by enumerating pending ports, erasing stale __tmp_file entries, caching complete 0x200-byte headers and supported icons, aborting if either presence value changes, and marking exact game-prefix matches before enabling input.
 0x801C9984, instruction site — begins the authenticated memory-card slot FT4 XY override.
 0x801C9B80, instruction site — finishes and recaptures the overridden memory-card slot FT4.
 0x801C9BCC, function start — ValidateCurrentMemoryCardSelection; tests the current tile against delete, load, or save eligibility and emits the accepted-input command when usable.
@@ -76,19 +76,19 @@
 0x801CA750, function start — ProcessMemoryCardGridInput; dispatches directional movement, returns confirm or cancel status, and refreshes the highlight when the selected tile changes.
 0x801CA8C0, function start — ComposeMemoryCardSaveTitle; copies the Xenogears title template, appends a two-digit one-based slot number and trailing space, and stores the completed card title.
 0x801CA8D4, function start — ResumeMemoryCardSaveTitleComposition; resumes title composition after the one-based slot number and divide-by-ten product are prepared, then appends both digits and stores the completed title.
-0x801CAA38, function start — RunMemoryCardPromptInput; renders prompt frames until confirmation, cancellation, card-change restart, or the no-input timeout and returns the resulting choice.
+0x801CAA38, function start — RunMemoryCardPromptInput; runs prompt input until confirmation, cancellation, or card-change restart; card-sensitive prompts have no software timeout, while argument zero returns the current choice after the 180-sample idle counter expires, including 179 new draws.
 0x801CACF8, function start — PresentMemoryCardPromptSequence; presents one prompt and optionally a second after acceptance, dismisses each presentation, and returns the final response.
 0x801CADB0, function start — ResetMemoryCardSlotCursor; clears the selected slot and positions the cursor on the first port containing a card.
 0x801CAE08, function start — SetMemoryCardTransferBannerState; creates, activates, changes, or releases the animated memory-card transfer banner according to the requested state.
 0x801CB184, function start — DecodeSaveNameRecords; converts 31 fixed-width save-name records into the runtime text encoding.
-0x801CB28C, function start — ApplyLoadedSavePayload; imports loaded game state, restores persistent configuration values, and decodes saved names for runtime use.
-0x801CB304, function start — RunMemoryCardLoadOperation; selects a save, reads its blocks with retries, validates its checksum, applies valid game state, and reports success or failure.
+0x801CB28C, function start — ApplyLoadedSavePayload; restores the gameplay snapshot, play time, and sixteen configuration halfwords from a checksum-validated payload, then decodes all 31 saved name records for runtime use.
+0x801CB304, function start — RunMemoryCardLoadOperation; selects and confirms a matching save, retries open and each failed or short 0x100-byte chunk read up to five times, trusts the header block count when reading block_count shifted left 13 bytes into a fixed 0x2100-byte buffer, validates the first-block checksum, and applies the payload only on success.
 0x801CB8AC, function start — ConfirmMemoryCardFormat; displays the port-specific format prompt, cancels if card presence changes, and returns the player's confirmation.
 0x801CB9E8, function start — ResolveSaveFileNumber; preserves an explicit file number or selects the first unused number from the card's fifteen-file occupancy map.
-0x801CBA4C, function start — BuildMemoryCardSaveImage; snapshots current settings and party metadata, encodes names for storage, serializes game state into a save image, and restores runtime names.
-0x801CBD90, function start — RunMemoryCardSaveOperation; selects and optionally formats a card, confirms overwrites, builds a checksummed save image, writes its blocks through a temporary file, and commits the result.
-0x801CC6D8, function start — RunMemoryCardCopyOperation; validates source and destination cards, prevents duplicate saves, transfers every save block between ports, and refreshes card contents.
-0x801CD2AC, function start — RunMemoryCardDeleteOperation; confirms deletion, removes the selected save file, clears cached slot metadata, and refreshes both card displays.
+0x801CBA4C, function start — BuildMemoryCardSaveImage; synchronizes sixteen active configuration halfwords into the resident shadow, writes party, play-time, and save-number metadata, converts all 31 names for snapshotting and restores their runtime encoding, then serializes the 0x1F00-byte payload; the shadow write survives later payload-write or rename failure.
+0x801CBD90, function start — RunMemoryCardSaveOperation; optionally formats the selected card, rejects occupied foreign files, destructively erases an overwrite target, writes a checksummed one-block image through __tmp_file with retries, and publishes it only by successful rename; failure can leave the old overwrite absent or a stale temporary entry.
+0x801CC6D8, function start — RunMemoryCardCopyOperation; copies every header-declared block of any occupied source to the opposite port through __tmp_file, rejects exact destination-filename duplicates, ignores the final rename result, and can report success and rescan with only the temporary entry remaining.
+0x801CD2AC, function start — RunMemoryCardDeleteOperation; after two confirmations issues erase for any occupied file, ignores the erase result, always reports success and invalidates both scans, so a failed erase is rediscovered on rescan.
 0x801CD710, function start — ExecuteSelectedMemoryCardAction; dispatches delete, copy, load, or save according to the selected entry and current menu mode.
 0x801CD81C, function start — BuildPartySummaryIdentity; prepares a party summary's portrait, name, fixed labels, palette, and placement for the active render buffer.
 0x801CDB1C, function start — BuildPartySummaryLevelDigits; converts the displayed level into glyphs and intentionally suppresses the secondary level field.
@@ -240,7 +240,7 @@
 0x801D9EDC, function start — ResumeLoadSaveCleanupAtVSyncDrain; waits for vertical synchronization, enters a critical section, restores three saved CD callbacks, and leaves the critical section.
 0x801D9EE4, function start — ResumeLoadSaveCleanupAtCdCallbackRestore; enters a critical section, restores the saved CD sync, ready, and read callbacks, and leaves the critical section.
 0x801D9F34, function start — SetupLoadSaveCardSelectorText; initializes six card-selection text elements using the load-game or normal-menu variant.
-0x801D9F98, function start — ProcessLoadSaveMenu; drives card setup, slot selection, load/save, and cleanup.
+0x801D9F98, function start — ProcessLoadSaveMenu; initializes card services, runs the action selector and slot flows for delete, copy, and mode-dependent load or save, then closes events, restores callbacks, and releases card presentation state on every exit.
 0x801DA4A8, function start — InitializeItemMenuResources; prepares selector artwork and item text, allocates and clears item-display storage, and enables item glyphs.
 0x801DA518, function start — ReleaseItemMenuResources; removes item windows and text, disables item glyphs, and frees item-display, image, and inventory-view storage.
 0x801DA5BC, function start — BuildItemInventoryPage; renders sixteen inventory slots from the requested page with item names, quantities, usability coloring, and empty-slot suppression.
@@ -261,7 +261,7 @@
 0x801DD5E8, function start — SetTechniqueMenuDimming; switches technique windows, entries, cursor, descriptions, and icons between normal and dimmed presentation.
 0x801DD790, function start — RunTechniqueTargetSelection; selects valid party targets, applies the chosen healing technique, deducts MP or gear fuel after success, and restores the technique display on exit.
 0x801DDF24, function start — ProcessTechniqueMenu; handles technique-grid navigation, character switching, detail refreshes, target selection, activation, and cancellation.
-0x801DE29C, function start — CheckCurrentDiscNumber; validates or transitions using a disc and field request.
+0x801DE29C, function start — OpenCharacterTechniqueMenu; passes the selected party slot to ProcessTechniqueMenu in character mode and returns success.
 0x801DE2C8, function start — InitializeEquipmentMenuResources; allocates and clears equipment-list storage and prepares equipment text, glyphs, selector artwork, cursor animation, and party-switch indicators.
 0x801DE2E4, function start — ResumeEquipmentInitializationWithDisplayStorage; accepts newly allocated display storage, clears it, and completes equipment text, glyph, selector, cursor, and party-switch setup.
 0x801DE334, function start — ResumeEquipmentInitializationAtGlyphSetup; enables equipment glyphs and then prepares selector artwork, cursor animation, and party-switch indicators.
@@ -276,13 +276,13 @@
 0x801DE5AC, function start — ReturnFromEquipmentCategoryWindowSetup; returns after the category labels and replacement window have been established without changing further state.
 0x801DE5CC, function start — BuildCompatibleEquipmentPage; filters inventory by mode, slot, compatibility, and restrictions, renders eight candidate names and quantities from the requested offset, and returns the remaining scroll range.
 0x801DED50, function start — ResumeEquipmentCandidateRendering; renders up to eight previously filtered equipment candidates with quantities and enable flags, updates the scrollbar, and returns the remaining scroll range.
-0x801DF0D4, function start — ApplyEquipmentSelection; equips or removes the selected item, returns displaced equipment to inventory, consumes the replacement, removes empty stacks, clamps quantities, and reports a required category switch.
+0x801DF0D4, function start — ApplyEquipmentSelection; commits the selected replacement or removal, consumes its inventory unit, and returns the displaced item only to the first matching stack capped at 99 or, when no match exists, the first empty slot; capacity failure silently loses the item, quantities are normalized, and the category-switch result is returned.
 0x801DF5D0, function start — StageCurrentEquipmentLoadout; copies the active character or gear loadout into editable slots and snapshots the current derived statistics for comparison.
-0x801DF890, function start — CommitStagedEquipmentLoadout; writes the edited character or gear equipment slots back to persistent state.
+0x801DF890, function start — CommitStagedEquipmentLoadout; copies the staged character or Gear loadout back to persistent equipment slots; on candidate cancellation this restores the baseline captured on browser entry rather than accepting the current preview.
 0x801DFB68, function start — StageSelectedEquipmentCandidate; writes the selected candidate identifier into the appropriate staged weapon, armor, accessory, or gear slot.
 0x801DFE2C, function start — RecalculateGearEquipmentPreview; recomputes the selected gear's derived parameters and snapshots the resulting statistics for equipment comparison.
 0x801DFF5C, function start — BuildEquipmentDescriptionLines; resolves the selected or currently equipped item for the active mode and slot, renders its three description lines, or hides the description when no item is present.
-0x801E0434, function start — ReturnReplacedEquipmentToInventory; clears the replaced character or gear equipment slot and returns that item to its inventory stack with a quantity cap of 99.
+0x801E0434, function start — ReturnReplacedEquipmentToInventory; clears the replaced character or gear equipment slot, increments every duplicate matching inventory stack with a cap of 99, or uses the first empty slot when no match exists.
 0x801E05D0, function start — ProcessEquipmentMenu; drives equipment-category navigation, inventory browsing, character switching, stat previews, equip confirmation, cancellation, rendering, and cleanup.
 0x801E0680, function start — ResumeEquipmentViewRefresh; resumes the equipment loop by refreshing character and equipment-page visuals when the selected character or page changes.
 0x801E06B4, function start — ResumeEquipmentCategoryRefresh; resumes by rebuilding the selected equipment category, item count, scroll position, stat preview, and item-list display.
@@ -326,8 +326,8 @@
 0x801E4928, function start — CalculateGearWeightPenalty; derives a nonnegative equipment penalty from accumulated gear weight and its innate offset.
 0x801E4998, function start — InitializeGearResourceHpThreshold; derives a gear-resource HP threshold from maximum HP and rounds it down to a multiple of ten.
 0x801E4A28, function start — SnapshotMenuGameState; copies mutable character, gear, inventory, progression, and related gameplay state into a menu snapshot.
-0x801E4D10, function start — RestoreMenuGameState; restores character, gear, inventory, progression, and related gameplay state from a snapshot and recalculates component and equipment effects.
-0x801E5058, function start — GrantTenOfEveryInventoryEntry; fills five inventory catalogs with sequential identifiers and sets every populated quantity to ten.
+0x801E4D10, function start — RestoreMenuGameState; restores snapshot domains and, for each Gear, copies core and component fields and weapon channels, reloads base stats and recalculates effects, then restores saved fuel and tail state; the weight penalty remains calculated from the prior capacity tier until a later recalculation.
+0x801E5058, function start — OverwriteInventoryCatalogRangesWithTenEach; overwrites IDs and quantities in Weapons 1..71, Accessories 1..149, Items 1..75, Gear Parts 1..71, and Gear Weapons 1..104 with identifier equal to slot index and quantity ten, leaving every other slot unchanged.
 0x801E5178, function start — UnlockAllCharactersAndAbilities; enables all eleven party members, installs their complete ability masks, and sets ability energy to seven.
 0x801E53CC, function start — InitializeMenuBoxPrimitivePool; resets one indexed menu box and prepares its double-buffered background, border, texture, color, and draw-mode packets.
 0x801E56E8, function start — InitializeMemoryCardTileFaces; prepares double-buffered 16x16 card icons, dim backing quads, transformation vertices, and draw modes for one tile.
@@ -370,4 +370,4 @@
 0x801E927C, function start — InitializeNeutralTexturedQuad; initializes an opaque unshaded textured quad with neutral gray intensity.
 0x801E92CC, function start — InitializeDiscSwapInterface; resets an inactive CD interface and repeatedly issues initialization command 8 until accepted.
 0x801E9340, function start — ReadHostPathIntoMemory; opens a host path, transfers the requested byte count to memory, and closes the handle.
-0x801E93A0, function start — ValidateDiscIdentityAndLoadIndexes; waits for media readiness, verifies the expected disc marker and number, loads disc indexes, and reports success, read failure, or wrong media.
+0x801E93A0, function start — ValidateDiscIdentityAndLoadIndexes; waits for shell and media readiness, validates the _XEN marker and expected ASCII disc digit, issues the main and secondary index loads on success, and returns 0 for success, 2 for readiness, read, or marker failure, or 3 for a disc-digit mismatch.
