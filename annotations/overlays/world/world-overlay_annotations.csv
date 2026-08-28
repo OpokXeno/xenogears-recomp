@@ -59,7 +59,7 @@
 0x80073398, function start — WorldMapSetupPositionFromField; selects initial position and heading from saved Field state.
 0x80073448, function start — WorldMapSetupPositionFromFileData; resolves an indexed initial position with fallback.
 0x80073530, function start — WorldMapFinalizeFile1Loading; relocates primary resources and establishes table pointers.
-0x8007369C, function start — WorldMapAllocateSkyBuffers; allocates the World Map sky packet buffers.
+0x8007369C, function start — WorldMapAllocateOrderingTables; allocates the two 0x1000-byte, 0x400-entry World Map ordering tables.
 0x800736DC, function start — WorldMapInitializeSky; initializes sky packet templates and colors.
 0x800737EC, function start — WorldMapRenderSky; renders the authenticated World Map sky producer.
 0x800739B8, function start — WorldMapInitializeHorizon; initializes horizon and texture-window packets.
@@ -317,8 +317,8 @@
 0x80088F5C, function start — WorldMapDormantLandmarkTaskUpdate; keeps the unavailable configured-landmark task in the idle state.
 0x80088F64, function start — WorldMapInitializeEffectStatePools; initializes World Map effect state pools.
 0x80088FF4, function start — WorldMapFreeEffectStatePools; frees World Map effect state pools.
-0x8008901C, function start — WorldMapCreatePolyFT4Array1; allocates the primary effects packet buffers.
-0x80089128, function start — WorldMapFreePolyFT4Array1; frees the primary effects packet buffers.
+0x8008901C, function start — WorldMapInitializeEffectRenderPackets; allocates two 0x2800-byte buffers of 256 POLY_FT4 effect packets, initializes semitransparent templates with GetTPage(1,1,0x340,0x100) and GetClut(0x100,0x1FF), then copies them into the second frame-parity buffer.
+0x80089128, function start — WorldMapFreeEffectRenderPackets; frees both frame-parity World Map effect-packet buffers and clears their pointers.
 0x80089160, function start — WorldMapConfigureEffectEmitterTransforms; activates an owner's eight effect emitters and applies optional translation and negated rotation vectors.
 0x800893E0, function start — WorldMapConfigureEffectEmitterRotationPair; activates an owner's eight effect emitters, clears their translation offsets, and installs supplied secondary-offset and rotation vectors.
 0x800894C8, function start — WorldMapClearEffectLayerForOwner; clears an owner's active effect layer.

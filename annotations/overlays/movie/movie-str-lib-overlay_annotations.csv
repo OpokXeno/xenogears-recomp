@@ -12,8 +12,8 @@
 0x801D37CC, function start — MovieStrStartPlayback; configures callbacks display bounds audio mode and the initial CD stream.
 0x801D3B00, function start — MovieStrAcquireNextFrame; obtains the next STR frame and updates dimensions from its header.
 0x801D3D54, function start — MovieStrDecodeNextFrame; VLC-decodes a frame and starts its MDEC input and output transfers.
-0x801D3F7C, function start — MovieStrUpdatePlayback; advances decoding handles end conditions and restarts stalled streams.
-0x801D41AC, function start — MovieStrStartCdStream; resets stream state seeks to the requested sector and begins reading.
+0x801D3F7C, function start — MovieStrUpdatePlayback; advances decoding and handles final-frame stop or loop restart; after a prolonged stall it supplies the following-sector recovery location only when capture is available and the returned frame is in range, otherwise restarting from the original start.
+0x801D41AC, function start — MovieStrStartCdStream; stops active playback and seeks the CD backend to an optional recovery location or to the saved file start plus sector offset before beginning ReadS.
 0x801D4318, function start — MovieStrStopPlayback; stops CD and MDEC activity and removes streaming callbacks.
 0x801D43B0, function start — MovieStrLibraryShutdown; stops playback and frees all resident movie buffers.
 0x801D444C, function start — MovieStrBuildVlcTable; expands the packed Psy-Q VLC lookup table.
@@ -46,17 +46,17 @@
 0x801D5544, function start — MovieStrEncodeSpuAdpcmBlocks; packs PCM samples and control flags into SPU ADPCM blocks.
 0x801D57DC, function start — MovieStrEncodeSpuPcm; dispatches an ENCSPU environment to the SPU ADPCM encoder.
 0x801D583C, function start — MovieStrSetRingBuffer; installs the STR ring address and size and clears its state.
-0x801D586C, function start — MovieStrStartCdRead2; issues CD Setmode and ReadS commands and installs streaming callbacks.
+0x801D586C, function start — MovieStrStartCdRead2; issues CD Setmode and ReadS, installs streaming callbacks when mode bit 0x100 is set, and enables saved-location capture only when mode bit 0x20 is also set.
 0x801D5900, function start — MovieStrCdDataCallback; forwards CD data callbacks to the STR interrupt handler.
 0x801D5920, function start — MovieStrClearRingBuffer; resets STR ring indices flags and slot states.
 0x801D5980, function start — MovieStrUnsetRingBuffer; disables CD streaming callbacks and DMA state.
-0x801D5A04, function start — MovieStrCdDataReadyCallback; marks a completed ring frame ready and records its metadata.
-0x801D5A94, function start — MovieStrGetBackLocation; returns the last frame number and the following CD location.
+0x801D5A04, function start — MovieStrCdDataReadyCallback; marks the frame-start descriptor ready and saves its frame number and first-sector CD location for possible recovery.
+0x801D5A94, function start — MovieStrGetBackLocation; when CD-location capture is enabled writes the sector after the saved frame-start location and returns its frame number, otherwise returns -1 without writing a location.
 0x801D5AF4, function start — MovieStrSetStream; resets STR assembly state and installs stream completion callbacks.
 0x801D5B7C, function start — MovieStrFreeRingBuffer; releases the ring slots belonging to a consumed frame.
 0x801D5C34, function start — MovieStrClearRingSlots; marks a contiguous range of STR ring slots free.
-0x801D5C70, function start — MovieStrGetNextFrame; claims the next completed frame and returns its payload and header.
+0x801D5C70, function start — MovieStrGetNextFrame; follows a state-1 wrap sentinel to slot zero, then claims the next state-2 frame and returns its payload and descriptor.
 0x801D5D34, function start — MovieStrSetStreamMask; stores STR stream matching and frame-bound parameters.
-0x801D5D54, function start — MovieStrCdInterrupt; validates incoming STR sectors and assembles their payloads in the ring.
+0x801D5D54, function start — MovieStrCdInterrupt; validates and assembles STR sectors while reserving one spare descriptor with sector_count <= slot_count - producer_index - 1, then performs state-1 wrap handling or rejects the sector when a contiguous frame will not fit.
 0x801D66C4, function start — MovieStrCopyWords; copies a requested number of words between sector buffers.
 0x801D66F8, function start — MovieStrStartCdDma; waits for availability and programs a CD-ROM DMA transfer.

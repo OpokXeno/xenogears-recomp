@@ -25,16 +25,16 @@
 0x801DF6A8, function start — GearHelperObjectPoolReset; resets object-pool allocation state.
 0x801DF6F0, function start — GearHelperObjectPoolAllocate; returns the first free 20-byte track record at or after the allocation cursor and advances the cursor to the next free record.
 0x801DF7A8, function start — GearHelperObjectPoolRelease; releases one pooled object.
-0x801DF7F4, function start — GearHelperStartAnimationTracksPreservingPose; installs encoded rotation and translation tracks without replacing the current pose or directly applies a non-streamed animation pose.
+0x801DF7F4, function start — GearHelperBindKeyframeTracksOrApplyPose; in encoded mode treats keyframe +0x0C as the last descriptor index, binds at most min(+0x0C+1, runtime joint count) descriptors without replacing the current pose, and locates streams after the complete serialized descriptor array; in direct-pose mode clears transient tracks and applies pose triplets.
 0x801DFAC4, function start — GearHelperStartAnimationTracksFromBasePose; loads encoded initial rotation and translation values into affected joints before installing their animation tracks and marking transforms dirty.
 0x801DFE8C, function start — GearHelperStopAllSkeletonAnimationTracks; releases every nonprotected rotation translation and scale track attached to every skeleton joint.
 0x801DFF78, function start — GearHelperStopSkeletonAnimationTracksByTag; releases every joint track whose tag byte equals the requested tag.
-0x801E0064, function start — GearHelperInitializeVertexBuffer; initializes a model vertex buffer.
-0x801E00DC, function start — GearHelperFreeVertexBuffer; frees a model vertex buffer.
-0x801E011C, function start — GearHelperInitializeVertices; initializes model vertices.
-0x801E0248, function start — GearHelperVertexAllocate; allocates one helper vertex record.
-0x801E0354, function start — GearHelperVertexRelease; releases one helper vertex record.
-0x801E0398, function start — GearHelperVertexUpdateAndRender; updates and renders helper vertices.
+0x801E0064, function start — GearHelperInitializeModelTrailSegmentPool; allocates the requested number of renderable 0x7C-byte model-trail segment records plus one nonrendered overflow/fallback record and initializes the pool.
+0x801E00DC, function start — GearHelperFreeModelTrailSegmentPool; frees the complete model-trail segment allocation and clears its capacity and allocation cursor.
+0x801E011C, function start — GearHelperResetModelTrailSegmentPool; marks all renderable and fallback model-trail segment records free and initializes their two textured-quad packet copies.
+0x801E0248, function start — GearHelperAllocateModelTrailSegment; returns and initializes the next free renderable segment, or returns the extra nonrendered fallback record when all renderable slots are occupied.
+0x801E0354, function start — GearHelperReleaseModelTrailSegment; marks one segment free and rewinds the allocation cursor when its index is earlier.
+0x801E0398, function start — GearHelperUpdateAndRenderModelTrailSegments; updates, depth-sorts, submits, and expires active segments while traversing only the renderable records and excluding the fallback record.
 0x801E0698, function start — GearHelperInitializeModelTrailEmitter; initializes a trail emitter's attachment mode endpoints bounded history lifetime colors and per-frame RGB fade deltas.
 0x801E0844, function start — GearHelperDisableModelTrailEmitter; disables a model trail emitter by setting its active attachment index to minus one.
 0x801E0850, function start — GearHelperEvaluateCosineStep; returns the signed-short value of base plus cosine-angle-plus-4096 divided by the supplied divisor.
@@ -79,10 +79,10 @@
 0x801E729C, function start — GearHelperSyncRootJointVerticalPositionInterior; interior/fallthrough root that copies the preloaded vertical position into the root joint translation when external attachment control is disabled.
 0x801E72CC, function start — GearHelperGetModelJointMatrix; resolves a model joint matrix.
 0x801E7378, function start — GearHelperSetDirectAnimationMode; stores the low input bit as the global animation-path mode that selects direct packet updates instead of pooled packet blending.
-0x801E738C, function start — GearHelperInitialize; initializes the shared Gear model helper.
+0x801E738C, function start — GearHelperInitialize; initializes the shared animation-track pool, creates a 16-renderable-plus-one-fallback model-trail segment pool, and clears all ten model slots and helper state.
 0x801E742C, function start — GearHelperLoadModelSlot; validates and allocates a model slot then constructs its mesh skeleton packets render primitives scripts and auxiliary animation objects from the supplied resource bundle.
-0x801E7D14, function start — GearHelperUpdateAndRenderModels; advances helper timing and lighting then updates scripts transforms attachments and rendering for every loaded model before drawing transient helper vertices.
-0x801E7FD4, function start — GearHelperShutdown; frees all ten model slots then releases the shared interpolation pool and transient vertex buffer.
+0x801E7D14, function start — GearHelperUpdateAndRenderModels; advances helper timing and lighting, updates scripts, transforms, attachments, and rendering for every loaded model, then updates and draws transient model-trail segments.
+0x801E7FD4, function start — GearHelperShutdown; frees all ten model slots, the shared animation-track pool, and the complete 17-record model-trail segment allocation comprising 16 renderable records plus one fallback.
 0x801E8030, function start — GearHelperFreeModelSlot; releases one model slot's mesh skeleton packet data auxiliary arrays and owned resources before clearing the global slot.
 0x801E8330, function start — GearHelperStartSelectedModelAnimation; installs the active model index and selection mask then starts the requested animation using that model as both source and target.
 0x801E8394, function start — GearHelperStartModelAnimationFromSource; installs the target model and selection mask then starts the requested animation using another model's script tables.

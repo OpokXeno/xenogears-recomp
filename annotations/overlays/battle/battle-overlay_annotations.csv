@@ -535,7 +535,7 @@
 0x8009F794, function start — BattleFreeMechaModelBlockIndex; optionally releases every indexed model block's runtime resources, then frees and clears the block index.
 0x8009F844, function start — BattleRenderMechaAuxiliaryEffects; renders an active mecha's body, projected shadow, auxiliary meshes, animated texture tiles, and wheel trails.
 0x800A0838, function start — BattleAdvanceMechaBoneAnimationTracks; advances rotation, translation, and scale tracks, decodes their update modes, handles looping or completion, releases expired tracks, marks changed bones, and returns transition flags.
-0x800A1B50, function start — BattleApplyMechaKeyframePose; copies available keyframe rotations and translations directly into bones whose persistent tracks do not block replacement.
+0x800A1B50, function start — BattleApplyMechaKeyframePose; applies the direct-pose rotation and translation triplets to unprotected nonroot bones, using keyframe +0x0C as the rotation-triplet count and +0x0E as the translation-triplet count.
 0x800A1CF4, function start — BattleCreateMechaPoseTransitionTracks; allocates timed rotation and translation tracks from current bone values to a keyframe using shortest-angle deltas and selectable interpolation.
 0x800A216C, function start — BattleClearMechaBoneAnimationChannels; releases the selected rotation, translation, and scale animation channels from one indexed bone.
 0x800A2234, function start — BattleCreateMechaAnimationTrackPool; allocates a fixed-capacity animation-track pool and resets every slot.
@@ -543,7 +543,7 @@
 0x800A22E8, function start — BattleResetMechaAnimationTrackPool; marks every animation-track slot free and resets the next-allocation index.
 0x800A2330, function start — BattleAllocateMechaAnimationTrack; returns the next free animation-track slot and advances the allocation hint to the following vacancy.
 0x800A23E8, function start — BattleReleaseMechaAnimationTrack; marks a track free and moves the allocation hint backward when the released slot precedes it.
-0x800A2434, function start — BattleBindMechaAnimationTracks; binds serialized rotation and translation streams to bones, removes absent channels, or applies a static pose immediately.
+0x800A2434, function start — BattleBindMechaKeyframeTracksOrApplyPose; in encoded mode treats keyframe +0x0C as the last descriptor index, binds at most min(+0x0C+1, runtime bone count) descriptors, and locates streams after the complete serialized descriptor array; in direct-pose mode clears transient tracks and applies pose triplets.
 0x800A2704, function start — BattleBindAndPrimeMechaAnimationTracks; binds serialized bone tracks while seeding current rotations and translations from the animation's initial keyed pose.
 0x800A2ACC, function start — BattleClearTransientMechaAnimationTracks; releases every bone animation track whose tag is not 0xFF and clears the corresponding channels.
 0x800A2BB8, function start — BattleClearTaggedMechaAnimationTracks; releases every bone animation track carrying the requested tag and clears the corresponding channels.

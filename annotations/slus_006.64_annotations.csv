@@ -170,7 +170,7 @@
 0x8001FAB4, GraphicsDrawPauseLetters — rendering (decomp: ladysilverberg/xenogears-decomp, system/rendering.c)
 0x8001FB30, SpriteLoadEmbeddedVramImages — loads an embedded multi-image blob into VRAM at stored texture coordinates using a temporary 8 KiB stack.
 0x8001FBA4, AnimScriptResolveVariableAddress — resolves an encoded operand to either a stack-relative byte or an external-data byte selected by its high bit.
-0x8001FBE4, AnimScriptExecuteExtendedOpcode — executes extended animation opcodes that manipulate movement, transforms, attachments, resources, audio, arithmetic, colors, and models.
+0x8001FBE4, AnimScriptExecuteGenericOpcode — Executes generic sprite-animation operations for movement, transforms, attachments, resources, audio, arithmetic, colors, and models; opcode CC stores the current instruction address plus a signed 16-bit byte offset as the secondary bytecode pointer.
 0x80021AD8, ColorAddClampByte — adds a signed delta to a color channel and saturates the result to the range 0 through 255.
 0x80021B04, MathSetSVector — writes three supplied 16-bit components to a destination vector.
 0x80021B14, MathSetVector — writes three supplied 32-bit components to a destination vector.
@@ -222,7 +222,7 @@
 0x80023440, SpriteDecodeRenderType — Decodes a four-bit sprite render type from the animation descriptor flags.
 0x80023468, SpriteClassifyRenderStorage — Maps a decoded sprite render type to storage class zero one or two.
 0x800234AC, SpriteClearDirectionTransforms — Zeroes all eight directional translation and rotation records.
-0x80023538, SpriteBindAnimationData — Binds animation data to a sprite then derives its script and frame tables and resets motion transform and interpreter state.
+0x80023538, SpriteBindAnimationHeader — Binds one animation header, resolves bytecode and directional-table pointers relative to their respective offset fields at +0x02 and +0x04, applies flag-controlled motion and transform resets, and resets interpreter state.
 0x80023804, SpriteInitializeState — Initializes a newly allocated sprite with default flags colors scale timing pointers and motion state.
 0x8002393C, SpriteBaseClearRotationAndFrames — Clears a sprite base record's rotation components and frame-data pointer.
 0x80023950, SpriteDisableBaseData — Selects the sprite storage layout without a base record.
@@ -238,7 +238,7 @@
 0x80024524, AllocateSprite — Allocates a 0x164-byte sprite workspace then records its size and initializes it from the supplied parameters.
 0x800245D8, SpriteStartAnimationById — Selects a default or special animation by signed ID then binds it and reapplies the sprite's facing direction.
 0x80024730, SpriteConfigureRenderCallback — Performs render-type-specific setup and installs the corresponding indexed rendering callback.
-0x800248D4, SpriteRunAnimationBytecode — Interprets animation opcodes until a wait end or blocking condition while updating frames timing control flow and animation selection.
+0x800248D4, SpriteRunAnimationBytecode — Runs compact frame and wait commands plus extended sprite-animation operations until a wait, blocking condition, or end while handling frame selection, branches, calls, and current-PC-relative secondary pointers.
 0x80024F20, ResetSpriteRenderState — Clears the double-buffered sprite contexts and resets primitive cursors ordering buckets and transfer queues.
 0x80024F64, GfxAllocateWorkBuffers — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp1.c)
 0x80024FE4, GfxSetCurrentOT — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp1.c)
@@ -258,7 +258,7 @@
 0x80025C04, ScaleSpritePacketRgb555 — Scales each packed RGB555 channel by a fixed-point factor while preserving transparency and nonzero source channels.
 0x80025D4C, ModulateSpritePacketRgb555 — Applies mode-dependent RGB555 channel offsets and scaling then clamps each result while preserving transparency.
 0x80025FA8, BuildTintedSpriteFt4Packets — Decodes a selected sprite frame into scaled and flipped FT4 packets with texture coordinates CLUT pages and optional color modulation.
-0x8002675C, BuildFieldSpriteFt4Packets — builds scaled POLY_FT4 packets for field sprites (Ghidra static analysis + authenticated runtime producer work, 2026-08-23).
+0x8002675C, BuildFieldSpriteFt4Packets — Builds double-buffered POLY_FT4 packets from expanded 0x1C-byte Field sprite descriptors by scaling screen geometry independently from low-byte UV deltas and applying axis reversal with origin decrement and zero-boundary compensation.
 0x80026A0C, BuildSpritePackets — Emits SPRT primitives for every fragment in a selected frame and appends the required texture-page draw-mode packet.
 0x80026B9C, SkipSpritePacketBuild — Returns without emitting any sprite packets.
 0x80026BA4, SubmitSpriteFt4Packets — Builds FT4 packets for a sprite frame then links each packet and its draw-mode command into the selected ordering bucket.
@@ -442,8 +442,8 @@
 0x80032DCC, HeapWriteToDebugFile — heap debug (decomp: ladysilverberg/xenogears-decomp, system/heap_debug.c)
 0x80032E04, HeapDumpToFile — heap debug (decomp: ladysilverberg/xenogears-decomp, system/heap_debug.c)
 0x80032E7C, HeapDerefPtr — heap debug (decomp: ladysilverberg/xenogears-decomp, system/heap_debug.c)
-0x80032E88, LZSSHeapDecompress — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
-0x80032EB4, LZSSDecompress — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
+0x80032E88, LZSSHeapDecompress — Allocates the declared expanded size with the supplied heap flags and decodes the size-prefixed LZSS stream; input reads have no logical member-end bound and can consume cross-member lookahead and prefetch the next control byte.
+0x80032EB4, LZSSDecompress — Expands a size-prefixed LZSS stream into caller-provided storage to its declared output size; input reads have no logical member-end bound and can consume cross-member lookahead and prefetch the next control byte.
 0x80032F54, InitializeDialogTextRenderer — Initializes dialog state and geometry then allocates line primitives and glyph-image buffers and configures two texture pages.
 0x8003342C, ResolveArchiveEntryPointers — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
 0x80033474, ResolveFileEntryPointers — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
