@@ -1744,12 +1744,14 @@ def simulate_sequence(
                             track, voice_events, callback, False
                         )
                     elif opcode == 0xB4:
-                        noise_clock = operands[0] & 0x3F
-                        noise_clock_automation.append((callback + 1, noise_clock))
+                        noise_clock = operands[0]
+                        noise_clock_automation.append(
+                            (callback, min(noise_clock, 0x3F))
+                        )
                         _set_track_noise(track, voice_events, callback, True)
                     elif opcode == 0xB5:
                         noise_clock = (noise_clock + operands[0]) & 0x3F
-                        noise_clock_automation.append((callback + 1, noise_clock))
+                        noise_clock_automation.append((callback, noise_clock))
                         _set_track_noise(track, voice_events, callback, True)
                     elif opcode == 0xB6:
                         _set_track_noise(track, voice_events, callback, True)
@@ -1819,10 +1821,8 @@ def simulate_sequence(
                     elif opcode == 0xCA:
                         track.modes = track.modes & ~0x700 | (operands[0] & 0x7) << 8
                     elif opcode == 0xD0:
+                        # Retail leaves the active note unchanged until a later note-on.
                         new_offset = _signed_byte(operands[0]) << 5
-                        track.current_note_q24 += (
-                            new_offset - track.pitch_offset_q8
-                        ) << 16
                         track.pitch_offset_q8 = new_offset
                     elif opcode == 0xD1:
                         delta = _signed_byte(operands[0]) << 5
@@ -1830,21 +1830,18 @@ def simulate_sequence(
                             (track.pitch_offset_q8 + delta) & 0xFF,
                             (track.pitch_offset_q8 + delta) >> 8 & 0xFF,
                         )
-                        track.current_note_q24 += delta << 16
                     elif opcode == 0xD2:
                         delta = _signed_byte(operands[0]) << 3
                         track.pitch_offset_q8 = _signed_word(
                             (track.pitch_offset_q8 + delta) & 0xFF,
                             (track.pitch_offset_q8 + delta) >> 8 & 0xFF,
                         )
-                        track.current_note_q24 += delta << 16
                     elif opcode == 0xD3:
                         delta = _signed_word(operands[1], operands[0])
                         track.pitch_offset_q8 = _signed_word(
                             (track.pitch_offset_q8 + delta) & 0xFF,
                             (track.pitch_offset_q8 + delta) >> 8 & 0xFF,
                         )
-                        track.current_note_q24 += delta << 16
                     elif opcode == 0xD4:
                         duration = operands[0]
                         delta_q24 = _signed_byte(operands[1]) << 24
@@ -2163,89 +2160,33 @@ def _generate_spu_noise(
     )
     change_index = 0
     clock = 0
-    noise_count = 0
-    noise_level = 1
-    frequency_add = (0, 84, 140, 180, 210)
-    wave_add = (
-        1,
-        0,
-        0,
-        1,
-        0,
-        1,
-        1,
-        0,
-        1,
-        0,
-        0,
-        1,
-        0,
-        1,
-        1,
-        0,
-        1,
-        0,
-        0,
-        1,
-        0,
-        1,
-        1,
-        0,
-        1,
-        0,
-        0,
-        1,
-        0,
-        1,
-        1,
-        0,
-        0,
-        1,
-        1,
-        0,
-        1,
-        0,
-        0,
-        1,
-        0,
-        1,
-        1,
-        0,
-        1,
-        0,
-        0,
-        1,
-        0,
-        1,
-        1,
-        0,
-        1,
-        0,
-        0,
-        1,
-        0,
-        1,
-        1,
-        0,
-        1,
-        0,
-        0,
-        1,
-    )
+    noise_divider = 0
+    noise_counter = 0
+    noise_level = 0
     for frame in range(frame_count):
         while change_index < len(changes) and changes[change_index][0] <= frame:
             clock = changes[change_index][1]
             change_index += 1
         output[frame] = _i16(noise_level)
-        level = (0x8000 >> (clock >> 2)) << 16
-        noise_count += 0x10000 + frequency_add[clock & 3]
-        if noise_count & 0xFFFF >= frequency_add[4]:
-            noise_count += 0x10000 - frequency_add[clock & 3]
-        if noise_count >= level:
-            noise_count %= level
-            noise_level = (
-                noise_level << 1 | wave_add[noise_level >> 10 & 0x3F]
-            ) & 0xFFFFFFFF
+        divider_increment = 2 << (clock >> 2)
+        counter_increment = 4 + (clock & 3)
+        if clock >= 0x3C:
+            divider_increment = 0x8000
+            counter_increment = 8
+        noise_divider += divider_increment
+        if noise_divider & 0x8000:
+            noise_divider = 0
+            noise_counter += counter_increment
+            if noise_counter & 8:
+                noise_counter &= 7
+                parity = (
+                    (noise_level >> 15)
+                    ^ (noise_level >> 12)
+                    ^ (noise_level >> 11)
+                    ^ (noise_level >> 10)
+                    ^ 1
+                ) & 1
+                noise_level = ((noise_level << 1) | parity) & 0xFFFF
     return output
 
 
@@ -2878,11 +2819,9 @@ def decode_psx_adpcm(adpcm: bytes) -> list[int]:
                 if nibble & 8:
                     nibble -= 16
                 sample = (nibble << 12) >> shift
-                sample += (
-                    history_1 * filter_0[predictor]
-                    + history_2 * filter_1[predictor]
-                    + 32
-                ) >> 6
+                sample += (history_1 * filter_0[predictor] >> 6) + (
+                    history_2 * filter_1[predictor] >> 6
+                )
                 sample = max(-32768, min(32767, sample))
                 history_2 = history_1
                 history_1 = sample
@@ -2892,8 +2831,18 @@ def decode_psx_adpcm(adpcm: bytes) -> list[int]:
 
 def q8_semitone_to_spu_pitch(note_q8: int) -> int:
     masked_note = note_q8 & 0x7FFF
-    semitone_q8 = masked_note % (12 * 256)
-    octave = masked_note // (12 * 256)
+    note_index = masked_note >> 8
+    if note_index < 117:
+        packed_note = (note_index // 12 << 4) | note_index % 12
+    elif note_index < 120:
+        packed_note = 0
+    else:
+        # Retail's 120-byte note map falls through into the adjacent ratio table.
+        packed_note = (0x00, 0x20, 0x02, 0x20, 0x04, 0x20, 0x06, 0x20)[
+            note_index - 120
+        ]
+    semitone_q8 = (packed_note & 0x0F) * 256 + (masked_note & 0xFF)
+    octave = packed_note >> 4
     ratio = int(0x2000 * math.pow(2, semitone_q8 / (12 * 256)) + 0.5)
     shift = 6 - octave
     pitch = ratio >> shift if shift >= 0 else ratio << -shift
@@ -3028,8 +2977,11 @@ def render_wds_voice(
     gauss = _load_spu_gauss_table()
     decoded = [0] * 28
     previous = [0, 0, 0]
-    sample_index = 28
+    # Beetle's first Gaussian window is decoded samples 0 through 3 and its
+    # cursor remains there for the four-frame key-on delay.
+    sample_index = 31
     phase = 0
+    startup_delay = 4
     history_1 = 0
     history_2 = 0
     block_flags = 0
@@ -3117,7 +3069,9 @@ def render_wds_voice(
                     if nibble & 8:
                         nibble -= 16
                     sample = (nibble << 12) >> shift
-                    sample += (history_1 * filter_0 + history_2 * filter_1 + 32) >> 6
+                    sample += (history_1 * filter_0 >> 6) + (
+                        history_2 * filter_1 >> 6
+                    )
                     if sample > 32767:
                         sample = 32767
                     elif sample < -32768:
@@ -3163,6 +3117,10 @@ def render_wds_voice(
         output[output_index + 1] = right
         output_index += 2
 
+        if startup_delay:
+            startup_delay -= 1
+            continue
+
         if envelope_phase == "attack" and envelope_level == 0x7FFF:
             envelope_phase = "decay"
         if envelope_phase == "attack":
@@ -3203,7 +3161,7 @@ def render_wds_voice(
                 envelope_level = overflow_level
             if (
                 envelope_phase == "decay"
-                and envelope_level <= (sustain_level + 1) << 11
+                and envelope_level < (sustain_level + 1) << 11
             ):
                 envelope_phase = "sustain"
         if envelope_phase == "release" and envelope_level == 0:

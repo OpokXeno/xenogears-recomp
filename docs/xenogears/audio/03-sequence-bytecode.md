@@ -254,6 +254,12 @@ semitone is 256 Q8 units, this is one eighth of a semitone.
 
 `0xD2` multiplies by 8 Q8 units, or one thirty-second of a semitone.
 
+`0xD0` through `0xD3` only change the persistent offset used when a later note
+is constructed. They mark pitch state dirty, so retail can rewrite the same SPU
+pitch for an already-owned voice, but they do not retune the currently sounding
+note. Active-note movement instead comes from slides, portamento, and pitch
+modulation.
+
 ### `0xE0..0xEF`: volume, pan, and modulators
 
 | Op | Bytes | Uses | Status | Meaning |

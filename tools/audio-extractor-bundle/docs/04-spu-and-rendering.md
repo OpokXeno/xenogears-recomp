@@ -91,11 +91,14 @@ For every signed four-bit nibble:
 
 ```text
 decoded = (signed_nibble << 12) >> shift
-decoded += (history1 * filter0 + history2 * filter1 + 32) >> 6
+decoded += (history1 * filter0) >> 6
+decoded += (history2 * filter1) >> 6
 decoded = clamp(decoded, -32768, 32767)
 ```
 
-The current sample becomes `history1`; the old `history1` becomes `history2`.
+The predictor products are truncated independently, matching the SPU model in
+Beetle. The current sample becomes `history1`; the old `history1` becomes
+`history2`.
 
 Supported predictor pairs are:
 
@@ -145,7 +148,10 @@ pitch = 0x1000 * 2 ** ((note_q8 - 60 * 256) / (12 * 256))
 ```
 
 The implementation follows the driver's octave/range arithmetic and masks the
-result to 14 bits with `& 0x3FFF`.
+result to 14 bits with `& 0x3FFF`. The retail octave/semitone map has 117
+generated entries followed by three zero-padding bytes. Higher masked negative
+notes index the adjacent ratio-table bytes, behavior that some effects rely on
+and that the renderer preserves.
 
 The final note value includes:
 
@@ -163,8 +169,10 @@ interpolation described here.
 
 ## 7. Gaussian Interpolation
 
-Fractional pitch positions use four-tap Gaussian interpolation. The bundle
-contains the 512 signed coefficients in:
+Fractional pitch positions use four-tap Gaussian interpolation. Key-on first
+preloads decoded data during the SPU's four-frame playback delay without
+advancing ADSR or pitch phase. The bundle contains the 512 signed coefficients
+in:
 
 ```text
 psxrecomp/runtime/include/spu_gauss.h
@@ -180,6 +188,7 @@ gauss[0x100 + i]
 gauss[i]
 ```
 
+The interpolation cursor addresses the first of four forward decoded samples.
 The renderer keeps the last three samples from the previous ADPCM block so the
 filter remains continuous across block boundaries. Initial history is zero at
 key-on.
