@@ -1629,6 +1629,13 @@ def simulate_sequence(
                                 break
                             if track.saved_offset is None:
                                 _set_event_key_off(track, voice_events, callback, 6)
+                                if (
+                                    completed_cycle_counts[track.index]
+                                    >= loop_target
+                                ):
+                                    track.active = False
+                                    track.pc = next_pc
+                                    break
                                 _reset_track_for_general_loop(
                                     track, initial_tracks[track.index]
                                 )
