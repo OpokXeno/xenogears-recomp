@@ -101,6 +101,10 @@ tools/*
 !tools/census_disc_overlays.py
 !tools/test_census_disc_overlays.py
 !tools/extract_disc_overlays.py
+!tools/generate_xenogears_file_map.py
+!tools/test_generate_xenogears_file_map.py
+!tools/generate_field_vm_docs.py
+!tools/field_vm_encodings.json
 !tools/audio-extractor-bundle
 !tools/finalize_static_overlays.py
 !tools/test_finalize_static_overlays.py
