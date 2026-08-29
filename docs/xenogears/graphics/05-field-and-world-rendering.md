@@ -277,7 +277,7 @@ installs environments, updates both animated texture sets, and calls
 `DrawOTag(ot_base+0x0FFC)` at `0x800719B4`. Ordinary traversal therefore begins
 at bucket 1023 and proceeds toward bucket zero.
 
-`WorldMapUpdateControllerAndFrameState` at `0x800712D0` owns controller and
+`WorldMapFrameCoordinator` at `0x800712D0` owns controller and
 per-frame state around task dispatch. The two animated texture updates occur at
 `0x80074F2C` and `0x80075104` after task execution and before `DrawOTag`.
 
@@ -342,7 +342,7 @@ shadows, sky, horizon, clouds, and effects.
 | `WorldMapRenderDecorations` `0x8008615C`, `WorldMapRenderCellDecorationPackets` `0x80099BFC` | Up to 512 `POLY_FT4`, stride `0x28`; source directory has 256 chunks and 1,756 positions | `bucket=SZ3>>4`; the helper projects vertices 0..2 with RTPT and vertex 3 with RTPS, but retains `SZ3` from the first projection | Prior-dispatch 5 x 5 active-tile array, relocated chunk directory, fixed UV rectangle `(0,0x40)..(0x1F,0x6F)`, `GetTPage(0,0,0x380,0x100)`, and 16 CLUTs from `(0xF0,0x1F0+index)` |
 | `WorldMapRenderEntityShadows` `0x800747DC` | Storage has 16 marker records and 16 double-buffered `POLY_FT4` packets; the modulo-16 pending counter safely represents at most 15 queued markers | `bucket=min(SZ0,SZ1,SZ2,SZ3)>>4`; reject minimum depth `>=0x1000` | Wrapped marker position, terrain height/normal, two shadow scale modes, material word `0x2E484040`, CLUT `0x7F92`, tpage `0x001E` |
 | `WorldMapRenderModels` `0x800848F4` | Resident 17-family model grammar; placement count comes from the loaded section, and packet capacity is each model resource's primitive count | Model ordering depth plus signed bias, shifted by the selected family/mode; coarse reject at `0x0D80` | 16-byte placement records expanded to `0x54`-byte records, relocated model/collision resources, two packet buffers, parent transforms, and ordering-bias table `0x8009AD2C` |
-| `WorldMapDrawGround` `0x8009932C`, `WorldMapEmitGroundCellTriangles` `0x8009980C` | `POLY_FT3`, stride `0x20`; paired emission permits a final count of `0x7FF` = 2,047 packets and uses at most `0xFFE0` arena bytes | `max_depth=max(SZ0,SZ1,SZ2)`; reject `>=0x0F00`; `bucket=min(max_depth>>4,0xEF)` | Current 5 x 5 tile and four-quadrant visibility arrays, streamed cell geometry, eight texture pages, 64 CLUT entries, packed diagonal/UV flags, animated water heights |
+| `WorldMapDrawGround` `0x8009932C`, `WorldMapEmitGroundCellTriangles` `0x8009980C` | `POLY_FT3`, stride `0x20`; paired emission permits a final count of `0x7FF` = 2,047 packets and uses at most `0xFFE0` arena bytes | `max_depth=max(SZ0,SZ1,SZ2)`; reject `>=0x0F00`; `bucket=min(max_depth>>4,0xEF)` | Current 5 x 5 tile and four-quadrant visibility arrays, streamed cell geometry, seven initialized texture-page entries, 64 CLUT entries, packed diagonal/UV flags, animated water heights |
 | `WorldMapRenderHorizon` `0x80073B04` | Two active `POLY_FT4` plus two `DR_TWIN`; storage has four FT4 templates for two frame buffers | Both quads share `bucket=second_quad_SZ3>>ordering_shift`; DMA order is active-window `DR_TWIN`, second FT4, first FT4, reset `DR_TWIN`, then the prior bucket head | `GetTPage(0,1,0x380,0x100)`, `GetClut(0x110,0x1FE)`, two horizon geometry records, texture windows `(0,0,0x80,0)` and `(0,0,0,0)` |
 | `WorldMapRenderSky` `0x800737EC` | Four active `POLY_G4`, each `0x24` bytes; four templates per frame buffer | Each accepted quad uses its own projected depth: `bucket=quad_SZ3>>ordering_shift` | Four untextured sky geometry records and the gradient colors initialized by `WorldMapInitializeSky` `0x800736DC` |
 | `WorldMapRenderClouds` `0x80086798` | 80 cloud states; near/middle/far emit 48/12/3 `POLY_FT4`; arena capacity 288 | Return before admitting another cloud when count exceeds 240; per packet `bucket=selected_depth>>4` using the retail branch-order comparison | Eight UV groups, wrapped cloud positions, camera wedge matrices, material `0x2E262626`, tpage `0x003F`, CLUT `0x7F93` |
@@ -413,8 +413,9 @@ Each visible ground quadrant contains a 9 x 9 sample grid and an 8 x 8 cell
 grid. Every cell can emit two triangles. The geometric candidate count is
 `25 * 4 * 64 * 2 = 12,800`, but culling and the terrain arena guard cap stored
 packets at 2,047. Packed cell attributes select one of two diagonals, one of four
-UV orientations, one of eight texture pages, one of two 32-entry CLUT banks,
-and optional animated water height.
+UV orientations, one of seven initialized texture-page entries, one of two
+32-entry CLUT banks, and optional animated water height. Retail terrain uses
+texture selectors `0..5`.
 
 ### 4.6 Cinematic Packet Owners
 
@@ -427,7 +428,7 @@ them through the normal model depth and ordering-bias path.
 | `0x8007A06C` | Goliath destruction, Aveh rescue, Mode 13, Babel finale | Double-buffered `POLY_FT4`, asset primitive count, semitransparent RGB `0x80`, `GetTPage(1,3,0x340,0x100)`, `GetClut(0x100,0x1FF)` | Ordinary model OT submission |
 | `0x8007EBBC` | Babel approach and follower effects | Double-buffered `POLY_FT4`, asset primitive count, RGB `(0x3C,0x3C,0xC0)`, `GetTPage(0,abr,0x300,0x100)`, `GetClut(0,0x1FF)` | Ordinary model OT submission |
 | `0x800816DC` | Mode 16 primary and dual fade layers | Double-buffered `POLY_FT4`, asset primitive count, template UV/color/CLUT retained, `GetTPage(0,abr,0x180,0)` | Ordinary model OT submission |
-| `0x80083108` | Mode 9 animated models | Double-buffered `POLY_FT3`, asset primitive count, semitransparent RGB zero, `GetTPage(0,abr,0x2C0,0x100)` | Ordinary model OT submission |
+| `0x80083108` | Mode 17 animated models | Double-buffered `POLY_FT3`, asset primitive count, semitransparent RGB zero, `GetTPage(0,abr,0x2C0,0x100)` | Ordinary model OT submission |
 
 The initializers copy exactly `primitive_count * packet_stride` bytes to the
 second frame buffer. Updates at `0x8007A1B4`, `0x8007B394`, `0x8007B798`,
@@ -437,9 +438,9 @@ second frame buffer. Updates at `0x8007A1B4`, `0x8007B394`, `0x8007B798`,
 arrays at stride `0x20`.
 
 World particle emitters are separate from these model-owned arrays.
-`WorldMapConfigureEffectEmitterTransforms` at `0x80089160` and
-`WorldMapConfigureEffectEmitterRotationPair` at `0x800893E0` configure eight
-emitters for an owner. `WorldMapUpdateEffects` creates particles in the
+`WorldMapConfigureEffectEmitterTransforms` at `0x80089160` and its overlapping
+continuation at `0x800893E0` configure eight emitters for an owner.
+`WorldMapUpdateEffects` creates particles in the
 256-entry pool, and `WorldMapRenderEffects` submits accepted FT4 packets with
 the `SZ3>>4` rule listed above.
 

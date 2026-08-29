@@ -536,11 +536,15 @@ codec.
 
 ### 6.1 Configuration file set
 
-There are nine World configurations with base file IDs:
+There are 17 base-addressable World file sets with IDs:
 
 ```text
 base = 0x2B + configuration * 0x0B
 ```
+
+Nine sets (`0x2B..0x83`) are ordinary progress-selected configurations. The
+remaining eight (`0x8E..0xDB`) supply dedicated scripted World modes. The file
+census in this section covers the nine ordinary sets.
 
 Within each set:
 
@@ -582,9 +586,10 @@ to `0x207` bytes with SHA-256
 No World instruction reads its section pointer or expanded bytes. Preserve it
 as a serialized-but-unread section; it is not trailer data for `+0x24`.
 
-Each encounter section has a `0x260`-byte consumed body: `0x200` bytes of battle
-selection data followed by six 16-byte level-band weight rows. The last section
-can have one through seven alignment bytes.
+Each encounter section has a `0x260`-byte serialized body: `0x200` bytes of
+battle selection data followed by six 16-byte weight rows. Ordinary World
+selection reads the first four rows. The last section can have one through seven
+alignment bytes.
 
 Across the nine configurations, the archive contains 559 model placements,
 with per-set counts `18,16,49,69,90,80,81,80,76`. Model bundle payloads total
@@ -612,20 +617,21 @@ empty group. Each nonempty group contains 16-byte records and ends when
 
 ```c
 struct WorldExit {
-    int16_t x_origin_or_bound;
-    int16_t z_origin_or_bound;
-    int16_t x_extent_or_bound;
-    int16_t z_extent_or_bound;
+    int16_t x_origin;
+    int16_t z_origin;
+    int16_t x_extent;
+    int16_t z_extent;
     int16_t destination_field;
-    int16_t serialized_0a;       /* Preserved; not read by exit handling. */
+    int16_t destination_world_mode;
     int16_t output_value;
-    int16_t type_or_channel;
+    int16_t type;
 };
 ```
 
-Type 4 publishes `output_value` through a separate result slot from the other
-types. Every geometric halfword, destination, output, and type field is consumed;
-only `serialized_0a` is skipped.
+Type 4 publishes `output_value` through the secondary dialogue channel, clears
+ordinary prompt ownership, and does not retain an active exit record. Ordinary
+Field exits commit `destination_world_mode` for the next World entry. Every field
+in the record is consumed.
 
 The complete per-configuration placement census is:
 
@@ -751,8 +757,7 @@ first `0x710` bytes:
 0x144  tile 1: 81 packed samples, 0x144 bytes
 0x288  tile 2: 81 packed samples, 0x144 bytes
 0x3CC  tile 3: 81 packed samples, 0x144 bytes
-0x510  64 uint16 material words, 0x80 bytes
-0x590  64 triples of uint16 serialized color coefficients, 0x180 bytes
+0x510  256 uint16 material words, 0x200 bytes
 0x710  end of copied structure
 0x710  0xF0 stored bytes filled with 0xE5
 0x800  end of slot
@@ -787,12 +792,13 @@ cosine terms. UV rotation permutes the four corners of a 16 by 16 texture cell.
 The renderer emits two textured triangles and selects a fog palette from GTE
 depth cue plus sample bit 11.
 
-### 6.8 Material and serialized color tables
+### 6.8 Material table
 
-The material table has 64 words and is indexed as an 8 by 8 grid:
+The material table has 256 words and is indexed as a 16 by 16 grid. Each of the
+four terrain tiles covers one 8 by 8 quadrant of this slot-wide table:
 
 ```text
-material = read_u16(chunk + 0x510 + (z * 8 + x) * 2)
+material = read_u16(chunk + 0x510 + (z * 16 + x) * 2)
 ```
 
 | Material bits | Behavior |
@@ -806,14 +812,9 @@ The low nibble indexes direction vectors used by collision and movement. A dot
 test selects either bits `4..6` or `7..9`. A separate retail accessor returns
 bits `10..15`, but no call reaches it and all serialized values are zero there.
 
-The `+0x590` table contains 64 triples `(r16,g16,b16)` aligned with the 8 by 8
-material cells. It is copied into every RAM chunk, but no World instruction
-reads it afterward. Across one disc there are 294,912 triples and 1,571 distinct
-values. Components range from 0 through 576; `(288,288,288)` occurs 203,134
-times, with other grayscale and channel-specific combinations. These
-observable distributions identify fixed-point color-like coefficients. Since
-the renderer does not consume them, the three halfwords per cell remain stored
-but do not participate in lighting.
+The table occupies the complete `+0x510..+0x70F` remainder of the runtime slot.
+Ground-type selection reads its two three-bit classes, while terrain collision
+uses the partition nibble to choose and orient boundary vectors.
 
 ### 6.9 Other World graphical sections
 

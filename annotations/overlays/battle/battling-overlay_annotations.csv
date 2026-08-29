@@ -13,20 +13,20 @@
 0x800708C4, function start — BattlingInterpolateCameraEye; Moves the camera eye toward a destination and constrains its horizontal path to the arena boundary.
 0x8007099C, function start — BattlingUpdateCameraMode; Selects fixed or fighter-relative camera destinations and interpolates the camera target and eye for the requested mode.
 0x80070C7C, function start — BattlingRebaseArenaCoordinates; Recenters both fighters and the camera around their midpoint then applies the selected arena placement preset and clears transient effects.
-0x80070F80, function start — BattlingBeginAttractScript; Selects a camera script and resets its delay state plus both fighters' script-controlled motion flags.
+0x80070F80, function start — BattlingBeginPresentationScript; Installs Tutorial or scripted-scenario bytecode, clears its wait and per-sequence movement state, and clears both fighters' boost-request flags.
 0x80070FD8, function start — BattlingStartRandomArenaReentryMotion; Chooses one of two randomized inward headings and starts maximum-speed recovery movement with its animation phase reset.
-0x8007107C, function start — BattlingTutorialScriptRun; interprets tutorial movement, animation, wait, and exit bytecode.
+0x8007107C, function start — BattlingPresentationScriptRun; Interprets the shared Tutorial and scripted-scenario bytecode for fighter selection, commands, movement, distance staging, HP, Heat, dialogs, windows, camera presets, arena placement, and sequence exit.
 0x80071724, function start — BattlingQueueScreenWindowPackets; Writes the interpolated window coordinates and queues both current screen-control packets into the ordering table.
 0x80071794, function start — BattlingTutorialTextureLoad; uploads tutorial TIM resources and initializes packets.
 0x800718C0, function start — BattlingTutorialDialogInitialize; initializes tutorial dialog and window state.
-0x8007191C, function start — BattlingSelectAttractScriptAndResetFighters; Selects an attract sequence and restores both fighters to full health while resetting window interpolation and menu presentation.
-0x800719F0, function start — BattlingInitializeAttractScreen; Initializes the attract-screen state and text window then starts its default camera sequence and fighter presentation.
-0x80071AD0, function start — BattlingTutorialUpdate; handles tutorial input, scripts, dialogs, and actors.
+0x8007191C, function start — BattlingSelectTutorialScriptAndResetFighters; Selects one of ten Tutorial entries, configures selector or lesson dialog presentation, resets the screen window and forced Heat, and restores both fighters to maximum HP.
+0x800719F0, function start — BattlingInitializeTutorialScreen; Enters state 7 and activity 5, disables rubber-band mode, creates the Tutorial selector window, initializes script and camera state, and starts Tutorial entry 9.
+0x80071AD0, function start — BattlingTutorialUpdate; Handles Tutorial selection, scripts, dialogs, screen-window interpolation, and camera presets while running the complete bout transaction including countdown and knockout classification.
 0x80071DA4, function start — BattlingSnapFighterToWalkableTerrain; Searches nearby terrain cells until the fighter is supported then updates elevation and terrain classification.
-0x80071F8C, function start — BattlingExecuteAttractStageCommand; Performs display synchronization or terrain snapping and can select a health-based panel or clamp camera height.
-0x800720C4, function start — BattlingResetRubberBandClimax; Clears the one-shot activation latch for the rubber-band climax sequence.
-0x800720D4, function start — BattlingStartRubberBandClimaxIfInactive; Starts the climax camera script once and resets fade state hit timers effect counters and presentation state.
-0x80072170, function start — BattlingUpdateRubberBandClimax; Advances the climax camera script and fades while spawning effects and forcing the designated fighter to one health at the transition.
+0x80071F8C, function start — BattlingExecutePresentationStageCommand; Performs display synchronization or terrain snapping and can select an HP-ratio-based message or clamp camera height.
+0x800720C4, function start — BattlingResetScriptedScenarioClimax; Clears the one-shot activation latch for the scripted-scenario climax.
+0x800720D4, function start — BattlingStartScriptedScenarioClimaxIfInactive; Once per bout, starts the scripted-scenario bytecode, pauses ordinary bout control, assigns both fighters to script-controlled player state, and resets climax presentation and effects.
+0x80072170, function start — BattlingUpdateScriptedScenarioClimax; Advances the scripted-scenario bytecode and effect substates, sets side 0 HP to one at fade-out, and exports result code 0x7F before returning to Field.
 0x800725A8, function start — BattlingNoOpCallback0; intentional empty callback.
 0x800725B0, function start — BattlingInitializeWinnerShowcase; Allocates winner-display resources and initializes its camera model transform lighting and match-stat parameters.
 0x800726B4, function start — BattlingTeardownWinnerShowcase; Releases winner-display resources and restores graphics audio text and transition settings.
@@ -46,17 +46,17 @@
 0x80073B7C, function start — BattlingResolveModelAttachmentPosition; Resolves an attachment or animated bone position into arena coordinates with the fighter translation applied.
 0x80073CA4, function start — BattlingCommitCurrentFrameAttackVolumes; Promotes newly emitted attack volumes to active status and retires every older volume.
 0x80073CEC, function start — BattlingInitializeSweptAttackVolume; Preserves the previous endpoints then installs new endpoints and collision metadata for a newly emitted swept attack.
-0x80073DE4, function start — BattlingCanAccumulateImpactWithoutFatalDamage; Tests whether an impact-meter addition can be accepted without its overflow damage reaching current health.
-0x80073E2C, function start — BattlingAccumulateImpactAndQueueHealthDamage; Adds impact energy and converts overflow above the gauge limit into queued health damage and per-side damage totals.
+0x80073DE4, function start — BattlingCanAccumulateHeatWithoutFatalDamage; Tests whether a Heat addition stays within 0x1000 or whether its biased overflow-damage preflight remains strictly below current HP.
+0x80073E2C, function start — BattlingAccumulateHeatAndQueueHealthDamage; Bypasses Heat charging in Practice and automatic activity, otherwise adds Heat, caps it at 0x1000, queues floor-divided overflow HP damage, and records accepted Ether or boost overflow totals.
 0x80073F34, function start — BattlingDispatchAnimationEffectEvent; Resolves one or two attachment endpoints and emits the requested point particle trail beam or linked effect.
-0x800740E4, function start — BattlingProcessAnimationAttackEvent; Resolves attack endpoints and emits reusable hit volumes or projectiles while charging impact costs and updating attack presentation.
+0x800740E4, function start — BattlingProcessAnimationAttackEvent; Resolves attack endpoints and emits swept volumes or projectiles, charging standard Heat for Ether projectile events and updating attack presentation and replay state.
 0x80074678, function start — BattlingProcessCrossedAnimationFrameEvents; Scans every crossed animation frame and dispatches attack effect visibility and reset commands before committing the new hit volumes.
 0x80074998, function start — BattlingBeginResetModelPartVisibility; Loads the fighter's model-part table and continues at 0x8007499C to rebuild visibility from the active whitelist.
 0x8007499C, function start — BattlingResumeResetModelPartVisibilityAfterTableLoad; Resumes with the model-part table already loaded then hides all eligible parts and enables the whitelisted parts plus the optional thirteenth part.
 0x80074AB4, function start — BattlingRestoreReplayFrame; Restores a fighter's recorded pose and animation then reapplies part visibility and advances frame events for replay.
 0x80074BA4, function start — BattlingRecordReplayFrameAndAdvanceAnimation; Saves the current pose and action state then handles animation changes frame advancement looping visibility and event-frame progression.
-0x80075060, function start — BattlingSelectResultCode; Chooses the exported match-result code from the winner side health thresholds accumulated attack totals and opponent health.
-0x800751C8, function start — BattlingBoutStateUpdate; detects knockout or draw and advances round state.
+0x80075060, function start — BattlingSelectResultCode; Writes the exported result byte from side 0 remaining-HP thresholds after a side 0 victory or from side 0 Ether-overflow and boost-overflow totals, R1 and Triangle/Circle press counts, and side 1 remaining HP after a side 1 victory.
+0x800751C8, function start — BattlingBoutStateUpdate; Advances opening and post-knockout state, starts the scripted-scenario climax when eligible, classifies knockout or draw, performs replay or series transitions, and refreshes shared 3D distance, XZ distance, and fighter heading.
 0x8007570C, function start — BattlingComputeScaledActorDelta; computes a scaled actor-coordinate difference.
 0x80075738, function start — BattlingComputeActorDelta; returns an actor-coordinate difference.
 0x80075748, function start — BattlingNoOpCallback1; intentional empty callback.
@@ -72,7 +72,7 @@
 0x8007661C, function start — BattlingDrawSelectedAttackDiagnostics; prints the selected attack name and percentage plus current and maximum animation frames at the side-specific debug position.
 0x800767C8, function start — BattlingQueueCloseRangeReaction; clears pending commands and queues reaction command five when nearby grounded opponents meet the required state and facing conditions.
 0x80076884, function start — BattlingProcessControllerMovement; reads the side's controller inputs queues action commands applies camera-relative steering and acceleration and derives movement speed and heading.
-0x80077038, function start — BattlingUpdateHealthHitstunAndKnockout; advances action timers drains accumulated damage updates the health gauge and enters the knockout state with directional recoil when health reaches zero.
+0x80077038, function start — BattlingUpdateHealthHitstunAndKnockout; Advances combat timers, drains Heat and queued overflow and direct-hit damage, updates HP presentation, and enters directional-recoil knockout at zero HP except in Practice and automatic activity.
 0x80077584, function start — BattlingApplyDirectionalLaunchImpulse; adds angle-derived horizontal velocity and increases upward launch velocity while clamping its maximum rise.
 0x8007762C, function start — BattlingBeginHeavyKnockback; selects the heavy-hit animation initializes lockout and impact timers clears incompatible flags and applies the requested launch impulse.
 0x800776A8, function start — BattlingTriggerSideRumble; starts controller vibration for the requested duration when the current mode side and rumble-enable flags permit it.
@@ -92,12 +92,12 @@
 0x800796B8, function start — BattlingUpdateSharedArenaCamera; derives opponent distance heading midpoint and camera side then smooths the camera toward a terrain-constrained framing position.
 0x80079A8C, function start — BattlingEffectsInitialize; initializes emitters and shared effect state.
 0x80079B04, function start — BattlingNoOpCallback2; intentional empty effect callback.
-0x80079B0C, function start — BattlingResetMatchProgression; clears the match counter result counters transient mode flags and accumulated arena progression state.
-0x80079B44, function start — BattlingInitializeMatchRuntime; initializes both battlers and all shared camera rendering effect input result and arena subsystems for a new match.
+0x80079B0C, function start — BattlingResetSeriesProgression; Clears the round number, both side win counts, draw count, elapsed-series simulation-update counter, and result-side input selector for a new series.
+0x80079B44, function start — BattlingInitializeBoutRuntime; Reinitializes both fighters and per-bout effects, camera, input, result, replay, and presentation state, resets frame-rate pacing, starts the 90-update opening, and increments the round number.
 0x80079D08, function start — BattlingEncodeReplayFlags; stores the battler's reaction guard and special-state bits into the current replay sample.
 0x80079D6C, function start — BattlingDecodeReplayFlags; restores the battler's reaction guard and special-state bits from the current replay sample.
 0x80079DE0, function start — BattlingClearEffectState; clears shared effect state.
-0x80079DF0, function start — BattlingBoutInitializeAndUpdate; initializes fighters, input, camera, resources, and bout state.
+0x80079DF0, function start — BattlingBoutSimulationUpdate; Executes one complete live simulation transaction when the update-hold counter is zero, including collisions, control or AI, bout and health processing, actions, movement, terrain, replay, animation events, and effects; otherwise decrements the hold counter.
 0x8007A21C, function start — BattlingBeginReplayRewind; configures the replay countdown rewinds the history cursor and preserves live battler and auxiliary positions for later restoration.
 0x8007A344, function start — BattlingReplayUpdate; updates recorded fighters and renders replay state.
 0x8007A6D0, function start — BattlingSetWinnerPose; selects the winner's timed celebration or idle animation and marks the animation for immediate restart.
@@ -153,7 +153,7 @@
 0x8007ED84, function start — BattlingMenuStringDrawWithOffset; draws a string from the current X coordinate minus a supplied offset then restores X and advances Y by 20 pixels.
 0x8007EE08, function start — BattlingMenuPrimaryTextColorSet; selects white text or a frame-ramped green-to-yellow highlight.
 0x8007EE68, function start — BattlingMenuAlternateTextColorSet; selects white text or a frame-ramped white-to-blue highlight.
-0x8007EEE8, function start — BattlingBuildGearRoster; builds available Gear and opponent choices.
+0x8007EEE8, function start — BattlingBuildGearRoster; Builds either the complete 49-Gear list or a progress-filtered list, appending Argento to the filtered list once when the opponent-checklist completion flag is set.
 0x8007EFB4, function start — BattlingGearSelectionGridInitialize; initializes the 7x7 Gear grid.
 0x8007F05C, function start — BattlingGearPortraitQuadBuild; builds a side-positioned textured Gear portrait quad with wrapped selection index and transition brightness.
 0x8007F258, function start — BattlingGearSelectionRender; animates cursors and renders Gear names.
@@ -169,30 +169,30 @@
 0x8007FE48, function start — BattlingDrawModeSettings; draws mode-specific settings.
 0x8007FF70, function start — BattlingStepOptionValue; wraps or clamps an option value.
 0x80080054, function start — BattlingAdjustDifficultyOption; updates difficulty.
-0x80080090, function start — BattlingAdjustRoundCountOption; updates round count.
-0x800800CC, function start — BattlingAdjustTimeLimitOption; updates time limit.
-0x80080108, function start — BattlingAdjustOptionByte3; updates a one-bit option.
-0x80080144, function start — BattlingAdjustOptionByte4; updates a one-bit option.
+0x80080090, function start — BattlingAdjustMotionSpeedOption; Adjusts motion-speed index 0x80099DA1 through values 0..7.
+0x800800CC, function start — BattlingAdjustFrameRateOption; Adjusts frame-rate pacing index 0x80099D9A through values 0..4.
+0x80080108, function start — BattlingAdjustController1VibrationOption; Toggles controller 1 vibration at 0x80099D9B.
+0x80080144, function start — BattlingAdjustController2VibrationOption; Toggles controller 2 vibration at 0x80099D9C.
 0x80080180, function start — BattlingAdjustPlayer1Control; updates player-one control.
 0x800801BC, function start — BattlingAdjustPlayer2Control; updates player-two control.
-0x800801F8, function start — BattlingAdjustModeOption; updates the three-value mode.
-0x80080234, function start — BattlingAdjustSideOption; updates a side-dependent option.
-0x80080268, function start — BattlingAdjustArenaOption; updates arena selection.
+0x800801F8, function start — BattlingAdjustMatchCountOption; Wraps number-of-matches setting 0x80099D9F through 0..3, where zero selects an endless series.
+0x80080234, function start — BattlingAdjustRubberBandOption; Toggles the independent rubber-band option at 0x80092884.
+0x80080268, function start — BattlingAdjustPracticeBehaviorOption; Adjusts Practice side-1 behavior selector 0x80099DA2 through values 0..13.
 0x800802A4, function start — BattlingUpdatePlayer1GearSelection; handles player-one Gear selection and reloads.
 0x8008040C, function start — BattlingUpdatePlayer2GearSelection; handles player-two Gear selection and reloads.
-0x80080570, function start — BattlingLoadSelectedGearResources; loads both selected fighter resources.
+0x80080570, function start — BattlingRequestResolvedGearArchives; Resolves both selected Gear IDs to package resource IDs, including paired substitutions for IDs 4, 7, 11, 30, and 31, then replaces and requests both compressed fighter archives.
 0x80080644, function start — BattlingLoadSelectionPortraits; uploads both selected Gear portraits.
-0x80080780, function start — BattlingConfirmGearSelection; commits selection and enters the mode.
+0x80080780, function start — BattlingConfirmGearSelection; On first use synchronizes and uploads all 49 bulk portraits and frees their source, then records the selected activity and enters the fighter-construction transition.
 0x800808F4, function start — BattlingMarkMenuResourceReload; marks menu resources for reload.
 0x80080920, function start — BattlingStartTutorialSelection; initializes fixed tutorial Gear selection.
 0x80080964, function start — BattlingMenuDescriptorSwitch; saves the active menu and selects an indexed menu descriptor or restores the previously saved descriptor.
 0x800809BC, function start — BattlingIsMainMenuActive; returns whether the main menu descriptor is currently active.
-0x800809D8, function start — BattlingMenuStateReset; resets menu state and loads common resources.
+0x800809D8, function start — BattlingMenuStateReset; Resets top-level menu, activity, navigation, transition, and portrait-release state, then starts bulk portrait file 0x30:6 loading.
 0x80080A58, function start — BattlingCommonArchiveReleaseOnce; synchronizes the common archive load and frees its allocation exactly once.
 0x80080AA0, function start — BattlingCaptureBufferDetachOrFree; either detaches the capture buffer without freeing it or frees an attached buffer and clears its pointer.
 0x80080AE8, function start — BattlingRestoreCapturedMenuFramebuffer; smooths the saved 320x218 image in place and uploads it to its framebuffer region.
 0x80080B58, function start — BattlingCaptureMenuFramebuffer; allocates snapshot storage and captures a synchronized 320x218 display-page image.
-0x80080C48, function start — BattlingStartSelectedMode; starts versus or practice mode.
+0x80080C48, function start — BattlingOpenPauseMenuForActivity; Captures the current framebuffer and opens the ordinary-bout or Practice pause descriptor, returning to menu idle for an unsupported selector.
 0x80080D10, function start — BattlingClearMenuDrawQueue; discards all staged menu drawing packets.
 0x80080D20, function start — BattlingSubmitMenuDrawQueue; submits staged menu packets and selection labels then clears the queue and emits enabled overlays.
 0x80080F04, function start — BattlingMenuPrimitiveInitialize; initializes menu sprites and draw packets.
@@ -207,7 +207,7 @@
 0x80081D2C, function start — BattlingMenusUpdateAndRender; restores a requested background snapshot and processes input before updating and rendering the active menu.
 0x80081E00, function start — BattlingConfigureLowerScreenGrayOverlay; configures both display buffers with a gray tile covering the screen below line 96.
 0x80081E6C, function start — BattlingConfigureFullscreenBlackOverlay; configures both display buffers with a black tile covering the full screen.
-0x80081ECC, function start — BattlingGraphicsResourcesInitialize; initializes arena UI, palettes, and textures.
+0x80081ECC, function start — BattlingGraphicsResourcesInitialize; Initializes HUD and arena packet state, multiplies all 16384 terrain heights by 12 in place, and creates the heightfield packet pools.
 0x80082178, function start — BattlingRasterizeWideArenaBoundary; rasterizes an eight-vertex radial boundary into per-scanline clipping spans.
 0x80082300, function start — BattlingRasterizeNarrowArenaBoundary; rasterizes a five-vertex radial boundary into per-scanline clipping spans.
 0x80082458, function start — BattlingCopySampledFloorNormal; copies the normal produced by the latest arena-floor height sample.
@@ -225,9 +225,9 @@
 0x80083738, function start — BattlingBoutCameraInitialize; frames both fighters and chooses a nearby floor-clamped camera side with a smoothed initial movement.
 0x80083B54, function start — BattlingCopySceneTransforms; copies both scene-transform records.
 0x80083BB4, function start — BattlingClearVideoMemoryViewport; clears a 320- or 640-pixel-wide 480-line video-memory region to black and synchronizes the GPU.
-0x80083C0C, function start — BattlingSetMode; changes mode and performs mode-specific setup.
+0x80083C0C, function start — BattlingSetMode; Changes the top-level Battling state and performs state-specific setup.
 0x80083CD8, function start — BattlingGetMode; returns the current Battling mode.
-0x80083CE8, function start — BattlingElapsedTimeDisplay; converts the elapsed frame count to minutes seconds and hundredths then draws the formatted value.
+0x80083CE8, function start — BattlingElapsedTimeDisplay; converts the elapsed simulation-update count to minutes seconds and hundredths then draws the formatted value.
 0x80083D74, function start — BattlingElapsedTimeDisplayContinuation; resumes with live division intermediates and finishes formatting and drawing the elapsed-time value.
 0x80083DCC, function start — BattlingPrepareActorLightingTransforms; fades actor illumination and updates actor-relative and camera-relative render transforms.
 0x800840CC, function start — BattlingRenderArenaScene; renders fighters, arena geometry, effects, and OT.
@@ -240,7 +240,7 @@
 0x80084BEC, function start — BattlingAttachSpecialGearAccessory; creates and attaches a textured auxiliary model with fixed rotation to the selected fighter.
 0x80084C88, function start — BattlingGearActorInitialize; initializes a selected Gear actor and resources.
 0x80084FD0, function start — BattlingOptionalPostRenderEffect; invokes an optional post-render effect.
-0x80085014, function start — BattlingForceComMode; forces both participants to COM control.
+0x80085014, function start — BattlingEnterAutomaticDemonstration; Clears the presentation flag and video-memory viewport, enters top-level state 5, assigns both fighters to COM control, and selects automatic activity 6.
 0x80085070, function start — BattlingEnablePlayerControlMode; clears both COM-control flags and enables interactive control state.
 0x8008509C, function start — BattlingLoadGearArchive; replaces and loads one fighter Gear archive.
 0x80085134, function start — BattlingReleaseGearResource; synchronizes and frees one fighter resource.
@@ -281,15 +281,15 @@
 0x80088754, function start — BattlingVectorLengthXZ; returns the square root of the summed squared X and Z components.
 0x800887A4, function start — BattlingPointDistance3D; returns the three-dimensional distance between two points.
 0x80088838, function start — BattlingPointDistanceXZ; returns the planar XZ distance between two points.
-0x800888B0, function start — BattlingSetGearUnlocked; sets the selected Gear identifier in the persistent unlock bitmap.
-0x800888E4, function start — BattlingIsGearUnlocked; tests the selected Gear identifier in the persistent unlock bitmap.
-0x80088908, function start — BattlingClearAllocationBit; clears an allocation bitmap bit.
-0x80088940, function start — BattlingSetAllocationHighFlag; sets the high allocation-state bit.
-0x8008895C, function start — BattlingAppendCompletionBonusGear; appends the completion-only Gear once after the full-unlock flag becomes set.
-0x800889C8, function start — BattlingCheckFullGearUnlock; verifies every required Gear unlock and sets completion state before appending the bonus Gear.
-0x80088A40, function start — BattlingOptionsSave; packs the active controller vibration mode and arena settings into persistent Battling state.
+0x800888B0, function start — BattlingMarkOpponentDefeated; Sets the selected Gear ID bit in the persistent eight-byte opponent checklist.
+0x800888E4, function start — BattlingIsOpponentDefeated; Tests the selected Gear ID bit in the persistent opponent checklist.
+0x80088908, function start — BattlingClearOpponentDefeated; Clears the selected Gear ID bit in the persistent opponent checklist.
+0x80088940, function start — BattlingSetOpponentChecklistCompletion; Sets opponent-checklist completion bit 16 in the resident Battling option word.
+0x8008895C, function start — BattlingAppendOpponentChecklistRewardGear; Appends Argento to the progress-filtered roster once when the opponent-checklist completion bit is set.
+0x800889C8, function start — BattlingCheckOpponentChecklistCompletion; Verifies defeated-opponent bits for Gear IDs 0..48 except Argento, sets the completion bit, and appends Argento to the filtered roster.
+0x80088A40, function start — BattlingOptionsSave; When the session selector is nonzero, packs both vibration flags, match target, and COM difficulty into the persistent low halfword while preserving the upper halfword.
 0x80088AF8, function start — BattlingOptionsLoad; decodes persisted settings or restores defaults.
-0x80088BD4, function start — BattlingUnlockGearAndCheckCompletion; unlocks one Gear and reevaluates the full-roster completion reward.
+0x80088BD4, function start — BattlingRecordDefeatedOpponentAndCheckCompletion; Marks one defeated opponent in the persistent checklist and reevaluates the Argento completion reward.
 0x80088C00, function start — BattlingVsyncCallback; samples VSync into frame timing.
 0x80088C28, function start — BattlingHeapDebugPageUpdate; changes and prints the heap-debug page.
 0x80088CBC, function start — BattlingDisplayBufferPacketInitialize; initializes a display-buffer sprite.
@@ -432,27 +432,27 @@
 0x8008ECEC, function start — BattlingTaggedSpatialSoundsStop; stops every active spatial sound carrying the requested tag.
 0x8008ED6C, function start — BattlingMappedActorSoundStop; resolves a logical sound selection and stops both mapped effects for the fighter side.
 0x8008EE1C, function start — BattlingAiSteeringApply; accelerates or decelerates movement and turns the heading toward the requested direction.
-0x8008EF00, function start — BattlingPracticeConditionalActionQueue; conditionally queues the facing-dependent action and sets a sixty-frame delay.
+0x8008EF00, function start — BattlingPracticeConditionalActionQueue; conditionally queues the facing-dependent action and sets a sixty-update delay.
 0x8008EF30, function start — BattlingPracticeRandomBasicActionsQueue; queues one to three randomized basic actions and selects a short or long delay.
-0x8008EF74, function start — BattlingPracticeActionThreeQueue; queues action three and sets a sixty-frame delay.
+0x8008EF74, function start — BattlingPracticeActionThreeQueue; queues action three and sets a sixty-update delay.
 0x8008EFA8, function start — BattlingPracticeMovementToggle; toggles automated movement and selects the corresponding update delay.
-0x8008F014, function start — BattlingPracticeActionsFourAndThreeQueue; queues actions four and three and sets a sixty-frame delay.
-0x8008F060, function start — BattlingPracticeActionFourQueue; queues action four and sets a sixty-frame delay.
+0x8008F014, function start — BattlingPracticeActionsFourAndThreeQueue; queues actions four and three and sets a sixty-update delay.
+0x8008F060, function start — BattlingPracticeActionFourQueue; queues action four and sets a sixty-update delay.
 0x8008F094, function start — BattlingPracticeNearRangeMovementUpdate; periodically chooses a full-speed heading while nearby and stops when outside range.
 0x8008F17C, function start — BattlingPracticeFarRangeMovementUpdate; periodically chooses a full-speed heading while separated and stops at very close range.
-0x8008F260, function start — BattlingPracticeContinueAsComAi; installs the requested difficulty and continues through the COM decision update.
+0x8008F260, function start — BattlingPracticeContinueAsConfiguredComAi; Transiently writes the Practice label's difficulty, then invokes normal COM AI, which immediately reloads difficulty from the global GAME LEVEL setting.
 0x8008F280, function start — BattlingPracticeAiUpdate; dispatches selected practice AI behavior.
 0x8008F4F4, function start — BattlingHealthAboveFractionTest; tests whether current health exceeds a requested fraction of maximum health.
 0x8008F530, function start — BattlingHeatIncreaseSafetyTest; tests whether the next heat increase avoids overload or leaves enough health to survive it.
 0x8008F570, function start — BattlingHeatSafeLimitCompute; returns the maximum current heat that permits the standard heat increase without overload.
 0x8008F580, function start — BattlingHeatRiskClassify; classifies current heat as safe or one of two increasing overload-risk levels.
-0x8008F5B4, function start — BattlingAiAttackDecisionEvaluate; probabilistically approves an attack from heat safety and both fighters' health and activity.
-0x8008F720, function start — BattlingAiEngagementDecisionEvaluate; chooses whether to engage from distance and heat risk with difficulty-weighted randomness.
-0x8008F7B8, function start — BattlingAiTacticalFlagsRandomize; randomizes tactical behavior flags and snapshots the current successful-hit count.
-0x8008F900, function start — BattlingAiBurstActionsQueue; conditionally queues a randomized burst action sequence for the current combat modes.
-0x8008F9B0, function start — BattlingActorOutOfBoundsOrDisabled; tests arena bounds and disabled state.
+0x8008F5B4, function start — BattlingAiAttackDecisionEvaluate; Probabilistically approves an attack from fighter-specific tuning weights, Heat safety, both fighters' HP, relative HP, and the opponent's physical state.
+0x8008F720, function start — BattlingAiEngagementDecisionEvaluate; Decides whether to engage from horizontal range, an optional decision-weight gate, Heat-risk class, and the high-risk decision weight.
+0x8008F7B8, function start — BattlingAiTacticalFlagsRandomize; Randomizes tactical behavior flags and orientation, stores a random low byte in the packed tactical state, and snapshots the fighter's received-damaging-hit counter.
+0x8008F900, function start — BattlingAiQueueTerrainDependentActions; Randomly suppresses the sequence against a terrain-class-1 opponent, optionally queues the close-range reaction, queues jump when rubber-band mode or fighter terrain permits it, and queues the special-action command when the sequence proceeds.
+0x8008F9B0, function start — BattlingActorNeedsScriptedArenaReentry; Evaluates the coordinate and terrain-class predicate used by presentation scripts and scenario AI to decide whether an actor requires arena reentry.
 0x8008FA2C, function start — BattlingAiBoundaryReturnHeadingSet; computes an inward recovery heading and enables full-speed movement.
-0x8008FACC, function start — BattlingAiBoundaryRecoveryUpdate; detects out-of-bounds fighters and overrides heading speed and boost state for recovery.
+0x8008FACC, function start — BattlingScriptedScenarioBoundaryRecoveryUpdate; Only for scenario-enabled side 1, intercepts ordinary AI and applies predicate- and distance-dependent recovery, chase, wait, or stop handling while either fighter requires scripted arena reentry.
 0x8008FBD8, function start — BattlingAiPendingActionsInterrupt; clears pending actions and enables the movement override at a difficulty-dependent cadence.
 0x8008FC7C, function start — BattlingComAiIdleStateEnter; enters idle state with a difficulty-scaled delay and refreshed tactical flags.
 0x8008FCC8, function start — BattlingComAiIdleStateUpdate; waits defensively while reacting to proximity boundaries and attack opportunities before advancing state.

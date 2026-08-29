@@ -38,21 +38,25 @@ that snapshot. Each path returns the Battle route to the resident dispatcher.
 
 ### 2.2 World Map route
 
-Each World region pointer addresses a `0x240`-byte encounter-selection record.
-Each record is followed by `0x20` bytes of region-owned adjunct data, producing
-a `0x260` pointer stride. The encounter selector consumes the 16 formations and
-four progress-sensitive weight rows in the `0x240`-byte prefix:
+Each World region pointer addresses a `0x260`-byte record. It contains 16
+formations and six serialized weight rows; the ordinary World selector consumes
+the first four progress-sensitive rows:
 
 ```text
 +0x000  Formation formations[16]  /* 0x200 bytes */
-+0x200  uint8 progress_weights[4][16]
++0x200  uint8 progress_weights[6][16]
++0x260  end of selected region record
 ```
+
+Rows 4 and 5 at `+0x240..+0x25F` preserve the serialized six-row layout but are
+outside the ordinary selector's four progress bands.
 
 `WorldMapInitializeEncounterSchedule` at `0x80075228` clears 16 countdown slots,
 activates one countdown, and sets the travel interval to 384 or 768 movement
-updates according to World mode. The movement updater at `0x8007528C` generates
-distinct countdowns in `1..interval`, decrements them on accepted movement
-updates, and reports expirations to the World frame coordinator.
+updates according to bit `0x4000` of persistent travel/vehicle state. The
+movement updater at `0x8007528C` generates distinct countdowns in `1..interval`,
+decrements them on accepted movement updates, and reports expirations to the
+World frame coordinator.
 
 `WorldMapSelectRandomEncounter` at `0x80075E7C` resolves the current region and
 chooses a weight row from total game progress:
