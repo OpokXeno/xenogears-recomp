@@ -194,7 +194,7 @@ def run_duplicate(request: RunRequest, watchdog_seconds: int) -> dict[str, objec
         runs.append(execute_run(
             RunRequest(request.build, request.trace, request.runtime_state / suffix,
                        request.memcard_dir, request.evidence, request.renderer, request.disc,
-                       request.timing_mode, request.render_mode, request.overlay_mode,
+                       request.render_mode, request.overlay_mode,
                        request.bios, request.baseline_request),
             watchdog_seconds, require_post_checkpoint_activity=False))
     assert_duplicate_runs(
@@ -233,7 +233,7 @@ def run_producer_family(
             request = RunRequest(
                 build, trace, root / "runtime-state", memcard_dir,
                 root / "aggregate.json", "opengl", disc,
-                "original", "shadow", "cold", bios,
+                "shadow", "cold", bios,
             )
             runtime = execute_run(
                 request, watchdog_seconds, producer_family=True,
@@ -271,7 +271,7 @@ def run_task15_matrix(
         completed = False
         request = RunRequest(
             build, trace, state, memcard_dir, runtime_state_root / "unused.json",
-            "opengl", disc, "original", render_mode, overlay_mode, bios,
+            "opengl", disc, render_mode, overlay_mode, bios,
         )
         try:
             runtime = execute_run(
@@ -299,7 +299,6 @@ def run_task15_matrix(
         "schema": TASK15_MATRIX_SCHEMA,
         "task": 15,
         "status": "PASS",
-        "timing_mode": "original",
         "overlay_mode": overlay_mode,
         "privacy": {"metadata_only": True, "private_paths": False},
         "rows": rows,
@@ -374,7 +373,6 @@ def main() -> None:
     run_parser.add_argument("--evidence", type=Path, required=True)
     run_parser.add_argument("--disc", type=Path, required=True)
     run_parser.add_argument("--renderer", choices=("opengl",), required=True)
-    run_parser.add_argument("--timing-mode", choices=("original",), required=True)
     run_parser.add_argument(
         "--render-mode", choices=("original", "shadow", "native"), required=True)
     run_parser.add_argument(
@@ -384,7 +382,6 @@ def main() -> None:
     baseline_parser = subparsers.add_parser("baseline")
     baseline_parser.add_argument("--trace", type=Path, required=True)
     baseline_parser.add_argument("--builds", required=True)
-    baseline_parser.add_argument("--timing-mode", choices=("original",), required=True)
     baseline_parser.add_argument("--render-mode", choices=("original",), required=True)
     baseline_parser.add_argument("--overlay-modes", choices=("cold,warm",), required=True)
     baseline_parser.add_argument("--warm-cache", type=Path, required=True)
@@ -395,7 +392,6 @@ def main() -> None:
     auth_proof_parser = subparsers.add_parser("auth-proof")
     auth_proof_parser.add_argument("--trace", type=Path, required=True)
     auth_proof_parser.add_argument("--builds", required=True)
-    auth_proof_parser.add_argument("--timing-mode", choices=("original",), required=True)
     auth_proof_parser.add_argument("--render-mode", choices=("original",), required=True)
     auth_proof_parser.add_argument("--overlay-modes", choices=("cold,warm",), required=True)
     auth_proof_parser.add_argument("--warm-cache", type=Path, required=True)
@@ -412,7 +408,6 @@ def main() -> None:
     matrix_parser.add_argument("--disc", type=Path, default=root / "game" / "disc1.cue")
     matrix_parser.add_argument("--bios", type=Path, default=root / "game" / "SCPH1001.BIN")
     matrix_parser.add_argument("--renderer", choices=("opengl",), required=True)
-    matrix_parser.add_argument("--timing-mode", choices=("original",), required=True)
     matrix_parser.add_argument(
         "--render-modes", choices=("original,shadow,native",), required=True)
     matrix_parser.add_argument(
@@ -429,7 +424,6 @@ def main() -> None:
         "--disc", type=Path, default=root / "game" / "disc1.cue")
     p0_matrix_parser.add_argument("--bios", type=Path, default=root / "game" / "SCPH1001.BIN")
     p0_matrix_parser.add_argument("--renderer", choices=("opengl",), required=True)
-    p0_matrix_parser.add_argument("--timing-mode", choices=("original",), required=True)
     p0_matrix_parser.add_argument(
         "--render-modes", choices=("original,shadow,native",), required=True)
     p0_matrix_parser.add_argument(
@@ -437,7 +431,6 @@ def main() -> None:
     p0_matrix_parser.add_argument("--watchdog-seconds", type=int, default=1200)
     producer_parser = subparsers.add_parser("producer-family")
     producer_parser.add_argument("--family-metadata", type=Path, required=True)
-    producer_parser.add_argument("--timing-mode", choices=("original",), required=True)
     producer_parser.add_argument("--render-mode", choices=("shadow",), required=True)
     producer_parser.add_argument("--evidence", type=Path, required=True)
     producer_parser.add_argument("--build", type=Path, default=root / "build-dbg" / "XenogearsRecomp")
@@ -454,7 +447,6 @@ def main() -> None:
                                 help="existing directory containing project-root card1.mcd and/or card2.mcd")
     record_parser.add_argument("--disc", type=Path, required=True)
     record_parser.add_argument("--renderer", choices=("opengl",), required=True)
-    record_parser.add_argument("--timing-mode", choices=("original",), required=True)
     record_parser.add_argument("--render-mode", choices=("original",), required=True)
     record_parser.add_argument("--max-vblanks", type=int, required=True)
     record_parser.add_argument("--on-close", action="store_true")
@@ -565,7 +557,7 @@ def main() -> None:
     request = RunRequest(arguments.build, arguments.trace, arguments.runtime_state,
                            validate_memcard_dir(arguments.memcard_dir), arguments.evidence,
                            arguments.renderer, validate_disc(arguments.disc),
-                           arguments.timing_mode, arguments.render_mode,
+                           arguments.render_mode,
                            arguments.overlay_mode, arguments.bios)
     if arguments.runs == 1:
         run = execute_run(request, arguments.watchdog_seconds)

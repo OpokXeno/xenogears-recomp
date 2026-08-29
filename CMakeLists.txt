@@ -564,39 +564,12 @@ if(BUILD_TESTING)
     add_test(NAME native_render_mode_control
         COMMAND native_render_mode_control_test)
 
-    add_executable(xenogears_timing_test
-        psxrecomp/runtime/tests/test_xenogears_timing.c
-        psxrecomp/runtime/src/xenogears_timing.c)
-    target_include_directories(xenogears_timing_test PRIVATE
+    add_executable(xenogears_scene_test
+        psxrecomp/runtime/tests/test_xenogears_scene.c
+        psxrecomp/runtime/src/xenogears_scene.c)
+    target_include_directories(xenogears_scene_test PRIVATE
         psxrecomp/runtime/include)
-    add_test(NAME xenogears_timing COMMAND xenogears_timing_test)
-
-    add_executable(xenogears_field_hook_test
-        psxrecomp/runtime/tests/test_xenogears_field_hook.c
-        psxrecomp/runtime/src/xenogears_field_hook.c)
-    target_include_directories(xenogears_field_hook_test PRIVATE
-        psxrecomp/runtime/include)
-    add_test(NAME xenogears_field_hook COMMAND xenogears_field_hook_test)
-
-    add_executable(game_fps_meter_test
-        psxrecomp/runtime/tests/test_game_fps_meter.c
-        psxrecomp/runtime/src/game_fps_meter.c)
-    target_include_directories(game_fps_meter_test PRIVATE
-        psxrecomp/runtime/include ${PSX_SDL_INCLUDE_DIRS})
-    target_link_libraries(game_fps_meter_test PRIVATE ${PSX_SDL_LIBRARIES})
-    add_test(NAME game_fps_meter COMMAND game_fps_meter_test)
-
-    add_test(NAME xenogears_resident_codegen
-        COMMAND "${Python3_EXECUTABLE}"
-            "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp/recompiler/tests/test_xenogears_resident_codegen.py"
-            --recompiler "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp/recompiler/build/psxrecomp-game")
-
-    add_executable(native_fps_route_capture_overlay_provenance_test
-        psxrecomp/runtime/tests/test_native_fps_route_capture_overlay_provenance.c)
-    target_include_directories(native_fps_route_capture_overlay_provenance_test PRIVATE
-        psxrecomp/runtime/include)
-    add_test(NAME native_fps_route_capture_overlay_provenance
-        COMMAND native_fps_route_capture_overlay_provenance_test)
+    add_test(NAME xenogears_scene COMMAND xenogears_scene_test)
 
     add_executable(xg_input_replay
         native_renderer/tests/integration/test_input_replay.cpp

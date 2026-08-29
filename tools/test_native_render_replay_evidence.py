@@ -98,7 +98,7 @@ def test_duplicate_runs_when_given_private_disc_preserve_it_for_each_child() -> 
         write_trace(request.trace, vblank_budget=3)
         observed: list[tuple[Path | None, Path, bool | None]] = []
         run = {
-            "status": "PASS", "timing_mode": "original", "render_mode": "original",
+            "status": "PASS", "render_mode": "original",
             "checkpoint": {"field_id": 5}, "backend": "opengl",
             "counters": {"vblank_latches": 3, "trace_state_latches": 3,
                          "provider_updates": 3, "capture_samples": 3,
@@ -167,7 +167,6 @@ def test_evidence_when_two_original_runs_match_requires_opengl_and_field_five() 
         trace = replay.parse_trace(trace_path)
         run = {
             "status": "PASS",
-            "timing_mode": "original",
             "render_mode": "original",
             "checkpoint": {"field_id": 5},
             "backend": "opengl",
@@ -197,7 +196,6 @@ def test_evidence_when_pass_stops_before_trace_budget_is_rejected() -> None:
         parsed_trace = replay.parse_trace(trace)
         payload = {
             "status": "PASS",
-            "timing_mode": "original",
             "render_mode": "original",
             "checkpoint": {"field_id": 5},
             "backend": "opengl",
@@ -229,7 +227,6 @@ def test_evidence_when_pass_consumes_full_trace_budget_is_accepted() -> None:
         trace = replay.parse_trace(trace_path)
         payload = {
             "status": "PASS",
-            "timing_mode": "original",
             "render_mode": "original",
             "checkpoint": {"field_id": 5},
             "backend": "opengl",
@@ -262,7 +259,6 @@ def test_evidence_when_internal_counter_values_diverge_is_rejected() -> None:
         trace = replay.parse_trace(trace_path)
         run = {
             "status": "PASS",
-            "timing_mode": "original",
             "render_mode": "original",
             "checkpoint": {"field_id": 5},
             "backend": "opengl",

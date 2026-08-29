@@ -56,7 +56,7 @@ _DIAGNOSTIC_KEYS: Final = frozenset({
     "geometry_overflowed",
 })
 _EVIDENCE_KEYS: Final = frozenset({
-    "schema", "schema_version", "task", "status", "scenario", "timing_mode",
+    "schema", "schema_version", "task", "status", "scenario",
     "render_mode", "authentication", "family", "comparison", "privacy",
     "cleanup",
 })
@@ -205,7 +205,6 @@ def build_producer_family_evidence(
         "task": 12,
         "status": "PASS",
         "scenario": "game-producer",
-        "timing_mode": "original",
         "render_mode": "shadow",
         "authentication": {
             "metadata_schema": FIELD_CHARACTER_SHADOW_SCHEMA,
@@ -250,7 +249,6 @@ def parse_producer_family_evidence(value: JsonValue) -> JsonObject:
         or record["task"] != 12
         or record["status"] != "PASS"
         or record["scenario"] != "game-producer"
-        or record["timing_mode"] != "original"
         or record["render_mode"] != "shadow"
     ):
         _fail("producer_family_evidence_identity_invalid")

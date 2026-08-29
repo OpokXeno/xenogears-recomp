@@ -85,7 +85,7 @@ static bool has_exact_trace_proof(void) {
 
 static void select_scene_boundary(void) {
     const GuestRenderSceneConfig native = {
-        GUEST_RENDER_TIMING_NATIVE_59_94, GUEST_RENDER_RENDER_NATIVE,
+        GUEST_RENDER_RENDER_NATIVE,
     };
     bool trace_proven = false;
     XgRenderAuth *auth = NULL;

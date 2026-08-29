@@ -120,15 +120,15 @@ static int test_runtime_configure_is_transactional_and_idempotent(void) {
     psx_xg_render_auth_runtime_test_prepare_host();
     psx_xg_render_auth_runtime_test_fail_registration_after(1u);
     CHECK(!psx_xg_render_auth_configure(
-        GUEST_RENDER_TIMING_NATIVE_59_94, GUEST_RENDER_RENDER_NATIVE,
+        GUEST_RENDER_RENDER_NATIVE,
         test_presentation_gate, NULL));
 
     psx_xg_render_auth_runtime_test_clear_registration_failure();
     CHECK(psx_xg_render_auth_configure(
-        GUEST_RENDER_TIMING_NATIVE_59_94, GUEST_RENDER_RENDER_NATIVE,
+        GUEST_RENDER_RENDER_NATIVE,
         test_presentation_gate, NULL));
     CHECK(psx_xg_render_auth_configure(
-        GUEST_RENDER_TIMING_NATIVE_59_94, GUEST_RENDER_RENDER_NATIVE,
+        GUEST_RENDER_RENDER_NATIVE,
         test_presentation_gate, NULL));
     CHECK(g_psx_xg_render_auth_cold_enabled &&
           psx_xg_render_auth_cold_enabled());
@@ -4329,7 +4329,7 @@ static int reset_source_mode(GuestRenderRenderMode mode) {
     presentation_gate_succeeds = true;
     presentation_gate_saw_closed_state = false;
     temporal_candidate_count = 0u;
-    return psx_xg_render_auth_configure(GUEST_RENDER_TIMING_NATIVE_59_94, mode,
+    return psx_xg_render_auth_configure(mode,
                                         test_presentation_gate, NULL);
 }
 
@@ -4675,7 +4675,7 @@ static int test_native_particle_retains_native_on_presentation_gate_failure(void
     psx_xg_render_auth_runtime_test_reset();
     presentation_gate_succeeds = false;
     CHECK(psx_xg_render_auth_configure(
-        GUEST_RENDER_TIMING_NATIVE_59_94, GUEST_RENDER_RENDER_NATIVE,
+        GUEST_RENDER_RENDER_NATIVE,
         test_presentation_gate, NULL));
     set_matching_runtime_identity();
     note_matching_runtime_variant_candidate();
@@ -10618,7 +10618,7 @@ static int test_runtime_render_modes_are_independent_and_gate_staging(void) {
         presentation_gate_succeeds = true;
         presentation_gate_saw_closed_state = false;
         CHECK(psx_xg_render_auth_configure(
-            GUEST_RENDER_TIMING_NATIVE_59_94, modes[index],
+            modes[index],
             test_presentation_gate, NULL));
         set_matching_runtime_identity();
         psx_xg_render_auth_cold_enable(true);
@@ -10628,10 +10628,6 @@ static int test_runtime_render_modes_are_independent_and_gate_staging(void) {
                                        0x800b06dcu, 250u));
         CHECK(presentation_gate_saw_closed_state);
         CHECK(guest_render_bridge_snapshot(&bridge) == GUEST_RENDER_OK);
-        CHECK(bridge.modes.requested_timing_mode ==
-              GUEST_RENDER_TIMING_NATIVE_59_94);
-        CHECK(bridge.modes.effective_timing_mode ==
-              GUEST_RENDER_TIMING_NATIVE_59_94);
         CHECK(bridge.modes.requested_render_mode == modes[index]);
         CHECK(guest_render_transaction_pending_snapshot(&pending) ==
               GUEST_RENDER_TRANSACTION_OK);
@@ -10685,7 +10681,7 @@ static int test_runtime_discards_pre_capture_provisional_candidate(void) {
     presentation_gate_succeeds = true;
     presentation_gate_saw_closed_state = false;
     CHECK(psx_xg_render_auth_configure(
-        GUEST_RENDER_TIMING_ORIGINAL, GUEST_RENDER_RENDER_NATIVE,
+        GUEST_RENDER_RENDER_NATIVE,
         test_presentation_gate, NULL));
     set_matching_runtime_identity();
     psx_xg_render_auth_source_reset();
@@ -10729,17 +10725,13 @@ static int test_runtime_gate_failure_retains_native_authority(void) {
     presentation_gate_succeeds = false;
     presentation_gate_saw_closed_state = false;
     CHECK(psx_xg_render_auth_configure(
-        GUEST_RENDER_TIMING_NATIVE_59_94, GUEST_RENDER_RENDER_NATIVE,
+        GUEST_RENDER_RENDER_NATIVE,
         test_presentation_gate, NULL));
     set_matching_runtime_identity();
     begin_runtime_variant_source_sequence(XG_RENDER_AUTH_TIER_COLD_INTERPRETER);
     CHECK(presentation_gate_saw_closed_state);
     CHECK(guest_render_bridge_snapshot(&bridge) == GUEST_RENDER_OK);
     CHECK(bridge.state_open && bridge.producer_open);
-    CHECK(bridge.modes.requested_timing_mode ==
-          GUEST_RENDER_TIMING_NATIVE_59_94);
-    CHECK(bridge.modes.effective_timing_mode ==
-          GUEST_RENDER_TIMING_NATIVE_59_94);
     CHECK(bridge.modes.requested_render_mode == GUEST_RENDER_RENDER_NATIVE);
     CHECK(bridge.modes.effective_render_mode == GUEST_RENDER_RENDER_NATIVE);
     CHECK(bridge.fallback_reason == GUEST_RENDER_FALLBACK_PRESENTATION_GATE);
@@ -10916,7 +10908,7 @@ int main(void) {
     psx_xg_render_auth_runtime_test_reset();
     guest_render_bridge_test_reset();
     if (!psx_xg_render_auth_configure(
-            GUEST_RENDER_TIMING_NATIVE_59_94, GUEST_RENDER_RENDER_NATIVE,
+            GUEST_RENDER_RENDER_NATIVE,
             test_presentation_gate, NULL))
         return 1;
     ok &= test_runtime_completed_proof_receipt_lifecycle();

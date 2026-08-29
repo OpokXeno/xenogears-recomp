@@ -20,7 +20,6 @@ typedef bool (*PsxXgRenderPresentationGate)(
 typedef int (*PsxXgRenderExecPhaseExchange)(int phase);
 
 bool psx_xg_render_auth_configure(
-    GuestRenderTimingMode requested_timing_mode,
     GuestRenderRenderMode requested_render_mode,
     PsxXgRenderPresentationGate presentation_gate,
     void *presentation_user_data);

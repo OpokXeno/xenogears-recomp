@@ -125,7 +125,6 @@ static GuestRenderProducerProvenance native_provenance(void) {
 
 static int begin_bridge_state(GuestRenderVisualStateId *out_state_id) {
     const GuestRenderSceneConfig config = {
-        GUEST_RENDER_TIMING_NATIVE_59_94,
         GUEST_RENDER_RENDER_NATIVE,
     };
     GuestRenderVisualStateId state_id = { 0 };

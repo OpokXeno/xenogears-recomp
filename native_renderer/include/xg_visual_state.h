@@ -27,11 +27,6 @@ typedef enum XgVisualStateResult {
     XG_VISUAL_STATE_NO_COMPLETED_STATE,
 } XgVisualStateResult;
 
-typedef enum XgTimingMode {
-    XG_TIMING_MODE_ORIGINAL,
-    XG_TIMING_MODE_NATIVE_59_94,
-} XgTimingMode;
-
 typedef enum XgRenderMode {
     XG_RENDER_MODE_ORIGINAL,
     XG_RENDER_MODE_SHADOW,
@@ -39,7 +34,6 @@ typedef enum XgRenderMode {
 } XgRenderMode;
 
 typedef struct XgVisualStateModes {
-    XgTimingMode timing_mode;
     XgRenderMode render_mode;
 } XgVisualStateModes;
 

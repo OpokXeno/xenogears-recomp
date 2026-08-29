@@ -137,7 +137,6 @@ class RunRequest:
     evidence: Path
     renderer: str
     disc: Path | None = None
-    timing_mode: str = "original"
     render_mode: str = "original"
     overlay_mode: str = "cold"
     bios: Path | None = DEFAULT_BIOS
@@ -492,7 +491,7 @@ def runtime_command(request: RunRequest, runtime_evidence: Path | None = None) -
         str(build), *bios_arguments, *game_arguments, "--no-launcher",
         "--runtime-state", str(runtime_state),
         "--memcard-dir", str(memcard_dir), "--renderer", request.renderer,
-        "--native-fps", request.timing_mode, "--render-mode", request.render_mode,
+        "--render-mode", request.render_mode,
         "--input-replay", str(trace), "--evidence-out", str(runtime_output), *disc_arguments)
     assert not any(token in command for token in PROHIBITED)
     return command
@@ -526,7 +525,7 @@ def assert_run_evidence(
 ) -> None:
     if run.get("status") != "PASS":
         raise ValueError("runtime did not report PASS")
-    if run.get("timing_mode") != "original" or run.get("render_mode") != render_mode:
+    if run.get("render_mode") != render_mode:
         raise ValueError("runtime modes are invalid")
     checkpoint = run.get("checkpoint")
     if trace.record_on_close:
@@ -541,8 +540,7 @@ def assert_run_evidence(
     if render_mode != "original" or native_render is not None:
         native_render = _mapping(native_render, "native render evidence is missing")
         expected_fields = {
-            "requested_timing_mode", "effective_timing_mode",
-             "requested_render_mode", "effective_render_mode",
+            "requested_render_mode", "effective_render_mode",
              "transaction_count", "substitution_count", "stream", "ui_ot",
             "cumulative_fallback_count", "scene_fallback_count_baseline",
             "scene_fallback_count_delta", "scene_fallback_reason",
@@ -581,9 +579,7 @@ def assert_run_evidence(
             raise ValueError("UI OT evidence is invalid")
         if render_mode == "native" and (ui_ot["pending"] or ui_ot["blocked"]):
             raise ValueError("Native UI OT preparation was not cleanly closed")
-        if (native_render.get("requested_timing_mode") != "original" or
-                native_render.get("effective_timing_mode") != "original" or
-                native_render.get("requested_render_mode") != render_mode or
+        if (native_render.get("requested_render_mode") != render_mode or
                 native_render.get("effective_render_mode") != render_mode):
             raise ValueError("effective render mode is invalid")
         cumulative = native_render.get("cumulative_fallback_count")
@@ -897,15 +893,11 @@ def _runtime_environment() -> dict[str, str]:
 
 
 def assert_task15_matrix_evidence(evidence: dict[str, object]) -> None:
-    if set(evidence) != {
-        "schema", "task", "status", "timing_mode", "overlay_mode",
-        "privacy", "rows",
-    }:
+    if set(evidence) != {"schema", "task", "status", "overlay_mode", "privacy", "rows"}:
         raise ValueError("Task 15 matrix is not closed")
     if evidence.get("schema") != TASK15_MATRIX_SCHEMA or evidence.get("task") != 15:
         raise ValueError("Task 15 matrix schema is invalid")
-    if (evidence.get("timing_mode") != "original" or
-            evidence.get("overlay_mode") not in {"cold", "warm"}):
+    if evidence.get("overlay_mode") not in {"cold", "warm"}:
         raise ValueError("Task 15 matrix axes are invalid")
     if evidence.get("privacy") != {"metadata_only": True, "private_paths": False}:
         raise ValueError("Task 15 matrix privacy is invalid")
@@ -1066,7 +1058,6 @@ def build_p0_mode_matrix_evidence(
         "schema": P0_MODE_MATRIX_SCHEMA,
         "phase": "P0",
         "status": status,
-        "timing_mode": "original",
         "overlay_mode": "cold",
         "native_classification": "pre-gte",
         "privacy": {"metadata_only": True, "private_paths": False},
@@ -1077,15 +1068,14 @@ def build_p0_mode_matrix_evidence(
 
 def assert_p0_mode_matrix_evidence(evidence: dict[str, object]) -> None:
     if set(evidence) != {
-        "schema", "phase", "status", "timing_mode", "overlay_mode",
-        "native_classification", "privacy", "rows", "comparisons",
+        "schema", "phase", "status", "overlay_mode", "native_classification",
+        "privacy", "rows", "comparisons",
     }:
         raise ValueError("P0 mode matrix is not closed")
     if (evidence.get("schema") != P0_MODE_MATRIX_SCHEMA or
             evidence.get("phase") != "P0" or
-            evidence.get("status") not in {"PASS", "BLOCKED"} or
-            evidence.get("timing_mode") != "original" or
-            evidence.get("overlay_mode") != "cold" or
+             evidence.get("status") not in {"PASS", "BLOCKED"} or
+             evidence.get("overlay_mode") != "cold" or
              evidence.get("native_classification") != "pre-gte" or
             evidence.get("privacy") != {"metadata_only": True, "private_paths": False}):
         raise ValueError("P0 mode matrix metadata is invalid")

@@ -509,7 +509,7 @@ static bool submission_scene_config(GuestRenderSceneConfig *out_config) {
     if (out_config == NULL || state.render_mode != GUEST_RENDER_RENDER_NATIVE)
         return false;
     *out_config = (GuestRenderSceneConfig){
-        state.timing_mode, state.render_mode,
+        state.render_mode,
     };
     return true;
 }

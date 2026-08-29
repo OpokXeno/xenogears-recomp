@@ -78,10 +78,6 @@ int main() {
     assert(evidence_text.find("\"registered\":42") != std::string::npos);
     assert(evidence_text.find("\"pending_cmd\":6") != std::string::npos);
     assert(evidence_text.find("\"transitions\"") != std::string::npos);
-    assert(evidence_text.find("\"requested_timing_mode\":\"original\"") !=
-           std::string::npos);
-    assert(evidence_text.find("\"effective_timing_mode\":\"original\"") !=
-           std::string::npos);
     assert(evidence_text.find("\"requested_render_mode\":\"original\"") !=
            std::string::npos);
     assert(evidence_text.find("\"effective_render_mode\":\"original\"") !=

@@ -551,17 +551,12 @@ int main() {
 
     guest_render_bridge_test_reset();
     const GuestRenderSceneConfig native_scene = {
-        GUEST_RENDER_TIMING_NATIVE_59_94,
         GUEST_RENDER_RENDER_NATIVE,
     };
     assert(guest_render_bridge_begin_scene(&native_scene) == GUEST_RENDER_OK);
     guest_render_bridge_force_original(GUEST_RENDER_FALLBACK_BACKEND_FAILURE);
     assert(input_replay::write_evidence(evidence_path.c_str(), 5u, "opengl"));
     const std::string fallback_scene = read_file(evidence_path);
-    assert(fallback_scene.find("\"requested_timing_mode\":\"native_59_94\"") !=
-           std::string::npos);
-    assert(fallback_scene.find("\"effective_timing_mode\":\"native_59_94\"") !=
-           std::string::npos);
     assert(fallback_scene.find("\"requested_render_mode\":\"native\"") !=
            std::string::npos);
     assert(fallback_scene.find("\"effective_render_mode\":\"native\"") !=

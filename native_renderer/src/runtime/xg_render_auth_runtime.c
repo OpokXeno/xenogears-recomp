@@ -52,7 +52,6 @@ typedef struct XgRenderAuthRuntimeState {
     bool candidate_matched;
     bool candidate_dispatched;
     bool gte_attribution_producer_active;
-    GuestRenderTimingMode requested_timing_mode;
     GuestRenderRenderMode requested_render_mode;
     PsxXgRenderPresentationGate presentation_gate;
     void *presentation_user_data;
@@ -62,7 +61,6 @@ typedef struct XgRenderAuthRuntimeState {
 
 static XgRenderAuthRuntimeState state = {
     .armed = true,
-    .requested_timing_mode = GUEST_RENDER_TIMING_ORIGINAL,
     .requested_render_mode = GUEST_RENDER_RENDER_ORIGINAL,
 };
 
@@ -90,7 +88,6 @@ static void composition_query_state(
         XgRenderRuntimeAuthSceneState *out_state) {
     if (out_state == NULL) return;
     *out_state = (XgRenderRuntimeAuthSceneState){
-        .timing_mode = state.requested_timing_mode,
         .render_mode = state.requested_render_mode,
         .pending_tier = state.pending_variant_tier,
         .scene_generation = state.scene_generation,
@@ -624,7 +621,6 @@ static void publish_completed_proof(XgRenderAuthTier tier) {
 
 static void begin_scene(XgRenderAuthTier tier, uint32_t producer_entry) {
     const GuestRenderSceneConfig config = {
-        state.requested_timing_mode,
         state.requested_render_mode,
     };
     GuestRenderVisualStateId state_id = { 0 };
@@ -919,19 +915,13 @@ static void observe_hook(CPUState *cpu, XgRenderAuthTier tier, uint32_t hook, ui
 }
 
 bool psx_xg_render_auth_configure(
-    GuestRenderTimingMode requested_timing_mode,
     GuestRenderRenderMode requested_render_mode,
     PsxXgRenderPresentationGate presentation_gate,
     void *presentation_user_data) {
-    const bool timing_valid =
-        requested_timing_mode == GUEST_RENDER_TIMING_ORIGINAL ||
-        requested_timing_mode == GUEST_RENDER_TIMING_NATIVE_59_94;
     const bool render_valid =
         requested_render_mode == GUEST_RENDER_RENDER_ORIGINAL ||
         requested_render_mode == GUEST_RENDER_RENDER_SHADOW ||
         requested_render_mode == GUEST_RENDER_RENDER_NATIVE;
-    const GuestRenderTimingMode timing_mode = timing_valid
-        ? requested_timing_mode : GUEST_RENDER_TIMING_ORIGINAL;
     const GuestRenderRenderMode render_mode = render_valid
         ? requested_render_mode : GUEST_RENDER_RENDER_ORIGINAL;
     const bool preserve_producer_family =
@@ -939,11 +929,9 @@ bool psx_xg_render_auth_configure(
     const XgRenderAuthRuntimeState previous_state = state;
 
     if (state.configured)
-        return state.requested_timing_mode == timing_mode &&
-            state.requested_render_mode == render_mode &&
+        return state.requested_render_mode == render_mode &&
             state.presentation_gate == presentation_gate &&
             state.presentation_user_data == presentation_user_data;
-    state.requested_timing_mode = timing_mode;
     state.requested_render_mode = render_mode;
     state.presentation_gate = presentation_gate;
     state.presentation_user_data = presentation_user_data;
@@ -1394,8 +1382,6 @@ void psx_xg_render_auth_mode_snapshot(
 
     if (out_snapshot == NULL) return;
     memset(out_snapshot, 0, sizeof(*out_snapshot));
-    out_snapshot->modes.requested_timing_mode = state.requested_timing_mode;
-    out_snapshot->modes.effective_timing_mode = state.requested_timing_mode;
     out_snapshot->modes.requested_render_mode = state.requested_render_mode;
     out_snapshot->modes.effective_render_mode = state.requested_render_mode;
     out_snapshot->presentation = state.presentation;
@@ -1423,10 +1409,6 @@ void psx_xg_render_auth_mode_snapshot(
                    bridge_snapshot.fallback_reason ==
                        GUEST_RENDER_FALLBACK_NONE &&
                    completed_authority) {
-            out_snapshot->modes.requested_timing_mode =
-                state.requested_timing_mode;
-            out_snapshot->modes.effective_timing_mode =
-                state.requested_timing_mode;
             out_snapshot->modes.requested_render_mode =
                 state.requested_render_mode;
             out_snapshot->modes.effective_render_mode =
@@ -1454,7 +1436,6 @@ void psx_xg_render_auth_reset(void) {
         .armed = true,
         .scene_generation = 1u,
         .interpolation_scene_generation = 1u,
-        .requested_timing_mode = GUEST_RENDER_TIMING_ORIGINAL,
         .requested_render_mode = GUEST_RENDER_RENDER_ORIGINAL,
     };
     g_psx_xg_render_auth_cold_enabled = false;

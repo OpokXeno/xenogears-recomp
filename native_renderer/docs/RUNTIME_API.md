@@ -36,12 +36,11 @@ Configure the current host integration in this order:
 ## Configure the runtime
 
 Call `psx_xg_render_auth_configure` once during startup.
-Supply the requested timing mode and render mode.
+ Supply the requested render mode.
 Supply a presentation gate and the user data for that gate.
 
 ```c
 bool psx_xg_render_auth_configure(
-    GuestRenderTimingMode requested_timing_mode,
     GuestRenderRenderMode requested_render_mode,
     PsxXgRenderPresentationGate presentation_gate,
     void *presentation_user_data);
@@ -50,7 +49,7 @@ bool psx_xg_render_auth_configure(
 Check the return value.
 Stop startup when the function returns `false`.
 
-Unsupported timing or render values are normalized to their `ORIGINAL` values.
+Unsupported render values are normalized to `ORIGINAL`.
 They do not necessarily make the call return `false`.
 Validate enum values when silent normalization is not acceptable.
 

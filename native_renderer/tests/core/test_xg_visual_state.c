@@ -63,18 +63,13 @@ static void test_lifecycle_and_process_wide_uniqueness(void) {
     CHECK(xg_visual_state_finalize(bridge, next_scene) == XG_VISUAL_STATE_OK);
 }
 
-static void test_independent_mode_axes(void) {
+static void test_render_modes(void) {
     XgVisualStateModes modes = {
-        XG_TIMING_MODE_ORIGINAL,
         XG_RENDER_MODE_ORIGINAL,
     };
 
     CHECK(xg_visual_state_modes_are_valid(modes));
     modes.render_mode = XG_RENDER_MODE_NATIVE;
-    CHECK(modes.timing_mode == XG_TIMING_MODE_ORIGINAL);
-    CHECK(xg_visual_state_modes_are_valid(modes));
-    modes.timing_mode = XG_TIMING_MODE_NATIVE_59_94;
-    CHECK(modes.render_mode == XG_RENDER_MODE_NATIVE);
     CHECK(xg_visual_state_modes_are_valid(modes));
 }
 
@@ -95,7 +90,7 @@ static void test_overflow_fails_closed(void) {
 int main(void) {
     test_process_owner_and_null_inputs();
     test_lifecycle_and_process_wide_uniqueness();
-    test_independent_mode_axes();
+    test_render_modes();
     test_overflow_fails_closed();
     puts("visual-state lifecycle assertions passed");
     return 0;

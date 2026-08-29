@@ -17,7 +17,6 @@
 #include <stdint.h>
 
 typedef struct XgRenderRuntimeAuthSceneState {
-    GuestRenderTimingMode timing_mode;
     GuestRenderRenderMode render_mode;
     XgRenderAuthTier pending_tier;
     uint64_t scene_generation;

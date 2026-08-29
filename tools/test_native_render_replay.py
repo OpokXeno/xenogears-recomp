@@ -337,7 +337,7 @@ def test_runtime_command_when_clean_boot_uses_only_normal_input_path() -> None:
     assert not any(token in command for token in forbidden)
 
 
-def test_runtime_command_when_task15_native_forwards_independent_axes() -> None:
+def test_runtime_command_when_native_render_is_requested_forwards_only_render_mode() -> None:
     replay = replay_module()
     request = replay.RunRequest(
         build=Path("build-dbg/XenogearsRecomp"),
@@ -346,14 +346,13 @@ def test_runtime_command_when_task15_native_forwards_independent_axes() -> None:
         memcard_dir=Path("memcards"),
         evidence=Path(".omo/evidence/task-15.json"),
         renderer="opengl",
-        timing_mode="original",
         render_mode="native",
         overlay_mode="cold",
     )
 
     command = replay.runtime_command(request)
 
-    assert command[command.index("--native-fps") + 1] == "original"
+    assert "--native-fps" not in command
     assert command[command.index("--render-mode") + 1] == "native"
 
 
@@ -363,8 +362,6 @@ def test_task15_matrix_schema_accepts_only_three_closed_metadata_rows() -> None:
     def native_evidence(mode: str) -> dict[str, object]:
         active = mode == "native"
         return {
-            "requested_timing_mode": "original",
-            "effective_timing_mode": "original",
             "requested_render_mode": mode,
             "effective_render_mode": mode,
             "transaction_count": 0,
@@ -475,7 +472,6 @@ def test_task15_matrix_schema_accepts_only_three_closed_metadata_rows() -> None:
         "schema": replay.TASK15_MATRIX_SCHEMA,
         "task": 15,
         "status": "PASS",
-        "timing_mode": "original",
         "overlay_mode": "cold",
         "privacy": {"metadata_only": True, "private_paths": False},
         "rows": [
@@ -583,8 +579,6 @@ def test_runtime_evidence_accepts_a_clean_scene_after_an_earlier_fallback(
         write_trace(trace_path)
         trace = replay.parse_trace(trace_path)
         native_render = {
-            "requested_timing_mode": "original",
-            "effective_timing_mode": "original",
             "requested_render_mode": render_mode,
             "effective_render_mode": render_mode,
             "transaction_count": 2,
@@ -704,7 +698,6 @@ def test_runtime_evidence_accepts_a_clean_scene_after_an_earlier_fallback(
         }
         payload = {
             "status": "PASS",
-            "timing_mode": "original",
             "render_mode": render_mode,
             "checkpoint": {"field_id": 5},
             "backend": "opengl",
@@ -927,7 +920,6 @@ def test_evidence_without_post_checkpoint_runtime_activity_is_rejected() -> None
         trace = replay.parse_trace(trace_path)
         run = {
             "status": "PASS",
-            "timing_mode": "original",
             "render_mode": "original",
             "checkpoint": {"field_id": 5},
             "backend": "opengl",
@@ -961,7 +953,6 @@ def test_evidence_with_post_checkpoint_runtime_activity_is_accepted() -> None:
         trace = replay.parse_trace(trace_path)
         run = {
             "status": "PASS",
-            "timing_mode": "original",
             "render_mode": "original",
             "checkpoint": {"field_id": 5},
             "backend": "opengl",
@@ -990,7 +981,6 @@ def test_evidence_when_checkpoint_value_differs_is_rejected() -> None:
         trace = replay.parse_trace(trace_path)
         run = {
             "status": "PASS",
-            "timing_mode": "original",
             "render_mode": "original",
             "checkpoint": {"field_id": 4},
             "backend": "opengl",

@@ -20,12 +20,10 @@ bool xg_visual_state_id_equal(XgVisualStateId left, XgVisualStateId right) {
 }
 
 bool xg_visual_state_modes_are_valid(XgVisualStateModes modes) {
-    const bool timing_valid = modes.timing_mode == XG_TIMING_MODE_ORIGINAL ||
-                              modes.timing_mode == XG_TIMING_MODE_NATIVE_59_94;
     const bool render_valid = modes.render_mode == XG_RENDER_MODE_ORIGINAL ||
                               modes.render_mode == XG_RENDER_MODE_SHADOW ||
                               modes.render_mode == XG_RENDER_MODE_NATIVE;
-    return timing_valid && render_valid;
+    return render_valid;
 }
 
 XgVisualStateResult xg_visual_state_process_owner(XgVisualStateBridge **out_owner) {
