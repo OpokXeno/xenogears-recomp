@@ -58,6 +58,24 @@ Selector block `d` ends at selector block `d + 1`; block 7 ends at the string
 offset from `+0x30`. At top-level dispatch boundaries, program terminators
 delimit active instruction streams inside each block.
 
+The "enemy names and battle strings" region at `u16(+0x30)` is a
+`DialogStringBundle`
+([`graphics/03` §9.3](../graphics/03-resource-formats.md#93-dialog-string-bundles)):
+a `u32` entry count followed by that many `u16` offsets relative to the bundle
+base, then the encoded, `0x00`-terminated strings themselves (decoded with the
+single-byte code table in
+[`graphics/03` §9.1.1](../graphics/03-resource-formats.md#911-single-byte-code-table)).
+Entry index runs in step with definition selector `d`: entry `0` is
+definition `0`'s own display name, entry `1` is definition `1`'s, and so on
+through the last occupied slot, before the remaining entries continue into
+that enemy set's attack names and battle messages (confirmed by decoding
+several enemy-set files and matching entries `0..7` against every
+`def<N>` slot referenced by World Map and Field encounters — e.g. enemy-set 1
+decodes to `Jackal, Jackal, Hobgob, Lucre Bug, Nolucre Bug, Hobgob,
+Armor Grub, Hobgob` for definitions `0..7`). An unoccupied definition slot's
+entry typically decodes to either raw non-text bytes or a generic
+`Monster <N>` placeholder rather than a real name.
+
 The four entries have distinct lifecycles:
 
 | Entry | Role | Runtime lifecycle |

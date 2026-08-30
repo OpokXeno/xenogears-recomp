@@ -1076,6 +1076,53 @@ is never selected. A special `(0xFF,0xFF)` pair selects an executable-resident
 fallback glyph. The rasterizer expands each 16-bit row into a 4-bit text surface
 and supports the two nibble planes used by alternating text buffers.
 
+#### 9.1.1 Single-byte code table
+
+Header `+0x08` (`0x0051`, "count of narrow single-byte glyphs") marks codes
+`0x10..0x60` as a distinct narrow-width block from the wider glyphs at
+`0x61..0x13A`; the narrow block is the one used by ordinary Latin text
+(dialogue, menu labels, enemy and item names). Nothing previously recorded
+which character each code renders. Decoding every narrow glyph's `16x11`
+monochrome bitmap and reading it by eye (each row is a `uint16_t`, MSB-first
+left to right) recovers this table:
+
+| Code range | Characters |
+|---|---|
+| `0x10` | Space |
+| `0x11` | `+` |
+| `0x12` | `,` |
+| `0x13` | `-` |
+| `0x14` | `.` |
+| `0x15` | `/` |
+| `0x16..0x1F` | `0`..`9` |
+| `0x20..0x39` | `A`..`Z` |
+| `0x3D..0x56` | `a`..`z` |
+| `0x57` | `!` |
+| `0x58` | `"` |
+| `0x59` | `#` |
+| `0x5A` | `%` |
+| `0x5B` | `&` |
+| `0x5C` | `'` |
+| `0x5D` | `(` |
+| `0x5E` | `)` |
+| `0x5F` | `:` |
+| `0x60` | `?` |
+
+Every entry above was confirmed against real decoded strings (hyphen in
+`Tusk-Tusk` and `Gobble-gobble`, apostrophe in `I'll kill you` and
+`Lil' Kobold`, quote marks bracketing `I'll kill you`, slash in
+`Dragon Breath/Eth Atk`, period in `Ran away...` and `Ft. Hurricane`), except
+`0x11`, `0x12`, `0x5A`, and `0x5B`, which are shape-only reads of an
+unambiguous glyph (a plus, a comma's descender, a
+percent sign, an ampersand) not yet seen in a decoded string. Codes `0x3A`,
+`0x3B`, and `0x3C` render distinct punctuation-shaped glyphs but were not
+confidently identified and are omitted here rather than guessed. Code `0x14`
+(`.`) was initially left unidentified for the same reason, then confirmed once
+real decoded text (`"Ran away..."`, `"Ft. Hurricane"`) supplied enough context.
+`tools/xenogears_text.py` implements this table and is the reference
+implementation used to decode enemy names in
+[`rng/03-worldmap-encounter-tables.md`](../rng/03-worldmap-encounter-tables.md#6-enemy-name-resolution).
+
 ### 9.2 Polygon-composed font
 
 Battle's `sFont` is not an outline font and not the bitmap font above. It is a

@@ -5,6 +5,25 @@
 The selected map is stored as an uncompressed outer container. Its nine inner
 sections are independent Xenogears LZSS streams.
 
+### Field-To-File Addressing
+
+Each field's container is a distinct disc file at directory `4`:
+
+```text
+file_id = 0xB8 + 2 * field_id
+```
+
+Traced from `FieldLoadRawBundle` (`0x8001B53C`, "archive entry `0xB8` plus the
+field index" per its own annotation) and its caller, which reads the active
+field index from `fieldMapNumber` (`0x8004F34C` — the same global the debug
+overlay's Map Teleport tool writes), masks it to 12 bits, then doubles it
+before the call — the doubling was not obvious from the annotation text alone
+and only showed up by reading the actual instructions. Directory `4` was
+confirmed empirically: trying candidate directories against field `1`'s file
+until one produced a structurally valid container (strictly increasing
+section offsets, plausible section sizes, and a `0x210`-byte section 6 exactly
+matching §7 below).
+
 The known directory fields are:
 
 | Offset | Size | Contents |
