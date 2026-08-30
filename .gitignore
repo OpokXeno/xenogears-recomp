@@ -106,6 +106,7 @@ tools/*
 !tools/generate_field_vm_docs.py
 !tools/field_vm_encodings.json
 !tools/audio-extractor-bundle
+!tools/sprite-extractor-bundle
 !tools/finalize_static_overlays.py
 !tools/test_finalize_static_overlays.py
 !tools/run_with_job_pool.py
@@ -123,3 +124,5 @@ tools/*
 !tools/test_native_render_replay_evidence.py
 !tools/test_native_render_3d_certify.py
 !tools/test_overlay_annotations.py
+!tools/generate_emulator_field_pacing_patch.py
+!tools/test_generate_emulator_field_pacing_patch.py

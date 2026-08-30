@@ -2873,7 +2873,8 @@ static int test_ui_ot_abandons_partial_staging_before_retry(void) {
               GUEST_RENDER_NATIVE_STREAM_OK);
     }
 
-    xg_render_ui_ot_note_draw_observation(frame, ui_visual);
+    xg_render_ui_ot_note_draw_observation(
+        frame, UINT32_C(0x100), ui_visual);
     CHECK(!xg_render_ui_ot_prepare(
         UINT32_C(0x100), GUEST_RENDER_RENDER_NATIVE, frame,
         ui_ot_read_word));
@@ -2915,6 +2916,63 @@ static int test_ui_ot_abandons_partial_staging_before_retry(void) {
     CHECK(guest_render_native_stream_consume_exact(
               ui_visual, UINT32_C(0x114),
               &consumed) == GUEST_RENDER_NATIVE_STREAM_OK);
+
+    psx_xg_render_auth_runtime_test_enable_ui_ot_gpu(false);
+    guest_render_native_stream_test_reset();
+    xg_render_ui_ot_reset();
+    return 1;
+}
+
+static int test_ui_ot_accepts_one_vblank_submission_delay(void) {
+    const uint32_t frame = 7u;
+    const GpuRenderTransactionId ui_visual = {5001u, 8u};
+    GpuRenderSemantic consumed = {0};
+    PsxXgRenderUiOtSnapshot ui_ot = {0};
+
+    guest_render_native_stream_test_reset();
+    guest_render_native_stream_set_enabled(true);
+    xg_render_ui_ot_reset();
+    psx_xg_render_auth_runtime_test_enable_ui_ot_gpu(true);
+    memset(ui_ot_words, 0, sizeof(ui_ot_words));
+    ui_ot_words[0] = UINT32_C(0x08ffffff);
+    ui_ot_words[1] = UINT32_C(0x20403020);
+    ui_ot_words[5] = UINT32_C(0x20506040);
+
+    xg_render_ui_ot_note_draw_observation(
+        frame, UINT32_C(0x100), ui_visual);
+    CHECK(xg_render_ui_ot_prepare(
+        UINT32_C(0x100), GUEST_RENDER_RENDER_NATIVE, frame + 1u,
+        ui_ot_read_word));
+    xg_render_ui_ot_snapshot(&ui_ot);
+    CHECK(!ui_ot.pending);
+    CHECK(!ui_ot.blocked);
+    CHECK(ui_ot.completed_count == 1u);
+    CHECK(guest_render_native_stream_consume_exact(
+              ui_visual, UINT32_C(0x104),
+              &consumed) == GUEST_RENDER_NATIVE_STREAM_OK);
+    CHECK(guest_render_native_stream_consume_exact(
+              ui_visual, UINT32_C(0x114),
+              &consumed) == GUEST_RENDER_NATIVE_STREAM_OK);
+
+    xg_render_ui_ot_note_draw_observation(
+        frame, UINT32_C(0x100), ui_visual);
+    CHECK(!xg_render_ui_ot_prepare(
+        UINT32_C(0x200), GUEST_RENDER_RENDER_NATIVE, frame + 1u,
+        ui_ot_read_word));
+    xg_render_ui_ot_snapshot(&ui_ot);
+    CHECK(ui_ot.pending);
+    CHECK(ui_ot.blocked);
+    CHECK(ui_ot.blocked_count == 1u);
+
+    xg_render_ui_ot_note_draw_observation(
+        frame, UINT32_C(0x100), ui_visual);
+    CHECK(!xg_render_ui_ot_prepare(
+        UINT32_C(0x100), GUEST_RENDER_RENDER_NATIVE, frame + 2u,
+        ui_ot_read_word));
+    xg_render_ui_ot_snapshot(&ui_ot);
+    CHECK(ui_ot.pending);
+    CHECK(ui_ot.blocked);
+    CHECK(ui_ot.blocked_count == 2u);
 
     psx_xg_render_auth_runtime_test_enable_ui_ot_gpu(false);
     guest_render_native_stream_test_reset();
@@ -10916,6 +10974,7 @@ int main(void) {
     ok &= test_runtime_idle_activation_hook_is_relevant();
     ok &= test_cold_ui_draw_ot_observation_is_relevant();
     ok &= test_ui_ot_abandons_partial_staging_before_retry();
+    ok &= test_ui_ot_accepts_one_vblank_submission_delay();
     ok &= test_runtime_variant_supersedes_canonical_entry_alias();
     ok &= test_runtime_initial_runtime_variant_chain_is_armed();
     ok &= test_runtime_variant_accepts_entry_at_return_terminal();

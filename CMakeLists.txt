@@ -77,6 +77,11 @@ if(BUILD_TESTING)
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_overlay_annotations.py")
     set_tests_properties(overlay_annotation_catalog PROPERTIES
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+    add_test(NAME emulator_field_pacing_patch
+        COMMAND "${Python3_EXECUTABLE}" -m pytest
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_generate_emulator_field_pacing_patch.py")
+    set_tests_properties(emulator_field_pacing_patch PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${XG_RENDER_MANIFEST}"
@@ -492,6 +497,7 @@ target_link_libraries(psx-runtime PRIVATE
     xg_field_character_runtime)
 target_sources(psx-runtime PRIVATE
         native_renderer/src/core/xg_native_render_baseline.c
+        src/mods/xenogears_field_pacing.c
         src/mods/xenogears_indexed_disc.cpp)
 target_include_directories(psx-runtime PRIVATE
     native_renderer/include
@@ -513,6 +519,7 @@ if(TARGET psx-runtime-pgxp)
         xg_field_character_runtime)
     target_sources(psx-runtime-pgxp PRIVATE
         native_renderer/src/core/xg_native_render_baseline.c
+        src/mods/xenogears_field_pacing.c
         src/mods/xenogears_indexed_disc.cpp)
     target_include_directories(psx-runtime-pgxp PRIVATE
         native_renderer/include

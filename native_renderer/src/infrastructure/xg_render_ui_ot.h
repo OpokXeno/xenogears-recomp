@@ -11,7 +11,8 @@
 typedef uint32_t (*XgRenderUiOtReadWord)(uint32_t address);
 
 void xg_render_ui_ot_note_draw_observation(
-    uint32_t frame, GpuRenderTransactionId visual_id);
+    uint32_t frame, uint32_t start_address,
+    GpuRenderTransactionId visual_id);
 void xg_render_ui_ot_clear_pending(void);
 bool xg_render_ui_ot_prepare(
     uint32_t start_address, GuestRenderRenderMode requested_mode,

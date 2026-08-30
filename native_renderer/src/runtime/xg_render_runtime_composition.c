@@ -1557,7 +1557,9 @@ bool xg_render_runtime_composition_observe_auth_hook(
             visual_id.state_sequence != UINT64_MAX) {
             ++visual_id.state_sequence;
             xg_render_ui_ot_note_draw_observation(
-                (uint32_t)auth_scene.frame_count(), visual_id);
+                (uint32_t)auth_scene.frame_count(),
+                cpu != NULL ? cpu->gpr[2] + cpu->gpr[4] : 0u,
+                visual_id);
         }
     }
     if (hook == PSX_XG_RENDER_AUTH_HOOK_SOURCE_PRE) {

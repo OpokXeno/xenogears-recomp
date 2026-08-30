@@ -23,6 +23,9 @@ out_dir = "generated"
 # NOTE: out_stem is parsed by config_loader but NOT forwarded by psxrecomp-game
 # (main_psx.cpp) at pin 678c71f — outputs are always named after the exe file
 discovery = "whole-image"
+# Field already enforces its authored mode+2 minimum at the end of each
+# iteration. Avoid waiting for a second boundary when scene work crossed one.
+mod_function_entry_funcs = ["0x8004B54C"]
 
 [video]
 # Presentation rate: 30 preserves original PSX cadence; 60 enables Native

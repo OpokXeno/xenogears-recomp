@@ -18,6 +18,7 @@ typedef struct XgRenderUiOtCandidate {
 
 static bool pending;
 static uint32_t pending_frame;
+static uint32_t pending_start_address;
 static GpuRenderTransactionId pending_visual_id;
 static PsxXgRenderUiOtSnapshot snapshot;
 
@@ -111,15 +112,18 @@ static uint64_t hash_environment(
 }
 
 void xg_render_ui_ot_note_draw_observation(
-        uint32_t frame, GpuRenderTransactionId visual_id) {
+        uint32_t frame, uint32_t start_address,
+        GpuRenderTransactionId visual_id) {
     if (visual_id.scene_epoch == 0u) return;
     pending = true;
     pending_frame = frame;
+    pending_start_address = start_address & UINT32_C(0x001ffffc);
     pending_visual_id = visual_id;
 }
 
 void xg_render_ui_ot_clear_pending(void) {
     pending = false;
+    pending_start_address = 0u;
     pending_visual_id = (GpuRenderTransactionId){0};
 }
 
@@ -142,7 +146,11 @@ bool xg_render_ui_ot_prepare(
     bool success = false;
 
     if (!pending || requested_mode != GUEST_RENDER_RENDER_NATIVE) return true;
-    if (current_frame != pending_frame) {
+    /* Bind the DMA to the exact DrawOTag observation. The call may cross one
+     * VBlank before programming DMA, but a different address or older
+     * observation cannot inherit its authenticated visual transaction. */
+    if (address != pending_start_address ||
+        (uint32_t)(current_frame - pending_frame) > 1u) {
         snapshot.pending = true;
         ++snapshot.blocked_count;
         snapshot.blocked = true;
@@ -270,6 +278,7 @@ done:
     snapshot.last_vram_serial = gpu_render_vram_mutation_serial();
     if (success) {
         pending = false;
+        pending_start_address = 0u;
         pending_visual_id = (GpuRenderTransactionId){0};
         snapshot.pending = false;
         snapshot.blocked = false;
@@ -290,6 +299,7 @@ void xg_render_ui_ot_snapshot(PsxXgRenderUiOtSnapshot *out_snapshot) {
 void xg_render_ui_ot_reset(void) {
     pending = false;
     pending_frame = 0u;
+    pending_start_address = 0u;
     pending_visual_id = (GpuRenderTransactionId){0};
     snapshot = (PsxXgRenderUiOtSnapshot){0};
 }
