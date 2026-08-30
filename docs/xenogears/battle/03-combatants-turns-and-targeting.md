@@ -295,6 +295,31 @@ normal validity predicate, removes the acting slot, chooses a random target,
 and attempts one of the available basic attack, ability, Gear transformation,
 or defend paths.
 
+The actual category and move choice is made by
+`BattleSelectAutomatedCharacterAttack` at `0x8009BAC4`, a cascading
+multi-roll selector:
+
+- A per-character flag byte can force the whole roll straight to the basic
+  attack sub-case below, skipping everything else (data path not fully
+  identified — plausibly "no deathblow attempt available this turn").
+- Otherwise, a `random_mod_100 < 10` roll first offers a chance at Defend
+  (only if a defend option is actually available; if not, or on the 90% side,
+  it falls through to a deathblow attempt).
+- The deathblow attempt reads a per-character tier byte to select one of
+  several learned-move bitmasks and slot counts, then draws a uniform index
+  in that range (`rand() % count`) and checks whether the drawn slot is
+  actually learned. An unlearned draw, or roughly a 25% roll failing
+  separately, falls back to a plain basic attack instead.
+- The basic attack case itself rolls two more `random_mod_100` checks (`< 80`,
+  then `< 60`) to choose among three attack variants, landing at
+  roughly 48% / 32% / 20% overall.
+
+The exact meaning of the tier byte's jump table (which of several
+learned-move bitmask/count pairs applies) was not recovered from the
+recompiled code alone, since its contents live in a data table this analysis
+didn't dump; treat the category split above as the verified shape of the
+mechanism, not an exhaustive value table.
+
 Enemy slots execute bytecode through `BattleExecuteMonsterTurnScript` at
 `0x800799C8`. The script can select targets, query entity state, request an
 attack, alter readiness, or queue a later action. The ordinary stream ends at

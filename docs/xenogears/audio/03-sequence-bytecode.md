@@ -342,6 +342,10 @@ Implemented waveform arithmetic is:
 | 8..15 | Disable and produce zero |
 
 These descriptions name the arithmetic, not official musical waveform names.
+Waveforms 6 and 7 draw from the dedicated sound-modulator xorshift generator;
+see
+[`docs/xenogears/rng/01-generators-and-determinism.md`](../rng/01-generators-and-determinism.md#4-the-sound-modulator-generator)
+for its algorithm, seed, and boot-time initialization.
 
 ## 7. Instrument Lifetime
 

@@ -234,13 +234,72 @@ decoder do not enforce them:
 11. Validate save gameplay data and its checksum separately from the title
     header.
 
-## 12. Function Index
+## 12. Item, Weapon, And Accessory Name Database
+
+Resident `GetWeaponName` (`0x80033848`), `GetAccessoryName` (`0x800337E8`),
+and `GetItemName` (`0x80033818`) all resolve an item ID to a display name
+from one shared database, loaded once at boot immediately after the main
+bitmap font (directory `0x01`, file `7`, LZSS-compressed like the font).
+Resident `SystemInitializeData` (`0x800335F4`) receives the decompressed
+blob and calls `ResolveArchiveEntryPointers` (`0x8003342C`) on it before
+publishing the result through two resident globals (`0x80059360`,
+`0x80059368`).
+
+The decompressed blob is a packet-style member array:
+
+```text
++0x00  u32 member_count
++0x04  u32 member_offset[member_count]  /* relative to +0x04 */
+```
+
+Each member is itself a `DialogStringBundle`
+([Section 5](#5-string-bundle)): a `u32` entry count, a `u16` offset array
+relative to that member's own base, then the encoded, `0x00`-terminated
+strings. `GetItemName`'s shared lookup core is resident `GetStringEntry`
+(`0x80033728`) — the same generic offset-table accessor
+[`battling/02` §3.2](../battling/02-resources-roster-and-fighter-data.md#32-text-member)
+uses for Battling's own text bundle. Here it's applied twice: once to pick a
+member from the outer array by drop class, then again inside that member to
+resolve the item ID to a string offset, with the item ID used directly as the
+bundle index, so entry `0` is always the ID-zero empty sentinel and real
+items begin at entry `1`.
+
+The five inventory-class members consumed by
+[`battle/08` §10](../battle/08-results-progression-and-persistence.md#persistent-inventory-banks)'s
+drop classes sit at these fixed byte offsets into the member-offset array
+(confirmed by decoding each and finding real item names — "Magical Rod",
+"Martial Wear", "Aquasol", "Extra Ar", "Magic RodG"):
+
+| Drop class | Inventory | Offset | Observed member count |
+|---:|---|---:|---:|
+| 0 | Character weapon | `0x5C` | 99 |
+| 1 | Character accessory | `0x44` | 149 |
+| 2 | Consumable/key item | `0x58` | 264 |
+| 3 | Gear part | `0xC8` | 104 |
+| 4 | Gear weapon | `0xCC` | 99 |
+
+The same member array holds several other bundles not tied to a drop class —
+character deathblow/Ether names (`Guided Shot`, `Inner Healing`, ...) at
+offsets `0x00`-`0x28`ish and `0x50`/`0xC0`, and Gear special-attack names
+(`Fix Frame HP`, `Ygg Cannon`, ...) at `0xD0` — which this chapter does not
+otherwise use and leaves uncatalogued.
+`tools/xenogears_text.py`'s `read_item_name_bundle` implements the five
+drop-class lookups above; it is the reference implementation used by
+[`rng/04-enemy-drop-tables.md`](../rng/04-enemy-drop-tables.md).
+
+## 13. Function Index
 
 | Address | Function |
 |---:|---|
 | Resident `0x80032EB4` | Expand a Xenogears LZSS stream. |
 | Resident `0x80033558` | Initialize font header fields and glyph bases. |
+| Resident `0x80033728` | `GetStringEntry`; resolve a 16-bit text offset by ID (also used by Battling). |
+| Resident `0x800337E8` | `GetAccessoryName`. |
+| Resident `0x80033818` | `GetItemName`. |
+| Resident `0x80033848` | `GetWeaponName`. |
 | Resident `0x80033B34` | Expand stored string codes to encoded bytes. |
+| Resident `0x800335F4` | `SystemInitializeData`; installs the resolved item-database pointer. |
+| Resident `0x8003342C` | `ResolveArchiveEntryPointers`; fixes up one archive's relative offsets. |
 | Menu `0x801C9038` | Read one memory-card title frame. |
 | Menu `0x801C90B0` | Register one save header. |
 | Menu `0x801C9270` | Match the save identifier. |
