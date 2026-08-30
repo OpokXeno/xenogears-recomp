@@ -206,6 +206,27 @@ Against a character-scale target, a non-Hyper Gear uses alternate basic attack
 data. At Hyper AL `4`, T/S/X map to attack indices `12..14` against both
 character-scale and Gear-scale targets.
 
+### Ether-based attack failure
+
+`BattleRollGearAttackFailure` (`0x80096824`) gives every Gear attack a chance
+to simply fail before it resolves. The threshold is the Gear's Ether stat
+(entity offset `+0x5B`) plus a modifier carried on the action descriptor
+reached through the same shared action pointer used elsewhere in Battle (see
+[`04` §5](04-actions-damage-and-status.md#5-crisis-criticals-and-counterattacks)
+for another consumer of that pointer):
+
+```text
+threshold = gear_ether_stat + action_modifier
+if rand() % 100 < threshold:
+    proceed normally
+else:
+    fail: mark the action's result code and skip resolution
+```
+
+A Gear with low Ether and an action carrying no positive modifier can
+therefore whiff outright, independent of the target's evade chance handled
+in [`04` §4](04-actions-damage-and-status.md#4-damage-pipelines).
+
 ### Attack Level transitions
 
 `BattlePostprocessGearAttackResult` at `0x8009C4B4` updates Attack Level after
@@ -251,8 +272,8 @@ it to zero.
 ### Chance calculation
 
 The automatic Hyper chance is computed on each Gear turn before commands are
-shown. Let `slot` be party slot `0..2`, `HP` current Gear HP, and `MaxHP`
-maximum Gear HP:
+shown, inside `BattlePrepareGearTurnParameters` (`0x8009A2D4`). Let `slot` be
+party slot `0..2`, `HP` current Gear HP, and `MaxHP` maximum Gear HP:
 
 ```text
 if HP == MaxHP:
@@ -644,6 +665,7 @@ Gear descriptors and fuel costs.
 | `0x80086B88` | `BattleCanSelectGearAttackInput` | Validate Gear move unlock and AL tier |
 | `0x80086F98` | `BattleAppendGearAttackInputAndBuildMoveHints` | Build Gear input sequence and choose move |
 | `0x80083948` | `BattleHandleGearAttackSelection` | Validate and deduct attack fuel |
+| `0x80096824` | `BattleRollGearAttackFailure` | Roll Ether-based chance for the attack to whiff |
 | `0x8009C4B4` | `BattlePostprocessGearAttackResult` | Update AL and HMP after a Gear attack |
 | `0x8009C050` | `BattleGetGearConditionFlags` | Build critical/Hyper condition bits |
 | `0x8009C0E0` | `BattleActivateGearHyperMode` | Enter direct three-turn Hyper state and set character 0's Gear-special availability bit |
