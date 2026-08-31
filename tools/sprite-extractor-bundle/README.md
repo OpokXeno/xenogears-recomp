@@ -1,10 +1,9 @@
 # Xenogears Sprite Extractor
 
 Self-contained Python 3.11+ tool for extracting and rendering Xenogears sprite
-pixels from one or more retail discs. It covers embedded dynamic sprites, Field
-NPC sheets and static actors, Battle enemy sheets and static actors, Battle
-action/common/VFX sprites, and World sprites. It uses only the Python standard
-library.
+pixels from one or more retail discs. It covers embedded dynamic sprites, sheets and static actors,
+Battle enemy sheets and static actors, Battle action/common/VFX sprites,
+and World sprites. It uses only the Python standard library.
 
 ## Usage
 
@@ -18,9 +17,7 @@ python3 tools/extract_disc_sprites.py \
 Inputs may be CUE files referring to MODE1/MODE2 BIN tracks, raw 2352-byte BIN
 images, or 2048-byte ISO images. The default output directory is
 `extracted-sprites`. Use `--output PATH` to override it or `--no-previews` to
-perform raw extraction without PNG generation. No filesystem map or other
-sidecar input is used; FAT indices and directory routes come directly from each
-disc.
+perform raw extraction without PNG generation.
 
 ## Output
 
@@ -31,6 +28,7 @@ extracted-sprites/
   catalog/catalog.json
   catalog/<subsystem>/<category>/<conceptual-name>_<fat-index>_<hash>/
     previews/*.png
+    previews/palette-<variant>/*.png
   metadata/<resource-id>.json
 ```
 
@@ -43,17 +41,13 @@ the human-facing view, grouped by Field, World, or Battle subsystem and
 display name uses the deterministic `concept_<fat-index>_<hash>` form, such as
 `battle-enemy-static_2731_0100c3852f`.
 
-Each catalog directory has relative symlinks for its binary assets and metadata,
-physical PNG frames, and `sources.json` with every physical occurrence. Identical
-PNG content is deduplicated with hard links between catalog resources.
+Resources with one palette keep their PNGs directly in `previews/`. Resources
+with multiple physical palette variants group them into `previews/palette-00/`,
+`previews/palette-01/`, and so on.
+
 Detailed frame, tile,
 palette, sheet, source, blend, and dependency metadata is stored in one sidecar
 per unique resource so the main manifest remains practical to query.
-
-JSON is ASCII, indented, deterministically ordered, and written atomically when
-its contents change. A resource enters the catalog only when its real indexed
-pixels and palette can be rendered. Managed files no longer referenced by a new
-manifest are removed.
 
 ## Discovery And Validation
 
@@ -75,7 +69,7 @@ members, LZSS packet archives, and Field ActorFile sections 3 and 4. It also:
 - pairs Battle VFX bundles with adjacent `0x1200/0x1201` image descriptors;
 - loads the common Battle CLUT atlas for specialized 8-bpp actors.
 
-Packet member decompression retains enclosing-extent lookahead and final
+Compressed stream decompression retains enclosing-extent lookahead and final
 CD-sector padding to match retail behavior. Field section targets may differ
 from their advisory declaration but must fit the loader's documented
 `declared_size + 0x10` allocation.
@@ -92,16 +86,16 @@ On authenticated USA retail images the rendered baseline is:
 
 | Measurement | Count |
 | --- | ---: |
-| Unique rendered resources | 1,655 |
-| Physical resource occurrences | 8,175 |
-| Dynamic Field / Battle / World actors | 126 / 36 / 25 |
+| Unique rendered resources | 1,673 |
+| Physical resource occurrences | 8,225 |
+| Dynamic Field / Battle / World actors | 144 / 36 / 25 |
 | Reconstructed Field / Battle static actors | 423 / 220 |
 | Battle enemy / action / common / VFX static actors | 61 / 50 / 1 / 108 |
 | Unique Field NPC / Battle enemy sheets | 764 / 61 |
 | Physical Field NPC sheet occurrences | 2,723 |
 | Physical Battle enemy sheet occurrences | 146 |
 | Static bundle hashes rendered / inherited without pixels | 617 / 2 |
-| PNG references / unique PNG bytes | 42,515 / 33,104 |
+| PNG references / unique PNG bytes | 44,858 / 34,609 |
 
 The expected disc SHA-256 values are
 `39c547a9afc6da15d847ef81a2c6cea1a6516bdfa562cf13b0999b04e8598bda`
@@ -132,4 +126,8 @@ all physical variants. Zero-bank palette headers are marked
 `not_applicable_no_banks`, not treated as underdeclarations. The specialized
 dynamic 8-bpp frames combine their local palette upload with the common Battle
 CLUT row as the runtime does; the final 16 words not populated by either source
-are recorded as zero-initialized in preview metadata.
+are recorded as zero-initialized in preview metadata. Composition applies
+in-frame subgroup translation and Z rotation, screen-size adjustments, and the
+runtime's reverse linked-list tile submission order. Geometry that depends on
+subgroup state inherited from an earlier animation command remains identified
+as state-dependent in preview metadata.

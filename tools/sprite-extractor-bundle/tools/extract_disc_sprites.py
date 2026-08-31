@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -269,6 +270,7 @@ def _parse_prefix_stream(
     tile_index: int,
     subgroup: int,
     transformed_subgroups: set[int],
+    subgroup_transforms: list[dict],
 ) -> tuple[dict, int, int]:
     prefixes = []
     vertical_flip = False
@@ -292,6 +294,7 @@ def _parse_prefix_stream(
                     raise ValueError("truncated subgroup translation")
                 subgroup_translation = [s8(entry[cursor]), s8(entry[cursor + 1])]
                 prefix["translation"] = subgroup_translation
+                subgroup_transforms[subgroup]["translation"] = subgroup_translation
                 transformed_subgroups.add(subgroup)
                 cursor += 2
             if command & 0x10:
@@ -299,10 +302,12 @@ def _parse_prefix_stream(
                     raise ValueError("truncated subgroup rotation")
                 subgroup_rotation = entry[cursor] << 4
                 prefix["rotation"] = subgroup_rotation
+                subgroup_transforms[subgroup]["rotation"] = subgroup_rotation
                 transformed_subgroups.add(subgroup)
                 cursor += 1
             elif command & 0x40:
                 subgroup_rotation = 0
+                subgroup_transforms[subgroup]["rotation"] = 0
                 transformed_subgroups.add(subgroup)
         else:
             prefix["kind"] = "tile"
@@ -350,6 +355,8 @@ def _parse_prefix_stream(
         "subgroup": subgroup,
         "subgroup_translation": subgroup_translation,
         "subgroup_rotation": subgroup_rotation,
+        "effective_subgroup_translation": list(subgroup_transforms[subgroup]["translation"]),
+        "effective_subgroup_rotation": subgroup_transforms[subgroup]["rotation"],
         "subgroup_state_dependent": subgroup != 4 or subgroup in transformed_subgroups,
     }, cursor, subgroup
 
@@ -444,6 +451,7 @@ def _parse_frames(entry: bytes, palette_banks: int) -> tuple[dict, list[dict]]:
         tiles = []
         subgroup = 4
         transformed_subgroups: set[int] = set()
+        subgroup_transforms = [{"translation": [0, 0], "rotation": 0} for _ in range(8)]
         for tile_index in range(tile_count):
             reference = u16(entry, references_at + tile_index * stride)
             tile, cursor, subgroup = _parse_prefix_stream(
@@ -453,6 +461,7 @@ def _parse_frames(entry: bytes, palette_banks: int) -> tuple[dict, list[dict]]:
                 tile_index,
                 subgroup,
                 transformed_subgroups,
+                subgroup_transforms,
             )
             tile["reference"] = f"0x{reference:X}"
             if static:
@@ -653,6 +662,85 @@ def _flip_rgba(width: int, height: int, pixels: bytes, horizontal: bool, vertica
     return bytes(output)
 
 
+def _rasterize_transformed_tile(tile: dict) -> dict:
+    source_width = tile["width"]
+    source_height = tile["height"]
+    screen_width = source_width + tile["width_adjustment"]
+    screen_height = source_height + tile["height_adjustment"]
+    if screen_width <= 0 or screen_height <= 0:
+        raise ValueError("tile screen adjustment produces a non-positive extent")
+    translation_x, translation_y = tile["translation"]
+    angle = tile["rotation"] * math.tau / 0x1000
+    cosine = math.cos(angle)
+    sine = math.sin(angle)
+    if abs(cosine) < 1e-12:
+        cosine = 0.0
+    if abs(sine) < 1e-12:
+        sine = 0.0
+
+    def transform(x: float, y: float) -> tuple[float, float]:
+        return (
+            x * cosine - y * sine + translation_x,
+            x * sine + y * cosine + translation_y,
+        )
+
+    x = tile["x"]
+    y = tile["y"]
+    corners = [
+        transform(x, y),
+        transform(x + screen_width, y),
+        transform(x, y + screen_height),
+        transform(x + screen_width, y + screen_height),
+    ]
+    left = math.floor(min(point[0] for point in corners))
+    top = math.floor(min(point[1] for point in corners))
+    right = math.ceil(max(point[0] for point in corners))
+    bottom = math.ceil(max(point[1] for point in corners))
+    width = right - left
+    height = bottom - top
+    output = bytearray(width * height * 4)
+    for output_y in range(height):
+        transformed_y = top + output_y + 0.5 - translation_y
+        for output_x in range(width):
+            transformed_x = left + output_x + 0.5 - translation_x
+            local_x = transformed_x * cosine + transformed_y * sine - x
+            local_y = -transformed_x * sine + transformed_y * cosine - y
+            if not 0 <= local_x < screen_width or not 0 <= local_y < screen_height:
+                continue
+            source_x = min(source_width - 1, int(local_x * source_width / screen_width))
+            source_y = min(source_height - 1, int(local_y * source_height / screen_height))
+            source_at = (source_y * source_width + source_x) * 4
+            destination_at = (output_y * width + output_x) * 4
+            output[destination_at : destination_at + 4] = tile["pixels"][source_at : source_at + 4]
+    return {"x": left, "y": top, "width": width, "height": height, "pixels": bytes(output)}
+
+
+def _compose_tiles(tiles: list[dict]) -> tuple[int, int, int, int, bytes]:
+    rendered = [_rasterize_transformed_tile(tile) for tile in tiles]
+    if not rendered:
+        raise ValueError("frame has no visual tiles")
+    min_x = min(tile["x"] for tile in rendered)
+    min_y = min(tile["y"] for tile in rendered)
+    max_x = max(tile["x"] + tile["width"] for tile in rendered)
+    max_y = max(tile["y"] + tile["height"] for tile in rendered)
+    width, height = max_x - min_x, max_y - min_y
+    if width <= 0 or height <= 0 or width * height > 16 * 1024 * 1024:
+        raise ValueError("composed preview dimensions are unsafe")
+    raster = bytearray(width * height * 4)
+    # Runtime inserts each tile at the head of the draw list, so lower indices
+    # are submitted last and appear above later tiles at the same depth.
+    for tile in reversed(rendered):
+        for tile_y in range(tile["height"]):
+            for tile_x in range(tile["width"]):
+                source_at = (tile_y * tile["width"] + tile_x) * 4
+                destination_at = (
+                    ((tile["y"] - min_y + tile_y) * width)
+                    + tile["x"] - min_x + tile_x
+                ) * 4
+                _alpha_over(raster, destination_at, tile["pixels"][source_at : source_at + 4])
+    return width, height, min_x, min_y, bytes(raster)
+
+
 def _alpha_over(destination: bytearray, at: int, source: bytes) -> None:
     alpha = source[3]
     if alpha == 0:
@@ -702,27 +790,20 @@ def render_dynamic_frame(
             width, height = source["width"], source["height"]
             pixels = b"".join(bytes(palette[value]) for value in indexed)
         pixels = _flip_rgba(width, height, pixels, tile["horizontal_flip"], tile["vertical_flip"])
-        decoded.append((tile["local_x"], tile["local_y"], width, height, pixels))
-    if decoded:
-        min_x = min(tile[0] for tile in decoded)
-        min_y = min(tile[1] for tile in decoded)
-        max_x = max(tile[0] + tile[2] for tile in decoded)
-        max_y = max(tile[1] + tile[3] for tile in decoded)
-        width, height = max_x - min_x, max_y - min_y
-    else:
-        raise ValueError("frame has no visual tiles")
-    if width <= 0 or height <= 0 or width * height > 16 * 1024 * 1024:
-        raise ValueError("composed preview dimensions are unsafe")
-    raster = bytearray(width * height * 4)
-    for x, y, tile_width, tile_height, pixels in decoded:
-        for tile_y in range(tile_height):
-            for tile_x in range(tile_width):
-                source_at = (tile_y * tile_width + tile_x) * 4
-                destination_at = (((y - min_y + tile_y) * width) + x - min_x + tile_x) * 4
-                _alpha_over(raster, destination_at, pixels[source_at : source_at + 4])
+        decoded.append({
+            "x": tile["local_x"],
+            "y": tile["local_y"],
+            "width": width,
+            "height": height,
+            "width_adjustment": tile["screen_width_adjustment"],
+            "height_adjustment": tile["screen_height_adjustment"],
+            "translation": tile["effective_subgroup_translation"],
+            "rotation": tile["effective_subgroup_rotation"],
+            "pixels": pixels,
+        })
+    width, height, min_x, min_y, raster = _compose_tiles(decoded)
     geometry_dependencies = {
         "persistent_subgroup_transform_state",
-        "screen_size_adjustment",
     }
     exact_geometry = not geometry_dependencies.intersection(frame["dependencies"])
     blend_faithful = "ps1_blend_semantics" not in frame["dependencies"]
@@ -738,7 +819,7 @@ def render_dynamic_frame(
         completeness = "source_pixels_complete_geometry_state_dependent"
     else:
         completeness = "source_pixels_complete_ps1_blend_approximated"
-    return encode_png_rgba(width, height, bytes(raster)), {
+    return encode_png_rgba(width, height, raster), {
         "preview_type": "rendered_frame",
         "width": width,
         "height": height,
@@ -1065,28 +1146,22 @@ def render_static_frame_from_vram(
             tile["horizontal_flip"],
             tile["vertical_flip"],
         ))
-        decoded.append((tile["local_x"], tile["local_y"], atlas["width"], atlas["height"], pixels))
-    if decoded:
-        min_x = min(tile[0] for tile in decoded)
-        min_y = min(tile[1] for tile in decoded)
-        max_x = max(tile[0] + tile[2] for tile in decoded)
-        max_y = max(tile[1] + tile[3] for tile in decoded)
-        width, height = max_x - min_x, max_y - min_y
-    else:
-        raise ValueError("frame has no visual tiles")
-    if width <= 0 or height <= 0 or width * height > 16 * 1024 * 1024:
-        raise ValueError("composed static preview dimensions are unsafe")
-    raster = bytearray(width * height * 4)
-    for x, y, tile_width, tile_height, pixels in decoded:
-        for tile_y in range(tile_height):
-            for tile_x in range(tile_width):
-                source_at = (tile_y * tile_width + tile_x) * 4
-                destination_at = (((y - min_y + tile_y) * width) + x - min_x + tile_x) * 4
-                _alpha_over(raster, destination_at, pixels[source_at : source_at + 4])
-    geometry_dependencies = {"persistent_subgroup_transform_state", "screen_size_adjustment"}
+        decoded.append({
+            "x": tile["local_x"],
+            "y": tile["local_y"],
+            "width": atlas["width"],
+            "height": atlas["height"],
+            "width_adjustment": tile["screen_width_adjustment"],
+            "height_adjustment": tile["screen_height_adjustment"],
+            "translation": tile["effective_subgroup_translation"],
+            "rotation": tile["effective_subgroup_rotation"],
+            "pixels": pixels,
+        })
+    width, height, min_x, min_y, raster = _compose_tiles(decoded)
+    geometry_dependencies = {"persistent_subgroup_transform_state"}
     exact_geometry = not geometry_dependencies.intersection(frame["dependencies"])
     blend_faithful = "ps1_blend_semantics" not in frame["dependencies"]
-    return encode_png_rgba(width, height, bytes(raster)), {
+    return encode_png_rgba(width, height, raster), {
         "preview_type": "rendered_external_frame",
         "width": width,
         "height": height,
@@ -1303,7 +1378,7 @@ def scan_disc(
                     "consumed_size": consumed,
                 }], len(expanded))
         try:
-            expanded, consumed = lzss_decompress(raw)
+            expanded, consumed = lzss_decompress(padded)
         except ValueError:
             expanded = None
         if expanded is not None:
@@ -1335,7 +1410,7 @@ def scan_disc(
             declared = u32(raw, 0x118)
             if section_at and declared and section_at < len(raw):
                 try:
-                    section, consumed = lzss_decompress(raw, section_at)
+                    section, consumed = lzss_decompress(padded, section_at)
                 except ValueError:
                     pass
                 else:
@@ -1629,7 +1704,7 @@ def extract_external_actor_records(
                 companion_fat = route_to_fat.get((0x04, field_route[1] + 1))
                 if companion_fat is None or entries[companion_fat].size <= 0:
                     continue
-                actor_file = disc.read_user_data(entry.lba, entry.size)
+                actor_file = disc.read_user_data(entry.lba, entry.size, padded=True)
                 companion_entry = entries[companion_fat]
                 companion = disc.read_user_data(companion_entry.lba, companion_entry.size)
                 try:
@@ -1905,7 +1980,7 @@ def extract_sprite_sheet_records(
                 if directory_id == 0x04 and file_id >= 0xB8 and (file_id - 0xB8) % 2 == 0
             ), None)
             if field_route and entry.size >= 0x154:
-                actor_file = disc.read_user_data(entry.lba, entry.size)
+                actor_file = disc.read_user_data(entry.lba, entry.size, padded=True)
                 try:
                     section3, _ = lzss_decompress(actor_file, u32(actor_file, 0x13C))
                     section4, _ = lzss_decompress(actor_file, u32(actor_file, 0x140))
@@ -2030,9 +2105,20 @@ def _catalog_identity(record: dict) -> tuple[str, str, str, dict]:
     return name, name, category, occurrence
 
 
+def _hardlink_or_copy(source: Path, destination: Path) -> None:
+    try:
+        os.link(source, destination)
+    except OSError:
+        shutil.copy2(source, destination)
+
+
 def _relative_symlink(source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    os.symlink(os.path.relpath(source, destination.parent), destination)
+    try:
+        os.symlink(os.path.relpath(source, destination.parent), destination)
+    except OSError:
+        # Windows requires elevation or Developer Mode for symbolic links.
+        _hardlink_or_copy(source, destination)
 
 
 def build_catalog(output: Path, records: list[dict]) -> dict:
@@ -2050,6 +2136,7 @@ def build_catalog(output: Path, records: list[dict]) -> dict:
         for entry in record["entries"]:
             entry_name = f"{entry['index']:02d}-{_slug(entry['role'])}.bin"
             _relative_symlink(output / entry["path"], destination / "entries" / entry_name)
+        palette_variants = {preview["palette_variant"] for preview in record["previews"]}
         for preview in record["previews"]:
             if preview["preview_type"] in {"rendered_frame", "rendered_external_frame"}:
                 preview_name = f"frame-{preview['frame_id']:04d}_palette-{preview['palette_variant']:02d}.png"
@@ -2060,10 +2147,13 @@ def build_catalog(output: Path, records: list[dict]) -> dict:
                 )
             else:
                 raise ValueError(f"unsupported catalog preview type: {preview['preview_type']}")
-            preview_relative = relative / "previews" / preview_name
+            preview_relative = relative / "previews"
+            if len(palette_variants) > 1:
+                preview_relative /= f"palette-{preview['palette_variant']:02d}"
+            preview_relative /= preview_name
             preview_destination = output / preview_relative
             preview_destination.parent.mkdir(parents=True, exist_ok=True)
-            os.link(output / preview["path"], preview_destination)
+            _hardlink_or_copy(output / preview["path"], preview_destination)
             preview["path"] = preview_relative.as_posix()
         source_record = {
             "sha256": record["sha256"],
