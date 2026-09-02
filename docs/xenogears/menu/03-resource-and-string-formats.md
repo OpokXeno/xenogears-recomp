@@ -278,11 +278,13 @@ drop classes sit at these fixed byte offsets into the member-offset array
 | 3 | Gear part | `0xC8` | 104 |
 | 4 | Gear weapon | `0xCC` | 99 |
 
-The same member array holds several other bundles not tied to a drop class —
-character deathblow/Ether names (`Guided Shot`, `Inner Healing`, ...) at
-offsets `0x00`-`0x28`ish and `0x50`/`0xC0`, and Gear special-attack names
-(`Fix Frame HP`, `Ygg Cannon`, ...) at `0xD0` — which this chapter does not
-otherwise use and leaves uncatalogued.
+The same member array holds several other bundles not tied to a drop class.
+Member `20` (offset `0x50`) holds the Chi/Ether ability names for all eleven
+characters, cataloged in
+[`characters/01` §9](../characters/01-characters.md#9-chi-ether-abilities).
+Character deathblow names at offsets `0x00`-`0x28`ish and `0xC0`, and Gear
+special-attack names (`Fix Frame HP`, `Ygg Cannon`, ...) at `0xD0`, remain
+uncatalogued — this chapter does not otherwise use them.
 `tools/xenogears_text.py`'s `read_item_name_bundle` implements the five
 drop-class lookups above; it is the reference implementation used by
 [`rng/04-enemy-drop-tables.md`](../rng/04-enemy-drop-tables.md).
