@@ -98,11 +98,24 @@ survey:
   random turns, and the `RandVariable`/`MulVariableWithRand` Field script
   opcodes.
 - World Map: `WorldMapSelectRandomEncounter` and the warp/shake camera tasks.
-- Menus and shops: `GearShopMenuGetRandomRangeValue`-backed rolls in the Gear
-  shop tuning flow.
+- Menus and shops: `GearShopMenuGetRandomRangeValue` (`0x801C511C`) is a real,
+  correctly-implemented range-roll helper, but exhaustive static analysis
+  found no caller for it anywhere — no direct call in any shard or overlay,
+  no computed/indirect call within its own overlay, and no reference to its
+  address in that overlay's raw binary as data. It appears to be dead code in
+  the retail build rather than an active consumer of this stream; see
+  [`menu/11`](../menu/11-gear-shop-tuning-and-preview.md#25-function-index) for
+  where it's cataloged.
 - Battling (the colosseum minigame) draws on the same `rand` for camera
   placement, particle jitter, and COM AI tactical randomization, all through
-  its own overlay-local wrapper calls.
+  its own overlay-local wrapper calls; the gameplay-affecting rolls are
+  indexed in [`06-battling-rng.md`](06-battling-rng.md).
+- The resident sprite animation VM shared by Field, Battle, and other
+  sprite-driven modules has five dedicated random opcodes (`AC`, `C0`, `C1`,
+  `C4`, `E5` — random angular/radial displacement, random position, and
+  assign-random-below-immediate); see
+  [`graphics/04` §10](../graphics/04-models-sprites-and-animation.md#10-sprite-animation-vm)
+  for the full opcode catalog.
 
 This list characterizes the stream's reach; it is not an exhaustive per-site
 catalog of every roll and its exact formula (drop tables, individual
