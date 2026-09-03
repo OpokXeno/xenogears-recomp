@@ -207,8 +207,24 @@ changes, it becomes true only across signed 16-bit wraparound.
 
 ### 5.3 Attack state
 
-Attack entry queues an initial basic burst and chooses the difficulty-dependent
-repetition count. It clears movement and boost and refreshes tactical flags.
+Attack entry queues an initial basic burst through
+`BattlingAiRandomBasicBurstQueue` at `0x8008FE80` and chooses the
+difficulty-dependent repetition count. It clears movement and boost and
+refreshes tactical flags. The burst queue itself is:
+
+```text
+residue = random(0..9)
+count   = 1 if residue < 2   (20%)
+        = 2 if residue < 5   (30%, else)
+        = 3 otherwise        (50%)
+repeat count times:
+    action = random(0..1) + 1   /* command 1 or 2, uniform */
+    enqueue action
+```
+
+The same helper backs `BattlingAiBasicBurstRefresh` (§4) and the practice
+"UP AND AT'EM"/"SLOWPOKE" behaviors (§8), which call it through
+`BattlingPracticeRandomBasicActionsQueue` at `0x8008EF30`.
 
 `BattlingAiAttackSequenceChoose` at `0x80090258` selects between an ordinary
 burst and an available special. Specials can be selected while fighter
@@ -266,6 +282,38 @@ are `10..69` updates, or `10..49` with tactical flag `0x0400`. The state returns
 to Idle after passing its target distance, or immediately when three-dimensional
 fighter separation exceeds `0x4B0` while rubber-band mode is active. At close range it
 can face `-0x400` or `+0x400`, request boost, and queue evasive bursts.
+
+### 5.6 Terrain-dependent action gate
+
+`BattlingAiQueueTerrainDependentActions` at `0x8008F900` is a shared helper
+called from Idle update, Approach update, Retreat update (twice), and both
+`BattlingAiBasicBurstRefresh` and `BattlingAiAttackSequenceChoose` — anywhere
+the machine is about to queue jump or special-action commands. Fighter flags
+word `+0xD0` packs a two-bit terrain class at bits `0x60000000`; class `1`
+(`0x20000000`) marks a fighter standing on the arena's raised/special terrain.
+
+```text
+if opponent.flags & 0x60000000 == 0x20000000:      /* opponent on terrain class 1 */
+    if random(0..3) != 0:                          /* 75% of the time */
+        return                                      /* suppress the whole call */
+    /* else (25%) fall through */
+
+if rubber_band_mode:
+    BattlingQueueCloseRangeReaction(self)            /* 0x800767C8, side effect only */
+    enqueue command 4 (jump)
+elif self.flags & 0x60000000 == 0x20000000:          /* self on terrain class 1 */
+    enqueue command 4 (jump)
+
+enqueue command 3 (special action)                   /* always, once suppression clears */
+```
+
+So an opponent standing on terrain class 1 gives the AI only a 1-in-4 chance
+per call to act at all; when it does act (or the opponent isn't on that
+terrain), a jump is queued whenever rubber-band mode is active or the AI's
+own fighter is on terrain class 1, and a special-action command is queued
+unconditionally afterward. Both queue writes go through
+`BattlingEnqueueFighterCommand` at `0x8007639C`, the same 32-entry circular
+command queue used elsewhere in this chapter.
 
 ## 6. Attack Approval Probabilities
 
@@ -341,6 +389,38 @@ The dispatcher briefly writes `0`, `1`, or `2` for these three labels, but
 The movement and queued-action behaviors call `BattlingAiSteeringApply` after
 updating desired heading and speed, so they use the same acceleration and
 turning rules as normal COM control.
+
+### 8.1 GIVE CHASE and RUN AWAY
+
+`BattlingPracticeFarRangeMovementUpdate` (`0x8008F17C`, GIVE CHASE) and
+`BattlingPracticeNearRangeMovementUpdate` (`0x8008F094`, RUN AWAY) share one
+structure, reading and writing a small movement sub-state reached through the
+fighter's practice pointer rather than its ordinary `+0x48`/`+0x58` request
+fields directly:
+
+```text
+if GIVE CHASE and horizontal_distance < 0x100:   stop (park the behavior)
+if RUN AWAY   and horizontal_distance >= 0x801:  stop (park the behavior)
+
+countdown -= 1
+if countdown != -1: continue parked/moving as-is
+
+# countdown expired: pick a new heading and a new countdown
+heading   = GIVE CHASE: (random(0..1535) - 768)    # range -768..767, biased toward 0
+          = RUN AWAY:   (random(0..1535) + 1280)   # range 1280..2815, biased toward 2048
+speed     = 0xFF (full)
+countdown = GIVE CHASE: random(0..119) + 10         # 10..129 updates
+          = RUN AWAY:   random(0..49)  + 10         # 10..59 updates
+```
+
+The two heading ranges are both 1536 units wide and sit exactly 2048 apart —
+consistent with a 12-bit (`0x1000`-per-turn) angle unit, GIVE CHASE biased
+toward "face the opponent" and RUN AWAY toward the opposite direction. This
+chapter did not trace the code that consumes that stored heading and writes
+the fighter's actual movement-request fields, so the angle unit and sign
+convention are inferred from the numeric symmetry, not independently
+confirmed. RUN AWAY re-rolls its heading roughly twice as often as GIVE CHASE
+(10-59 versus 10-129 updates).
 
 ## 9. Rubber-Band Mechanics
 

@@ -549,6 +549,14 @@ slot 1 before replacing its wrapper contents.
 
 ## 25. Function Index
 
+`GearShopMenuGetRandomRangeValue` (`801C511C`) is a correctly-implemented
+range-roll helper with no discoverable caller anywhere in this overlay or the
+rest of the recompiled game — no direct call, no computed call, and no
+reference to its address as data in this overlay's raw binary. Nothing in
+this chapter's tuning or preview flow appears to actually use it; treat it as
+dead code in the retail build rather than a live source of randomness. See
+[`rng/01` §2.4](../rng/01-generators-and-determinism.md#24-consumers-across-modules).
+
 ```text
 801C511C GearShopMenuGetRandomRangeValue | 801C51B8 GearShopMenuSetFt4Rect | 801C5228 GearShopMenuIsCharacterFlagSet | 801C5244 GearShopMenuGetCharacterBitMask | 801C5260 GearShopMenuGetGearEquipFlags | 801C527C GearShopMenuGearCanEquip | 801C5298 GearShopMenuParseNumberToString | 801C5344 GearShopMenuManageResourceState
 801C53A8 GearShopMenuManageCoreState | 801C540C GearShopSelectionMenuManager | 801C5470 GearShopMenuManageTextBatchState | 801C54D4 GearShopMenuDressingRoomManager | 801C5538 GearShopMenuManageOverlayPacketState | 801C559C GearShopMenuManageExtendedDisplayState | 801C5600 GearShopMenuShopManager | 801C5664 GearShopMenuManagePreviewState

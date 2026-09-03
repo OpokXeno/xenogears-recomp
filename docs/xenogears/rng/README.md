@@ -27,6 +27,9 @@ folder documents those generators and the data they feed.
    [`field/11`](../field/11-encounters-transitions-loading-and-persistence.md),
    covering all 635 fields (of 730) that carry an encounter table, deduplicated
    down to the 55 tables actually authored.
+6. [`06-battling-rng.md`](06-battling-rng.md) indexes every explicit random
+   roll in Battling, the colosseum minigame, cross-referencing the formula
+   already documented in each `battling/` chapter rather than restating it.
 
 ## Conventions
 
