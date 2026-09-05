@@ -38,7 +38,12 @@ param(
     [int]$BuildJobs = 0
 )
 
-$ErrorActionPreference = "Stop"
+# NOT "Stop": every step below is a native exe (cmake/ninja/psxrecomp-*)
+# checked via an explicit $LASTEXITCODE test below it. Under "Stop",
+# PowerShell 5.1 promotes the *first line* a native tool writes to stderr
+# (even routine CMake/ninja status text, with exit code 0) into a
+# terminating NativeCommandError, aborting the script on false positives.
+$ErrorActionPreference = "Continue"
 
 if ($BuildJobs -le 0) {
     $ConfiguredBuildJobs = if ($env:BUILD_JOBS) {
@@ -189,9 +194,9 @@ $MANIFEST_IDENTITY_SHA256 = $MANIFEST_METADATA.manifest_identity
 # --- Step 1: Build the recompiler ---
 Write-Host "==> Building recompiler..."
 & cmake -S $RECOMPILER_DIR -B $RECOMPILER_BUILD @CMakeGeneratorArgs `
-    -DCMAKE_BUILD_TYPE=Release `
-    -DPSX_GAME_EXTRA_IDENTITY_SHA256=$GAME_IDENTITY_SHA256 `
-    -DPSX_GAME_MANIFEST_DIGEST_SHA256=$MANIFEST_IDENTITY_SHA256
+    "-DCMAKE_BUILD_TYPE=Release" `
+    "-DPSX_GAME_EXTRA_IDENTITY_SHA256=$GAME_IDENTITY_SHA256" `
+    "-DPSX_GAME_MANIFEST_DIGEST_SHA256=$MANIFEST_IDENTITY_SHA256"
 if ($LASTEXITCODE -ne 0) { throw "Recompiler configuration failed" }
 & cmake --build $RECOMPILER_BUILD --config Release --parallel $BuildJobs
 if ($LASTEXITCODE -ne 0) { throw "Recompiler build failed" }
