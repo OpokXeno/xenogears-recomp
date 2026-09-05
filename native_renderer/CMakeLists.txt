@@ -9,6 +9,19 @@ set(XG_RENDER_PRIVATE_INCLUDE_DIRS
     src/producers/world
     src/runtime)
 
+if(MSVC)
+    # xg_render_auth_runtime.c / xg_render_instrumentation.c use <stdatomic.h>
+    # (atomic_flag); MSVC only supports it under the experimental C11 atomics
+    # switch (same scoping psxrecomp/runtime/runtime.cmake uses for
+    # audio_trace.c). Source-file scoped so it reaches every target that
+    # compiles these two files (the xg_render_auth library and the
+    # test_xg_render_static_auth test executable alike).
+    set_property(SOURCE
+        src/runtime/xg_render_auth_runtime.c
+        src/infrastructure/xg_render_instrumentation.c
+        APPEND PROPERTY COMPILE_OPTIONS /experimental:c11atomics)
+endif()
+
 add_library(xg_visual_state STATIC src/core/xg_visual_state.c)
 target_include_directories(xg_visual_state PUBLIC include)
 target_compile_features(xg_visual_state PUBLIC c_std_11)
