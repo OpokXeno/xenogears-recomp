@@ -60,9 +60,9 @@ Grab the x86-64 archive for your platform from [Releases](https://github.com/Opo
 2. **Optional: select a retail BIOS** — OpenBIOS runs by default. To use the retail backend, select your legally obtained matching `SCPH1001.BIN` (a 512 KB file dumped from your own console) via Settings → System → Browse.
 3. Optionally adjust renderer, supersampling, screen look, widescreen, and controller settings, then press **Launch**. Your choices are remembered.
 
-**Accepted disc formats:** `.cue` + `.bin` (preferred — pick the `.cue`), direct
-`.bin`, `.img`, `.iso`, `.car`, and `.chd`. If the header or game ID does not
-match SLUS-00664, the launcher warns and tries to run the image anyway.
+**Accepted disc formats:** `.cue` + `.bin` and `.chd`. If the header or game ID
+does not match SLUS-00664, the launcher warns and tries to run the image
+anyway.
 
 Official Linux and Windows releases are 64-bit x86-64 builds with SDL3 linked
 statically; no separate SDL installation is required.
