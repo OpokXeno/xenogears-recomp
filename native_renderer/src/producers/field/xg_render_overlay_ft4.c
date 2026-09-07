@@ -5,8 +5,12 @@
 #include "xg_render_field_sprite.h"
 #include "xg_render_primitive_utils.h"
 #include "xg_render_quad_builder.h"
+#include "xg_render_battle_fx.h"
+#include "xg_render_manifest_generated.h"
+#include "xg_render_submission.h"
 
 #include <stddef.h>
+#include <string.h>
 
 #define TEMPLATE_CAPACITY XG_RENDER_IR_ITEM_CAPACITY
 
@@ -24,6 +28,147 @@ typedef struct XgRenderOverlayFt4LocalProducerPending {
 } XgRenderOverlayFt4LocalProducerPending;
 
 static XgRenderOverlayFt4LocalProducerPending local_producer_pending;
+
+static struct {
+    XgRenderBattleRipplePrimitive records[XG_RENDER_BATTLE_FX_RIPPLE_TRIANGLES];
+    XgRenderResourceProvenance provenance;
+    uint64_t scene_generation;
+    uint32_t count;
+    uint32_t entry_sp;
+    uint32_t return_address;
+    bool valid;
+} ripple_pending;
+
+typedef struct RippleCaptureContext {
+    CPUState *cpu;
+    const XgRenderOverlayFt4Services *services;
+    XgRenderBattleFxOwnerIdentity owner;
+} RippleCaptureContext;
+
+static bool ripple_authority(const XgRenderOverlayFt4Services *services,
+        XgRenderResourceProvenance *provenance, XgRenderBattleFxOwnerIdentity *owner) {
+    static const uint8_t expected_sha256[32] = {
+        0x5c,0x65,0xf6,0x07,0x26,0x4d,0x84,0x1d,0x2f,0x4a,0x0f,0x6d,0x03,0x23,0xf1,0xe1,
+        0xc8,0x5b,0x64,0x2e,0x09,0x75,0x0c,0xed,0xed,0x52,0x0d,0x47,0xa3,0xf0,0x6a,0x83,
+    };
+    XgRenderResourceCapabilityMetadata metadata;
+    uint64_t generation;
+    if (services == NULL || services->source_artifact == NULL ||
+        !services->source_artifact(0x801fc11cu, 0x27bdff78u, provenance, &generation) ||
+        generation == 0u || provenance->synthetic ||
+        provenance->kind != XG_RENDER_RESOURCE_PROVENANCE_ARTIFACT ||
+        xg_render_resource_capability_validate(provenance, XG_RENDER_RESOURCE_OWNER_SCENE,
+            generation, &metadata) != XG_RENDER_RESOURCE_CAPABILITY_OK ||
+        (metadata.artifact.base & 0x1fffffffu) != 0x1fc000u ||
+        memcmp(metadata.artifact.sha256, expected_sha256, sizeof(expected_sha256)) != 0)
+        return false;
+    *owner = (XgRenderBattleFxOwnerIdentity){
+        .kind = XG_RENDER_BATTLE_FX_RIPPLE_DISSOLVE,
+        .overlay_identity = XG_RENDER_BATTLE_FX_RIPPLE_OVERLAY_IDENTITY,
+        .authentication_receipt = provenance->receipt,
+        .owner_generation = generation,
+    };
+    for (uint32_t index = 0u; index < 8u; ++index)
+        owner->executable_identity |= (uint64_t)xg_render_game_identity[index] << (8u * index);
+    return owner->executable_identity != 0u;
+}
+
+static bool ripple_authorize_capture(void *data, uint32_t pc, uint32_t instruction,
+        const XgRenderBattleFxOwnerIdentity *owner) {
+    const RippleCaptureContext *context = data;
+    return (pc & 0x1fffffffu) == 0x1fc11cu && instruction == 0x27bdff78u &&
+        owner->authentication_receipt == context->owner.authentication_receipt &&
+        owner->owner_generation == context->owner.owner_generation;
+}
+
+static bool ripple_source_range(void *data, uint32_t address, uint32_t size,
+                                uint32_t alignment) {
+    const RippleCaptureContext *context = data;
+    return context->services->guest_data_range_is_valid(address, size, alignment, false);
+}
+
+static bool ripple_projection(void *data, XgHost3dProjection *projection) {
+    const RippleCaptureContext *context = data;
+    xg_render_runtime_capture_shadow_projection(context->cpu, projection);
+    return true;
+}
+
+static bool ripple_draw_state(void *data, XgRenderIrMaterialState *material) {
+    GpuDrawState state = {0};
+    (void)data;
+    *material = (XgRenderIrMaterialState){0};
+    gpu_get_draw_state(&state);
+    xg_render_material_apply_draw_state(material, &state);
+    return true;
+}
+
+static bool ripple_capture_batch(void *data, const XgRenderBattleFxOwnerIdentity *owner,
+        const XgRenderBattleRipplePrimitive *records, uint32_t count) {
+    const RippleCaptureContext *context = data;
+    if (count > XG_RENDER_BATTLE_FX_RIPPLE_TRIANGLES || (count != 0u && records == NULL))
+        return false;
+    for (uint32_t index = 0u; index < count; ++index)
+        if (!context->services->guest_data_range_is_valid(
+                records[index].packet_address, 0x28u, 4u, false))
+            return false;
+    if (count != 0u)
+        memcpy(ripple_pending.records, records, count * sizeof(*records));
+    ripple_pending.count = count;
+    ripple_pending.scene_generation = owner->owner_generation;
+    ripple_pending.valid = true;
+    return true;
+}
+
+static void ripple_observe(CPUState *cpu, uint32_t pc, uint32_t instruction,
+        GuestRenderRenderMode mode, const XgRenderOverlayFt4Services *services) {
+    XgRenderResourceProvenance provenance;
+    XgRenderBattleFxOwnerIdentity owner;
+    if (cpu == NULL || mode != GUEST_RENDER_RENDER_NATIVE ||
+        !xg_render_submission_native_work_mode() || services == NULL ||
+        services->guest_data_range_is_valid == NULL) {
+        ripple_pending.valid = false;
+        return;
+    }
+    if ((pc & 0x1fffffffu) == 0x1fc11cu && instruction == 0x27bdff78u) {
+        ripple_pending.valid = false;
+        if (!ripple_authority(services, &provenance, &owner)) return;
+        RippleCaptureContext context = {cpu, services, owner};
+        const XgRenderBattleRippleCaptureServices capture = {
+            .context = &context,
+            .authorize = ripple_authorize_capture,
+            .source_range_valid = ripple_source_range,
+            .capture_projection = ripple_projection,
+            .capture_draw_state = ripple_draw_state,
+            .publish_captures = ripple_capture_batch,
+        };
+        ripple_pending.provenance = provenance;
+        ripple_pending.entry_sp = cpu->gpr[29];
+        ripple_pending.return_address = cpu->gpr[31];
+        if (xg_render_battle_fx_capture_ripple(cpu, pc, instruction, &owner, &capture) !=
+                XG_RENDER_BATTLE_FX_OK)
+            ripple_pending.valid = false;
+    } else if ((pc & 0x1fffffffu) == 0x1fc3f8u && instruction == 0x03e00008u) {
+        const bool valid = ripple_pending.valid &&
+            cpu->gpr[29] == ripple_pending.entry_sp &&
+            cpu->gpr[31] == ripple_pending.return_address &&
+            ripple_authority(services, &provenance, &owner) &&
+            provenance.capability == ripple_pending.provenance.capability &&
+            owner.owner_generation == ripple_pending.scene_generation;
+        ripple_pending.valid = false;
+        if (!valid || !xg_render_submission_pre_scene_available(ripple_pending.count)) return;
+        for (uint32_t index = 0u; index < ripple_pending.count; ++index) {
+            const XgRenderBattleRipplePrimitive *source = &ripple_pending.records[index];
+            const XgRenderPreScenePrimitive record = {
+                .primitive = source->primitive,
+                .packet_address = source->packet_address,
+                .source_primitive_index = source->source_primitive_index,
+                .ot_bucket = source->ot_bucket,
+                .payload_word_count = 9u,
+            };
+            if (!xg_render_submission_pre_scene_stage(&record)) break;
+        }
+    }
+}
 
 static bool physical_address_equals(uint32_t left, uint32_t right) {
     return (left & UINT32_C(0x1fffffff)) ==
@@ -353,13 +498,17 @@ bool xg_render_overlay_ft4_capture_direct_templates(
         source.material.textured = true;
         source.material.raw_texture = false;
         source.vertices[0] = (XgRenderQuadSourceVertex){
-            left, origin_y, u0, 0xf0u, 0x80u, 0x80u, 0x80u};
+            .x = left, .y = origin_y, .u = u0, .v = 0xf0u,
+            .red = 0x80u, .green = 0x80u, .blue = 0x80u};
         source.vertices[1] = (XgRenderQuadSourceVertex){
-            right, origin_y, u1, 0xf0u, 0x80u, 0x80u, 0x80u};
+            .x = right, .y = origin_y, .u = u1, .v = 0xf0u,
+            .red = 0x80u, .green = 0x80u, .blue = 0x80u};
         source.vertices[2] = (XgRenderQuadSourceVertex){
-            left, bottom, u0, 0xffu, 0x80u, 0x80u, 0x80u};
+            .x = left, .y = bottom, .u = u0, .v = 0xffu,
+            .red = 0x80u, .green = 0x80u, .blue = 0x80u};
         source.vertices[3] = (XgRenderQuadSourceVertex){
-            right, bottom, u1, 0xffu, 0x80u, 0x80u, 0x80u};
+            .x = right, .y = bottom, .u = u1, .v = 0xffu,
+            .red = 0x80u, .green = 0x80u, .blue = 0x80u};
         if (xg_render_quad_build_primitive(&source, &record->primitive) !=
                 XG_RENDER_QUAD_BUILDER_OK)
             return false;
@@ -422,17 +571,18 @@ bool xg_render_overlay_ft4_capture_rectangle_template(
         record->material_ready = true;
     }
     source.vertices[0] = (XgRenderQuadSourceVertex){
-        left, top, u, v, 0x80u, 0x80u, 0x80u};
+        .x = left, .y = top, .u = u, .v = v,
+        .red = 0x80u, .green = 0x80u, .blue = 0x80u};
     source.vertices[1] = (XgRenderQuadSourceVertex){
-        (int16_t)(left + width), top, (uint8_t)(u + width), v,
-        0x80u, 0x80u, 0x80u};
+        .x = (int16_t)(left + width), .y = top, .u = (uint8_t)(u + width), .v = v,
+        .red = 0x80u, .green = 0x80u, .blue = 0x80u};
     source.vertices[2] = (XgRenderQuadSourceVertex){
-        left, (int16_t)(top + height), u, (uint8_t)(v + height),
-        0x80u, 0x80u, 0x80u};
+        .x = left, .y = (int16_t)(top + height), .u = u, .v = (uint8_t)(v + height),
+        .red = 0x80u, .green = 0x80u, .blue = 0x80u};
     source.vertices[3] = (XgRenderQuadSourceVertex){
-        (int16_t)(left + width), (int16_t)(top + height),
-        (uint8_t)(u + width), (uint8_t)(v + height),
-        0x80u, 0x80u, 0x80u};
+        .x = (int16_t)(left + width), .y = (int16_t)(top + height),
+        .u = (uint8_t)(u + width), .v = (uint8_t)(v + height),
+        .red = 0x80u, .green = 0x80u, .blue = 0x80u};
     if (xg_render_quad_build_primitive(&source, &record->primitive) !=
             XG_RENDER_QUAD_BUILDER_OK)
         return false;
@@ -516,13 +666,13 @@ bool xg_render_overlay_ft4_capture_projected_material(
             (object & UINT32_C(0xffff));
         source.material = material;
         source.vertices[0] = (XgRenderQuadSourceVertex){
-            0, 0, u0, (uint8_t)v0, color, color, color};
+            .u = u0, .v = (uint8_t)v0, .red = color, .green = color, .blue = color};
         source.vertices[1] = (XgRenderQuadSourceVertex){
-            0, 0, u1, (uint8_t)v0, color, color, color};
+            .u = u1, .v = (uint8_t)v0, .red = color, .green = color, .blue = color};
         source.vertices[2] = (XgRenderQuadSourceVertex){
-            0, 0, u0, (uint8_t)(v0 + 13), color, color, color};
+            .u = u0, .v = (uint8_t)(v0 + 13), .red = color, .green = color, .blue = color};
         source.vertices[3] = (XgRenderQuadSourceVertex){
-            0, 0, u1, (uint8_t)(v0 + 13), color, color, color};
+            .u = u1, .v = (uint8_t)(v0 + 13), .red = color, .green = color, .blue = color};
         if (xg_render_quad_build_primitive(
                 &source, &record->primitive) != XG_RENDER_QUAD_BUILDER_OK)
             return false;
@@ -582,13 +732,13 @@ bool xg_render_overlay_ft4_capture_glyph_material(
     source.material.textured = true;
     source.material.raw_texture = false;
     source.vertices[0] = (XgRenderQuadSourceVertex){
-        0, 0, u0, v0, 0x80u, 0x80u, 0x80u};
+        .u = u0, .v = v0, .red = 0x80u, .green = 0x80u, .blue = 0x80u};
     source.vertices[1] = (XgRenderQuadSourceVertex){
-        0, 0, u1, v0, 0x80u, 0x80u, 0x80u};
+        .u = u1, .v = v0, .red = 0x80u, .green = 0x80u, .blue = 0x80u};
     source.vertices[2] = (XgRenderQuadSourceVertex){
-        0, 0, u0, (uint8_t)(v0 + 16u), 0x80u, 0x80u, 0x80u};
+        .u = u0, .v = (uint8_t)(v0 + 16u), .red = 0x80u, .green = 0x80u, .blue = 0x80u};
     source.vertices[3] = (XgRenderQuadSourceVertex){
-        0, 0, u1, (uint8_t)(v0 + 16u), 0x80u, 0x80u, 0x80u};
+        .u = u1, .v = (uint8_t)(v0 + 16u), .red = 0x80u, .green = 0x80u, .blue = 0x80u};
     if (xg_render_quad_build_primitive(&source, &record->primitive) !=
             XG_RENDER_QUAD_BUILDER_OK)
         return false;
@@ -670,13 +820,13 @@ bool xg_render_overlay_ft4_capture_projected_2e_material(
         source.material.raw_texture = false;
         source.material.semi_transparent = true;
         source.vertices[0] = (XgRenderQuadSourceVertex){
-            0, 0, u0, v0, 0x80u, 0x80u, 0x80u};
+            .u = u0, .v = v0, .red = 0x80u, .green = 0x80u, .blue = 0x80u};
         source.vertices[1] = (XgRenderQuadSourceVertex){
-            0, 0, u1, v0, 0x80u, 0x80u, 0x80u};
+            .u = u1, .v = v0, .red = 0x80u, .green = 0x80u, .blue = 0x80u};
         source.vertices[2] = (XgRenderQuadSourceVertex){
-            0, 0, u0, v1, 0x80u, 0x80u, 0x80u};
+            .u = u0, .v = v1, .red = 0x80u, .green = 0x80u, .blue = 0x80u};
         source.vertices[3] = (XgRenderQuadSourceVertex){
-            0, 0, u1, v1, 0x80u, 0x80u, 0x80u};
+            .u = u1, .v = v1, .red = 0x80u, .green = 0x80u, .blue = 0x80u};
         if (xg_render_quad_build_primitive(&source, &record->primitive) !=
                 XG_RENDER_QUAD_BUILDER_OK)
             return false;
@@ -735,6 +885,7 @@ bool xg_render_overlay_ft4_capture_projected_geometry(
     XgRenderOverlayFt4Template *record;
     PsxXgRenderOverlayFt4Snapshot *snapshot = &overlay_snapshot;
     uint32_t packet;
+    (void)services;
 
     if (cpu == NULL || cpu->read_word == NULL || cpu->read_half == NULL ||
         render_mode != GUEST_RENDER_RENDER_NATIVE)
@@ -957,6 +1108,11 @@ XgRenderOverlayFt4Observation xg_render_overlay_ft4_observe(
         CPUState *cpu, uint32_t pc, uint32_t instruction_word,
         GuestRenderRenderMode render_mode,
         const XgRenderOverlayFt4Services *services) {
+    if (((pc & 0x1fffffffu) == 0x1fc11cu && instruction_word == 0x27bdff78u) ||
+        ((pc & 0x1fffffffu) == 0x1fc3f8u && instruction_word == 0x03e00008u)) {
+        ripple_observe(cpu, pc, instruction_word, render_mode, services);
+        return XG_RENDER_OVERLAY_FT4_OBSERVATION_HANDLED;
+    }
     static const uint32_t caller_calls[10] = {
         UINT32_C(0x801cd984), UINT32_C(0x801d3724),
         UINT32_C(0x801d4fb4), UINT32_C(0x801d5fa8),
@@ -1137,6 +1293,7 @@ void xg_render_overlay_ft4_snapshot(
 }
 
 void xg_render_overlay_ft4_clear(void) {
+    ripple_pending.valid = false;
     template_count = 0u;
 }
 
@@ -1151,6 +1308,7 @@ void xg_render_overlay_ft4_invalidate(uint32_t address, uint32_t size) {
 }
 
 void xg_render_overlay_ft4_reset(void) {
+    ripple_pending.valid = false;
     template_count = 0u;
     overlay_snapshot = (PsxXgRenderOverlayFt4Snapshot){0};
     projected_2e_descriptor_scope = false;

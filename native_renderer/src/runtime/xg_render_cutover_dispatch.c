@@ -35,6 +35,84 @@ static const XgRenderCutoverRoute resident_line_routes[] = {
     { UINT32_C(0x80073b64), UINT32_C(0x3c03800d), XG_CUTOVER_ROUTE_ONLY },
 };
 
+static const XgRenderCutoverRoute resident_resource_routes[] = {
+    { UINT32_C(0x8002bc10), UINT32_C(0x34021200),
+      XG_CUTOVER_RESIDENT_RESOURCE_BEGIN },
+    { UINT32_C(0x8002be14), UINT32_C(0x0c011225),
+      XG_CUTOVER_RESIDENT_RESOURCE_UPLOAD },
+    { UINT32_C(0x8002be5c), UINT32_C(0x1c40002a),
+      XG_CUTOVER_RESIDENT_RESOURCE_FINISH },
+    { UINT32_C(0x8002bff8), UINT32_C(0x34021200),
+      XG_CUTOVER_RESIDENT_RESOURCE_BEGIN },
+    { UINT32_C(0x8002c1fc), UINT32_C(0x0c011225),
+      XG_CUTOVER_RESIDENT_RESOURCE_UPLOAD },
+    { UINT32_C(0x8002c24c), UINT32_C(0x1c400024),
+      XG_CUTOVER_RESIDENT_RESOURCE_FINISH },
+};
+
+static const XgRenderCutoverRoute resident_text_routes[] = {
+    { UINT32_C(0x800370dc), UINT32_C(0x3c068006), XG_CUTOVER_ROUTE_ONLY },
+    { UINT32_C(0x800372c4), UINT32_C(0x03e00008), XG_CUTOVER_ROUTE_ONLY },
+    { UINT32_C(0x80032f54), UINT32_C(0x27bdffc8),
+      XG_CUTOVER_RESIDENT_TEXT_CONTEXT_INITIALIZE },
+    { UINT32_C(0x800334d8), UINT32_C(0x3c048006),
+      XG_CUTOVER_RESIDENT_TEXT_FONT_FREE },
+    { UINT32_C(0x80033558), UINT32_C(0x27bdffe8),
+      XG_CUTOVER_RESIDENT_TEXT_FONT_INITIALIZE },
+    { UINT32_C(0x80033df0), UINT32_C(0x27bdffb8),
+      XG_CUTOVER_RESIDENT_TEXT_ADVANCE_BEGIN },
+    { UINT32_C(0x80033e9c), UINT32_C(0xa4400058),
+      XG_CUTOVER_RESIDENT_TEXT_ROW_RECYCLE },
+    { UINT32_C(0x800346d4), UINT32_C(0x27bdffe8),
+      XG_CUTOVER_RESIDENT_TEXT_STREAM_DESTROY },
+    { UINT32_C(0x80034800), UINT32_C(0x27bdfff8),
+      XG_CUTOVER_RESIDENT_TEXT_ROW_COLORS },
+    { UINT32_C(0x80034874), UINT32_C(0x03e00008),
+      XG_CUTOVER_RESIDENT_TEXT_ROW_SELECT },
+    { UINT32_C(0x8003487c), UINT32_C(0x340200ff),
+      XG_CUTOVER_RESIDENT_TEXT_ROW_SELECT_CLEAR },
+    { UINT32_C(0x80034888), UINT32_C(0x27bdff80),
+      XG_CUTOVER_RESIDENT_TEXT_STRING_ENTRY_RENDER },
+    { UINT32_C(0x800349a8), UINT32_C(0x8e030028),
+      XG_CUTOVER_RESIDENT_TEXT_PAGE_RESET },
+    { UINT32_C(0x80034a3c), UINT32_C(0x86130016),
+      XG_CUTOVER_RESIDENT_TEXT_FRAME_CHECKPOINT },
+    { UINT32_C(0x80034ea4), UINT32_C(0x03e00008),
+      XG_CUTOVER_RESIDENT_TEXT_STRING_ENTRY_RETURN },
+    { UINT32_C(0x80034ffc), UINT32_C(0x00804021),
+      XG_CUTOVER_RESIDENT_TEXT_GLYPH_RASTERIZE },
+};
+
+static const XgRenderCutoverRoute native_target_routes[] = {
+    { UINT32_C(0x80045534), UINT32_C(0x27bdffc0), XG_CUTOVER_ROUTE_ONLY },
+    { UINT32_C(0x8004574c), UINT32_C(0x27bdffc0), XG_CUTOVER_ROUTE_ONLY },
+};
+
+static const XgRenderCutoverRoute gear_motion_routes[] = {
+    { UINT32_C(0x801dc5c0), UINT32_C(0x27bdffc8), XG_CUTOVER_ROUTE_ONLY },
+    { UINT32_C(0x801dc840), UINT32_C(0x03e00008), XG_CUTOVER_ROUTE_ONLY },
+    { UINT32_C(0x801dc848), UINT32_C(0x27bdffc8), XG_CUTOVER_ROUTE_ONLY },
+    { UINT32_C(0x801dcc2c), UINT32_C(0x03e00008), XG_CUTOVER_ROUTE_ONLY },
+    { UINT32_C(0x801dcc3c), UINT32_C(0x27bdffc8), XG_CUTOVER_ROUTE_ONLY },
+    { UINT32_C(0x801dcd84), UINT32_C(0x03e00008), XG_CUTOVER_ROUTE_ONLY },
+    { UINT32_C(0x801dcd8c), UINT32_C(0x27bdffd8), XG_CUTOVER_ROUTE_ONLY },
+    { UINT32_C(0x801dcec8), UINT32_C(0x27bdff20), XG_CUTOVER_ROUTE_ONLY },
+    { UINT32_C(0x801ddbf0), UINT32_C(0x03e00008), XG_CUTOVER_ROUTE_ONLY },
+};
+
+static const XgRenderCutoverRoute movie_routes[] = {
+    { UINT32_C(0x80076698), UINT32_C(0x0c074df3),
+      XG_CUTOVER_MOVIE_STANDALONE_START },
+    { UINT32_C(0x80076834), UINT32_C(0x0c0750c6),
+      XG_CUTOVER_MOVIE_STANDALONE_STOP },
+    { UINT32_C(0x800a72fc), UINT32_C(0x0c074df3),
+      XG_CUTOVER_MOVIE_FIELD_START },
+    { UINT32_C(0x800a80c4), UINT32_C(0x0c0750ec),
+      XG_CUTOVER_MOVIE_FIELD_STOP },
+    { UINT32_C(0x801d3480), UINT32_C(0x00e0f809),
+      XG_CUTOVER_MOVIE_FRAME_COMPLETE },
+};
+
 static const XgRenderCutoverRoute residual_routes[] = {
     { UINT32_C(0x80045ed0), UINT32_C(0x95020000),
       XG_CUTOVER_RESIDUAL_CLEAR_TILE },
@@ -45,6 +123,8 @@ static const XgRenderCutoverRoute residual_routes[] = {
 };
 
 static const XgRenderCutoverRoute overlay_routes[] = {
+    { UINT32_C(0x801fc11c), UINT32_C(0x27bdff78), XG_CUTOVER_ROUTE_ONLY },
+    { UINT32_C(0x801fc3f8), UINT32_C(0x03e00008), XG_CUTOVER_ROUTE_ONLY },
     { UINT32_C(0x801ce23c), UINT32_C(0x0c0129cf), XG_CUTOVER_ROUTE_ONLY },
     { UINT32_C(0x801d09b0), UINT32_C(0x0c0129cf), XG_CUTOVER_ROUTE_ONLY },
     { UINT32_C(0x801d0bdc), UINT32_C(0x0c0129cf), XG_CUTOVER_ROUTE_ONLY },
@@ -72,6 +152,7 @@ static const XgRenderCutoverRoute model_pre_field_routes[] = {
 static const XgRenderCutoverRoute field_sprite_routes[] = {
     { UINT32_C(0x8002675c), UINT32_C(0x27bdffb0), XG_CUTOVER_ROUTE_ONLY },
     { UINT32_C(0x800269cc), UINT32_C(0x8fa90020), XG_CUTOVER_ROUTE_ONLY },
+    { UINT32_C(0x80026a04), UINT32_C(0x03e00008), XG_CUTOVER_ROUTE_ONLY },
     { UINT32_C(0x801c9984), UINT32_C(0xa4620008), XG_CUTOVER_ROUTE_ONLY },
     { UINT32_C(0x801c9b80), UINT32_C(0x02801021), XG_CUTOVER_ROUTE_ONLY },
 };
@@ -111,6 +192,30 @@ static const XgRenderCutoverRoute projected_routes[] = {
 };
 
 static const XgRenderCutoverRoute world_routes[] = {
+    { UINT32_C(0x80074f30), UINT32_C(0x8c42cc9c),
+      XG_CUTOVER_WORLD_ANIMATED_TEXTURE_BEGIN },
+    { UINT32_C(0x80074fec), UINT32_C(0x0c011225),
+      XG_CUTOVER_WORLD_ANIMATED_TEXTURE_UPLOAD },
+    { UINT32_C(0x80075018), UINT32_C(0x8fb20020),
+      XG_CUTOVER_WORLD_ANIMATED_TEXTURE_COMMIT },
+    { UINT32_C(0x80075108), UINT32_C(0x8c42cd64),
+      XG_CUTOVER_WORLD_ANIMATED_TEXTURE_BEGIN },
+    { UINT32_C(0x800751e4), UINT32_C(0x0c011225),
+      XG_CUTOVER_WORLD_ANIMATED_TEXTURE_UPLOAD },
+    { UINT32_C(0x80075210), UINT32_C(0x8fb20020),
+      XG_CUTOVER_WORLD_ANIMATED_TEXTURE_COMMIT },
+    { UINT32_C(0x80084410), UINT32_C(0xafbf0038),
+      XG_CUTOVER_WORLD_SHARED_CLUT_BEGIN },
+    { UINT32_C(0x80084508), UINT32_C(0x0c011225),
+      XG_CUTOVER_WORLD_SHARED_CLUT_UPLOAD },
+    { UINT32_C(0x8008451c), UINT32_C(0x87a50012),
+      XG_CUTOVER_WORLD_SHARED_CLUT_COMMIT },
+    { UINT32_C(0x800979cc), UINT32_C(0x3c04800a),
+      XG_CUTOVER_WORLD_GROUND_CLUT_BEGIN },
+    { UINT32_C(0x80097ac8), UINT32_C(0x0c011225),
+      XG_CUTOVER_WORLD_GROUND_CLUT_UPLOAD },
+    { UINT32_C(0x80097adc), UINT32_C(0x87a50012),
+      XG_CUTOVER_WORLD_GROUND_CLUT_COMMIT },
     { UINT32_C(0x8002c8cc), UINT32_C(0x27bdffd0), XG_CUTOVER_ROUTE_ONLY },
     { UINT32_C(0x8002cb4c), UINT32_C(0x03e00008), XG_CUTOVER_ROUTE_ONLY },
     { UINT32_C(0x8003f968), UINT32_C(0x1080000a), XG_CUTOVER_ROUTE_ONLY },
@@ -183,6 +288,8 @@ typedef struct XgRenderCutoverModuleRoute {
 
 static const XgRenderCutoverModuleRoute modules[] = {
     { XG_RENDER_CUTOVER_MODULE_PREAMBLE, NULL, 0u, false, false, false },
+    { XG_RENDER_CUTOVER_MODULE_GEAR_MOTION, gear_motion_routes,
+      ROUTE_COUNT(gear_motion_routes), false, false, false },
     { XG_RENDER_CUTOVER_MODULE_F4, f4_routes, ROUTE_COUNT(f4_routes),
       false, false, false },
     { XG_RENDER_CUTOVER_MODULE_OVERLAY_ADD_PRIM, overlay_add_prim_routes,
@@ -192,10 +299,10 @@ static const XgRenderCutoverModuleRoute modules[] = {
     { XG_RENDER_CUTOVER_MODULE_RESIDUAL, residual_routes,
       ROUTE_COUNT(residual_routes),
       false, false, false },
+    { XG_RENDER_CUTOVER_MODULE_WORLD, world_routes, ROUTE_COUNT(world_routes),
+      true, false, false },
     { XG_RENDER_CUTOVER_MODULE_OVERLAY, overlay_routes,
       ROUTE_COUNT(overlay_routes),
-      true, false, false },
-    { XG_RENDER_CUTOVER_MODULE_WORLD, world_routes, ROUTE_COUNT(world_routes),
       true, false, false },
     { XG_RENDER_CUTOVER_MODULE_MODEL_PRE_FIELD, model_pre_field_routes,
       ROUTE_COUNT(model_pre_field_routes), false, false, false },
@@ -211,6 +318,17 @@ static const XgRenderCutoverModuleRoute modules[] = {
     { XG_RENDER_CUTOVER_MODULE_VARIANT, NULL, 0u, false, true, false },
     { XG_RENDER_CUTOVER_MODULE_FIELD_CHARACTER,
       NULL, 0u, false, false, true },
+    { XG_RENDER_CUTOVER_MODULE_RESIDENT_RESOURCE,
+      resident_resource_routes, ROUTE_COUNT(resident_resource_routes),
+      false, false, false },
+    { XG_RENDER_CUTOVER_MODULE_MOVIE,
+      movie_routes, ROUTE_COUNT(movie_routes), false, false, false },
+    { XG_RENDER_CUTOVER_MODULE_RESIDENT_TEXT,
+       resident_text_routes, ROUTE_COUNT(resident_text_routes),
+       false, false, false },
+    { XG_RENDER_CUTOVER_MODULE_NATIVE_TARGET,
+      native_target_routes, ROUTE_COUNT(native_target_routes),
+      false, false, false },
 };
 
 static bool module_route_lookup(
@@ -283,6 +401,8 @@ bool xg_render_cutover_dispatch_pc_relevant(uint32_t pc) {
 }
 
 bool xg_render_cutover_dispatch_post_pc_relevant(uint32_t pc) {
+    if (xg_render_runtime_variant_native_dispatch_post_pc_relevant(pc))
+        return true;
     for (size_t index = 0u; index < ROUTE_COUNT(post_cutover_pcs); ++index)
         if (physical_address_equals(pc, post_cutover_pcs[index])) return true;
     return false;

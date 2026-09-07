@@ -7,12 +7,14 @@
 #include "gpu_render.h"
 #include "xg_render_snapshot_types.h"
 #include "xg_render_ir.h"
+#include "xg_render_motion.h"
 #include "xg_render_world_model_repository.h"
 
 #include <stdbool.h>
 #include <stdint.h>
 
 typedef struct XgRenderWorldModelsPipelineServices {
+    bool (*motion_source)(uint32_t producer_pc, XgRenderMotionSource *out);
     const XgRenderWorldModelRepositoryServices *repository;
     bool (*cutover_ready)(void);
     bool (*authentication_generation)(uint64_t *out_generation);

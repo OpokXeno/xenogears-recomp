@@ -25,8 +25,6 @@ enum {
 };
 
 typedef struct XgRenderAuthValidation {
-    uint32_t base_crc32;
-    uint32_t range_crc32;
     uint64_t code_page_generation;
     XgRenderAuthDigest instruction_window_digest;
     uint32_t instruction_window_start;
@@ -50,6 +48,8 @@ typedef struct XgRenderAuthCacheIdentity {
 typedef struct XgRenderAuthProfile {
     uint32_t producer_record_id;
     uint32_t site_record_id;
+    uint32_t disc_id;
+    uint32_t semantic_module;
     uint32_t producer_entry;
     XgRenderAuthIdentity static_game_identity;
     XgRenderAuthIdentity field_image_identity;

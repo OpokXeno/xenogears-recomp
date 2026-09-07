@@ -26,8 +26,6 @@ typedef struct XgRenderManifestRecord {
 typedef struct XgRenderManifestValidation {
     uint32_t producer_record_id;
     uint32_t site_record_id;
-    uint32_t field_base_crc32;
-    uint32_t field_range_crc32;
     uint32_t field_range_start;
     uint32_t field_range_size;
     uint32_t producer_entry;
@@ -41,6 +39,7 @@ typedef struct XgRenderManifestValidation {
     uint32_t jal_target;
     uint32_t required_delay_slot_instructions;
     uint32_t required_delay_slot_non_control_transfer;
+    uint32_t disc_id;
 } XgRenderManifestValidation;
 
 extern const uint8_t xg_render_game_identity[XG_RENDER_MANIFEST_DIGEST_SIZE];

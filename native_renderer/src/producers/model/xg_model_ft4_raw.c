@@ -20,10 +20,17 @@ static uint32_t packed_xy(const XgHost3dProjectedVertex *vertex) {
 
 static int dispatch_mode_is_valid(uint8_t mode) {
     return mode == XG_MODEL_FT4_RAW_DISPATCH_AVERAGE ||
+        mode == XG_MODEL_FT4_RAW_DISPATCH_RELIT ||
         mode == XG_MODEL_FT4_RAW_DISPATCH_FARTHEST ||
         mode == XG_MODEL_FT4_RAW_DISPATCH_NEAREST ||
         mode == XG_MODEL_FT4_RAW_DISPATCH_AVERAGE_DEPTH_CUE ||
         mode == XG_MODEL_FT4_RAW_DISPATCH_FARTHEST_DEPTH_CUE;
+}
+
+static int relit_color_is_final(const XgModelFt4RawSource *source) {
+    return source->relit_color_source ==
+            XG_MODEL_FT4_RAW_RELIT_COLOR_RESOLVED ||
+        source->relit_color_source == XG_MODEL_FT4_RAW_RELIT_COLOR_CAPTURED;
 }
 
 static int16_t clamp_i16(int32_t value) {
@@ -87,6 +94,8 @@ XgModelFt4RawResult xg_model_ft4_raw_build(
     memset(record, 0, sizeof(*record));
     if (source->ordering_shift > 31u ||
         !dispatch_mode_is_valid(source->dispatch_mode) ||
+        (source->dispatch_mode == XG_MODEL_FT4_RAW_DISPATCH_RELIT &&
+         !relit_color_is_final(source)) ||
         source->material.shading != XG_RENDER_IR_SHADING_FLAT ||
         !source->material.textured || !source->material.raw_texture ||
         source->material.texture_depth > XG_RENDER_IR_TEXTURE_15_BIT)
@@ -100,6 +109,7 @@ XgModelFt4RawResult xg_model_ft4_raw_build(
     record->projection_flags = output.projection_flags;
     record->nclip = nclip(output.vertices);
     if (source->dispatch_mode == XG_MODEL_FT4_RAW_DISPATCH_AVERAGE ||
+        source->dispatch_mode == XG_MODEL_FT4_RAW_DISPATCH_RELIT ||
         source->dispatch_mode ==
             XG_MODEL_FT4_RAW_DISPATCH_AVERAGE_DEPTH_CUE) {
         insertion_depth = output.ordering_depth;

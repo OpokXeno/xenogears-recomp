@@ -1,5 +1,7 @@
 #include "xg_render_auth.h"
 
+#include "xg_render_scene_snapshot.h"
+
 #include "guest_render_bridge.h"
 #include "xg_render_ir.h"
 
@@ -76,8 +78,7 @@ static bool digest_present(const XgRenderAuthDigest *digest) {
 
 static bool identity_equal(const XgRenderAuthIdentity *left,
                            const XgRenderAuthIdentity *right) {
-    return left->namespace_id == right->namespace_id &&
-           digest_equal(&left->full_sha256, &right->full_sha256);
+    return digest_equal(&left->full_sha256, &right->full_sha256);
 }
 
 static bool identity_present(const XgRenderAuthIdentity *identity) {
@@ -127,10 +128,8 @@ static bool validation_shape_is_valid(const XgRenderAuthValidation *validation) 
 }
 
 static bool validation_equal(const XgRenderAuthValidation *left,
-                             const XgRenderAuthValidation *right) {
-    return left->base_crc32 == right->base_crc32 &&
-           left->range_crc32 == right->range_crc32 &&
-           left->code_page_generation == right->code_page_generation &&
+                              const XgRenderAuthValidation *right) {
+    return left->code_page_generation == right->code_page_generation &&
            digest_equal(&left->instruction_window_digest,
                         &right->instruction_window_digest) &&
            left->instruction_window_start == right->instruction_window_start &&
@@ -197,6 +196,8 @@ static void record_event(XgRenderAuth *auth,
 
 static XgRenderAuthReason profile_reason(const XgRenderAuthProfile *profile) {
     if (profile->producer_record_id == 0u || profile->site_record_id == 0u ||
+        profile->disc_id == 0u ||
+        profile->semantic_module > XG_SEMANTIC_MODULE_MOVIE ||
         profile->producer_entry == 0u)
         return XG_RENDER_AUTH_REJECT_VALIDATION_MISMATCH;
     if (!identity_present(&profile->static_game_identity) ||
@@ -412,6 +413,8 @@ XgRenderAuthResult xg_render_auth_scene_begin(
     auth->profile = *profile;
     auth->logical_identity.producer_record_id = profile->producer_record_id;
     auth->logical_identity.site_record_id = profile->site_record_id;
+    auth->logical_identity.disc_id = profile->disc_id;
+    auth->logical_identity.semantic_module = profile->semantic_module;
     auth->logical_identity.producer_entry = profile->producer_entry;
     auth->logical_identity.capture_site = profile->validation.caller_site;
     auth->logical_identity.return_site = profile->validation.return_site;
@@ -629,6 +632,7 @@ XgRenderAuthResult xg_render_auth_snapshot(
     out_snapshot->reject_reason = auth->reject_reason;
     out_snapshot->field_image_identity = auth->profile.field_image_identity;
     out_snapshot->logical_identity = auth->logical_identity;
+    out_snapshot->producer_handle = auth->producer_handle;
     out_snapshot->producer_begin_count = auth->producer_begin_count;
     out_snapshot->native_item_count = auth->native_item_count;
     out_snapshot->hook_count = auth->hook_count;

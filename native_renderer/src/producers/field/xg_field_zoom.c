@@ -56,6 +56,8 @@ static XgRenderZoomRgbPending zoom_rgb_pending;
 static XgRenderZoomInvocation zoom_invocation;
 static XgRenderZoomCounters zoom_counters;
 static uint64_t zoom_next_generation = 1u;
+static bool zoom_scene_rebind_pending;
+static bool zoom_internal_write_active;
 
 typedef struct XgFieldZoomRange {
     uint32_t start;
@@ -119,6 +121,7 @@ void xg_field_zoom_register_code_watches(
 }
 
 void xg_field_zoom_invalidate_overlapping(uint32_t address, uint32_t size) {
+    if (zoom_internal_write_active) return;
     for (uint32_t quad = 0u; quad < XG_RENDER_ZOOM_QUAD_COUNT; ++quad) {
         for (uint32_t buffer = 0u; buffer < XG_RENDER_ZOOM_BUFFER_COUNT;
              ++buffer) {
@@ -146,6 +149,7 @@ static void materialize_zoom_source(uint8_t semi_transparent, uint8_t abr,
         .authenticated = artifact_generation != 0u,
         .valid = true,
     };
+    zoom_scene_rebind_pending = false;
     for (buffer = 0u; buffer < XG_RENDER_ZOOM_BUFFER_COUNT; ++buffer) {
         for (quad = 0u; quad < XG_RENDER_ZOOM_QUAD_COUNT; ++quad) {
             XgRenderZoomQuadSource *source = &zoom_source.quads[buffer][quad];
@@ -180,6 +184,8 @@ void xg_field_zoom_reset(void) {
     zoom_initializer_pending = (XgRenderZoomInitializerPending){ 0 };
     zoom_rgb_pending = (XgRenderZoomRgbPending){ 0 };
     zoom_invocation = (XgRenderZoomInvocation){ 0 };
+    zoom_scene_rebind_pending = false;
+    zoom_internal_write_active = false;
 }
 
 void xg_field_zoom_classify_code_write(
@@ -214,10 +220,18 @@ void xg_field_zoom_handle_invalidation(
             xg_render_invalidation_has_code_class(
                 event, PSX_XG_RENDER_CODE_WRITE_ZOOM))
             xg_field_zoom_reset();
+    } else if (event->kind == XG_RENDER_INVALIDATION_SCENE_BOUNDARY) {
+        /* The guest initializes the persistent zoom templates immediately
+         * before Movie hands presentation back to Field.  Preserve that
+         * authenticated source across the ownership boundary; subsequent
+         * entry hooks still require the same artifact generation. */
+        xg_field_zoom_reset_pending();
+        zoom_scene_rebind_pending = zoom_source.valid &&
+            zoom_source.authenticated;
+    } else if (event->kind == XG_RENDER_INVALIDATION_RESOURCE_OVERLAP) {
+        xg_field_zoom_invalidate_overlapping(event->address, event->size);
     } else if (event->kind == XG_RENDER_INVALIDATION_DISABLE ||
-               event->kind == XG_RENDER_INVALIDATION_SCENE_BOUNDARY ||
-               event->kind == XG_RENDER_INVALIDATION_LOADER_MISMATCH ||
-               event->kind == XG_RENDER_INVALIDATION_RESOURCE_OVERLAP) {
+               event->kind == XG_RENDER_INVALIDATION_LOADER_MISMATCH) {
         xg_field_zoom_reset();
     } else if (event->kind == XG_RENDER_INVALIDATION_RESET) {
         xg_field_zoom_reset();
@@ -424,10 +438,13 @@ void xg_field_zoom_observe_rgb_begin(
     zoom_rgb_pending = (XgRenderZoomRgbPending){ 0 };
     if (render_mode == GUEST_RENDER_RENDER_ORIGINAL || cpu == NULL ||
         cpu->read_word == NULL || artifact_generation == 0u ||
-        artifact_generation != zoom_source.artifact_generation ||
-        !zoom_source.valid ||
-        !zoom_source.authenticated)
+        !zoom_source.valid || !zoom_source.authenticated)
         return;
+    if (zoom_scene_rebind_pending) {
+        zoom_source.artifact_generation = artifact_generation;
+        zoom_scene_rebind_pending = false;
+    }
+    if (artifact_generation != zoom_source.artifact_generation) return;
     current_buffer = cpu->read_word(UINT32_C(0x800adb08));
     if (current_buffer >= XG_RENDER_ZOOM_BUFFER_COUNT) return;
     zoom_rgb_pending = (XgRenderZoomRgbPending){
@@ -476,13 +493,16 @@ void xg_field_zoom_observe_entry(
     uint64_t artifact_generation) {
     zoom_invocation = (XgRenderZoomInvocation){ 0 };
     if (render_mode == GUEST_RENDER_RENDER_ORIGINAL || cpu == NULL ||
-        artifact_generation == 0u ||
-        artifact_generation != zoom_source.artifact_generation ||
-        !zoom_source.valid ||
+        artifact_generation == 0u || !zoom_source.valid ||
         !zoom_source.authenticated ||
         !xg_render_runtime_stack_address_is_valid(cpu->gpr[29]) ||
         !xg_field_zoom_caller_is_authorized(cpu->gpr[31]))
         return;
+    if (zoom_scene_rebind_pending) {
+        zoom_source.artifact_generation = artifact_generation;
+        zoom_scene_rebind_pending = false;
+    }
+    if (artifact_generation != zoom_source.artifact_generation) return;
     zoom_invocation = (XgRenderZoomInvocation){
         .source_generation = zoom_source.generation,
         .entry_sp = cpu->gpr[29],
@@ -706,6 +726,7 @@ bool xg_field_zoom_cutover(
             return xg_field_zoom_reject(
                 stage_blocker != 0u ? stage_blocker : 56u, services);
     }
+    zoom_internal_write_active = true;
     psx_store_cycle_barrier();
     cpu->write_word(stack_pointer + 0x4cu, scale);
     psx_store_cycle_barrier();
@@ -747,6 +768,7 @@ bool xg_field_zoom_cutover(
                    records[index].y, sizeof(records[index].y));
         }
     }
+    zoom_internal_write_active = false;
     zoom_invocation = (XgRenderZoomInvocation){ 0 };
     xg_field_zoom_note_native_invocation(XG_RENDER_ZOOM_QUAD_COUNT);
     cpu->gpr[2] = 0u;

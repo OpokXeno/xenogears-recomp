@@ -175,18 +175,29 @@ static bool descriptor_cutovers_are_valid(
         switch ((XgRenderRuntimeVariantCutoverHandler)cutover->handler) {
         case XG_RENDER_RUNTIME_VARIANT_CUTOVER_ACTOR:
         case XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_NATIVE:
-            expected_transfer = 1u;
+            expected_transfer = XG_RENDER_RUNTIME_VARIANT_TRANSFER_LOCAL;
             break;
         case XG_RENDER_RUNTIME_VARIANT_CUTOVER_COMPASS_WORLD:
         case XG_RENDER_RUNTIME_VARIANT_CUTOVER_COMPASS_SCREEN:
         case XG_RENDER_RUNTIME_VARIANT_CUTOVER_PARTICLE_NATIVE:
-            expected_transfer = 2u;
+            expected_transfer = XG_RENDER_RUNTIME_VARIANT_TRANSFER_RETURN;
+            break;
+        case XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_CLUT_UPLOAD:
+        case XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_IMAGE_UPLOAD:
+            if (cutover->transfer !=
+                    XG_RENDER_RUNTIME_VARIANT_TRANSFER_OBSERVE &&
+                cutover->transfer !=
+                    XG_RENDER_RUNTIME_VARIANT_TRANSFER_OBSERVE_AFTER)
+                return false;
+            expected_transfer = cutover->transfer;
             break;
         default:
-            expected_transfer = 0u;
+            expected_transfer = XG_RENDER_RUNTIME_VARIANT_TRANSFER_OBSERVE;
             break;
         }
-        if ((cutover->pc & 3u) != 0u || cutover->transfer > 2u ||
+        if ((cutover->pc & 3u) != 0u ||
+            cutover->transfer >
+                XG_RENDER_RUNTIME_VARIANT_TRANSFER_OBSERVE_AFTER ||
             cutover->handler >=
                 XG_RENDER_RUNTIME_VARIANT_CUTOVER_HANDLER_COUNT ||
             cutover->transfer != expected_transfer ||
@@ -197,11 +208,12 @@ static bool descriptor_cutovers_are_valid(
                             cutover->code_range_size) ||
             !range_contains(cutover->code_range_start,
                             cutover->code_range_size, cutover->pc, 4u) ||
-            ((cutover->transfer == 1u) != (cutover->continuation != 0u)) ||
-            (cutover->transfer == 1u &&
+            ((cutover->transfer == XG_RENDER_RUNTIME_VARIANT_TRANSFER_LOCAL) !=
+             (cutover->continuation != 0u)) ||
+            (cutover->transfer == XG_RENDER_RUNTIME_VARIANT_TRANSFER_LOCAL &&
              !range_contains(descriptor->artifact_range_start,
-                             descriptor->artifact_range_size,
-                             cutover->continuation, 4u)))
+                              descriptor->artifact_range_size,
+                              cutover->continuation, 4u)))
             return false;
     }
     for (uint32_t index = 0u; index < descriptor->cutover_count; ++index) {
@@ -221,11 +233,35 @@ static bool descriptor_cutovers_are_valid(
                 XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_INITIALIZER_WRITER ||
             group->handler ==
                 XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_INITIALIZER_COMMIT;
+        const bool field_tim_group =
+            group->handler == XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_BEGIN ||
+            group->handler ==
+                XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_CLUT_UPLOAD ||
+            group->handler ==
+                XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_IMAGE_UPLOAD ||
+            group->handler == XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_COMMIT;
+        const bool field_image_group =
+            group->handler ==
+                XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_IMAGE_BEGIN ||
+            group->handler ==
+                XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_IMAGE_UPLOAD ||
+            group->handler ==
+                XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_IMAGE_COMMIT;
+        const bool field_clut_group =
+            group->handler ==
+                XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_CLUT_BEGIN ||
+            group->handler ==
+                XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_CLUT_UPLOAD ||
+            group->handler ==
+                XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_CLUT_COMMIT;
         uint32_t begin_count = 0u;
         uint32_t writer_count = 0u;
+        uint32_t image_count = 0u;
         uint32_t commit_count = 0u;
 
-        if (!resource_group && !zoom_group) continue;
+        if (!resource_group && !zoom_group && !field_tim_group &&
+            !field_image_group && !field_clut_group)
+            continue;
         for (uint32_t peer_index = 0u;
              peer_index < descriptor->cutover_count; ++peer_index) {
             const XgRenderRuntimeVariantCutover *peer =
@@ -244,16 +280,44 @@ static bool descriptor_cutovers_are_valid(
                     XG_RENDER_RUNTIME_VARIANT_CUTOVER_RESOURCE_INITIALIZER_WRITER;
                 commit_count += peer->handler ==
                     XG_RENDER_RUNTIME_VARIANT_CUTOVER_RESOURCE_INITIALIZER_COMMIT;
-            } else {
+            } else if (zoom_group) {
                 begin_count += peer->handler ==
                     XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_INITIALIZER_BEGIN;
                 writer_count += peer->handler ==
                     XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_INITIALIZER_WRITER;
                 commit_count += peer->handler ==
                     XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_INITIALIZER_COMMIT;
+            } else if (field_tim_group) {
+                begin_count += peer->handler ==
+                    XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_BEGIN;
+                writer_count += peer->handler ==
+                    XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_CLUT_UPLOAD;
+                image_count += peer->handler ==
+                    XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_IMAGE_UPLOAD;
+                commit_count += peer->handler ==
+                    XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_COMMIT;
+            } else if (field_image_group) {
+                begin_count += peer->handler ==
+                    XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_IMAGE_BEGIN;
+                image_count += peer->handler ==
+                    XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_IMAGE_UPLOAD;
+                commit_count += peer->handler ==
+                    XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_IMAGE_COMMIT;
+            } else {
+                begin_count += peer->handler ==
+                    XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_CLUT_BEGIN;
+                writer_count += peer->handler ==
+                    XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_CLUT_UPLOAD;
+                commit_count += peer->handler ==
+                    XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_CLUT_COMMIT;
             }
         }
-        if (begin_count != 1u || writer_count != 1u || commit_count != 1u)
+        if (begin_count != 1u || commit_count != 1u ||
+            ((resource_group || zoom_group) && writer_count != 1u) ||
+            (field_tim_group &&
+             (writer_count != 1u || image_count != 1u)) ||
+            (field_image_group && image_count != 1u) ||
+            (field_clut_group && writer_count != 1u))
             return false;
     }
     return true;
@@ -445,7 +509,9 @@ bool xg_render_runtime_variant_native_dispatch_pc_relevant(uint32_t pc) {
         if (!descriptor_is_valid(descriptor)) continue;
         for (uint32_t index = 0u; index < descriptor->cutover_count; ++index)
             if ((descriptor->cutovers[index].pc & UINT32_C(0x1fffffff)) ==
-                    normalized)
+                    normalized &&
+                descriptor->cutovers[index].transfer !=
+                    XG_RENDER_RUNTIME_VARIANT_TRANSFER_OBSERVE_AFTER)
                 return true;
         if (descriptor->source_site_count != 0u &&
             normalized >= (descriptor->source_sites[0].pc &
@@ -454,6 +520,26 @@ bool xg_render_runtime_variant_native_dispatch_pc_relevant(uint32_t pc) {
                 descriptor->source_site_count - 1u].pc &
                 UINT32_C(0x1fffffff)))
             return true;
+    }
+    return false;
+}
+
+bool xg_render_runtime_variant_native_dispatch_post_pc_relevant(uint32_t pc) {
+    const uint32_t normalized = pc & UINT32_C(0x1fffffff);
+
+    for (uint32_t descriptor_index = 0u;
+         descriptor_index < xg_render_runtime_variant_descriptor_count;
+         ++descriptor_index) {
+        const XgRenderRuntimeVariantDescriptor *descriptor =
+            &xg_render_runtime_variant_descriptors[descriptor_index];
+
+        if (!descriptor_is_valid(descriptor)) continue;
+        for (uint32_t index = 0u; index < descriptor->cutover_count; ++index)
+            if ((descriptor->cutovers[index].pc & UINT32_C(0x1fffffff)) ==
+                    normalized &&
+                descriptor->cutovers[index].transfer ==
+                    XG_RENDER_RUNTIME_VARIANT_TRANSFER_OBSERVE_AFTER)
+                return true;
     }
     return false;
 }
@@ -497,8 +583,10 @@ static bool candidate_artifact_matches(
     const PsxXgRenderAuthCandidate *candidate) {
     return descriptor != NULL && candidate != NULL &&
            physical_address_equals(candidate->artifact_base,
-                                   descriptor->artifact_base) &&
+                                    descriptor->artifact_base) &&
            candidate->artifact_size == descriptor->artifact_size &&
+           memcmp(candidate->artifact_sha256, descriptor->artifact_identity,
+                  sizeof(candidate->artifact_sha256)) == 0 &&
            candidate->runtime_variant_bound &&
            memcmp(candidate->runtime_variant_identity,
                   descriptor->companion_manifest_identity,

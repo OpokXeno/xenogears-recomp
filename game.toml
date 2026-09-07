@@ -182,9 +182,10 @@ memcard_dir = "."
 # WORLDMAP crash).
 disc_speed = "1x"
 bios_hle = true
-# Authenticated overlays are linked statically and dispatch before this cache.
-# Keep capture/autocompile enabled for every other runtime overlay identity.
-overlay_cache = true
+# Every supported overlay identity is authenticated and linked into the binary.
+# Keep the dynamic cache off: an AOT coverage miss must fail, never interpret or
+# compile guest code on the player's machine.
+overlay_cache = false
 
 [controller]
 multitap_analog = true

@@ -65,6 +65,11 @@ static uint64_t interpolation_scene_generation(void) {
         ? active_policy->interpolation_scene_generation() : 0u;
 }
 
+static bool motion_source(uint32_t pc, XgRenderMotionSource *out) {
+    return active_policy != NULL && active_policy->motion_source != NULL &&
+        active_policy->motion_source(pc, out);
+}
+
 static int32_t screen_x_cull_margin(void) {
     return active_policy != NULL && active_policy->screen_x_cull_margin != NULL
         ? active_policy->screen_x_cull_margin() : 0;
@@ -106,6 +111,17 @@ static bool stage_native(
         uint32_t interpolation_primitive_id) {
     return active_policy != NULL && active_policy->stage_native != NULL &&
         active_policy->stage_native(
+            primitive, packet_address, source_primitive_index,
+            interpolation_producer_id, interpolation_primitive_id);
+}
+
+static bool stage_native_deferred_anchors(
+        const XgRenderIrNativePrimitive *primitive, uint32_t packet_address,
+        uint32_t source_primitive_index, uint32_t interpolation_producer_id,
+        uint32_t interpolation_primitive_id) {
+    return active_policy != NULL &&
+        active_policy->stage_native_deferred_anchors != NULL &&
+        active_policy->stage_native_deferred_anchors(
             primitive, packet_address, source_primitive_index,
             interpolation_producer_id, interpolation_primitive_id);
 }
@@ -194,6 +210,7 @@ static const XgRenderWorldPendingServices pending_services = {
 };
 
 static const XgRenderWorldModelsPipelineServices models_services = {
+    .motion_source = motion_source,
     .repository = &repository_services,
     .cutover_ready = cutover_ready,
     .authentication_generation = authentication_generation,
@@ -202,7 +219,7 @@ static const XgRenderWorldModelsPipelineServices models_services = {
     .interpolation_scene_generation = interpolation_scene_generation,
     .screen_x_cull_margin = screen_x_cull_margin,
     .begin_submission = begin_submission,
-    .stage_native = stage_native,
+    .stage_native = stage_native_deferred_anchors,
     .stage_temporal = stage_temporal,
     .abort_submission = abort_submission,
 };

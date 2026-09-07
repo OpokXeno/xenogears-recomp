@@ -72,6 +72,8 @@ typedef struct XgWorldTerrainWaterCaptureRequest {
     uint16_t projection_distance;
     XgWorldTerrainWaterRasterState raster;
     bool projection_state_authenticated;
+    /* Capture-only coverage; does not change quadrant selection or raster culls. */
+    bool capture_all_samples;
 } XgWorldTerrainWaterCaptureRequest;
 
 typedef struct XgWorldTerrainWaterCapture {

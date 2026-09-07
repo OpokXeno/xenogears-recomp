@@ -7,6 +7,7 @@ from typing import Final
 from native_render_manifest_model import fail
 from native_render_runtime_variant_model import (
     ArtifactSpec,
+    NativeCutover,
     RuntimeVariantContract,
     SourceSite,
 )
@@ -91,49 +92,63 @@ def validate_site(spec: ArtifactSpec, data: bytes, site: SourceSite) -> None:
         fail("source observation instruction identity mismatch")
 
 
+def cutover_code_range_matches(
+    data: bytes, load_address: int, cutover: NativeCutover,
+) -> bool:
+    range_offset = cutover.code_range_start - load_address
+    pc_offset = cutover.pc - load_address
+    if (range_offset < 0 or
+            range_offset + cutover.code_range_size > len(data) or
+            pc_offset < 0 or pc_offset + 4 > len(data)):
+        return False
+    return (
+        hashlib.sha256(data[
+            range_offset:range_offset + cutover.code_range_size
+        ]).digest() == cutover.code_range_identity
+        and struct.unpack_from("<I", data, pc_offset)[0] == cutover.instruction
+    )
+
+
 def source_observation_plan_for_artifact(
     contract: RuntimeVariantContract,
     data: bytes,
     load_address: int,
 ) -> str | None:
-    if not code_contract_matches(contract, data, load_address):
-        return None
+    full_contract_matches = code_contract_matches(contract, data, load_address)
     lines = [PLAN_SCHEMA]
     for variant in contract.variants:
-        lifecycle = (
-            ("entry", variant.physical_producer_entry, 0),
-            ("capture", variant.capture.site, variant.capture.delay_instruction),
-            ("return", variant.physical_return_site, 0),
-        )
-        for role, pc, delay in lifecycle:
-            offset = pc - contract.artifact.base_address
-            if offset < 0 or offset + 4 > len(data):
-                fail("lifecycle site escapes the authenticated artifact range")
-            instruction = struct.unpack_from("<I", data, offset)[0]
-            if role == "capture":
-                delay_offset = offset + 4
-                if (delay_offset + 4 > len(data) or
-                        struct.unpack_from("<I", data, delay_offset)[0] != delay):
-                    fail("lifecycle capture delay instruction identity mismatch")
-            lines.append(
-                f"lifecycle {pc:08X} {instruction:08X} {role} {delay:08X}"
+        if full_contract_matches:
+            lifecycle = (
+                ("entry", variant.physical_producer_entry, 0),
+                ("capture", variant.capture.site, variant.capture.delay_instruction),
+                ("return", variant.physical_return_site, 0),
             )
+            for role, pc, delay in lifecycle:
+                offset = pc - contract.artifact.base_address
+                if offset < 0 or offset + 4 > len(data):
+                    fail("lifecycle site escapes the authenticated artifact range")
+                instruction = struct.unpack_from("<I", data, offset)[0]
+                if role == "capture":
+                    delay_offset = offset + 4
+                    if (delay_offset + 4 > len(data) or
+                            struct.unpack_from("<I", data, delay_offset)[0] != delay):
+                        fail("lifecycle capture delay instruction identity mismatch")
+                lines.append(
+                    f"lifecycle {pc:08X} {instruction:08X} {role} {delay:08X}"
+                )
         for cutover in variant.native_cutovers:
-            offset = cutover.pc - contract.artifact.base_address
-            if offset < 0 or offset + 4 > len(data):
-                fail("native cutover escapes the authenticated artifact range")
-            if struct.unpack_from("<I", data, offset)[0] != cutover.instruction:
-                fail("native cutover instruction identity mismatch")
-            lines.append(
-                f"cutover {cutover.pc:08X} {cutover.instruction:08X} "
-                f"{cutover.transfer} {cutover.continuation:08X}"
-            )
-        for site in variant.source_sites:
-            validate_site(contract.artifact, data, site)
-            lines.append(
-                f"site {site.pc:08X} {site.instruction:08X} "
-                f"{site.operation} {site.width} {site.auxiliary}"
-            )
-    if len(lines) == 1:
+            if cutover_code_range_matches(data, load_address, cutover):
+                lines.append(
+                    f"cutover {cutover.pc:08X} {cutover.instruction:08X} "
+                    f"{cutover.transfer} {cutover.continuation:08X}"
+                )
+        if full_contract_matches:
+            for site in variant.source_sites:
+                validate_site(contract.artifact, data, site)
+                lines.append(
+                    f"site {site.pc:08X} {site.instruction:08X} "
+                    f"{site.operation} {site.width} {site.auxiliary}"
+                )
+    if len(lines) == 1 and full_contract_matches:
         fail("authenticated artifact has no source observation sites")
-    return "\n".join(lines) + "\n"
+    return None if len(lines) == 1 else "\n".join(lines) + "\n"

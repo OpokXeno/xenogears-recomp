@@ -22,7 +22,7 @@ build/
 build-dbg/
 build*/
 dist/
-
+.tmp/
 # Maintainer-local release runbook (machine-specific paths; never commit)
 docs/self-hosted-runner.md
 
@@ -100,8 +100,22 @@ tools/*
 !tools/test_native_render_overlay_ranges.py
 !tools/native_render_ui_owners.py
 !tools/test_native_render_ui_owners.py
-!tools/native_render_p4_resource_proof.py
-!tools/test_native_render_p4_resource_proof.py
+!tools/native_render_phase_closure.py
+!tools/test_native_render_phase_closure.py
+!tools/native_render_auth_proof.py
+!tools/test_native_render_auth_proof.py
+!tools/test_native_render_auth_proof_contract.py
+!tools/test_native_render_auth_proof_instrumentation.py
+!tools/test_native_render_auth_proof_publication.py
+!tools/native_render_atomic.py
+!tools/native_render_private_fs.py
+!tools/native_render_process_identity.py
+!tools/native_render_replay_baseline.py
+!tools/native_render_review_schema.py
+!tools/native_render_schema.py
+!tools/native_render_replays/
+!tools/native_render_replays/field_baseline.toml
+!tools/native_render_replays/field_clean_boot.toml
 !tools/run_with_source_observation_plan.py
 !tools/validate_overlay_annotations.py
 !tools/census_disc_overlays.py
@@ -118,6 +132,8 @@ tools/sprite-extractor-bundle/extracted-sprites
 tools/image-extractor-bundle/extracted-images
 !tools/model-extractor-bundle
 tools/model-extractor-bundle/extracted-models
+!tools/field-script-extractor-bundle
+tools/field-script-extractor-bundle/extracted-field-scripts
 !tools/finalize_static_overlays.py
 !tools/test_finalize_static_overlays.py
 !tools/run_with_job_pool.py
@@ -129,6 +145,9 @@ tools/model-extractor-bundle/extracted-models
 !tools/native_render_replay_cli.py
 !tools/native_render_static_census.py
 !tools/native_render_presentation_roots.py
+!tools/test_native_render_presentation_roots.py
+!tools/native_render_presentation_branches.py
+!tools/test_native_render_presentation_branches.py
 !tools/native_render_3d_certify.py
 !tools/native_render_whole_presentation_certify.py
 !tools/test_native_render_field_character_shadow_schema.py

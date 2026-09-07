@@ -358,6 +358,28 @@ static QuadResult build_quad(BuildContext *context,
         XG_RENDER_QUAD_BUILDER_OK)
         return QUAD_RESULT_FAILED;
 
+    /* Adjacent quads share source lattice vertices, not only their diagonal.
+     * Keep LOD namespaces separate: topology changes are atomic cloud changes. */
+    const uint32_t side = lod == XG_WORLD_CLOUD_LOD_NEAR ? 5u :
+        lod == XG_WORLD_CLOUD_LOD_MIDDLE ? 3u : 2u;
+    const uint32_t quads_per_side = side - 1u;
+    const uint32_t quads_per_layer = quads_per_side * quads_per_side;
+    const uint32_t layer = lod_quad_index / quads_per_layer;
+    const uint32_t local_quad = lod_quad_index % quads_per_layer;
+    static const uint8_t corners[2][3] = {{0, 1, 2}, {2, 1, 3}};
+    for (uint32_t t = 0; t < 2; ++t) {
+        for (uint32_t v = 0; v < 3; ++v) {
+            const uint32_t corner = corners[t][v];
+            XgRenderIrVertex *vertex = &candidate.primitive.triangles[t].vertices[v];
+            vertex->interpolation_group_id = UINT32_C(0x62000000) |
+                (source_index * 3u + (uint32_t)lod + 1u);
+            vertex->interpolation_vertex_id = layer * side * side +
+                (local_quad / quads_per_side + corner / 2u) * side +
+                local_quad % quads_per_side + corner % 2u;
+            vertex->interpolation_vertex_identity_valid = true;
+        }
+    }
+
     memcpy(candidate.vertices, projected.vertices,
            sizeof(candidate.vertices));
     candidate.projection_flags = projected.projection_flags;

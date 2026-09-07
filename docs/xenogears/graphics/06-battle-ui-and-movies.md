@@ -868,6 +868,23 @@ advances the output rectangle, starts the next output DMA when strips remain,
 and on frame completion publishes the frame number, invokes the movie callback,
 and flips output parity.
 
+The exact callback boundary is the `jalr a3` at `0x801D3480` (instruction
+`0x00E0F809`). It is reached only after the final output rectangle has been
+uploaded and output parity has advanced. At that instruction `a0` is the STR
+frame number, `a1` is visual width (including the depth24 conversion), and `a2`
+is height. `MovieStrStartPlayback_raw` installs the callback argument into the
+slot read here at `0x801D39AC`. A null callback branches directly to the
+post-completion bookkeeping at `0x801D3488`; Native Movie publication therefore
+fails closed on that route rather than inferring a frame boundary.
+
+The Native observer authenticates this boundary only for the STR artifact at
+`0x801D3000`, size `90112`, CRC32 `2bb071fe`, and SHA-256
+`2a8469095fd33daef61dbbf09d4f106ba1d72904a502763cb89057cbb615a440`.
+It carries the frame metadata to the next MDEC-backed VBlank scanout. A
+`MOVIE_FRAME` is published only when matching generated strips have no overlap,
+cover every scanout byte, and the controller width and height equal the scanout
+dimensions. Partial coverage and overwritten strips remain framebuffer-only.
+
 ### 11.5 Loop, stall recovery, and shutdown
 
 `MovieStrStartPlayback_raw` starts in one-shot mode when its loop argument is

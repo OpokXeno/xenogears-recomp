@@ -6,6 +6,7 @@
 #include "gpu_render.h"
 #include "xg_native_view.h"
 #include "xg_render_ir.h"
+#include "xg_render_motion.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -14,6 +15,7 @@ typedef struct XgRenderModelSpritePipelineServices
     XgRenderModelSpritePipelineServices;
 
 typedef struct XgRenderWorldCoordinatorPolicy {
+    bool (*motion_source)(uint32_t producer_pc, XgRenderMotionSource *out);
     uint32_t (*readiness_blocker)(void);
     bool (*authorize_direct_dispatch)(void);
     bool (*authentication_generation)(uint64_t *out_generation);
@@ -26,6 +28,10 @@ typedef struct XgRenderWorldCoordinatorPolicy {
     bool (*authorize_guest_word)(uint32_t address);
     bool (*begin_submission)(void);
     bool (*stage_native)(
+        const XgRenderIrNativePrimitive *primitive, uint32_t packet_address,
+        uint32_t source_primitive_index, uint32_t interpolation_producer_id,
+        uint32_t interpolation_primitive_id);
+    bool (*stage_native_deferred_anchors)(
         const XgRenderIrNativePrimitive *primitive, uint32_t packet_address,
         uint32_t source_primitive_index, uint32_t interpolation_producer_id,
         uint32_t interpolation_primitive_id);

@@ -99,6 +99,11 @@ typedef struct XgWorldCloudRecord {
     bool accepted;
 } XgWorldCloudRecord;
 
+/* One atomic cloud instance and LOD, including all three layers. */
+static inline uint64_t xg_world_cloud_component_id(uint32_t source_index, uint32_t lod) {
+    return UINT64_C(0x434c4f5500000000) | (source_index * 3u + lod + 1u);
+}
+
 XgWorldCloudsResult xg_world_clouds_step_positions(
     XgWorldCloudPosition positions[XG_WORLD_CLOUD_COUNT],
     const XgWorldCloudVelocity velocities[XG_WORLD_CLOUD_COUNT]);

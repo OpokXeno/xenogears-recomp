@@ -40,8 +40,6 @@ class MetadataRecord:
 class ManifestValidationMetadata:
     producer_record_id: int
     site_record_id: int
-    field_base_crc32: int
-    field_range_crc32: int
     field_range_start: int
     field_range_size: int
     producer_entry: int
@@ -61,6 +59,7 @@ class ManifestValidationMetadata:
 class VerifiedManifest:
     game_identity: Digest32
     manifest_identity: Digest32
+    disc_id: int
     namespace_crc32: int
     records: tuple[MetadataRecord, ...]
     validation: ManifestValidationMetadata
@@ -113,6 +112,10 @@ def bounded_file_bytes(path: Path, offset: int, size: int) -> bytes:
     return data
 
 
+def secure_file_identity_equal(left: FileIdentity, right: FileIdentity) -> bool:
+    return left.sha256 == right.sha256 and left.size == right.size
+
+
 def bounded_bytes(path: Path, offset: int, size: int) -> bytes:
     if offset < 0 or size < 8:
         fail("delay-slot window range is invalid")
@@ -157,21 +160,19 @@ def verify(contract: ManifestContract, inputs: VerificationInputs) -> VerifiedMa
         case unreachable:
             assert_never(unreachable)
     game_actual = file_identity(inputs.exe)
-    if game_actual != contract.game.identity:
+    if not secure_file_identity_equal(game_actual, contract.game.identity):
         fail("full game identity mismatch")
     verify_psx_exe_mapping(inputs.exe, contract.game.header_size,
                            contract.game.base_address,
                            contract.game.loaded_size, "game image")
     overlay_path = inputs.overlays / field.file
     overlay_actual = file_identity(overlay_path)
-    if overlay_actual != field.identity:
+    if not secure_file_identity_equal(overlay_actual, field.identity):
         fail("field image full identity mismatch")
     verify_psx_exe_mapping(overlay_path, field.header_size, field.base_address,
                            field.loaded_size, "field image")
     range_file_offset = field.header_size + field.range_offset
     range_data = bounded_bytes(overlay_path, range_file_offset, field.range_size)
-    if zlib.crc32(range_data) & 0xFFFFFFFF != field.range_crc32:
-        fail("crc mismatch for authenticated field range")
     field_start = field.base_address + field.range_offset
     field_end = field_start + field.range_size
     if not field_start <= contract.producer.entry_address < field_end:
@@ -199,7 +200,7 @@ def verify(contract: ManifestContract, inputs: VerificationInputs) -> VerifiedMa
     for overlay in contract.overlays:
         overlay_path = inputs.overlays / overlay.file
         actual = file_identity(overlay_path)
-        if actual != overlay.identity:
+        if not secure_file_identity_equal(actual, overlay.identity):
             fail(f"{overlay.identifier} full identity mismatch")
         if overlay.image_format == "ps-x-exe":
             verify_psx_exe_mapping(
@@ -225,8 +226,6 @@ def verify(contract: ManifestContract, inputs: VerificationInputs) -> VerifiedMa
     validation = ManifestValidationMetadata(
         producer_record_id=RECORD_IDS[PRODUCER_ID],
         site_record_id=RECORD_IDS[SITE_ID],
-        field_base_crc32=field.range_crc32,
-        field_range_crc32=field.range_crc32,
         field_range_start=field_start,
         field_range_size=field.range_size,
         producer_entry=contract.producer.entry_address,
@@ -242,7 +241,10 @@ def verify(contract: ManifestContract, inputs: VerificationInputs) -> VerifiedMa
         required_delay_slot_non_control_transfer=1,
     )
     manifest_identity = Digest32(hashlib.sha256(inputs.manifest.read_bytes()).digest())
-    return VerifiedManifest(game_actual.sha256, manifest_identity, contract.game.namespace_crc32, tuple(records), validation)
+    return VerifiedManifest(game_actual.sha256, manifest_identity,
+                            contract.game.disc_id,
+                            contract.game.namespace_crc32, tuple(records),
+                            validation)
 
 
 def declare(contract: ManifestContract, manifest: Path) -> VerifiedManifest:
@@ -279,13 +281,13 @@ def declare(contract: ManifestContract, manifest: Path) -> VerifiedManifest:
         for index, overlay in enumerate(contract.overlays)
     )
     validation = ManifestValidationMetadata(
-        RECORD_IDS[PRODUCER_ID], RECORD_IDS[SITE_ID], field.range_crc32,
-        field.range_crc32, field.base_address + field.range_offset, field.range_size,
+        RECORD_IDS[PRODUCER_ID], RECORD_IDS[SITE_ID],
+        field.base_address + field.range_offset, field.range_size,
         contract.producer.entry_address, site.call_address, callee.entry_address,
         site.return_address, site.window_start, site.window_size, site.window_sha256,
         3, callee.entry_address, 1, 1)
     return VerifiedManifest(
         contract.game.identity.sha256,
         Digest32(hashlib.sha256(manifest.read_bytes()).digest()),
-        contract.game.namespace_crc32, tuple(records),
+        contract.game.disc_id, contract.game.namespace_crc32, tuple(records),
         validation)

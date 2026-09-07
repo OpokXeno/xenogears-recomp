@@ -448,7 +448,13 @@ repeated in every descriptor of the file, and `chunk_count_copy` equals
 Tags `0x1200` and `0x1201` use the same placement modes as packed records in
 Section 4.2, with independent image and CLUT state. The resident callback reads
 the descriptor, then uploads each following sector using its corresponding
-height.
+height. The authenticated Disc 1 implementations are
+`ArchiveTextureStreamDataCallback` `0x8002BB50..0x8002BF37` and its synchronous
+host mirror `PumpHostTextureStream` `0x8002BF38..0x8002C30F`. Each path observes
+the descriptor tag at `0x8002BC10`/`0x8002BFF8`, calls `LoadImage` once per
+sector at `0x8002BE14`/`0x8002C1FC`, and tests the post-decrement chunk count at
+`0x8002BE5C`/`0x8002C24C`. Thus one logical resource spans all tightly packed
+chunk rows and becomes complete only when that final count reaches zero.
 
 | Disc | Files inspected | Descriptors | `0x1200` | `0x1201` | Invalid layouts |
 |---|---:|---:|---:|---:|---:|
@@ -673,6 +679,11 @@ of 32 fogged palettes at VRAM `(0,432)`, producing 64 CLUT rows. Terrain sample
 texture-page selectors use values `0..5` in the retail corpus and map to these
 six images.
 
+The generated bank is one semantic CLUT resource. Its authenticated lifecycle
+begins inside `WorldMapLoadGroundTextures` at `0x800979CC`, stages the
+`256 x 64` `LoadImage` at `0x80097AC8`, and commits at `0x80097ADC` after
+`DrawSync(0)`. No partial fog bank is visible to a source frame.
+
 ### 6.5 Shared TIM bundle, file `+3`
 
 The nine file `+3` bundles contain:
@@ -698,6 +709,12 @@ After upload, World reads the combined 256-word palette row at `y=496`, creates
 16 fixed-point color interpolations, and uploads the first 15 rows to
 `y=496..510`. Row `y=511` remains the 8-bit CLUT loaded from the TIM bundle. The
 renderer exposes CLUT IDs for all 16 rows `496..511`.
+
+The generated rows are one semantic CLUT resource. Its authenticated lifecycle
+begins inside `WorldMapLoadSharedTextureResources` at `0x80084410`, stages the
+`256 x 15` `LoadImage` at `0x80084508`, and commits at `0x8008451C` after
+`DrawSync(0)`. The separately loaded row at `y=511` is not part of this
+publication.
 
 ### 6.6 Model placements and collision
 

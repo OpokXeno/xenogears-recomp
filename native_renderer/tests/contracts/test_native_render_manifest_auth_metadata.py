@@ -22,8 +22,6 @@ TOOL = REPOSITORY / "tools" / "native_render_manifest.py"
 VALIDATION_FIELDS = {
     "producer_record_id",
     "site_record_id",
-    "field_base_crc32",
-    "field_range_crc32",
     "field_range_start",
     "field_range_size",
     "producer_entry",
@@ -37,6 +35,7 @@ VALIDATION_FIELDS = {
     "jal_target",
     "required_delay_slot_instructions",
     "required_delay_slot_non_control_transfer",
+    "disc_id",
 }
 
 

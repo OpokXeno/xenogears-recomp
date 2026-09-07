@@ -11,6 +11,8 @@
 #include "xg_render_invalidation_event.h"
 #include "xg_render_mutation_classifier.h"
 #include "xg_render_route_descriptor.h"
+#include "xg_render_resource_repository.h"
+#include "xg_render_source_frame.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -22,15 +24,24 @@ typedef struct XgRenderRuntimeAuthSceneState {
     uint64_t scene_generation;
     uint64_t interpolation_generation;
     uint64_t artifact_generation;
+    XgRenderResourceProvenance artifact_provenance;
     uint32_t pending_producer_entry;
     bool armed;
     bool active;
     bool completed;
+    bool movie_owner_active;
     bool pending_sequence;
     bool pending_capture_ready;
     bool candidate_matched;
     bool candidate_dispatched;
 } XgRenderRuntimeAuthSceneState;
+
+typedef struct XgRenderArtifactAuthority {
+    uint64_t generation;
+    XgRenderResourceProvenance provenance;
+} XgRenderArtifactAuthority;
+
+typedef struct PsxXgRenderTimRouteDiagnostics PsxXgRenderTimRouteDiagnostics;
 
 typedef struct XgRenderRuntimeAuthSceneServices {
     void (*query_state)(XgRenderRuntimeAuthSceneState *out_state);
@@ -41,7 +52,21 @@ typedef struct XgRenderRuntimeAuthSceneServices {
         uint32_t ot_bucket, uint8_t payload_word_count,
         const XgRenderIrNativePrimitive *primitive,
         bool force_pending_capture, uint32_t *out_failure_detail);
+    bool (*prepare_source_target)(
+        const XgRenderSourceFrameDescription *description,
+        XgSemanticResourceRef *out_target);
+    bool (*standalone_source_identity)(
+        XgSemanticSceneIdentity *out_identity,
+        uint32_t *out_scene_generation);
+    bool (*retained_movie_surface)(
+        XgSemanticResourceRef *out_surface);
+    bool (*artifact_authority_for_pc)(
+        uint32_t pc, XgRenderArtifactAuthority *out_authority);
+    bool (*static_artifact_authority_for_cutover)(
+        uint32_t pc, uint32_t instruction_word,
+        XgRenderArtifactAuthority *out_authority);
     bool (*artifact_authorizes_pc)(uint32_t pc);
+    bool (*native_text_authorizes_pc)(uint32_t owner_entry);
     bool (*artifact_is_authorized)(void);
     bool (*completed_proof_matches_tier)(XgRenderAuthTier tier);
     void (*reject_auth)(uint32_t blocker);
@@ -63,6 +88,10 @@ void xg_render_runtime_composition_test_fail_registration_after(
 void xg_render_runtime_composition_test_clear_registration_failure(void);
 #endif
 void xg_render_runtime_composition_reset(void);
+bool xg_render_runtime_composition_is_transition_mask(
+    const GpuRenderSemantic *semantic);
+void xg_render_runtime_composition_tim_route_diagnostics(
+    PsxXgRenderTimRouteDiagnostics *out_diagnostics);
 XgRenderRuntimeCompositionResult xg_render_runtime_composition_observe_dispatch(
     CPUState *cpu, uint32_t pc, uint32_t instruction_word);
 bool xg_render_runtime_composition_cutover_pc_relevant(uint32_t pc);
@@ -104,6 +133,9 @@ bool xg_render_runtime_composition_resource_write_needs_invalidation(
     uint32_t address, uint32_t size);
 void xg_render_runtime_composition_handle_invalidation(
     const XgRenderInvalidationEvent *event);
+void xg_render_runtime_composition_invalidation_counts(
+    uint64_t *out_counts, size_t capacity,
+    uint64_t *out_mutation_counts, size_t mutation_capacity);
 void xg_render_runtime_composition_configure_invalidation(void);
 void xg_render_runtime_composition_register_code_watches(
     void (*set_range)(uint32_t physical_address, uint32_t size));
@@ -115,10 +147,21 @@ void xg_render_runtime_composition_set_terrain_temporal_coverage(bool enabled);
 void xg_render_runtime_composition_set_exec_phase_exchange(
     int (*exchange)(int phase));
 void xg_render_runtime_composition_before_gpu_submission(void);
+void xg_render_runtime_composition_set_native_work_mode(bool enabled);
+void xg_render_runtime_composition_native_work_view(XgSemanticDisplayState *display);
+void xg_render_runtime_composition_prepare_gpu_source_boundary(void);
 void xg_render_runtime_composition_note_gpu_semantic_current(
     const GpuRenderSemantic *semantic);
-void xg_render_runtime_composition_complete_gpu_source_frame(void);
+XgRenderSourceFrameResult
+xg_render_runtime_composition_complete_gpu_source_frame(void);
+bool xg_render_runtime_composition_ensure_source_frame(
+    const XgRenderSourceFrameDescription *description);
+bool xg_render_runtime_composition_begin_source_frame(
+    const XgRenderSourceFrameDescription *description,
+    XgSemanticResourceRef *out_target);
 bool xg_render_runtime_composition_prepare_ui_ot(uint32_t start_addr);
+void xg_render_runtime_composition_complete_ordering_table(
+    uint32_t start_addr, uint32_t transferred_words);
 void xg_render_runtime_composition_ui_ot_snapshot(
     PsxXgRenderUiOtSnapshot *out_snapshot);
 void xg_render_runtime_composition_source_snapshot(
@@ -133,11 +176,21 @@ void xg_render_runtime_composition_ft4_geometry_snapshot(
     PsxXgRenderFt4GeometrySnapshot *out_snapshot);
 void xg_render_runtime_composition_zoom_template_contract_snapshot(
     PsxXgRenderZoomTemplateContractSnapshot *out_snapshot);
+size_t xg_render_runtime_composition_pre_scene_snapshot(
+    PsxXgRenderPreScenePrimitiveSnapshot *out_snapshots, size_t capacity);
+size_t xg_render_runtime_composition_field_fragment_snapshot(
+    PsxXgRenderPreScenePrimitiveSnapshot *out_snapshots, size_t capacity);
 void xg_render_runtime_composition_overlay_ft4_snapshot(
     PsxXgRenderOverlayFt4Snapshot *out_snapshot);
 void xg_render_runtime_composition_disable(void);
 void xg_render_runtime_composition_prepare_authenticated_scene(void);
 bool xg_render_runtime_composition_flush_pre_scene(void);
+void xg_render_runtime_composition_pre_scene_status(
+    uint32_t *out_count, uint32_t *out_blocker);
+void xg_render_runtime_composition_title_restage_status(
+    uint64_t *out_attempts, uint32_t *out_last_result,
+    uint32_t *out_last_detail, uint32_t *out_fail_index,
+    uint32_t *out_tpage, uint32_t *out_clut);
 bool xg_render_runtime_composition_producer_family_enabled(void);
 void xg_render_runtime_composition_enable_producer_family(bool enabled);
 void xg_render_runtime_composition_producer_family_snapshot(
@@ -174,6 +227,8 @@ void xg_render_runtime_composition_world_sky_native_snapshot(
     PsxXgRenderWorldNativeSnapshot *out_snapshot);
 void xg_render_runtime_composition_world_execution_snapshot(
     PsxXgRenderWorldExecutionSnapshot *out_snapshot);
+void xg_render_runtime_composition_resident_text_snapshot(
+    PsxXgRenderResidentTextSnapshot *out_snapshot);
 void xg_render_runtime_composition_scene_boundary(bool generation_advanced);
 
 #endif

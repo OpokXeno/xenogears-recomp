@@ -5,6 +5,7 @@
 #include "xg_field_render_services.h"
 #include "xg_render_backend.h"
 #include "xg_render_primitive_utils.h"
+#include "xg_render_submission.h"
 #include "xg_render_world_sky_producer.h"
 #include "xg_world_decorations_source_capture.h"
 #include "xg_world_decorations_shadow.h"
@@ -21,6 +22,7 @@
 #include "xg_world_terrain_water_shadow.h"
 
 #include <limits.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct XgRenderWorldTerrainWaterState {
@@ -103,6 +105,48 @@ static XgRenderWorldEntityShadowsState entity_shadows;
 static XgRenderWorldDecorationsState decorations;
 static XgRenderWorldHorizonState horizon;
 static XgRenderWorldEffectsState effects;
+
+static bool publish_terrain_coverage(uint32_t anchor_count, uint32_t record_count,
+                                     uint32_t packet_base) {
+    if (!xg_render_submission_native_work_mode()) return true;
+    XgRenderTemporalSample *samples = calloc(anchor_count ? anchor_count : 1u, sizeof(*samples));
+    XgRenderTemporalCommandBinding *bindings = calloc(record_count ? record_count : 1u, sizeof(*bindings));
+    bool ok = false;
+    if (!samples || !bindings) goto done;
+    /* Geometry identity excludes camera, position, visibility and wave phase.
+     * Only this invocation's captured tiles enter it, never temporal_tiles history. */
+    uint64_t keys[XG_WORLD_TERRAIN_WATER_TILE_COUNT][4] = {{0}};
+    for (uint32_t i = 0; i < XG_WORLD_TERRAIN_WATER_TILE_COUNT; ++i) {
+        const XgWorldTerrainWaterTileSource *tile = &terrain_water.source.tiles[i];
+        keys[i][0] = tile->grid_index;
+        keys[i][1] = ((uint64_t)tile->terrain_id << 32) | tile->resource_address;
+        keys[i][2] = tile->active | ((uint64_t)tile->has_data << 1);
+        if (tile->active && tile->has_data)
+            keys[i][3] = xg_render_resource_digest(tile->samples, sizeof(tile->samples));
+    }
+    const XgRenderTemporalComponent component = {
+        .component_id = UINT64_C(0x5445525200000001),
+        .geometry_id = xg_render_resource_digest(keys, sizeof(keys)),
+        .scene_id = xg_render_submission_temporal_scene(),
+        .producer_id = XG_WORLD_TERRAIN_WATER_NATIVE_ENTRY_PC,
+    };
+    for (uint32_t i = 0; i < anchor_count; ++i) {
+        GpuRenderInterpolationVertexAnchor anchor;
+        const XgWorldTerrainWaterAnchor *a = &terrain_water.anchors[i];
+        if (xg_render_backend_translate_anchor(&a->material, &a->vertex, component.scene_id,
+                component.producer_id, &anchor) != XG_RENDER_BACKEND_OK) goto done;
+        samples[i] = (XgRenderTemporalSample){component.component_id, anchor.vertex};
+    }
+    for (uint32_t i = 0; i < record_count; ++i)
+        bindings[i] = (XgRenderTemporalCommandBinding){
+            packet_base + i * XG_WORLD_TERRAIN_WATER_NATIVE_PACKET_STRIDE + 4u, component.component_id};
+    ok = xg_render_submission_publish_temporal_coverage(XG_WORLD_TERRAIN_WATER_NATIVE_ENTRY_PC,
+        &component, 1, samples, anchor_count, bindings, record_count);
+done:
+    free(samples);
+    free(bindings);
+    return ok;
+}
 
 typedef struct XgRenderWorldCodeRange {
     uint32_t start;
@@ -395,6 +439,7 @@ bool xg_render_world_terrain_water_cutover(
         return false;
     gpu_get_draw_state(&draw);
     request.capture = (XgWorldTerrainWaterCaptureRequest){
+        .capture_all_samples = xg_render_submission_native_work_mode(),
         .authentication_generation = generation,
         .caller_return = cpu->gpr[31],
         .screen_offset_x = (int32_t)cpu->gte_ctrl[24],
@@ -449,6 +494,16 @@ bool xg_render_world_terrain_water_cutover(
             XG_WORLD_TERRAIN_WATER_NATIVE_FINAL_COUNT_ADDRESS, 4u, 4u, false))
         return false;
 
+    if (xg_render_submission_native_work_mode() &&
+        xg_world_terrain_water_append_temporal_tile_anchors(
+            terrain_water.source.tiles, XG_WORLD_TERRAIN_WATER_TILE_COUNT,
+            &terrain_water.source, terrain_water.anchors,
+            XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY, &preparation.anchor_count) !=
+                XG_WORLD_TERRAIN_WATER_OK)
+        return false;
+    /* Preserve the current capture prefix. Appended last-seen tile anchors below
+     * belong only to the legacy path and cannot authorize native-work history. */
+    const uint32_t captured_anchor_count = preparation.anchor_count;
     if (terrain_water.temporal_scene != scene_id) {
         memset(terrain_water.temporal_tiles, 0,
                sizeof(terrain_water.temporal_tiles));
@@ -579,6 +634,10 @@ bool xg_render_world_terrain_water_cutover(
             services->abort_submission();
             return false;
         }
+    }
+    if (!publish_terrain_coverage(captured_anchor_count, preparation.record_count, preparation.packet_base)) {
+        services->abort_submission();
+        return false;
     }
     if (!xg_world_terrain_water_shadow_record_native_cutover(
             preparation.record_count)) {
@@ -2444,11 +2503,11 @@ void xg_render_world_minimap_snapshot(
 }
 
 void xg_render_world_simple_reset(void) {
-    terrain_water = (XgRenderWorldTerrainWaterState){0};
-    entity_shadows = (XgRenderWorldEntityShadowsState){0};
-    decorations = (XgRenderWorldDecorationsState){0};
-    horizon = (XgRenderWorldHorizonState){0};
-    effects = (XgRenderWorldEffectsState){0};
+    memset(&terrain_water, 0, sizeof(terrain_water));
+    memset(&entity_shadows, 0, sizeof(entity_shadows));
+    memset(&decorations, 0, sizeof(decorations));
+    memset(&horizon, 0, sizeof(horizon));
+    memset(&effects, 0, sizeof(effects));
     xg_world_terrain_water_shadow_reset();
     xg_world_entity_shadows_shadow_reset();
     xg_world_decorations_shadow_reset();

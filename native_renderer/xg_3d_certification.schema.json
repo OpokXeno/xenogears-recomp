@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "xenogears.native-3d-certification/v1",
-  "title": "Xenogears P11 native 3D certification manifest",
+  "title": "Xenogears native 3D certification manifest",
   "description": "Closed schema for the TOML data model consumed by tools/native_render_3d_certify.py. A structurally valid document is not a PASS; all hash-pinned receipts are independently validated by the entry point.",
   "type": "object",
   "additionalProperties": false,

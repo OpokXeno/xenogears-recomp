@@ -15,6 +15,7 @@
 #include "xg_render_model_sprite_pipeline.h"
 #include "xg_render_overlay_ft4.h"
 #include "xg_render_resident_line_f2.h"
+#include "xg_render_resident_text.h"
 #include "xg_render_residual.h"
 #include "xg_render_resource_watch.h"
 #include "xg_render_runtime_variant_auth.h"
@@ -55,6 +56,7 @@ static const XgRenderInvalidationModule producer_modules[] = {
     { xg_render_world_sky_handle_invalidation },
     { xg_render_world_execution_handle_invalidation },
     { xg_render_runtime_variant_handle_invalidation },
+    { xg_render_resident_text_handle_invalidation },
 };
 
 static const XgRenderMutationSource mutation_sources[] = {
@@ -72,6 +74,8 @@ static const XgRenderMutationSource mutation_sources[] = {
       xg_render_world_sky_register_code_watches },
     { xg_render_runtime_variant_classify_code_write,
       xg_render_runtime_variant_register_descriptor_code_watches },
+    { xg_render_resident_text_classify_code_write,
+      xg_render_resident_text_register_code_watches },
 };
 
 bool xg_render_invalidation_modules_configure(void) {

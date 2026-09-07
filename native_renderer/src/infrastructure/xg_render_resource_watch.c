@@ -12,6 +12,7 @@ static uint32_t resource_watch_bitmap[XG_RENDER_RESOURCE_WATCH_BITMAP_WORDS];
 static uint8_t invalidated_byte_masks[XG_RENDER_LOOKUP_WORD_CAPACITY];
 static uint32_t model_ft3_descriptor_bitmap[
     XG_RENDER_RESOURCE_WATCH_BITMAP_WORDS];
+static bool model_ft3_descriptors_dirty;
 
 static uint8_t byte_mask_for_word(
         uint32_t begin, uint32_t end, uint32_t word) {
@@ -67,6 +68,7 @@ void xg_render_resource_watch_add_model_ft3_descriptor(
     uint32_t end;
 
     if (!physical_range(address, size, &begin, &end)) return;
+    model_ft3_descriptors_dirty=true;
     for (uint32_t word = begin >> 2u; word <= (end >> 2u); ++word)
         model_ft3_descriptor_bitmap[word >> 5u] |=
             UINT32_C(1) << (word & 31u);
@@ -147,6 +149,8 @@ void xg_render_resource_watch_handle_invalidation(
 }
 
 void xg_render_resource_watch_reset_model_ft3_descriptors(void) {
+    if(!model_ft3_descriptors_dirty)return;
     memset(model_ft3_descriptor_bitmap, 0,
            sizeof(model_ft3_descriptor_bitmap));
+    model_ft3_descriptors_dirty=false;
 }

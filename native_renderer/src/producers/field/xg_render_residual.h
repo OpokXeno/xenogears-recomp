@@ -18,6 +18,7 @@ typedef enum XgRenderResidualCaptureKind {
     XG_RENDER_RESIDUAL_CAPTURE_TILE_WRITE,
     XG_RENDER_RESIDUAL_CAPTURE_STATIC_GOURAUD,
     XG_RENDER_RESIDUAL_CAPTURE_PROJECTED_GOURAUD,
+    XG_RENDER_RESIDUAL_CAPTURE_BATTLE_FADER,
 } XgRenderResidualCaptureKind;
 
 typedef struct XgRenderResidualCaptureRequest {
@@ -41,6 +42,9 @@ void xg_render_residual_capture(
 bool xg_render_residual_resolve(
     const GuestRenderNativeStreamMissContext *context,
     GpuRenderSemantic *out_semantic, GuestRenderRenderMode render_mode,
+    const XgRenderProducerLifecycleServices *services);
+bool xg_render_residual_is_transition_mask(
+    const GpuRenderSemantic *semantic,
     const XgRenderProducerLifecycleServices *services);
 
 #endif

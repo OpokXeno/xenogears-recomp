@@ -34,8 +34,9 @@ BASELINE_ROWS: Final = (("debug", "cold"), ("debug", "warm"),
                         ("release", "cold"), ("release", "warm"))
 HOST_FIELD_ALLOWLIST: Final = ("host.elapsed_ms",)
 TASK15_MATRIX_SCHEMA: Final = "xenogears.native-render-task15-matrix/v1"
-P0_MODE_MATRIX_SCHEMA: Final = "xenogears.native-render-p0-mode-matrix/v1"
-P0_BASELINE_FIELDS: Final = (
+# Keep the persisted evidence schema and phase tag stable across API renames.
+MODE_MATRIX_SCHEMA: Final = "xenogears.native-render-p0-mode-matrix/v1"
+MODE_MATRIX_BASELINE_FIELDS: Final = (
     "complete", "overflow", "invalid_ot", "cyclic_ot",
     "field_completeness_mask", "required_field_mask", "visual_scene_epoch",
     "visual_state_sequence", "requested_render_mode", "effective_render_mode",
@@ -52,7 +53,7 @@ P0_BASELINE_FIELDS: Final = (
     "guest_cycle_delta", "cycles_per_vblank", "cycle_digest", "game_digest",
     "camera_actor_digest",
 )
-P0_EQUIVALENCE_FIELDS: Final = (
+MODE_MATRIX_EQUIVALENCE_FIELDS: Final = (
     "complete", "overflow", "invalid_ot", "cyclic_ot",
     "field_completeness_mask", "required_field_mask", "ot_lists", "ot_nodes",
     "ot_words", "ot_digest", "topology_digest", "material_samples",
@@ -65,7 +66,7 @@ P0_EQUIVALENCE_FIELDS: Final = (
 )
 # GTE attribution remains in the baseline evidence, but it is diagnostic-only
 # for the pre-GTE Native render gate.
-P0_ORACLE_ATTRIBUTION_FIELDS: Final = ()
+MODE_MATRIX_ORACLE_ATTRIBUTION_FIELDS: Final = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -969,27 +970,27 @@ def assert_task15_matrix_evidence(evidence: dict[str, object]) -> None:
         raise ValueError("Task 15 matrix is incomplete")
 
 
-def p0_baseline_projection(run: dict[str, object]) -> dict[str, object]:
-    baseline = _mapping(run.get("baseline"), "P0 baseline is missing")
-    if any(field not in baseline for field in P0_BASELINE_FIELDS):
-        raise ValueError("P0 baseline fields are incomplete")
-    projected = {field: baseline[field] for field in P0_BASELINE_FIELDS}
+def mode_matrix_baseline_projection(run: dict[str, object]) -> dict[str, object]:
+    baseline = _mapping(run.get("baseline"), "Mode matrix baseline is missing")
+    if any(field not in baseline for field in MODE_MATRIX_BASELINE_FIELDS):
+        raise ValueError("Mode matrix baseline fields are incomplete")
+    projected = {field: baseline[field] for field in MODE_MATRIX_BASELINE_FIELDS}
     if (projected["complete"] is not True or
             any(projected[field] is not False for field in (
                 "overflow", "invalid_ot", "cyclic_ot", "gte_blocked",
                 "global_vram_serial_overflowed",
             ))):
-        raise ValueError("P0 baseline did not complete cleanly")
+        raise ValueError("Mode matrix baseline did not complete cleanly")
     return projected
 
 
-def p0_baseline_differences(
+def mode_matrix_baseline_differences(
     left: dict[str, object], right: dict[str, object], fields: tuple[str, ...],
 ) -> list[str]:
     return [field for field in fields if left.get(field) != right.get(field)]
 
 
-def build_p0_mode_matrix_evidence(
+def build_mode_matrix_evidence(
     rows: list[dict[str, object]],
 ) -> dict[str, object]:
     by_mode: dict[str, dict[str, object]] = {}
@@ -999,29 +1000,29 @@ def build_p0_mode_matrix_evidence(
             {"render_mode", "runs"},
             {"render_mode", "runs", "determinism"},
         ):
-            raise ValueError("P0 matrix row is not closed")
+            raise ValueError("Mode matrix row is not closed")
         mode = row.get("render_mode")
         runs = row.get("runs")
         if mode not in {"original", "shadow", "native"} or mode in by_mode or not isinstance(runs, list) or len(runs) != 2:
-            raise ValueError("P0 matrix rows are invalid")
+            raise ValueError("Mode matrix rows are invalid")
         baselines = []
         for value in runs:
-            run = _mapping(value, "P0 run is invalid")
+            run = _mapping(value, "Mode matrix run is invalid")
             if set(run) != {
                 "status", "backend", "native_render", "baseline", "cleanup",
             } or run.get("status") != "PASS" or run.get("backend") != "opengl":
-                raise ValueError("P0 run is not closed")
+                raise ValueError("Mode matrix run is not closed")
             if run.get("cleanup") != {
                 "runtime_state_removed": True, "process_reaped": True,
             }:
-                raise ValueError("P0 run cleanup is incomplete")
-            _mapping(run.get("native_render"), "P0 native-render evidence is missing")
-            baseline = _mapping(run.get("baseline"), "P0 run baseline is missing")
-            if set(baseline) != set(P0_BASELINE_FIELDS):
-                raise ValueError("P0 run baseline is not closed")
+                raise ValueError("Mode matrix run cleanup is incomplete")
+            _mapping(run.get("native_render"), "Mode matrix native-render evidence is missing")
+            baseline = _mapping(run.get("baseline"), "Mode matrix run baseline is missing")
+            if set(baseline) != set(MODE_MATRIX_BASELINE_FIELDS):
+                raise ValueError("Mode matrix run baseline is not closed")
             baselines.append(baseline)
-        differences = p0_baseline_differences(
-            baselines[0], baselines[1], P0_BASELINE_FIELDS)
+        differences = mode_matrix_baseline_differences(
+            baselines[0], baselines[1], MODE_MATRIX_BASELINE_FIELDS)
         native_difference = runs[0].get("native_render") != runs[1].get("native_render")
         row["determinism"] = {
             "equal": not differences and not native_difference,
@@ -1031,19 +1032,19 @@ def build_p0_mode_matrix_evidence(
         deterministic = deterministic and row["determinism"]["equal"]
         by_mode[mode] = row
     if set(by_mode) != {"original", "shadow", "native"}:
-        raise ValueError("P0 matrix modes are incomplete")
+        raise ValueError("Mode matrix modes are incomplete")
 
-    original = _mapping(by_mode["original"]["runs"][0]["baseline"], "P0 original baseline is missing")
-    shadow = _mapping(by_mode["shadow"]["runs"][0]["baseline"], "P0 shadow baseline is missing")
-    native = _mapping(by_mode["native"]["runs"][0]["baseline"], "P0 native baseline is missing")
+    original = _mapping(by_mode["original"]["runs"][0]["baseline"], "Mode matrix original baseline is missing")
+    shadow = _mapping(by_mode["shadow"]["runs"][0]["baseline"], "Mode matrix shadow baseline is missing")
+    native = _mapping(by_mode["native"]["runs"][0]["baseline"], "Mode matrix native baseline is missing")
     comparisons = []
     for left_mode, right_mode, required, left, right, fields in (
         ("original", "shadow", True, original, shadow,
-         P0_EQUIVALENCE_FIELDS + P0_ORACLE_ATTRIBUTION_FIELDS),
+         MODE_MATRIX_EQUIVALENCE_FIELDS + MODE_MATRIX_ORACLE_ATTRIBUTION_FIELDS),
         ("original", "native", False, original, native,
-         P0_EQUIVALENCE_FIELDS),
+         MODE_MATRIX_EQUIVALENCE_FIELDS),
     ):
-        differences = p0_baseline_differences(left, right, fields)
+        differences = mode_matrix_baseline_differences(left, right, fields)
         comparisons.append({
             "left": left_mode,
             "right": right_mode,
@@ -1055,7 +1056,7 @@ def build_p0_mode_matrix_evidence(
         comparison["equal"] or not comparison["required"]
         for comparison in comparisons) else "BLOCKED"
     return {
-        "schema": P0_MODE_MATRIX_SCHEMA,
+        "schema": MODE_MATRIX_SCHEMA,
         "phase": "P0",
         "status": status,
         "overlay_mode": "cold",
@@ -1066,26 +1067,26 @@ def build_p0_mode_matrix_evidence(
     }
 
 
-def assert_p0_mode_matrix_evidence(evidence: dict[str, object]) -> None:
+def assert_mode_matrix_evidence(evidence: dict[str, object]) -> None:
     if set(evidence) != {
         "schema", "phase", "status", "overlay_mode", "native_classification",
         "privacy", "rows", "comparisons",
     }:
-        raise ValueError("P0 mode matrix is not closed")
-    if (evidence.get("schema") != P0_MODE_MATRIX_SCHEMA or
+        raise ValueError("Mode matrix is not closed")
+    if (evidence.get("schema") != MODE_MATRIX_SCHEMA or
             evidence.get("phase") != "P0" or
              evidence.get("status") not in {"PASS", "BLOCKED"} or
              evidence.get("overlay_mode") != "cold" or
              evidence.get("native_classification") != "pre-gte" or
             evidence.get("privacy") != {"metadata_only": True, "private_paths": False}):
-        raise ValueError("P0 mode matrix metadata is invalid")
+        raise ValueError("Mode matrix metadata is invalid")
     rows = evidence.get("rows")
     comparisons = evidence.get("comparisons")
     if not isinstance(rows, list) or len(rows) != 3 or not isinstance(comparisons, list) or len(comparisons) != 2:
-        raise ValueError("P0 mode matrix is incomplete")
-    rebuilt = build_p0_mode_matrix_evidence(rows)
+        raise ValueError("Mode matrix is incomplete")
+    rebuilt = build_mode_matrix_evidence(rows)
     if rebuilt != evidence:
-        raise ValueError("P0 mode matrix verdict is inconsistent")
+        raise ValueError("Mode matrix verdict is inconsistent")
 
 
 def _record_environment() -> dict[str, str]:

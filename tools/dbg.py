@@ -13,6 +13,7 @@ CROSS=0xBFFF (49151), SELECT=0xFFFE (65534), CIRCLE=0xDFFF (57343).
 """
 
 import os
+import json
 import socket
 import sys
 
@@ -35,11 +36,11 @@ def main(argv):
             if not data:
                 break
             chunks.append(data)
-            # The DuckStation oracle (4371) keeps the connection open after the
-            # reply; the native server closes it. Stop at the first full line
-            # so both work.
-            if b"\n" in data:
+            try:
+                json.loads(b"".join(chunks))
                 break
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                pass
     sys.stdout.buffer.write(b"".join(chunks))
     if not b"".join(chunks).endswith(b"\n"):
         sys.stdout.buffer.write(b"\n")

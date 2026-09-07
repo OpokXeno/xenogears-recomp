@@ -86,7 +86,7 @@ These masks are post-remapping logical inputs:
 | `0x0008` | R1 | Camera orbit right |
 | `0x0010` | Triangle | Normal menu request |
 | `0x0020` | Circle | Interaction and dialogue confirmation |
-| `0x0040` | Cross | Pause-entry suppression while held |
+| `0x0040` | Cross | Player run modifier; pause-entry suppression while held |
 | `0x0080` | Square | Player movement-trigger action |
 | `0x0100` | Select | Area-map request |
 | `0x0800` | Start | Pause toggle |
@@ -184,6 +184,18 @@ When eligible it:
 
 The handler creates intent only. The common movement and collision pipeline
 commits the position later in the same actor update.
+
+### Walk and run selection
+
+`0x80082BB8` starts with locomotion animation `1` (walk). For the player-controlled
+actor, held logical input `0x0040` (Cross by default) changes the selection to
+animation `2` (run) while ordinary player movement is available. Script-forced
+locomotion flags at `ActorData+0x00` can override that selection.
+
+`0x80081F80` then derives planar displacement. Ordinary field characters use the
+selected animation's root motion through Resident `0x80021FE0`, so walk versus
+run changes both the animation and effective movement speed. `ActorData+0x76`
+is a shared movement scale/divisor, not the run-button state.
 
 ### Current-frame availability
 
@@ -353,6 +365,8 @@ Mount-state application is available only while the map's Gear mode is active.
 | `0x8008110C` | Ordered actor simulation passes |
 | `0x800815F0` | Copy delayed leader state to followers |
 | `0x80081C54` | Record leader history |
+| `0x80081F80` | Derive actor planar displacement from heading and movement mode |
+| `0x80082BB8` | Select player walk/run locomotion and resolve planar movement |
 | `0x8008399C` | Dispatch contact and interaction routines |
 | `0x80087E98` | Change controlled and camera-tracked actor |
 | `0x8008A790` | Find a free party staging slot |

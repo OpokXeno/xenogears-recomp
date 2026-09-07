@@ -15,7 +15,6 @@ from native_render_manifest_model import (
     closed,
     digest,
     fail,
-    hex_value,
     integer,
     text,
 )
@@ -48,7 +47,6 @@ class ArtifactSpec:
     range_offset: int
     range_size: int
     range_identity: Digest32
-    range_crc32: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,8 +121,8 @@ def parse_canonical(raw: ManifestValue) -> CanonicalTuple:
 
 def parse_artifact(raw: ManifestValue) -> ArtifactSpec:
     value = closed(raw, {
-        "file", "full_sha256", "full_crc32", "full_size", "base_address",
-        "range_offset", "range_size", "range_sha256", "range_crc32",
+        "file", "full_sha256", "full_size", "base_address",
+        "range_offset", "range_size", "range_sha256",
     }, "runtime-variants.artifact")
     file_name = value["file"]
     if not isinstance(file_name, str) or Path(file_name).name != file_name:
@@ -133,14 +131,13 @@ def parse_artifact(raw: ManifestValue) -> ArtifactSpec:
         file_name,
         FileIdentity(
             digest(value["full_sha256"], "runtime-variants.artifact.full_sha256"),
-            hex_value(value["full_crc32"], "runtime-variants.artifact.full_crc32", 8),
+            0,
             integer(value["full_size"], "runtime-variants.artifact.full_size", True),
         ),
         address(value["base_address"], "runtime-variants.artifact.base_address"),
         integer(value["range_offset"], "runtime-variants.artifact.range_offset"),
         integer(value["range_size"], "runtime-variants.artifact.range_size", True),
         digest(value["range_sha256"], "runtime-variants.artifact.range_sha256"),
-        hex_value(value["range_crc32"], "runtime-variants.artifact.range_crc32", 8),
     )
     if artifact.range_offset + artifact.range_size > artifact.identity.size:
         fail("runtime artifact range escapes the declared image")
@@ -202,6 +199,10 @@ def parse_variant(raw: ManifestValue) -> RuntimeVariant:
         "resource-initializer-begin", "resource-initializer-writer",
         "resource-initializer-commit", "zoom-initializer-begin",
         "zoom-initializer-writer", "zoom-initializer-commit",
+        "field-tim-begin", "field-tim-clut-upload",
+        "field-tim-image-upload", "field-tim-commit",
+        "field-image-begin", "field-image-upload", "field-image-commit",
+        "field-clut-begin", "field-clut-upload", "field-clut-commit",
     }
     for cutover in cutovers:
         if cutover.handler in lifecycle_handlers:
@@ -209,13 +210,24 @@ def parse_variant(raw: ManifestValue) -> RuntimeVariant:
                 cutover.code_range_start, cutover.code_range_size,
                 cutover.code_range_identity), []).append(cutover.handler)
     for handlers in lifecycle_groups.values():
-        expected = (
-            {"resource-initializer-begin", "resource-initializer-writer",
-             "resource-initializer-commit"}
-            if any(handler.startswith("resource-") for handler in handlers)
-            else {"zoom-initializer-begin", "zoom-initializer-writer",
-                  "zoom-initializer-commit"}
-        )
+        if any(handler.startswith("resource-") for handler in handlers):
+            expected = {"resource-initializer-begin",
+                        "resource-initializer-writer",
+                        "resource-initializer-commit"}
+        elif any(handler.startswith("zoom-initializer-")
+                 for handler in handlers):
+            expected = {"zoom-initializer-begin",
+                        "zoom-initializer-writer",
+                        "zoom-initializer-commit"}
+        elif any(handler.startswith("field-tim-") for handler in handlers):
+            expected = {"field-tim-begin", "field-tim-clut-upload",
+                        "field-tim-image-upload", "field-tim-commit"}
+        elif any(handler.startswith("field-image-") for handler in handlers):
+            expected = {"field-image-begin", "field-image-upload",
+                        "field-image-commit"}
+        else:
+            expected = {"field-clut-begin", "field-clut-upload",
+                        "field-clut-commit"}
         if len(handlers) != len(expected) or set(handlers) != expected:
             fail("runtime initializer lifecycle must contain exact begin/writer/commit")
     model_dispatch_raw = value["model_dispatch_instructions"]
@@ -253,7 +265,7 @@ def parse_native_cutover(raw: ManifestValue) -> NativeCutover:
                    "runtime-variants.native-cutover")
     transfer = text(value["transfer"], "runtime-variants.native-cutover.transfer")
     handler = text(value["handler"], "runtime-variants.native-cutover.handler")
-    if transfer not in {"local", "observe", "return"}:
+    if transfer not in {"local", "observe", "observe-after", "return"}:
         fail("runtime native cutover transfer is unsupported")
     handler_transfers = {
         "actor": "local",
@@ -271,8 +283,21 @@ def parse_native_cutover(raw: ManifestValue) -> NativeCutover:
         "resource-initializer-writer": "observe",
         "resource-initializer-commit": "observe",
         "zoom-initializer-writer": "observe",
+        "field-tim-begin": "observe",
+        "field-tim-clut-upload": "observe",
+        "field-tim-image-upload": "observe",
+        "field-tim-commit": "observe",
+        "field-image-begin": "observe",
+        "field-image-upload": "observe",
+        "field-image-commit": "observe",
+        "field-clut-begin": "observe",
+        "field-clut-upload": "observe",
+        "field-clut-commit": "observe",
     }
-    if handler_transfers.get(handler) != transfer:
+    if (handler == "field-image-upload" and
+            transfer not in {"observe", "observe-after"}) or (
+            handler != "field-image-upload" and
+            handler_transfers.get(handler) != transfer):
         fail("runtime native cutover handler disagrees with transfer")
     cutover = NativeCutover(
         address(value["pc"], "runtime-variants.native-cutover.pc"),

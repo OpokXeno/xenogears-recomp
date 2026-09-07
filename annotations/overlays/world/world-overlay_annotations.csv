@@ -78,9 +78,15 @@
 0x80074E58, function start — WorldMapInitializeAnimatedTextureSet1; initializes the first animated texture set.
 0x80074F04, function start — WorldMapFreeAnimatedTextureSet1; frees the first animated texture set.
 0x80074F2C, function start — WorldMapUpdateAnimatedTextureSet1; advances the first animated texture set.
+0x80074F30, instruction site — begins the first animated-texture upload transaction.
+0x80074FEC, instruction site — stages a selected frame from the first animated-texture set.
+0x80075018, instruction site — commits the first animated-texture update after all due streams are staged.
 0x80075030, function start — WorldMapInitializeAnimatedTextureSet2; initializes the second animated texture set.
 0x800750DC, function start — WorldMapFreeAnimatedTextureSet2; frees the second animated texture set.
 0x80075104, function start — WorldMapUpdateAnimatedTextureSet2; advances the second animated texture set.
+0x80075108, instruction site — begins the second animated-texture upload transaction.
+0x800751E4, instruction site — stages a selected frame from the second animated-texture set.
+0x80075210, instruction site — commits the second animated-texture update after all due streams are staged.
 0x80075228, function start — WorldMapInitializeEncounterSchedule; clears sixteen encounter countdowns, activates one countdown, and sets the travel interval to 384 or 768 movement updates according to World mode.
 0x8007528C, function start — WorldMapUpdateEncounterSchedule; generates distinct countdowns in 1..interval, decrements active countdowns when invoked, and records the number that expire.
 0x80075460, function start — WorldMapSaveRuntimeState; saves transient World Map state.
@@ -261,6 +267,9 @@
 0x80083FE4, function start — WorldMapMode18EffectModelsTaskInit; hides staged models 7 and 8 and initializes both transforms at the mode 18 origin.
 0x80084068, function start — WorldMapMode18EffectModelsTaskUpdate; handles effect-preset commands lowers the emitter spawns the selected particle layers and synchronizes staged models 7 and 8.
 0x8008440C, function start — WorldMapLoadSharedTextureResources; uploads shared textures and generated palette ramps.
+0x80084410, instruction site — authenticated begin seam for generated shared World CLUT publication, before resource ownership changes.
+0x80084508, instruction site — WorldMapLoadSharedTextureResources uploads the generated 256-by-15 CLUT bank at VRAM (0,496).
+0x8008451C, instruction site — authenticated shared CLUT commit seam after DrawSync and before the 16 CLUT IDs are derived.
 0x80084580, function start — WorldMapInitializeModels; creates models, transforms, and collision meshes.
 0x80084770, call site — copies a World Map model packet template.
 0x80084778, return site — resumes after the authenticated model packet copy.
@@ -455,6 +464,9 @@
 0x80097800, function start — WorldMapDispatchTasks; initializes or updates all active tasks.
 0x800978FC, function start — WorldMapCreatePolyFT3Array; allocates terrain triangle packet buffers.
 0x800979C8, function start — WorldMapLoadGroundTextures; builds fogged palettes and uploads ground textures.
+0x800979CC, instruction site — authenticated begin seam for generated terrain CLUT publication, before the loader reads or allocates resources.
+0x80097AC8, instruction site — WorldMapLoadGroundTextures uploads the generated contiguous 256-by-64 terrain CLUT bank at VRAM (0,432).
+0x80097ADC, instruction site — authenticated commit seam after DrawSync and before CLUT IDs are derived.
 0x80097BC0, function start — WorldMapSetupInitialGrid; initializes the streamed grid and water phase.
 0x80097CB8, function start — WorldMapResetStreamingGrid; resets streamed-grid pointers and indices.
 0x80097D64, function start — WorldMapFreeLoadedChunks; frees all loaded World Map chunks.

@@ -484,19 +484,21 @@ struct BattlingHierarchy {
 struct BattlingHierarchyEntry {
     int16_t parent_index;  /* -1 attaches to the hierarchy root */
     int16_t mesh_index;    /* -1 creates a transform-only node */
-    int16_t scale_x;
-    int16_t scale_y;
-    int16_t scale_z;
     int16_t rotation_x;
     int16_t rotation_y;
     int16_t rotation_z;
+    int16_t translation_x;
+    int16_t translation_y;
+    int16_t translation_z;
 };
 ```
 
-Scales use `0x1000 == 1.0`; rotations wrap at `0x1000 == 360 degrees`. For each
-entry, `BattlingModelHierarchyBuild` allocates a render node, optionally binds
-the indexed model part, attaches it to `parent_index` or the root, and copies the
-serialized scale and rotation into the node transform. The resulting tree owns
+Rotations wrap at `0x1000 == 360 degrees`. `BattlingModelHierarchyBuild` copies
+the first triplet to render-node Euler angles `+0x44` and the second triplet to
+translation halfwords `+0x2C`; render-node matrix evaluation passes `+0x44` to
+the resident rotation-matrix builder and promotes `+0x2C` into its translation
+vector. For each entry, the builder allocates a render node, optionally binds
+the indexed model part, and attaches it to `parent_index` or the root. The resulting tree owns
 its runtime nodes and packet allocations while borrowing model, hierarchy, and
 animation bytes from the expanded fighter archive.
 

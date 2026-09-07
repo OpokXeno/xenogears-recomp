@@ -3,9 +3,13 @@
 #include "gpu.h"
 #include "xg_field_render_services.h"
 #include "xg_model_ft4_raw.h"
+#include "xg_render_gear_motion.h"
+#include "xg_render_backend.h"
 #include "xg_render_field_sprite.h"
+#include "xg_render_manifest_generated.h"
 #include "xg_render_primitive_utils.h"
 #include "xg_render_runtime_variant_auth.h"
+#include "xg_render_battle_geometry.h"
 #include "xg_sprite_ft4.h"
 
 #include <limits.h>
@@ -27,10 +31,13 @@ enum {
     FT4_PAYLOAD_UV0 = 1u << 1,
     FT4_PAYLOAD_TPAGE = 1u << 5,
     FT4_PAYLOAD_CLUT = 1u << 6,
+    MODEL_DISPATCH_CALLER_BATTLE = XG_RENDER_MODEL_DISPATCH_CALLER_GEAR_HELPER + 1u,
 };
 
 typedef struct ModelContext {
     XgHost3dProjection projection;
+    XgRenderMotionRef motion;
+    uint32_t motion_part;
     uint32_t instance_address;
     uint32_t model_address;
     uint32_t vertex_base;
@@ -46,6 +53,12 @@ typedef struct ModelContext {
     bool resident_dispatch;
     bool valid;
 } ModelContext;
+
+typedef struct GearHelperMode1Proof {
+    uint32_t caller_window_start;
+    uint32_t return_address;
+    bool armed;
+} GearHelperMode1Proof;
 
 typedef struct ModelFt4Record {
     XgModelFt4RawRecord native;
@@ -76,6 +89,7 @@ typedef struct ModelFt4State {
     uint32_t expected_counter_delta;
     uint32_t descriptor_base;
     uint32_t count;
+    bool pre_scene_staged;
 } ModelFt4State;
 
 typedef struct ModelFt3Record {
@@ -160,6 +174,7 @@ typedef struct SpriteState {
 static ModelFt4State model_ft4;
 static ModelFt3State model_ft3;
 static SpriteState sprite_ft4;
+static GearHelperMode1Proof gear_helper_mode1_proof;
 
 typedef struct XgRenderModelSpriteStageRequest {
     const XgRenderIrNativePrimitive *primitive;
@@ -195,7 +210,7 @@ static const XgRenderModelSpriteRange sprite_code_ranges[] = {
     { UINT32_C(0x8001e9bc), 0x4acu },
     { UINT32_C(0x8001f6b0), 0x0a0u },
     { UINT32_C(0x80024ff4), 0x050u },
-    { UINT32_C(0x8002675c), 0x274u },
+    { UINT32_C(0x8002675c), 0x2b0u },
     { UINT32_C(0x8003f738), 0x178u },
     { UINT32_C(0x8004974c), 0x124u },
     { UINT32_C(0x8004987c), 0x110u },
@@ -320,6 +335,31 @@ static const uint32_t model_dispatch_resident_caller_instructions[] = {
     UINT32_C(0x30e70004),
 };
 
+static const uint32_t model_dispatch_gear_helper_caller_instructions[][13] = {
+    {
+        UINT32_C(0x8fa6004c), UINT32_C(0x8fa80050),
+        UINT32_C(0x8ee30000), UINT32_C(0x00081080),
+        UINT32_C(0x00511021), UINT32_C(0x8c450068),
+        UINT32_C(0x96420000), UINT32_C(0x8fa70048),
+        UINT32_C(0x00021080), UINT32_C(0x00431021),
+        UINT32_C(0x8c440000), UINT32_C(0x0c00b1c0),
+        UINT32_C(0x00000000),
+    },
+    {
+        UINT32_C(0x8fa600f4), UINT32_C(0x8faa00f8),
+        UINT32_C(0x8fc30000), UINT32_C(0x000a1080),
+        UINT32_C(0x00521021), UINT32_C(0x8c450068),
+        UINT32_C(0x96220000), UINT32_C(0x8fa70070),
+        UINT32_C(0x00021080), UINT32_C(0x00431021),
+        UINT32_C(0x8c440000), UINT32_C(0x0c00b1c0),
+        UINT32_C(0x00000000),
+    },
+};
+
+static const uint32_t model_dispatch_gear_helper_returns[] = {
+    UINT32_C(0x801dcd48), UINT32_C(0x801dd43c),
+};
+
 static bool model_dispatch_instruction_window_matches(
         CPUState *cpu, uint32_t start, const uint32_t *instructions,
         uint32_t instruction_count) {
@@ -329,6 +369,114 @@ static bool model_dispatch_instruction_window_matches(
     for (uint32_t index = 0u; index < instruction_count; ++index)
         if (cpu->read_word(start + index * 4u) != instructions[index])
             return false;
+    return true;
+}
+
+static bool model_dispatch_gear_helper_window_matches(
+        CPUState *cpu, uint32_t return_address,
+        uint32_t *out_window_start) {
+    const uint32_t instruction_count = (uint32_t)(
+        sizeof(model_dispatch_gear_helper_caller_instructions[0]) /
+        sizeof(model_dispatch_gear_helper_caller_instructions[0][0]));
+
+    for (uint32_t index = 0u;
+         index < sizeof(model_dispatch_gear_helper_returns) /
+             sizeof(model_dispatch_gear_helper_returns[0]); ++index) {
+        const uint32_t window_start =
+            return_address - instruction_count * 4u;
+
+        if (!physical_address_equals(
+                return_address, model_dispatch_gear_helper_returns[index]) ||
+            !model_dispatch_instruction_window_matches(
+                cpu, window_start,
+                model_dispatch_gear_helper_caller_instructions[index],
+                instruction_count))
+            continue;
+        if (out_window_start != NULL) *out_window_start = window_start;
+        return true;
+    }
+    return false;
+}
+
+static bool normalized_range_contains(
+        uint32_t start, uint32_t size, uint32_t address,
+        uint32_t address_size) {
+    const uint64_t range_start = start & UINT32_C(0x1fffffff);
+    const uint64_t range_end = range_start + size;
+    const uint64_t value_start = address & UINT32_C(0x1fffffff);
+
+    return size != 0u && address_size != 0u &&
+        value_start >= range_start && value_start + address_size <= range_end;
+}
+
+static bool gear_helper_artifact_proof_matches(
+        const PsxXgRenderAuthCandidate *proof, uint32_t caller_window_start,
+        uint32_t return_address) {
+    static const uint32_t instruction_window_size =
+        sizeof(model_dispatch_gear_helper_caller_instructions[0]);
+
+    return proof != NULL && proof->authority_provenance && proof->pair_bound &&
+        proof->pair_id != 0u && !proof->runtime_variant_bound &&
+        physical_address_equals(proof->artifact_base, UINT32_C(0x801dc000)) &&
+        proof->artifact_size == 51200u &&
+        memcmp(proof->artifact_sha256,
+               (const uint8_t[32]){
+                   0x14, 0x39, 0x5a, 0x9f, 0x54, 0xc1, 0x24, 0xfe,
+                   0xd0, 0x16, 0xf0, 0x79, 0x06, 0xcc, 0x88, 0x2b,
+                   0x2a, 0x92, 0x56, 0xd5, 0xad, 0xe2, 0xd1, 0x0e,
+                   0xef, 0x99, 0xe1, 0x0f, 0xe9, 0x36, 0x65, 0x23,
+               }, sizeof(proof->artifact_sha256)) == 0 &&
+        memcmp(proof->identity.game_sha256, xg_render_game_identity,
+               sizeof(proof->identity.game_sha256)) == 0 &&
+        memcmp(proof->identity.manifest_sha256, xg_render_manifest_identity,
+               sizeof(proof->identity.manifest_sha256)) == 0 &&
+        normalized_range_contains(
+            proof->range_start, proof->range_size,
+            caller_window_start, instruction_window_size) &&
+        normalized_range_contains(
+            proof->artifact_base, proof->artifact_size,
+            caller_window_start, instruction_window_size) &&
+        normalized_range_contains(
+            proof->artifact_base, proof->artifact_size,
+            return_address, 4u);
+}
+
+bool xg_render_model_sprite_pipeline_accept_gear_helper_mode1_proof(
+        CPUState *cpu, const PsxXgRenderAuthCandidate *proof) {
+    uint32_t caller_window_start = 0u;
+    const uint32_t return_address = cpu != NULL ? cpu->gpr[31] : 0u;
+
+    gear_helper_mode1_proof = (GearHelperMode1Proof){0};
+    if (cpu == NULL ||
+        cpu->gpr[7] != XG_MODEL_FT4_RAW_DISPATCH_RELIT ||
+        !model_dispatch_gear_helper_window_matches(
+            cpu, return_address, &caller_window_start) ||
+        !gear_helper_artifact_proof_matches(
+            proof, caller_window_start, return_address))
+        return false;
+    gear_helper_mode1_proof = (GearHelperMode1Proof){
+        .caller_window_start = caller_window_start,
+        .return_address = return_address,
+        .armed = true,
+    };
+    return true;
+}
+
+static bool consume_gear_helper_mode1_proof(
+        CPUState *cpu, uint32_t return_address, uint32_t *out_window_start) {
+    const GearHelperMode1Proof proof = gear_helper_mode1_proof;
+    uint32_t caller_window_start = 0u;
+
+    gear_helper_mode1_proof = (GearHelperMode1Proof){0};
+    if (!proof.armed || cpu == NULL ||
+        cpu->gpr[7] != XG_MODEL_FT4_RAW_DISPATCH_RELIT ||
+        !physical_address_equals(return_address, proof.return_address) ||
+        !model_dispatch_gear_helper_window_matches(
+            cpu, return_address, &caller_window_start) ||
+        !physical_address_equals(
+            caller_window_start, proof.caller_window_start))
+        return false;
+    if (out_window_start != NULL) *out_window_start = caller_window_start;
     return true;
 }
 
@@ -367,6 +515,21 @@ static bool model_dispatch_caller_contract_matches(
         sizeof(model_dispatch_resident_caller_instructions[0]));
     uint32_t window_start;
 
+    if (return_address >= 8u &&
+        xg_render_battle_geometry_authorizes_call(return_address - 8u)) {
+        if (out_contract != NULL) *out_contract = MODEL_DISPATCH_CALLER_BATTLE;
+        if (out_window_start != NULL) *out_window_start = return_address - 8u;
+        return true;
+    }
+    if (gear_helper_mode1_proof.armed) {
+        if (consume_gear_helper_mode1_proof(
+                cpu, return_address, &window_start)) {
+            if (out_contract != NULL)
+                *out_contract = XG_RENDER_MODEL_DISPATCH_CALLER_GEAR_HELPER;
+            if (out_window_start != NULL) *out_window_start = window_start;
+            return true;
+        }
+    }
     if (return_address >= resident_count * 4u) {
         window_start = return_address - resident_count * 4u;
         if (model_dispatch_instruction_window_matches(
@@ -393,6 +556,8 @@ static bool model_dispatch_caller_contract_matches(
 static bool model_dispatch_context_contract_matches(
         CPUState *cpu, uint8_t caller_contract,
         uint32_t caller_window_start) {
+    if (caller_contract == MODEL_DISPATCH_CALLER_BATTLE)
+        return xg_render_battle_geometry_authorizes_call(caller_window_start);
     if (caller_contract == XG_RENDER_MODEL_DISPATCH_CALLER_RESIDENT) {
         return model_dispatch_instruction_window_matches(
             cpu, caller_window_start,
@@ -412,6 +577,24 @@ static bool model_dispatch_context_contract_matches(
                 model_dispatch_instruction_window_matches(
                     cpu, caller_window_start, contract.instructions,
                     contract.instruction_count))
+                return true;
+        }
+    }
+    if (caller_contract == XG_RENDER_MODEL_DISPATCH_CALLER_GEAR_HELPER) {
+        for (uint32_t index = 0u;
+             index < sizeof(model_dispatch_gear_helper_caller_instructions) /
+                 sizeof(model_dispatch_gear_helper_caller_instructions[0]);
+             ++index) {
+            if (physical_address_equals(
+                    caller_window_start,
+                    model_dispatch_gear_helper_returns[index] -
+                        sizeof(model_dispatch_gear_helper_caller_instructions[0])) &&
+                model_dispatch_instruction_window_matches(
+                    cpu, caller_window_start,
+                    model_dispatch_gear_helper_caller_instructions[index],
+                    (uint32_t)(
+                        sizeof(model_dispatch_gear_helper_caller_instructions[0]) /
+                        sizeof(model_dispatch_gear_helper_caller_instructions[0][0]))))
                 return true;
         }
     }
@@ -455,7 +638,8 @@ static void watch_resource(
 
 static void clear_model_ft4_pending(void) {
     if (!model_ft4.context.valid && !model_ft4.snapshot.pending &&
-        model_ft4.count == 0u)
+        model_ft4.context.caller_contract == XG_RENDER_MODEL_DISPATCH_CALLER_NONE &&
+        model_ft4.count == 0u && !model_ft4.pre_scene_staged)
         return;
     model_ft4.context = (ModelContext){0};
     model_ft4.initial_packet_cursor = 0u;
@@ -463,10 +647,13 @@ static void clear_model_ft4_pending(void) {
     model_ft4.expected_counter_delta = 0u;
     model_ft4.descriptor_base = 0u;
     model_ft4.count = 0u;
+    model_ft4.pre_scene_staged = false;
     model_ft4.snapshot.pending = false;
 }
 
 static void block_model_ft4(uint32_t blocker) {
+    if (model_ft4.pre_scene_staged)
+        xg_render_submission_pre_scene_block(blocker, true);
     clear_model_ft4_pending();
     model_ft4.snapshot.blocked = true;
     if (model_ft4.snapshot.blocker == 0u) model_ft4.snapshot.blocker = blocker;
@@ -687,6 +874,253 @@ void xg_render_model_sprite_pipeline_observe_ft3_template(
         cpu != NULL ? cpu->gpr[4] : 0u, render_mode, services);
 }
 
+static bool capture_field_motion(CPUState *cpu, ModelContext *context,
+                                 const XgRenderModelSpritePipelineServices *services) {
+    XgRenderMotionSource source;
+    XgRenderMotionPose pose = {0};
+    XgHost3dMatrix local, camera, extra, combined;
+    xg_render_motion_note(XG_MOTION_FIELD_CAPTURE,cpu->gpr[31]);
+    if (services == NULL || services->motion_source == NULL || services->lifecycle == NULL ||
+        services->lifecycle->guest_data_range_is_valid == NULL ||
+        !physical_address_equals(cpu->gpr[31], UINT32_C(0x8007519c)) ||
+        !services->motion_source(UINT32_C(0x800748e8), &source)) {
+        xg_render_motion_note(XG_MOTION_FIELD_CALLER_REJECT,cpu->gpr[31]);
+        return false;
+    }
+    const uint32_t base = cpu->read_word(0x800afb10u);
+    const uint32_t count = cpu->read_word(0x800afb0cu);
+    const uint32_t record = cpu->gpr[17]; /* s1, not s0 (shared wrapper). */
+    const uint32_t index = cpu->gpr[22];
+    if (count > 4096 || index >= count || base > UINT32_MAX - index * 0x5cu ||
+        !physical_address_equals(record, base + index * 0x5cu) ||
+        !services->lifecycle->guest_data_range_is_valid(record, 0x5c, 4, false) ||
+        !services->lifecycle->guest_data_range_is_valid(context->model_address, 0x38, 4, false))
+        return false;
+    const uint32_t flags = cpu->read_half(record + 0x58);
+    if ((flags & (0x60u | 3u | 0x2000u)) || cpu->read_word(record) != cpu->gpr[16]) {
+        xg_render_motion_note(XG_MOTION_FIELD_UNSUPPORTED,record);
+        return false;
+    }
+    if (!xg_render_runtime_capture_matrix(cpu, 0x800afa64u, &camera))
+        return false;
+    const uint32_t actor_count = cpu->read_word(0x800adbfcu);
+    XgHost3dMatrix locals[XG_RENDER_MOTION_NODE_CAPACITY];
+    uint32_t chain[XG_RENDER_MOTION_NODE_CAPACITY], depth = 0, current = index;
+    for (;;) {
+        if (depth == XG_RENDER_MOTION_NODE_CAPACITY || current >= count ||
+            base > UINT32_MAX - current * 0x5cu)
+            return false;
+        const uint32_t node_address = base + current * 0x5cu;
+        if (!services->lifecycle->guest_data_range_is_valid(node_address, 0x5c, 4, false) ||
+            !xg_render_runtime_capture_matrix(cpu, node_address + 0xc, &locals[depth]))
+            return false;
+        chain[depth++] = node_address;
+        const uint32_t node_flags = cpu->read_half(node_address + 0x58);
+        /* A sprite parent copies local -> +2c and skips model hierarchy work. */
+        if (current >= actor_count || (node_flags & 0x40u))
+            break;
+        const uint32_t state = cpu->read_word(node_address + 0x4c);
+        if (!services->lifecycle->guest_data_range_is_valid(state, 0x130, 4, false) ||
+            cpu->read_half(state + 0x128) != 0xffff || (cpu->read_word(state + 0x12c) & 3u))
+            return false;
+        const uint32_t parent = cpu->read_byte(state + 0x75);
+        if (parent == 0xff)
+            break;
+        /* Later records contain last-frame caches; they are not a current local pose. */
+        if (parent >= current)
+            return false;
+        current = parent;
+    }
+    pose.node_count = depth;
+    pose.translation_stage = XG_RENDER_MOTION_TRANSLATION_FIELD;
+    XgHost3dMatrix accumulated = locals[depth - 1];
+    XgHost3dMatrix canonical_accumulated;
+    for (uint32_t j = 0; j < depth; ++j) {
+        const uint32_t reversed = depth - 1 - j;
+        XgRenderMotionNode *node = &pose.nodes[j];
+        node->id = chain[reversed] & 0x1fffffffu;
+        node->parent = (int32_t)j - 1;
+        /* MATRIX.t is stored as s32, but every local RHS reaches GTE V0 as
+         * signed 16-bit. Keep raw locals for the original cache validation. */
+        XgHost3dMatrix effective = locals[reversed];
+        for (unsigned axis = 0; axis < 3; ++axis) {
+            effective.translation[axis] =
+                xg_render_motion_s16_translation(effective.translation[axis]);
+            if (effective.translation[axis] != locals[reversed].translation[axis])
+                xg_render_motion_note(XG_MOTION_TRANSLATION_CANONICALIZED, chain[reversed]);
+        }
+        node->translation_s16 = 1;
+        if (!xg_render_motion_decompose(&effective, &node->local))
+            return false;
+        if (!j)
+            canonical_accumulated = effective;
+        else if (j + 1 < depth && !xg_host_3d_comp_matrix(&canonical_accumulated, &effective,
+                                                          &canonical_accumulated))
+            return false;
+        if (j && j + 1 < depth &&
+            !xg_host_3d_comp_matrix(&accumulated, &locals[reversed], &accumulated))
+            return false;
+        if (j + 1 < depth) {
+            /* Field renders (camera * parent cache) * leaf, not camera *
+             * s16(final leaf world matrix). An additional parent-cache wrap
+             * is a discontinuity unless canonical locals reproduce it. */
+            for (unsigned axis = 0; axis < 3; ++axis)
+                if (canonical_accumulated.translation[axis] !=
+                    xg_render_motion_s16_translation(accumulated.translation[axis]))
+                    pose.discontinuity = 1;
+            XgHost3dMatrix cached;
+            if (!xg_render_runtime_capture_matrix(cpu, chain[reversed] + 0x2c, &cached) ||
+                memcmp(cached.rotation, accumulated.rotation, sizeof(cached.rotation)) ||
+                memcmp(cached.translation, accumulated.translation, sizeof(cached.translation)))
+                return false;
+        }
+    }
+    local = locals[0];
+    if (depth == 1) {
+        if (!xg_render_runtime_capture_matrix(cpu, 0x800afc30u, &extra) ||
+            !xg_host_3d_comp_matrix(&camera, &extra, &camera) ||
+            !xg_host_3d_comp_matrix(&camera, &local, &combined))
+            return false;
+    } else {
+        XgHost3dMatrix parent_view;
+        if (!xg_host_3d_comp_matrix(&camera, &accumulated, &parent_view) ||
+            !xg_host_3d_comp_matrix(&parent_view, &local, &combined))
+            return false;
+    }
+    if (memcmp(combined.rotation, context->projection.rotation, sizeof(combined.rotation)) ||
+        memcmp(combined.translation, context->projection.translation,
+               sizeof(combined.translation)) ||
+        !xg_render_motion_camera_from_view(&camera, &pose.camera)) {
+        xg_render_motion_note(XG_MOTION_FIELD_MATRIX_REJECT,record);
+        return false;
+    }
+    const uint32_t vertices = cpu->read_half(context->model_address + 2);
+    const uint32_t groups = cpu->read_half(context->model_address + 6);
+    uint32_t end = context->topology_base;
+    if (!vertices || groups > 256 ||
+        !services->lifecycle->guest_data_range_is_valid(context->vertex_base, vertices * 8, 4,
+                                                        false))
+        return false;
+    for (uint32_t i = 0; i < groups; ++i) {
+        if (!services->lifecycle->guest_data_range_is_valid(end, 4, 2, false))
+            return false;
+        const uint32_t bytes = 4u + cpu->read_half(end + 2) * 8u;
+        if (end > UINT32_MAX - bytes ||
+            !services->lifecycle->guest_data_range_is_valid(end, bytes, 2, false))
+            return false;
+        end += bytes;
+    }
+    const uint32_t key[4] = {context->model_address, context->vertex_base, context->topology_base,
+                             vertices};
+    pose.entity_id = UINT64_C(0x4649454c00000000) | (record & 0x1fffffffu);
+    pose.geometry_id = xg_render_resource_digest(key, sizeof(key));
+    pose.geometry_generation = 1;
+    pose.camera_id = depth == 1 ? UINT64_C(0x4649454c800afc30) : UINT64_C(0x4649454c800afa64);
+    pose.geometry_scale = 1;
+    context->motion_part = depth - 1;
+    pose.nodes[context->motion_part].source_model_to_view = combined;
+    pose.nodes[context->motion_part].source_matrix_valid = 1;
+    pose.screen_offset[0] = context->projection.screen_offset_x / 65536.0;
+    pose.screen_offset[1] = context->projection.screen_offset_y / 65536.0;
+    pose.projection_distance = context->projection.projection_distance;
+    if (pose.discontinuity)
+        xg_render_motion_note(XG_MOTION_TRANSLATION_STAGE_DISCRETE,record);
+    if (!xg_render_motion_publish(&source, &pose, &context->motion))
+        return false;
+    const uint32_t addresses[4] = {record, context->model_address, context->vertex_base,
+                                   context->topology_base};
+    const uint32_t sizes[4] = {4, 0x38, vertices * 8, end - context->topology_base};
+    for (unsigned i = 0; i < 4; ++i) {
+        if (!sizes[i])
+            continue;
+        if (!xg_render_motion_watch(context->motion, addresses[i], sizes[i]))
+            return false;
+        watch_resource(services, addresses[i], sizes[i]);
+    }
+    return true;
+}
+
+static void bind_model_motion(uint32_t packet, const XgHost3dVector *vertices,
+                              const uint32_t *indices, uint32_t count, uint32_t attribute,
+                              bool triangle) {
+    const ModelContext *context = &model_ft4.context;
+    const uint8_t split[2][3] = {{0, 1, 2}, {2, 1, 3}};
+    XgRenderMotionDrawBinding binding = {.motion = context->motion,
+                                         .motion_part_index = context->motion_part,
+                                         .triangle_count = count == 3 ? 1u : 2u};
+    if (!context->motion.handle.resource_id)
+        return;
+    for (uint32_t t = 0; t < binding.triangle_count; ++t)
+        for (unsigned v = 0; v < 3; ++v) {
+            binding.local[t][v] = vertices[split[t][v]];
+            binding.local[t][v].pad = 0;
+            binding.vertex_ids[t][v] = indices[split[t][v]];
+        }
+    (void)xg_render_motion_register_command(
+        packet + 4, &binding, context->instance_address & 0x1fffffffu,
+        (attribute & 0x1fffffffu) | ((uint32_t)(context->dispatch_mode & 7u) << 29u) |
+            (triangle ? 1u : 0u));
+}
+
+/* Capture the whole local geometry binding at model entry. This also covers
+ * average-depth FT3, whose endpoint source lane finishes at capture_ft3_link. */
+static void capture_motion_bindings(CPUState *cpu,
+                                    const XgRenderModelSpritePipelineServices *services) {
+    ModelContext *context = &model_ft4.context;
+    uint32_t topology = context->topology_base, attribute = context->material_base;
+    uint32_t packet = context->packet_base;
+    uint16_t tpage = context->tpage, clut = context->clut;
+    if (!context->motion.handle.resource_id || !services || !services->lifecycle ||
+        !services->lifecycle->guest_data_range_is_valid)
+        return;
+    const uint32_t count = cpu->read_half(context->model_address + 6);
+    const uint32_t vertex_count = cpu->read_half(context->model_address + 2);
+    for (uint32_t g = 0; g < count; ++g) {
+        const uint32_t family = cpu->read_byte(topology), n = cpu->read_half(topology + 2);
+        if ((family != 5 && family != 13) ||
+            !services->lifecycle->guest_data_range_is_valid(topology, 4 + n * 8, 2, false)) {
+            xg_render_motion_note(XG_MOTION_BIND_GEOMETRY_UNSUPPORTED,family);
+            goto fail;
+        }
+        for (uint32_t p = 0; p < n; ++p) {
+            XgHost3dVector vertices[4] = {0};
+            uint32_t indices[4] = {0};
+            const uint32_t size = family == 5 ? 3u : 4u;
+            if (!consume_controls(cpu, &attribute, &tpage, &clut))
+                goto fail;
+            for (uint32_t v = 0; v < size; ++v) {
+                indices[v] = cpu->read_half(topology + 4 + p * 8 + v * 2);
+                if (indices[v] >= vertex_count)
+                    goto fail;
+                const uint32_t address = context->vertex_base + indices[v] * 8;
+                if (!services->lifecycle->guest_data_range_is_valid(address, 8, 4, false))
+                    goto fail;
+                const uint32_t xy = cpu->read_word(address), z = cpu->read_word(address + 4);
+                vertices[v] = (XgHost3dVector){low_s16(xy), low_s16(xy >> 16), low_s16(z), 0};
+            }
+            const XgRenderModelFt4Template *material =
+                xg_render_model_repository_find_packet_template(packet, GUEST_RENDER_RENDER_NATIVE,
+                                                                services->repository);
+            const uint32_t descriptor =
+                material && material->descriptor_address ? material->descriptor_address : attribute;
+            bind_model_motion(packet, vertices, indices, size, descriptor, family == 5);
+            packet += family == 5 ? 0x20 : 0x28;
+            attribute += family == 5 ? 8 : 12;
+        }
+        topology += 4 + n * 8;
+    }
+    return;
+fail:
+    if (context->caller_contract == XG_RENDER_MODEL_DISPATCH_CALLER_GEAR_HELPER) {
+        const XgRenderMotionPose *pose;
+        if (xg_render_motion_view(context->motion, &pose))
+            xg_render_motion_forget_entity(pose->entity_id);
+    }
+    xg_render_motion_forget_range(context->packet_base,
+                                  cpu->read_word(context->model_address + 0x34));
+    context->motion = (XgRenderMotionRef){0};
+}
+
 void xg_render_model_sprite_pipeline_model_begin(
         CPUState *cpu, GuestRenderRenderMode render_mode,
         const XgRenderModelSpritePipelineServices *services) {
@@ -716,6 +1150,16 @@ void xg_render_model_sprite_pipeline_model_begin(
         clear_model_ft3_pending();
         return;
     }
+    if (caller_contract == MODEL_DISPATCH_CALLER_BATTLE) {
+        clear_model_ft4_pending();
+        clear_model_ft3_pending();
+        model_ft4.context.caller_contract = MODEL_DISPATCH_CALLER_BATTLE;
+        ++model_ft4.snapshot.dispatch_begin_count;
+        model_ft4.snapshot.last_dispatch_caller = cpu != NULL ? cpu->gpr[31] : 0u;
+        model_ft4.snapshot.last_dispatch_mode = cpu != NULL ? cpu->gpr[7] : 0u;
+        (void)xg_render_battle_geometry_capture(cpu, services ? services->lifecycle : NULL);
+        return;
+    }
     if (model_ft4.snapshot.blocked) return;
     if (model_ft4.snapshot.pending) {
         block_model_ft4(70u);
@@ -738,7 +1182,9 @@ void xg_render_model_sprite_pipeline_model_begin(
         return;
     }
     if (cpu->gpr[7] != XG_MODEL_FT4_RAW_DISPATCH_AVERAGE &&
-        cpu->gpr[7] != XG_MODEL_FT4_RAW_DISPATCH_FARTHEST) {
+        cpu->gpr[7] != XG_MODEL_FT4_RAW_DISPATCH_FARTHEST &&
+        (cpu->gpr[7] != XG_MODEL_FT4_RAW_DISPATCH_RELIT ||
+         caller_contract != XG_RENDER_MODEL_DISPATCH_CALLER_GEAR_HELPER)) {
         ++model_ft4.snapshot.dispatch_mode_reject_count;
         return;
     }
@@ -747,7 +1193,8 @@ void xg_render_model_sprite_pipeline_model_begin(
     context.packet_base = cpu->gpr[5];
     context.ot_base = cpu->gpr[6];
     if (!word_address_is_valid(context.model_address) ||
-        !word_address_is_valid(context.model_address + 0x14u) ||
+        context.model_address > UINT32_MAX - 0x34u ||
+        !word_address_is_valid(context.model_address + 0x34u) ||
         !word_address_is_valid(context.packet_base) ||
         !word_address_is_valid(context.ot_base)) {
         block_model_ft4(72u);
@@ -756,6 +1203,9 @@ void xg_render_model_sprite_pipeline_model_begin(
     context.vertex_base = cpu->read_word(context.model_address + 8u);
     context.topology_base = cpu->read_word(context.model_address + 0x10u);
     context.material_base = cpu->read_word(context.model_address + 0x14u);
+    /* A reused output buffer must not inherit an older eligible instance's pose. */
+    xg_render_motion_forget_range(context.packet_base,
+        cpu->read_word(context.model_address + 0x34u));
     model_ft4.snapshot.last_model_address = context.model_address;
     model_ft4.snapshot.last_topology_base = context.topology_base;
     model_ft4.snapshot.last_material_base = context.material_base;
@@ -766,26 +1216,28 @@ void xg_render_model_sprite_pipeline_model_begin(
         return;
     }
     xg_render_runtime_capture_shadow_projection(cpu, &context.projection);
-    if (!xg_render_runtime_stack_address_is_valid(cpu->gpr[29]) ||
-        !xg_render_runtime_capture_matrix(
-            cpu, cpu->gpr[29] + matrix_stack_offset, &matrix)) {
-        block_model_ft4(71u);
-        return;
+    if (caller_contract != XG_RENDER_MODEL_DISPATCH_CALLER_GEAR_HELPER) {
+        if (!xg_render_runtime_stack_address_is_valid(cpu->gpr[29]) ||
+            !xg_render_runtime_capture_matrix(
+                cpu, cpu->gpr[29] + matrix_stack_offset, &matrix)) {
+            block_model_ft4(71u);
+            return;
+        }
+        if (memcmp(context.projection.rotation, matrix.rotation,
+                   sizeof(context.projection.rotation)) != 0)
+            matrix_mismatch_mask |= 1u;
+        if (memcmp(context.projection.translation, matrix.translation,
+                   sizeof(context.projection.translation)) != 0)
+            matrix_mismatch_mask |= 2u;
+        model_ft4.snapshot.last_projection_matrix_mismatch_mask =
+            matrix_mismatch_mask;
+        if (matrix_mismatch_mask != 0u)
+            ++model_ft4.snapshot.projection_matrix_mismatch_count;
+        memcpy(context.projection.rotation, matrix.rotation,
+               sizeof(context.projection.rotation));
+        memcpy(context.projection.translation, matrix.translation,
+               sizeof(context.projection.translation));
     }
-    if (memcmp(context.projection.rotation, matrix.rotation,
-               sizeof(context.projection.rotation)) != 0)
-        matrix_mismatch_mask |= 1u;
-    if (memcmp(context.projection.translation, matrix.translation,
-               sizeof(context.projection.translation)) != 0)
-        matrix_mismatch_mask |= 2u;
-    model_ft4.snapshot.last_projection_matrix_mismatch_mask =
-        matrix_mismatch_mask;
-    if (matrix_mismatch_mask != 0u)
-        ++model_ft4.snapshot.projection_matrix_mismatch_count;
-    memcpy(context.projection.rotation, matrix.rotation,
-           sizeof(context.projection.rotation));
-    memcpy(context.projection.translation, matrix.translation,
-           sizeof(context.projection.translation));
     context.tpage = cpu->read_half(UINT32_C(0x80059308));
     context.clut = cpu->read_half(UINT32_C(0x8005930c));
     context.dispatch_mode = (uint8_t)cpu->gpr[7];
@@ -794,7 +1246,15 @@ void xg_render_model_sprite_pipeline_model_begin(
     context.resident_dispatch =
         caller_contract == XG_RENDER_MODEL_DISPATCH_CALLER_RESIDENT;
     context.valid = true;
+    if (render_mode == GUEST_RENDER_RENDER_NATIVE) {
+        if (caller_contract == XG_RENDER_MODEL_DISPATCH_CALLER_GEAR_HELPER) {
+            if (!xg_render_gear_motion_bind(cpu,&context.motion,&context.motion_part))
+                context.motion=(XgRenderMotionRef){0};
+        } else if (!capture_field_motion(cpu,&context,services))
+            context.motion=(XgRenderMotionRef){0};
+    }
     model_ft4.context = context;
+    capture_motion_bindings(cpu,services);
 }
 
 static bool apply_ft4_material(
@@ -985,6 +1445,9 @@ static bool prepare_model_ft4(
                     memcpy(record->uv, material->uv, sizeof(record->uv));
                     record->tpage = material->tpage;
                     record->clut = material->clut;
+                    source.material_word = record->material_word;
+                    source.relit_color_source =
+                        XG_MODEL_FT4_RAW_RELIT_COLOR_CAPTURED;
                     ++model_ft4.snapshot.template_hit_count;
                     if (!apply_ft4_material(&source, record)) {
                         model_ft4.snapshot.prepare_failure_detail = 6u;
@@ -992,14 +1455,20 @@ static bool prepare_model_ft4(
                     }
                 } else {
                     ++model_ft4.snapshot.template_miss_count;
-                    if (!capture_ft4_packet_material(
-                            cpu, source.packet_address, &source, record) &&
-                        !decode_ft4_material(
-                            cpu, attribute_address, tpage, clut, &source,
-                            record)) {
+                    if (capture_ft4_packet_material(
+                            cpu, source.packet_address, &source, record)) {
+                        source.relit_color_source =
+                            XG_MODEL_FT4_RAW_RELIT_COLOR_CAPTURED;
+                    } else if (decode_ft4_material(
+                                   cpu, attribute_address, tpage, clut,
+                                   &source, record)) {
+                        source.relit_color_source =
+                            XG_MODEL_FT4_RAW_RELIT_COLOR_RESOLVED;
+                    } else {
                         model_ft4.snapshot.prepare_failure_detail = 6u;
                         return false;
                     }
+                    source.material_word = record->material_word;
                 }
                 for (uint32_t vertex = 0u; vertex < 4u; ++vertex) {
                     const uint32_t index = cpu->read_half(
@@ -1018,6 +1487,8 @@ static bool prepare_model_ft4(
                     model_ft4.snapshot.prepare_failure_detail = 7u;
                     return false;
                 }
+                bind_model_motion(record->packet_address, source.vertices,
+                    record->source_vertex_indices, 4, record->attribute_address, false);
                 for (uint32_t triangle = 0u; triangle < 2u; ++triangle) {
                     for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
                         XgRenderIrVertex *destination =
@@ -1087,6 +1558,23 @@ static bool stage_request(
     return services->stage_pre_scene(&record);
 }
 
+static bool discard_staged_model_ft4_record(const ModelFt4Record *record) {
+    XgRenderPreScenePrimitive key = {0};
+
+    if (record == NULL) return false;
+    if (record->native.accepted) {
+        key.packet_address = record->packet_address;
+    } else if (xg_render_primitive_all_projective(
+                   &record->native.primitive)) {
+        key.interpolation_producer_id = record->interpolation_producer_id;
+        key.interpolation_primitive_id = record->interpolation_primitive_id;
+        key.temporal_only = true;
+    } else {
+        return true;
+    }
+    return xg_render_submission_pre_scene_discard(&key);
+}
+
 static bool stage_model_ft4(
         CPUState *cpu, GuestRenderRenderMode render_mode,
         const XgRenderModelSpritePipelineServices *services) {
@@ -1131,6 +1619,8 @@ static bool stage_model_ft4(
             model_ft4.context.dispatch_mode ==
                 XG_MODEL_FT4_RAW_DISPATCH_AVERAGE ||
             model_ft4.context.dispatch_mode ==
+                XG_MODEL_FT4_RAW_DISPATCH_RELIT ||
+            model_ft4.context.dispatch_mode ==
                 XG_MODEL_FT4_RAW_DISPATCH_AVERAGE_DEPTH_CUE;
         const GpuRenderTemporalCullPolicy temporal_cull = {
             .flags = GPU_RENDER_TEMPORAL_CULL_PROJECTIVE |
@@ -1163,6 +1653,8 @@ static bool stage_model_ft4(
         record->interpolation_producer_id = producer_id;
         record->interpolation_primitive_id = primitive_id;
         record->interpolation_identity_valid = identity_valid;
+        /* Native Work publishes only the validated endpoint at handler exit. */
+        if (xg_render_submission_native_work_mode()) continue;
         if (!record->native.accepted) {
             if (!identity_valid || !xg_render_primitive_all_projective(
                     &record->native.primitive))
@@ -1178,6 +1670,7 @@ static bool stage_model_ft4(
                 block_model_ft4(78u);
                 return false;
             }
+            model_ft4.pre_scene_staged = true;
             continue;
         }
         if (!stage_request(services, &(XgRenderModelSpriteStageRequest){
@@ -1194,6 +1687,7 @@ static bool stage_model_ft4(
             block_model_ft4(78u);
             return false;
         }
+        model_ft4.pre_scene_staged = true;
     }
     ++model_ft4.snapshot.native_cutover_count;
     model_ft4.snapshot.native_primitive_count += accepted_count;
@@ -1202,7 +1696,6 @@ static bool stage_model_ft4(
 
 void xg_render_model_sprite_pipeline_observe_ft4_guest_pass(
         CPUState *cpu, bool average_mode) {
-    static const uint8_t split[2][3] = {{0u, 1u, 2u}, {2u, 1u, 3u}};
     uint32_t descriptor_base;
     uint32_t next_descriptor;
     uint32_t descriptor_offset;
@@ -1215,7 +1708,9 @@ void xg_render_model_sprite_pipeline_observe_ft4_guest_pass(
         cpu->read_word == NULL)
         return;
     if ((average_mode && model_ft4.context.dispatch_mode !=
-             XG_MODEL_FT4_RAW_DISPATCH_AVERAGE) ||
+             XG_MODEL_FT4_RAW_DISPATCH_AVERAGE &&
+         model_ft4.context.dispatch_mode !=
+             XG_MODEL_FT4_RAW_DISPATCH_RELIT) ||
         (!average_mode && model_ft4.context.dispatch_mode !=
              XG_MODEL_FT4_RAW_DISPATCH_FARTHEST)) {
         block_model_ft4(79u);
@@ -1276,23 +1771,34 @@ void xg_render_model_sprite_pipeline_observe_ft4_guest_pass(
         record->observed_xy[vertex] = average_mode
             ? cpu->gpr[9u + vertex]
             : cpu->read_word(record->packet_address + 8u + vertex * 8u);
-        record->native.vertices[vertex].x =
-            low_s16(record->observed_xy[vertex]);
-        record->native.vertices[vertex].y =
-            low_s16(record->observed_xy[vertex] >> 16u);
     }
-    for (uint32_t triangle = 0u; triangle < 2u; ++triangle) {
-        for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
-            const uint32_t source = split[triangle][vertex];
-            XgRenderIrVertex *destination =
-                &record->native.primitive.triangles[triangle].vertices[vertex];
-            destination->x =
-                (int32_t)low_s16(record->observed_xy[source]) * INT32_C(65536);
-            destination->y =
-                (int32_t)low_s16(record->observed_xy[source] >> 16u) *
-                INT32_C(65536);
-        }
+}
+
+static bool publish_model_endpoint(const XgRenderIrNativePrimitive *primitive,
+    uint32_t command_id, uint32_t producer_id, uint32_t primitive_id) {
+    if (!xg_render_submission_native_work_mode()) return true;
+    if (model_ft4.context.motion.handle.resource_id != 0u) {
+        GpuRenderSemantic semantic;
+        const XgRenderMotionPose *pose;
+        if (!xg_render_motion_view(model_ft4.context.motion, &pose) ||
+            xg_render_backend_translate_primitive(primitive, &semantic) !=
+                XG_RENDER_BACKEND_OK)
+            return false;
+        /* Pose continuity is not the submission service's interpolation epoch. */
+        xg_render_semantic_set_interpolation_identity(
+            &semantic, pose->continuity_generation, producer_id, primitive_id);
+        return xg_render_submission_stage_exact(
+            (GpuRenderTransactionId){0}, command_id, &semantic) ==
+            GUEST_RENDER_TRANSACTION_OK;
     }
+    return xg_render_submission_pre_scene_stage(&(XgRenderPreScenePrimitive){
+        .primitive = *primitive,
+        .packet_address = command_id - 4u,
+        .source_primitive_index = command_id,
+        .interpolation_producer_id = producer_id,
+        .interpolation_primitive_id = primitive_id,
+        .interpolation_identity_valid = producer_id != 0u,
+    });
 }
 
 static bool publish_model_ft4(
@@ -1320,6 +1826,8 @@ static bool publish_model_ft4(
                     .register_replay = true,
                 }, services->repository))
             return false;
+        if (!publish_model_endpoint(&source.primitive,source.source_id,
+            source.interpolation_producer_id,source.interpolation_primitive_id)) return false;
         ++model_ft4.snapshot.publish_source_count;
     }
     return true;
@@ -1353,10 +1861,15 @@ static void finish_model_ft4(
             bool last_in_bucket = true;
             tag_matches = cpu->read_word(record->packet_address) ==
                 record->expected_tag;
-            for (uint32_t vertex = 0u; vertex < 4u; ++vertex)
+            for (uint32_t vertex = 0u; vertex < 4u; ++vertex) {
                 geometry_matches &= cpu->read_word(
                     record->packet_address + 8u + vertex * 8u) ==
                     record->observed_xy[vertex];
+                geometry_matches &= record->native.vertices[vertex].x ==
+                        low_s16(record->observed_xy[vertex]) &&
+                    record->native.vertices[vertex].y ==
+                        low_s16(record->observed_xy[vertex] >> 16u);
+            }
             for (uint32_t later = index + 1u; later < model_ft4.count; ++later) {
                 if (model_ft4.records[later].guest_observed_accepted &&
                     model_ft4.records[later].native.ordering_bucket ==
@@ -1406,6 +1919,19 @@ static void finish_model_ft4(
         ++model_ft4.snapshot.mismatch_count;
     }
     if (render_mode == GUEST_RENDER_RENDER_NATIVE) {
+        for (uint32_t index = 0u; index < model_ft4.count; ++index) {
+            const ModelFt4Record *record = &model_ft4.records[index];
+            const bool output_matches =
+                record->native.accepted == record->guest_observed_accepted &&
+                (!record->guest_observed_accepted || record->output_validated);
+
+            if (!xg_render_submission_native_work_mode() &&
+                (!framing_matches || !output_matches) &&
+                !discard_staged_model_ft4_record(record)) {
+                block_model_ft4(82u);
+                return;
+            }
+        }
         if (framing_matches) {
             ++model_ft4.snapshot.publish_invocation_count;
             if (!publish_model_ft4(services)) {
@@ -1710,6 +2236,8 @@ static bool prepare_model_ft3(
                     model_ft3.snapshot.prepare_failure_detail = 7u;
                     return false;
                 }
+                bind_model_motion(packet, vertices, record->source_vertex_indices,
+                    3, record->attribute_address, true);
                 for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
                     XgRenderIrVertex *destination =
                         &record->primitive.triangles[0].vertices[vertex];
@@ -1819,6 +2347,7 @@ static bool stage_model_ft3(
         record->interpolation_producer_id = producer_id;
         record->interpolation_primitive_id = primitive_id;
         record->interpolation_identity_valid = identity_valid;
+        if (xg_render_submission_native_work_mode()) continue;
         if (!record->accepted) {
             if (!identity_valid ||
                 !xg_render_primitive_all_projective(&record->primitive))
@@ -1911,14 +2440,7 @@ void xg_render_model_sprite_pipeline_observe_ft3_guest_pass(CPUState *cpu) {
         record->guest_observed_accepted = true;
     }
     for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
-        XgRenderIrVertex *destination =
-            &record->primitive.triangles[0].vertices[vertex];
         record->observed_xy[vertex] = cpu->gte_data[12u + vertex];
-        destination->x =
-            (int32_t)low_s16(record->observed_xy[vertex]) * INT32_C(65536);
-        destination->y =
-            (int32_t)low_s16(record->observed_xy[vertex] >> 16u) *
-            INT32_C(65536);
     }
 }
 
@@ -1947,6 +2469,8 @@ static bool publish_model_ft3(
                     .register_replay = true,
                 }, services->repository))
             return false;
+        if (!publish_model_endpoint(&source.primitive,source.source_id,
+            source.interpolation_producer_id,source.interpolation_primitive_id)) return false;
         ++model_ft3.snapshot.publish_source_count;
     }
     return true;
@@ -1998,10 +2522,15 @@ static void finish_model_ft3(
             bool last_in_bucket = true;
             tag_matches = cpu->read_word(record->packet_address) ==
                 record->expected_tag;
-            for (uint32_t vertex = 0u; vertex < 3u; ++vertex)
+            for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
                 geometry_matches &= cpu->read_word(
                     record->packet_address + 8u + vertex * 8u) ==
                     record->observed_xy[vertex];
+                geometry_matches &= record->vertices[vertex].x ==
+                        low_s16(record->observed_xy[vertex]) &&
+                    record->vertices[vertex].y ==
+                        low_s16(record->observed_xy[vertex] >> 16u);
+            }
             for (uint32_t later = index + 1u; later < model_ft3.count; ++later) {
                 if (model_ft3.records[later].guest_observed_accepted &&
                     model_ft3.records[later].ordering_bucket ==
@@ -2123,6 +2652,12 @@ void xg_render_model_sprite_pipeline_model_ft4_seam(
         ++model_ft4.snapshot.farthest_seam_count;
     if (!model_ft4.context.valid)
         ++model_ft4.snapshot.seam_without_context_count;
+    if (model_ft4.context.valid &&
+        model_ft4.context.dispatch_mode == XG_MODEL_FT4_RAW_DISPATCH_RELIT &&
+        !physical_address_equals(pc, UINT32_C(0x8002e268))) {
+        block_model_ft4(76u);
+        return;
+    }
     if (render_mode == GUEST_RENDER_RENDER_NATIVE) {
         if (model_ft4.context.valid &&
             !stage_model_ft4(cpu, render_mode, services)) {
@@ -2141,6 +2676,9 @@ void xg_render_model_sprite_pipeline_model_ft3_seam(
         CPUState *cpu, GuestRenderRenderMode render_mode,
         const XgRenderModelSpritePipelineServices *services) {
     if (model_ft3.snapshot.blocked || !model_ft4.context.valid) return;
+    if (model_ft4.context.caller_contract ==
+            XG_RENDER_MODEL_DISPATCH_CALLER_GEAR_HELPER)
+        return;
     if (render_mode == GUEST_RENDER_RENDER_NATIVE) {
         if (!stage_model_ft3(cpu, render_mode, services)) {
             if (model_ft3.snapshot.prepare_failure_detail != 0u)
@@ -2170,6 +2708,7 @@ void xg_render_model_sprite_pipeline_model_end(void) {
 void xg_render_model_sprite_pipeline_capture_ft3_link(
         CPUState *cpu, GuestRenderRenderMode render_mode,
         const XgRenderModelSpritePipelineServices *services) {
+    if (model_ft4.context.caller_contract == MODEL_DISPATCH_CALLER_BATTLE) return;
     const uint32_t packet = cpu != NULL ? cpu->gpr[19] : 0u;
     const uint32_t material_word = cpu != NULL && cpu->read_word != NULL
         ? cpu->read_word(packet + 4u) : 0u;
@@ -2219,6 +2758,17 @@ void xg_render_model_sprite_pipeline_capture_ft3_link(
         if (physical_address_equals(
                 model_ft3.records[index].packet_address, packet)) {
             primitive = model_ft3.records[index].primitive;
+            for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
+                const uint32_t xy = cpu->gpr[9u + vertex];
+                const XgRenderIrVertex *projected =
+                    &primitive.triangles[0].vertices[vertex];
+                if (projected->x != (int32_t)low_s16(xy) * INT32_C(65536) ||
+                    projected->y != (int32_t)low_s16(xy >> 16u) * INT32_C(65536)) {
+                    ++model_ft3.snapshot.geometry_mismatch_count;
+                    ++model_ft3.snapshot.validation_rejected_source_count;
+                    return;
+                }
+            }
             break;
         }
     }
@@ -2289,6 +2839,7 @@ void xg_render_model_sprite_pipeline_capture_ft3_link(
 
 void xg_render_model_sprite_pipeline_finish_ft3_link(
         CPUState *cpu, const XgRenderModelSpritePipelineServices *services) {
+    if (model_ft4.context.caller_contract == MODEL_DISPATCH_CALLER_BATTLE) return;
     const uint32_t packet = cpu != NULL ? cpu->gpr[19] : 0u;
     const uint32_t source_id = normalized_word_address(packet) + 4u;
     const XgRenderModelFt3SourceRecord *source =
@@ -2297,14 +2848,31 @@ void xg_render_model_sprite_pipeline_finish_ft3_link(
     if (source == NULL || !source->link_pending || cpu == NULL ||
         cpu->read_word == NULL)
         return;
+    const XgRenderModelFt3SourceRecord endpoint = *source;
+    bool geometry_matches = true;
+    for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
+        const uint32_t xy = cpu->read_word(packet + 8u + vertex * 8u);
+        const XgRenderIrVertex *projected =
+            &endpoint.primitive.triangles[0].vertices[vertex];
+        geometry_matches &= projected->x == (int32_t)low_s16(xy) * INT32_C(65536) &&
+            projected->y == (int32_t)low_s16(xy >> 16u) * INT32_C(65536);
+    }
+    const bool linked = cpu->gpr[13] != 0u && (cpu->read_word(packet) >> 24u) == 7u;
+    const bool accepted = linked && geometry_matches;
+    if (linked && !geometry_matches) {
+        ++model_ft3.snapshot.geometry_mismatch_count;
+        ++model_ft3.snapshot.validation_rejected_source_count;
+    }
     xg_render_model_repository_finish_ft3_link(
-        source_id,
-        cpu->gpr[13] != 0u && (cpu->read_word(packet) >> 24u) == 7u,
+        source_id, accepted,
         &(XgRenderModelSourcePublication){
             .resource_address = packet,
             .resource_size = 0x20u,
             .register_replay = true,
         }, services->repository);
+    if (accepted)
+        (void)publish_model_endpoint(&endpoint.primitive,source_id,
+            endpoint.interpolation_producer_id,endpoint.interpolation_primitive_id);
 }
 
 void xg_render_model_sprite_pipeline_sprite_begin(
@@ -2676,6 +3244,7 @@ void xg_render_model_sprite_pipeline_sprite_end(
 }
 
 void xg_render_model_sprite_pipeline_clear_model(void) {
+    gear_helper_mode1_proof = (GearHelperMode1Proof){0};
     clear_model_ft4_pending();
     clear_model_ft3_pending();
 }
@@ -2685,6 +3254,7 @@ void xg_render_model_sprite_pipeline_clear_sprite(void) {
 }
 
 void xg_render_model_sprite_pipeline_invalidate_model_code(void) {
+    gear_helper_mode1_proof = (GearHelperMode1Proof){0};
     if (model_ft4.context.valid || model_ft4.snapshot.pending)
         block_model_ft4(76u);
     else
@@ -2696,6 +3266,7 @@ void xg_render_model_sprite_pipeline_invalidate_model_code(void) {
 }
 
 void xg_render_model_sprite_pipeline_invalidate_model_data(void) {
+    gear_helper_mode1_proof = (GearHelperMode1Proof){0};
     clear_model_ft4_pending();
     clear_model_ft3_pending();
 }
@@ -2744,7 +3315,8 @@ void xg_render_model_sprite_pipeline_record_ft3_replay(
 }
 
 void xg_render_model_sprite_pipeline_record_ft4_replay(
-        XgRenderModelReplayResult result, bool sprite_opcode) {
+        XgRenderModelReplayResult result, bool sprite_opcode,
+        uint32_t miss_source_id) {
     if (result == XG_RENDER_MODEL_REPLAY_NOT_APPLICABLE) return;
     if (sprite_opcode)
         ++sprite_ft4.snapshot.resident_replay_attempt_count;
@@ -2753,9 +3325,10 @@ void xg_render_model_sprite_pipeline_record_ft4_replay(
     switch (result) {
     case XG_RENDER_MODEL_REPLAY_LOOKUP_ABSENT:
     case XG_RENDER_MODEL_REPLAY_LOOKUP_INVALID:
-        if (sprite_opcode)
+        if (sprite_opcode) {
             ++sprite_ft4.snapshot.resident_replay_lookup_miss_count;
-        else
+            sprite_ft4.snapshot.last_resident_miss_source = miss_source_id;
+        } else
             ++model_ft4.snapshot.replay_lookup_miss_count;
         break;
     case XG_RENDER_MODEL_REPLAY_RECORD_REJECTED:
@@ -2814,6 +3387,9 @@ void xg_render_model_sprite_pipeline_sprite_snapshot(
 
 void xg_render_model_sprite_pipeline_reset(
         const XgRenderModelSpritePipelineServices *services) {
+    xg_render_motion_reset();
+    xg_render_gear_motion_reset();
+    gear_helper_mode1_proof = (GearHelperMode1Proof){0};
     model_ft4 = (ModelFt4State){0};
     sprite_ft4 = (SpriteState){0};
     xg_render_model_repository_clear_ft4_sources();
@@ -2832,6 +3408,38 @@ void xg_render_model_sprite_pipeline_handle_invalidation(
         event, PSX_XG_RENDER_CODE_WRITE_SPRITE_FT4);
     const bool shared_data = xg_render_invalidation_has_code_class(
         event, PSX_XG_RENDER_CODE_WRITE_SHARED_TRIG_DATA);
+    /* A legacy proof can be disarmed while independently authenticated source
+     * producers continue. Actual code/resource writes and scene boundaries
+     * still invalidate their own inputs through the paths below. */
+    if (event->kind == XG_RENDER_INVALIDATION_AUTHORITY_LOST &&
+        xg_render_submission_native_work_mode()) {
+        xg_render_motion_prune_authority();
+        return;
+    }
+    if (event->kind == XG_RENDER_INVALIDATION_CODE_WRITE) {
+        xg_render_gear_motion_invalidate(event->address,event->size);
+        if (gear_helper_mode1_proof.armed ||
+            model_ft4.context.caller_contract == XG_RENDER_MODEL_DISPATCH_CALLER_GEAR_HELPER) {
+            const uint64_t begin = event->address & UINT32_C(0x1fffffff);
+            const uint64_t end = begin + event->size;
+            if (event->size && begin < 0x1e8638u && end > 0x1dc000u) {
+                gear_helper_mode1_proof = (GearHelperMode1Proof){0};
+                /* A snapshot may still retain this pose. Do not let a pending
+                 * Gear capture re-register its retired command binding. */
+                if (model_ft4.context.caller_contract ==
+                    XG_RENDER_MODEL_DISPATCH_CALLER_GEAR_HELPER)
+                    xg_render_model_sprite_pipeline_invalidate_model_code();
+            }
+        }
+    } else if (event->kind != XG_RENDER_INVALIDATION_RESOURCE_OVERLAP)
+        xg_render_gear_motion_reset();
+
+    if (event->kind == XG_RENDER_INVALIDATION_RESOURCE_OVERLAP ||
+        (event->kind == XG_RENDER_INVALIDATION_CODE_WRITE && event->mutation.resource_mutation))
+        xg_render_motion_invalidate_range(event->address,event->size);
+    if ((event->kind != XG_RENDER_INVALIDATION_CODE_WRITE &&
+         event->kind != XG_RENDER_INVALIDATION_RESOURCE_OVERLAP) || model_code || model_data)
+        xg_render_motion_reset();
 
     if (event->kind == XG_RENDER_INVALIDATION_CODE_WRITE) {
         if (model_code)

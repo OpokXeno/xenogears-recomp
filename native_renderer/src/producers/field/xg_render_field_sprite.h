@@ -19,6 +19,8 @@ typedef struct XgRenderFieldSpriteServices {
         const XgRenderIrNativePrimitive *primitive, uint32_t packet_address,
         uint32_t source_primitive_index, uint32_t interpolation_producer_id,
         uint32_t interpolation_primitive_id, uint32_t *failure_detail);
+    bool (*resources_ready)(
+        const XgRenderIrNativePrimitive *primitive, uint32_t *failure_detail);
     bool (*publish_overlay)(
         const XgRenderFieldSpriteOverlayPublication *publication,
         uint32_t *failure_detail);

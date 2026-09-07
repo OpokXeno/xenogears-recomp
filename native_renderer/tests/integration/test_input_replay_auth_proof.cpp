@@ -152,7 +152,7 @@ PsxXgRenderAuthCandidate matching_candidate() {
     candidate.pair_id = UINT64_C(0x1020304050607080);
     candidate.artifact_base = kFieldRangeStart;
     candidate.artifact_size = kFieldRangeSize;
-    candidate.artifact_crc32 = 0x11223344u;
+    candidate.artifact_sha256[0] = 0x11u;
     candidate.authority_provenance = true;
     candidate.pair_bound = true;
     return candidate;
@@ -199,14 +199,14 @@ const uint8_t xg_render_manifest_identity[XG_RENDER_MANIFEST_DIGEST_SIZE] = {
 };
 const uint32_t xg_render_namespace_crc32 = 0x25adc86eu;
 const XgRenderManifestValidation xg_render_manifest_validation = {
-    3u, 4u, 0x11223344u, 0x55667788u, kFieldRangeStart, kFieldRangeSize,
+    3u, 4u, kFieldRangeStart, kFieldRangeSize,
     kProducerEntry, kCallerSite, kStaticCallee, kReturnSite,
     0x800781b4u, 16u,
     {0x50u, 0x51u, 0x52u, 0x53u, 0x54u, 0x55u, 0x56u, 0x57u,
      0x58u, 0x59u, 0x5au, 0x5bu, 0x5cu, 0x5du, 0x5eu, 0x5fu,
      0x60u, 0x61u, 0x62u, 0x63u, 0x64u, 0x65u, 0x66u, 0x67u,
      0x68u, 0x69u, 0x6au, 0x6bu, 0x6cu, 0x6du, 0x6eu, 0x6fu},
-    3u, kStaticCallee, 1u, 1u,
+    3u, kStaticCallee, 1u, 1u, 1u,
 };
 const XgRenderManifestRecord xg_render_manifest_records[] = {
     {3u, "producer", 3u, kProducerEntry, 0u,

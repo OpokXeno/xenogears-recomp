@@ -8,6 +8,7 @@
 #include "xg_render_snapshot_types.h"
 #include "xg_render_ir.h"
 #include "xg_render_producer_lifecycle.h"
+#include "xg_render_resource_repository.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -49,6 +50,11 @@ typedef struct XgRenderOverlayFt4Services {
         uint32_t interpolation_primitive_id);
     void (*invalidate_field_sprite_template)(uint32_t packet_address);
     void (*watch_resource)(uint32_t address, uint32_t size);
+    /* Read-only, current artifact authority for source captures. The producer
+     * independently validates the capability and its complete artifact SHA. */
+    bool (*source_artifact)(uint32_t pc, uint32_t instruction_word,
+                           XgRenderResourceProvenance *out_provenance,
+                           uint64_t *out_scene_generation);
 } XgRenderOverlayFt4Services;
 
 bool xg_render_overlay_ft4_lookup(

@@ -56,6 +56,11 @@ bool psx_xg_render_auth_overlay_cutover_relevant(
 bool psx_xg_render_auth_native_cutover_post_pc_relevant(uint32_t pc);
 bool psx_xg_render_auth_native_ft4_bypass(
     CPUState *cpu, uint32_t pc, uint32_t instruction_word);
+bool psx_xg_render_auth_movie_standalone_start(CPUState *cpu);
+bool psx_xg_render_auth_movie_standalone_stop(void);
+bool psx_xg_render_auth_movie_field_start(CPUState *cpu);
+bool psx_xg_render_auth_movie_field_stop(void);
+bool psx_xg_render_auth_movie_frame_complete(CPUState *cpu);
 bool psx_xg_render_auth_ft4_geometry_pop(
     PsxXgRenderFt4Geometry *out_geometry);
 /* Legacy facade retained for source and binary compatibility. */

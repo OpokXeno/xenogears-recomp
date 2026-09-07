@@ -1,5 +1,5 @@
-# P11 certification template. This file is intentionally not a certification.
-# Keep sealed=false until P0-P10 have produced every hash-pinned public receipt.
+# Native 3D certification template. This file is intentionally not a certification.
+# Keep sealed=false until every required hash-pinned public receipt is available.
 # native_render_3d_certify.py rejects this template and never emits PASS evidence.
 schema = "xenogears.native-3d-certification/v1"
 sealed = false

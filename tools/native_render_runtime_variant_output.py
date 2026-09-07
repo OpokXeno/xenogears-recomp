@@ -20,10 +20,10 @@ def render_c(verified: VerifiedRuntimeVariants) -> bytes:
             f"        {{{bytes_initializer(contract.canonical.manifest_identity)}}},",
             f"        {{{bytes_initializer(verified.companion_identity)}}},",
             f"        {{{bytes_initializer(artifact.identity.sha256)}}},",
-            f"        UINT32_C(0x{artifact.identity.crc32:08x}), {artifact.identity.size}u,",
+            f"        {artifact.identity.size}u,",
             f"        UINT32_C(0x{artifact.base_address:08x}),",
             f"        UINT32_C(0x{artifact.base_address + artifact.range_offset:08x}), {artifact.range_size}u,",
-            f"        UINT32_C(0x{artifact.range_crc32:08x}), {{{bytes_initializer(artifact.range_identity)}}},",
+            f"        {{{bytes_initializer(artifact.range_identity)}}},",
             f"        UINT32_C(0x{contract.canonical.producer_entry:08x}),",
             f"        UINT32_C(0x{contract.canonical.capture_site:08x}),",
             f"        UINT32_C(0x{contract.canonical.static_callee:08x}),",
@@ -60,8 +60,8 @@ def render_c(verified: VerifiedRuntimeVariants) -> bytes:
                f"UINT32_C(0x{cutover.continuation:08x}), "
                f"UINT32_C(0x{cutover.code_range_start:08x}), {cutover.code_range_size}u, "
                f"{{{bytes_initializer(cutover.code_range_identity)}}}, "
-               f"{ {'observe': 0, 'local': 1, 'return': 2}[cutover.transfer] }u, "
-               f"{ {'actor': 0, 'compass-world': 1, 'compass-screen': 2, 'zoom-rgb-begin': 3, 'zoom-rgb-commit': 4, 'zoom-entry': 5, 'zoom-native': 6, 'zoom-initializer-begin': 7, 'zoom-initializer-commit': 8, 'particle-initializer': 9, 'particle-native': 10, 'resource-initializer-begin': 11, 'resource-initializer-writer': 12, 'resource-initializer-commit': 13, 'zoom-initializer-writer': 14}[cutover.handler] }u}}," for cutover in variant.native_cutovers),
+               f"{ {'observe': 0, 'local': 1, 'return': 2, 'observe-after': 3}[cutover.transfer] }u, "
+               f"{ {'actor': 0, 'compass-world': 1, 'compass-screen': 2, 'zoom-rgb-begin': 3, 'zoom-rgb-commit': 4, 'zoom-entry': 5, 'zoom-native': 6, 'zoom-initializer-begin': 7, 'zoom-initializer-commit': 8, 'particle-initializer': 9, 'particle-native': 10, 'resource-initializer-begin': 11, 'resource-initializer-writer': 12, 'resource-initializer-commit': 13, 'zoom-initializer-writer': 14, 'field-tim-begin': 15, 'field-tim-clut-upload': 16, 'field-tim-image-upload': 17, 'field-tim-commit': 18, 'field-image-begin': 19, 'field-image-upload': 20, 'field-image-commit': 21, 'field-clut-begin': 22, 'field-clut-upload': 23, 'field-clut-commit': 24}[cutover.handler] }u}}," for cutover in variant.native_cutovers),
             "        },",
             "    },",
         ))

@@ -53,6 +53,7 @@ class ProducerCallerScope:
 class OverlayRangeVariant:
     identifier: str
     base_address: int
+    load_address: int
     required_ranges: tuple[RequiredRange, ...]
     cutovers: tuple[RangeCutover, ...]
     artifact_size: int | None = None
@@ -111,7 +112,7 @@ def load_overlay_range_variants(path: Path) -> tuple[OverlayRangeVariant, ...]:
         if not isinstance(raw_variant, dict):
             raise OverlayRangeError(f"overlay-ranges.variant[{index}] must be a table")
         allowed = {
-            "id", "base_address", "required_ranges", "cutovers",
+            "id", "base_address", "load_address", "required_ranges", "cutovers",
             "artifact_size", "artifact_sha256", "producer_scope",
             "producer_callers",
         }
@@ -123,6 +124,11 @@ def load_overlay_range_variants(path: Path) -> tuple[OverlayRangeVariant, ...]:
             raise OverlayRangeError("overlay range variant id is invalid or duplicated")
         identifiers.add(identifier)
         base = _integer(value["base_address"], "variant.base_address")
+        load_address = _integer(
+            value.get("load_address", base), "variant.load_address")
+        if load_address < base or load_address & 3:
+            raise OverlayRangeError(
+                "variant load address must be aligned inside the artifact")
         raw_ranges = value["required_ranges"]
         raw_cutovers = value["cutovers"]
         if not isinstance(raw_ranges, list) or not raw_ranges or not isinstance(raw_cutovers, list) or not raw_cutovers:
@@ -132,14 +138,15 @@ def load_overlay_range_variants(path: Path) -> tuple[OverlayRangeVariant, ...]:
             item = _closed(raw_range, {"start", "size", "sha256"}, "required-range")
             start = _integer(item["start"], "required-range.start")
             size = _integer(item["size"], "required-range.size", positive=True)
-            if start < base or start + size > 0x100000000 or start & 3 or size & 3:
+            if (start < load_address or start + size > 0x100000000 or
+                    start & 3):
                 raise OverlayRangeError("required range is not aligned inside the artifact")
             ranges.append(RequiredRange(start, size, _digest(item["sha256"], "required-range.sha256")))
         cutovers: list[RangeCutover] = []
         for raw_cutover in raw_cutovers:
             item = _closed(raw_cutover, {"pc", "instruction", "transfer", "continuation"}, "range-cutover")
             transfer = item["transfer"]
-            if transfer not in {"local", "observe", "return"}:
+            if transfer not in {"local", "observe", "observe-after", "return"}:
                 raise OverlayRangeError("range cutover transfer is unsupported")
             cutover = RangeCutover(
                 _integer(item["pc"], "range-cutover.pc"),
@@ -149,6 +156,8 @@ def load_overlay_range_variants(path: Path) -> tuple[OverlayRangeVariant, ...]:
             )
             if (transfer == "local") != (cutover.continuation != 0):
                 raise OverlayRangeError("range cutover continuation disagrees with transfer")
+            if cutover.pc & 3 or cutover.continuation & 3:
+                raise OverlayRangeError("range cutover address is not aligned")
             cutovers.append(cutover)
         has_artifact_size = "artifact_size" in value
         has_artifact_sha256 = "artifact_sha256" in value
@@ -162,6 +171,17 @@ def load_overlay_range_variants(path: Path) -> tuple[OverlayRangeVariant, ...]:
             _digest(value["artifact_sha256"], "variant.artifact_sha256")
             if has_artifact_sha256 else None
         )
+        artifact_end = (
+            load_address + artifact_size
+            if artifact_size is not None else None
+        )
+        if artifact_end is not None and artifact_end > 0x100000000:
+            raise OverlayRangeError("variant artifact escapes the address space")
+        if any(
+            required.size & 3 and required.start + required.size != artifact_end
+            for required in ranges
+        ):
+            raise OverlayRangeError("required range is not aligned inside the artifact")
         producer_scope = None
         if "producer_scope" in value:
             scope = _closed(value["producer_scope"], {
@@ -227,8 +247,9 @@ def load_overlay_range_variants(path: Path) -> tuple[OverlayRangeVariant, ...]:
                 caller_calls.add(parsed.call)
                 producer_callers.append(parsed)
         variants.append(OverlayRangeVariant(
-            identifier, base, tuple(ranges), tuple(cutovers), artifact_size,
-            artifact_sha256, producer_scope, tuple(producer_callers),
+            identifier, base, load_address, tuple(ranges), tuple(cutovers),
+            artifact_size, artifact_sha256, producer_scope,
+            tuple(producer_callers),
         ))
     return tuple(variants)
 
@@ -239,7 +260,7 @@ def source_plan_for_overlay_ranges(
     lines = [PLAN_SCHEMA]
     seen: set[tuple[int, int]] = set()
     for variant in variants:
-        if load_address != variant.base_address:
+        if load_address != variant.load_address:
             continue
         if (variant.artifact_size is not None and
                 (len(data) != variant.artifact_size or
@@ -257,7 +278,9 @@ def source_plan_for_overlay_ranges(
             continue
         for cutover in variant.cutovers:
             offset = cutover.pc - load_address
-            if offset < 0 or offset + 4 > len(data) or struct.unpack_from("<I", data, offset)[0] != cutover.instruction:
+            if offset < 0 or offset + 4 > len(data):
+                raise OverlayRangeError("authenticated range cutover overruns artifact")
+            if struct.unpack_from("<I", data, offset)[0] != cutover.instruction:
                 raise OverlayRangeError("authenticated range cutover instruction mismatch")
             key = (cutover.pc & 0x1FFFFFFF, cutover.instruction)
             if key in seen:
@@ -268,6 +291,28 @@ def source_plan_for_overlay_ranges(
                 f"{cutover.transfer} {cutover.continuation:08X}"
             )
     return None if len(lines) == 1 else "\n".join(lines) + "\n"
+
+
+def emit_source_plan(
+    variants: tuple[OverlayRangeVariant, ...], artifact: Path,
+    load_address: int, output: Path, runtime_variants: Path | None = None,
+) -> None:
+    data = artifact.read_bytes()
+    runtime_plan = None
+    if runtime_variants is not None:
+        from native_render_overlay_codegen import (
+            source_observation_plan_for_artifact,
+        )
+        from native_render_runtime_variant_model import load_contract
+
+        runtime_plan = source_observation_plan_for_artifact(
+            load_contract(runtime_variants), data, load_address)
+    plan = merge_source_plans(
+        runtime_plan,
+        source_plan_for_overlay_ranges(variants, data, load_address),
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(plan or f"{PLAN_SCHEMA}\n", encoding="ascii", newline="\n")
 
 
 def merge_source_plans(*plans: str | None) -> str | None:
@@ -381,6 +426,7 @@ def emit_cold_cutover_table(
         "typedef struct XgRenderOverlayAuthVariant {",
         "    uint32_t base_address;",
         "    uint32_t artifact_size;",
+        "    uint8_t artifact_sha256[32];",
         "    uint32_t producer_entry;",
         "    uint32_t producer_return;",
         "    uint32_t producer_writer;",
@@ -402,12 +448,16 @@ def emit_cold_cutover_table(
         "static const XgRenderOverlayAuthVariant xg_render_overlay_auth_variants[] = {")
     for index, variant in enumerate(variants):
         scope = variant.producer_scope
+        artifact_sha256 = variant.artifact_sha256 or bytes(32)
+        artifact_initializer = ", ".join(
+            f"0x{value:02x}u" for value in artifact_sha256)
         lines.append(
-            "    { UINT32_C(0x%08x), %du, UINT32_C(0x%08x), "
+            "    { UINT32_C(0x%08x), %du, {%s}, UINT32_C(0x%08x), "
             "UINT32_C(0x%08x), UINT32_C(0x%08x), "
             "xg_render_overlay_auth_cutovers_%d, %du }," % (
                 variant.base_address,
                 variant.artifact_size or 0,
+                artifact_initializer,
                 scope.entry if scope is not None else 0,
                 scope.return_pc if scope is not None else 0,
                 scope.writer if scope is not None else 0,
@@ -458,10 +508,12 @@ def emit_cold_cutover_table(
         "static bool xg_render_overlay_auth_candidate_matches_variant(",
         "    const XgRenderOverlayAuthVariant *variant,",
         "    const PsxXgRenderAuthCandidate *candidate) {",
-        "    if ((candidate->artifact_base & UINT32_C(0x1fffffff)) !=",
+        "    if (variant->artifact_size == 0u ||",
+        "        (candidate->artifact_base & UINT32_C(0x1fffffff)) !=",
         "            (variant->base_address & UINT32_C(0x1fffffff)) ||",
-        "        (variant->artifact_size != 0u &&",
-        "         candidate->artifact_size != variant->artifact_size))",
+        "        candidate->artifact_size != variant->artifact_size ||",
+        "        memcmp(candidate->artifact_sha256, variant->artifact_sha256,",
+        "               sizeof(candidate->artifact_sha256)) != 0)",
         "        return false;",
         "    for (uint32_t index = 0u; index < variant->cutover_count; ++index)",
         "        if (xg_render_overlay_auth_range_contains(",
@@ -516,9 +568,21 @@ def _main() -> None:
     emit = subparsers.add_parser("emit-cold-cutover-table")
     emit.add_argument("--manifest", type=Path, required=True)
     emit.add_argument("--output", type=Path, required=True)
+    source_plan = subparsers.add_parser("emit-source-plan")
+    source_plan.add_argument("--manifest", type=Path, required=True)
+    source_plan.add_argument("--runtime-variants", type=Path)
+    source_plan.add_argument("--artifact", type=Path, required=True)
+    source_plan.add_argument("--load-address", type=lambda value: int(value, 0),
+                             required=True)
+    source_plan.add_argument("--output", type=Path, required=True)
     arguments = parser.parse_args()
-    emit_cold_cutover_table(
-        load_overlay_range_variants(arguments.manifest), arguments.output)
+    variants = load_overlay_range_variants(arguments.manifest)
+    if arguments.command == "emit-cold-cutover-table":
+        emit_cold_cutover_table(variants, arguments.output)
+    else:
+        emit_source_plan(
+            variants, arguments.artifact, arguments.load_address,
+            arguments.output, arguments.runtime_variants)
 
 
 if __name__ == "__main__":

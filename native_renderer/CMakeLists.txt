@@ -1,11 +1,25 @@
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    cmake_minimum_required(VERSION 3.20)
+    project(XgNativeSemanticRenderer C CXX)
+    include(CTest)
+    find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
+    find_package(SDL2 REQUIRED)
+    set(PSX_SDL_INCLUDE_DIRS "${SDL2_INCLUDE_DIRS}")
+    set(PSX_SDL_LIBRARIES SDL2::SDL2)
+endif()
+
 get_filename_component(XG_REPOSITORY_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 
 set(XG_RENDER_PRIVATE_INCLUDE_DIRS
     src/auth
     src/core
     src/infrastructure
+    src/producers/battle
+    src/producers/battling
     src/producers/field
+    src/producers/menu
     src/producers/model
+    src/producers/resident
     src/producers/world
     src/runtime)
 
@@ -132,6 +146,12 @@ target_include_directories(xg_sprite_ft4 PUBLIC include)
 target_compile_features(xg_sprite_ft4 PUBLIC c_std_11)
 target_link_libraries(xg_sprite_ft4 PUBLIC xg_host_3d xg_render_quad_builder)
 
+add_library(xg_render_model_resources STATIC
+    src/producers/model/xg_render_model_resources.c)
+target_include_directories(xg_render_model_resources PUBLIC include)
+target_compile_features(xg_render_model_resources PUBLIC c_std_11)
+target_link_libraries(xg_render_model_resources PUBLIC xg_semantic_presentation)
+
 add_library(xg_world_models STATIC
     src/producers/world/xg_world_models.c
     src/producers/world/xg_world_models_native.c)
@@ -153,6 +173,74 @@ target_include_directories(xg_render_backend PUBLIC
     "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
 target_compile_features(xg_render_backend PUBLIC c_std_11)
 target_link_libraries(xg_render_backend PUBLIC xg_render_ir)
+
+set(XG_RENDER_UI_OWNER_CATALOG_SOURCE
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/xg_render_ui_owner_catalog.c")
+add_custom_command(
+    OUTPUT "${XG_RENDER_UI_OWNER_CATALOG_SOURCE}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory
+        "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND "${Python3_EXECUTABLE}"
+        "${XG_REPOSITORY_ROOT}/tools/native_render_ui_owners.py" generate-c
+        --catalog "${CMAKE_CURRENT_SOURCE_DIR}/xg_render_ui_owners.toml"
+        --enum-header "${CMAKE_CURRENT_SOURCE_DIR}/include/xg_render_ui_resources.h"
+        --manifest "${CMAKE_CURRENT_SOURCE_DIR}/xg_render_manifest.toml"
+        --overlay-index "${XG_REPOSITORY_ROOT}/annotations/overlays/index.toml"
+        --output "${XG_RENDER_UI_OWNER_CATALOG_SOURCE}"
+    DEPENDS
+        "${XG_REPOSITORY_ROOT}/tools/native_render_ui_owners.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/xg_render_ui_owners.toml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/xg_render_manifest.toml"
+        "${XG_REPOSITORY_ROOT}/annotations/overlays/index.toml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/xg_render_ui_resources.h"
+    VERBATIM)
+set_source_files_properties("${XG_RENDER_UI_OWNER_CATALOG_SOURCE}"
+    PROPERTIES GENERATED TRUE)
+
+add_library(xg_semantic_presentation STATIC
+    "${XG_RENDER_UI_OWNER_CATALOG_SOURCE}"
+    src/core/xg_render_motion.c
+    src/infrastructure/xg_render_semantic_compositor.c
+    src/infrastructure/xg_render_source_frame.c
+    src/infrastructure/xg_render_source_commit.c
+    src/infrastructure/xg_render_native_work.c
+    src/infrastructure/xg_render_semantic_presentation.c
+    src/runtime/xg_render_presentation_host.c
+    src/infrastructure/xg_render_resource_repository.c
+    src/infrastructure/xg_render_surface_graph.c
+    src/infrastructure/xg_render_ui_layout.c
+    src/infrastructure/xg_render_vram_journal.c
+    src/infrastructure/xg_render_ui_resources.c
+    src/producers/movie/xg_render_movie_publisher.c)
+target_include_directories(xg_semantic_presentation PUBLIC
+    include
+    "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include"
+    PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated" src/runtime)
+target_compile_features(xg_semantic_presentation PUBLIC c_std_11)
+if(NOT MSVC)
+    target_link_libraries(xg_semantic_presentation PUBLIC m)
+endif()
+
+add_library(xg_render_resident_capture STATIC
+    src/producers/resident/xg_render_resident_capture.c)
+target_include_directories(xg_render_resident_capture PUBLIC include)
+target_compile_features(xg_render_resident_capture PUBLIC c_std_11)
+target_link_libraries(xg_render_resident_capture PUBLIC
+    xg_render_quad_builder)
+
+add_library(xg_render_battle_fx STATIC
+    src/producers/battle/xg_render_battle_fx.c)
+target_include_directories(xg_render_battle_fx PUBLIC include)
+target_compile_features(xg_render_battle_fx PUBLIC c_std_11)
+target_link_libraries(xg_render_battle_fx PUBLIC
+    xg_render_ir xg_host_3d)
+
+add_library(xg_render_fragment_runtime STATIC
+    src/runtime/xg_render_fragment_runtime.c)
+target_include_directories(xg_render_fragment_runtime PUBLIC include)
+target_compile_features(xg_render_fragment_runtime PUBLIC c_std_11)
+target_link_libraries(xg_render_fragment_runtime PUBLIC
+    xg_semantic_presentation)
 
 add_library(xg_guest_render_transaction STATIC
     "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/src/guest_render_transaction.c"
@@ -240,6 +328,8 @@ add_library(xg_render_auth STATIC
     src/runtime/xg_render_runtime_host_services.c
     src/runtime/xg_render_runtime_composition.c
     src/runtime/xg_render_cutover_dispatch.c
+    src/producers/resident/xg_render_resident_text.c
+    src/producers/resident/xg_render_native_target.c
     src/producers/world/xg_render_world_coordinator.c
     src/producers/field/xg_render_field_character_pipeline.c
     src/producers/field/xg_field_render_services.c
@@ -254,6 +344,8 @@ add_library(xg_render_auth STATIC
     src/auth/xg_render_local_producer_auth.c
     src/producers/model/xg_render_model_repository.c
     src/producers/model/xg_render_model_sprite_pipeline.c
+    src/producers/battle/xg_render_battle_geometry.c
+    src/producers/model/xg_render_gear_motion.c
     src/producers/world/xg_render_world_model_repository.c
     src/producers/world/xg_render_world_models_pipeline.c
     src/producers/field/xg_render_overlay_ft4.c
@@ -276,6 +368,7 @@ add_library(xg_render_auth STATIC
     src/producers/field/xg_field_zoom.c
     src/producers/field/xg_field_projected.c
     src/producers/field/xg_field_compass.c
+    src/infrastructure/xg_render_vram_resources.c
     src/auth/xg_render_runtime_variant_auth.c
     src/auth/xg_render_static_auth_metadata.c)
 add_dependencies(xg_render_auth xg_render_overlay_cutovers_generated)
@@ -291,6 +384,11 @@ target_link_libraries(xg_render_auth PUBLIC
     xg_render_quad_builder
     xg_render_ir
     xg_render_backend
+    xg_render_fragment_runtime
+    xg_render_resident_capture
+    xg_render_battle_fx
+    xg_semantic_presentation
+    xg_render_model_resources
     xg_model_ft4_raw
     xg_sprite_ft4
     xg_world_actor_sprites
@@ -455,6 +553,7 @@ if(BUILD_TESTING)
         tests/auth/xg_render_auth_runtime_test_adapter.c
         src/runtime/xg_render_runtime_composition.c
         src/runtime/xg_render_cutover_dispatch.c
+        src/producers/resident/xg_render_resident_text.c
         src/producers/world/xg_render_world_coordinator.c
         src/producers/field/xg_render_field_character_pipeline.c
         src/producers/field/xg_field_render_services.c
@@ -469,6 +568,7 @@ if(BUILD_TESTING)
         src/auth/xg_render_local_producer_auth.c
         src/producers/model/xg_render_model_repository.c
         src/producers/model/xg_render_model_sprite_pipeline.c
+        src/producers/battle/xg_render_battle_geometry.c
         src/producers/world/xg_render_world_model_repository.c
         src/producers/world/xg_render_world_models_pipeline.c
         src/producers/field/xg_render_overlay_ft4.c
@@ -491,6 +591,7 @@ if(BUILD_TESTING)
         src/producers/field/xg_field_zoom.c
         src/producers/field/xg_field_projected.c
         src/producers/field/xg_field_compass.c
+        src/infrastructure/xg_render_vram_resources.c
         src/auth/xg_render_runtime_variant_auth.c
         src/auth/xg_render_auth.c
         src/core/xg_render_ir.c
@@ -519,6 +620,9 @@ if(BUILD_TESTING)
     target_link_libraries(test_xg_render_static_auth PRIVATE
         xg_host_3d xg_native_view xg_field_character_shadow
         xg_field_character_runtime
+        xg_render_fragment_runtime
+        xg_semantic_presentation
+        xg_render_model_resources
         xg_model_ft4_raw xg_sprite_ft4 xg_world_clouds xg_world_decorations
         xg_world_effects xg_world_entity_shadows xg_world_horizon
         xg_world_minimap xg_world_models xg_world_actor_sprites xg_world_sky
@@ -603,6 +707,176 @@ if(BUILD_TESTING)
         "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
     add_test(NAME xg_render_shared_packet_resolver
         COMMAND test_xg_render_shared_packet_resolver)
+    set_tests_properties(xg_render_shared_packet_resolver PROPERTIES
+        LABELS "shared-packet-resolver;synthetic;native-only")
+
+    add_executable(test_xg_render_instrumentation
+        tests/infrastructure/test_xg_render_instrumentation.c
+        src/infrastructure/xg_render_instrumentation.c)
+    target_include_directories(test_xg_render_instrumentation PRIVATE
+        include
+        ${XG_RENDER_PRIVATE_INCLUDE_DIRS}
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
+    target_compile_definitions(test_xg_render_instrumentation PRIVATE
+        XG_RENDER_INSTRUMENTATION_TESTING=1)
+    add_test(NAME xg_render_instrumentation
+        COMMAND test_xg_render_instrumentation)
+    set_tests_properties(xg_render_instrumentation PROPERTIES
+        LABELS "instrumentation;synthetic;native-only")
+
+    add_executable(test_guest_render_native_stream
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/tests/test_guest_render_native_stream.c"
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/src/guest_render_native_stream.c")
+    target_include_directories(test_guest_render_native_stream PRIVATE
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
+    target_compile_definitions(test_guest_render_native_stream PRIVATE
+        GUEST_RENDER_NATIVE_STREAM_TESTING=1
+        GUEST_RENDER_NATIVE_STREAM_CAPACITY=4)
+    add_test(NAME guest_render_native_stream
+        COMMAND test_guest_render_native_stream)
+    set_tests_properties(guest_render_native_stream PROPERTIES
+        LABELS "native-stream;synthetic;native-only")
+
+    add_executable(test_xg_semantic_presentation
+        tests/infrastructure/test_xg_semantic_presentation.c)
+    target_link_libraries(test_xg_semantic_presentation PRIVATE
+        xg_semantic_presentation)
+    add_dependencies(test_xg_semantic_presentation
+        test_guest_render_native_stream
+        test_xg_render_instrumentation)
+    add_test(NAME xg_semantic_presentation
+        COMMAND test_xg_semantic_presentation)
+    set_tests_properties(xg_semantic_presentation PROPERTIES
+        LABELS "semantic-presentation;synthetic;native-only")
+
+    add_executable(test_xg_render_presentation_host
+        tests/infrastructure/test_xg_render_presentation_host.c)
+    target_link_libraries(test_xg_render_presentation_host PRIVATE
+        xg_semantic_presentation)
+    add_test(NAME xg_render_presentation_host
+        COMMAND test_xg_render_presentation_host)
+    set_tests_properties(xg_render_presentation_host PROPERTIES
+        LABELS "presentation-host;synthetic;native-only")
+
+    add_executable(test_xg_render_source_timeline
+        tests/infrastructure/test_xg_render_source_timeline.c)
+    target_link_libraries(test_xg_render_source_timeline PRIVATE
+        xg_semantic_presentation)
+    add_test(NAME xg_render_source_timeline COMMAND test_xg_render_source_timeline)
+    set_tests_properties(xg_render_source_timeline PROPERTIES
+        LABELS "source-timeline;synthetic;native-only")
+
+    add_executable(test_xg_render_temporal_submission
+        tests/infrastructure/test_xg_render_temporal_submission.c
+        src/infrastructure/xg_render_temporal_submission.c)
+    target_include_directories(test_xg_render_temporal_submission PRIVATE
+        include
+        src/infrastructure
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
+    target_compile_definitions(test_xg_render_temporal_submission PRIVATE
+        XG_RENDER_IR_ITEM_CAPACITY=2)
+    target_link_libraries(test_xg_render_temporal_submission PRIVATE
+        xg_semantic_presentation)
+    add_test(NAME xg_render_temporal_submission COMMAND test_xg_render_temporal_submission)
+    set_tests_properties(xg_render_temporal_submission PROPERTIES
+        LABELS "temporal-submission;synthetic;native-only")
+
+    add_executable(test_xg_render_resource_repository
+        tests/infrastructure/test_xg_render_resource_repository.c)
+    target_link_libraries(test_xg_render_resource_repository PRIVATE
+        xg_semantic_presentation)
+    add_test(NAME xg_render_resource_repository
+        COMMAND test_xg_render_resource_repository)
+
+    add_executable(test_xg_render_model_resources
+        tests/infrastructure/test_xg_render_model_resources.c)
+    target_link_libraries(test_xg_render_model_resources PRIVATE
+        xg_render_model_resources)
+    add_test(NAME xg_render_model_resources
+        COMMAND test_xg_render_model_resources)
+
+    add_executable(test_xg_render_vram_resources
+        tests/infrastructure/test_xg_render_vram_resources.c
+        src/infrastructure/xg_render_vram_resources.c
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/src/psx_sha256.c")
+    target_include_directories(test_xg_render_vram_resources PRIVATE
+        include
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
+    target_link_libraries(test_xg_render_vram_resources PRIVATE
+        xg_semantic_presentation)
+    add_test(NAME xg_render_vram_resources
+        COMMAND test_xg_render_vram_resources)
+
+    add_executable(test_xg_render_ui_movie
+        tests/infrastructure/test_xg_render_ui_movie.c)
+    target_link_libraries(test_xg_render_ui_movie PRIVATE
+        xg_semantic_presentation)
+    add_test(NAME xg_render_ui_movie COMMAND test_xg_render_ui_movie)
+    add_test(NAME xg_render_ui_owner_contract
+        COMMAND test_xg_render_ui_movie --ui-only)
+
+    add_executable(test_xg_render_ui_layout
+        tests/infrastructure/test_xg_render_ui_layout.c)
+    target_link_libraries(test_xg_render_ui_layout PRIVATE
+        xg_semantic_presentation)
+    add_test(NAME xg_render_ui_layout COMMAND test_xg_render_ui_layout)
+    set_tests_properties(xg_render_ui_layout PROPERTIES
+        LABELS "ui-layout;synthetic;native-only")
+
+    add_executable(test_xg_render_ui_source_commit
+        tests/infrastructure/test_xg_render_ui_source_commit.c)
+    target_link_libraries(test_xg_render_ui_source_commit PRIVATE
+        xg_semantic_presentation)
+    add_test(NAME xg_render_ui_source_commit
+        COMMAND test_xg_render_ui_source_commit)
+    set_tests_properties(xg_render_ui_source_commit PROPERTIES
+        LABELS "ui-source-commit;synthetic;native-only")
+
+    add_executable(test_xg_render_movie_publisher
+        tests/infrastructure/test_xg_render_movie_publisher.c)
+    target_link_libraries(test_xg_render_movie_publisher PRIVATE
+        xg_semantic_presentation)
+    add_test(NAME xg_render_movie_publisher
+        COMMAND test_xg_render_movie_publisher)
+
+    add_executable(test_xg_render_surface_graph
+        tests/infrastructure/test_xg_render_surface_graph.c)
+    target_link_libraries(test_xg_render_surface_graph PRIVATE
+        xg_semantic_presentation)
+    add_test(NAME xg_render_surface_graph
+        COMMAND test_xg_render_surface_graph)
+
+    add_executable(test_xg_render_semantic_presentation_synthetic
+        tests/integration/test_xg_render_semantic_presentation_synthetic.c)
+    target_link_libraries(test_xg_render_semantic_presentation_synthetic PRIVATE
+        xg_semantic_presentation)
+    add_test(NAME xg_render_semantic_presentation_synthetic
+        COMMAND test_xg_render_semantic_presentation_synthetic)
+    set_tests_properties(xg_render_semantic_presentation_synthetic PROPERTIES
+        LABELS "semantic-presentation;field-world;resident-menu;battle;movie;synthetic;native-only")
+
+    foreach(assert_target IN ITEMS
+            test_xg_render_shared_packet_resolver
+            test_xg_render_instrumentation
+            test_xg_semantic_presentation
+            test_xg_render_presentation_host
+            test_xg_render_source_timeline
+            test_xg_render_temporal_submission
+            test_xg_render_resource_repository
+            test_xg_render_model_resources
+            test_xg_render_vram_resources
+            test_xg_render_ui_movie
+            test_xg_render_ui_layout
+            test_xg_render_ui_source_commit
+            test_xg_render_movie_publisher
+            test_xg_render_surface_graph
+            test_xg_render_semantic_presentation_synthetic)
+        if(MSVC)
+            target_compile_options(${assert_target} PRIVATE /UNDEBUG)
+        else()
+            target_compile_options(${assert_target} PRIVATE -UNDEBUG)
+        endif()
+    endforeach()
 
     add_executable(test_xg_native_render_baseline_adapter
         tests/integration/test_xg_native_render_baseline_adapter.c
@@ -629,6 +903,15 @@ if(BUILD_TESTING)
     add_test(NAME xg_render_overlay_ranges
         COMMAND "${Python3_EXECUTABLE}" -m pytest
             "${XG_REPOSITORY_ROOT}/tools/test_native_render_overlay_ranges.py")
+    add_test(NAME xg_render_ui_owner_catalog
+        COMMAND "${Python3_EXECUTABLE}" -m pytest
+            "${XG_REPOSITORY_ROOT}/tools/test_native_render_ui_owners.py")
     add_test(NAME xg_native_render_replay
         COMMAND "${Python3_EXECUTABLE}" "${XG_REPOSITORY_ROOT}/tools/test_native_render_replay.py")
+    add_test(NAME xg_disc_overlay_census
+        COMMAND "${Python3_EXECUTABLE}" -m pytest
+            "${XG_REPOSITORY_ROOT}/tools/test_census_disc_overlays.py")
+    set_tests_properties(
+        xg_render_static_census
+        PROPERTIES LABELS "static-census;static;native-only")
 endif()

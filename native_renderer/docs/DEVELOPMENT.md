@@ -18,6 +18,9 @@ Put a new file in the directory that owns its state.
 | Field-specific producer state | `src/producers/field/` |
 | Model-specific producer state | `src/producers/model/` |
 | World-specific producer state | `src/producers/world/` |
+| Resident resource/font capture | `src/producers/resident/` |
+| Battle ripple capture | `src/producers/battle/` |
+| Movie publication | `src/producers/movie/` |
 
 Do not put producer state in `xg_render_auth_runtime.c`.
 Do not put authentication decisions in infrastructure.
@@ -38,9 +41,8 @@ Use this procedure for a new producer.
 10. Register the producer resolver when necessary.
 11. Add producer-owned invalidation handling.
 12. Add diagnostic snapshots.
-13. Add focused tests.
-14. Add an integration test for the route.
-15. Update this documentation.
+13. Review the production route and its invalidation paths.
+14. Update this documentation.
 
 Do not add a route before the lifecycle is defined.
 Do not authorize a route from its program counter (PC) only.
@@ -101,6 +103,12 @@ Use one commit point.
 If staging fails, abort the transaction.
 Do not leave inactive commands in the stream.
 
+In Native Work mode, preserve the immutable DRAW/UPLOAD/COPY/FILL/TARGET FIFO.
+Do not discard mutation-only work or treat a duplicate visual as a skipped GPU
+operation. Backpressure retries the same work; failure blocks the lane rather
+than skipping to a later delta. Temporal coverage replaces an entire producer
+scope at its operation gap, even when that replacement is empty.
+
 ## Add a route
 
 Add the route to the route descriptor data.
@@ -159,49 +167,6 @@ Make repeated reset operations safe.
 Use fixed capacities when deterministic storage is required.
 Reject capacity exhaustion without overwriting old data.
 
-## Test location
-
-Put each test in the directory that matches its owner.
-
-| Test type | Directory |
-|---|---|
-| Authentication runtime | `tests/auth/` |
-| Core math or IR | `tests/core/` |
-| Manifest or dependency contract | `tests/contracts/` |
-| Field producer | `tests/field/` |
-| Shared infrastructure | `tests/infrastructure/` |
-| End-to-end runtime path | `tests/integration/` |
-| Model producer | `tests/model/` |
-| World producer | `tests/world/` |
-
-Production builds must not enable a test-only control path.
-Use a test adapter when practical.
-Use a test adapter in `tests/` when a seam is necessary.
-
-## Select tests
-
-Run the smallest applicable test first.
-
-Examples:
-
-```sh
-ctest --test-dir build --output-on-failure -R '^xg_render_auth$'
-ctest --test-dir build --output-on-failure -R '^xg_render_static_auth$'
-ctest --test-dir build --output-on-failure -R '^xg_world_models$'
-```
-
-Run manifest tests after a manifest or parser change:
-
-```sh
-python -m pytest -q native_renderer/tests/contracts/test_native_render_manifest.py
-python -m pytest -q native_renderer/tests/contracts/test_native_render_runtime_variants.py
-```
-
-Run the overlay-free build contract only after CMake or manifest build changes.
-That test can take several minutes.
-
-Run the complete suite before a release or a large integration change.
-
 ## Review checklist
 
 Before you finish a change, answer each question.
@@ -215,7 +180,8 @@ Before you finish a change, answer each question.
 - Does a diagnostic path avoid granting authority?
 - Does default CMake avoid private overlay files?
 - Do focused public headers remain independent?
-- Do all new tests run from CTest or Pytest discovery?
+- Are FIFO ACKs, cancellations, and pending work accounted for separately?
+- Are generated motion phases distinguished from actual presentations?
 - Does `git diff --check` pass?
 - Is the documentation still correct?
 

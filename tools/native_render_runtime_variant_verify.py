@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 from pathlib import Path
-import zlib
 
 from native_render_manifest_model import Digest32, fail
 from native_render_manifest_model import load_contract as load_canonical_contract
@@ -174,12 +173,12 @@ def verify(contract: RuntimeVariantContract,
     if inputs.artifact.name != contract.artifact.file_name:
         fail("runtime artifact filename mismatch")
     actual = file_identity(inputs.artifact)
-    if actual != contract.artifact.identity:
+    if (actual.sha256 != contract.artifact.identity.sha256 or
+            actual.size != contract.artifact.identity.size):
         fail("runtime artifact identity mismatch")
     spec = contract.artifact
     range_data = bounded_bytes(inputs.artifact, spec.range_offset, spec.range_size)
-    if (Digest32(hashlib.sha256(range_data).digest()) != spec.range_identity or
-            zlib.crc32(range_data) & 0xFFFFFFFF != spec.range_crc32):
+    if Digest32(hashlib.sha256(range_data).digest()) != spec.range_identity:
         fail("runtime artifact range identity mismatch")
     for variant in contract.variants:
         check_variant(contract, inputs.artifact, variant)

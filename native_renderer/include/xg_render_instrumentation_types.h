@@ -1,6 +1,7 @@
 #ifndef XG_RENDER_INSTRUMENTATION_TYPES_H
 #define XG_RENDER_INSTRUMENTATION_TYPES_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 typedef enum XgRenderRuntimeVariantEvent {
@@ -36,6 +37,8 @@ typedef struct PsxXgRenderAuthInstrumentation {
     uint32_t first_native_ir_flush_failure_reason;
     uint32_t first_native_ir_flush_failure_packet;
     uint32_t first_native_ir_flush_failure_status;
+    uint64_t counter_overflow_events;
+    bool counters_poisoned;
 } PsxXgRenderAuthInstrumentation;
 
 #endif

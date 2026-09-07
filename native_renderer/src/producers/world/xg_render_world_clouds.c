@@ -3,10 +3,13 @@
 #include "gpu.h"
 #include "xg_field_render_services.h"
 #include "xg_render_primitive_utils.h"
+#include "xg_render_submission.h"
+#include "xg_render_backend.h"
 #include "xg_world_clouds_shadow.h"
 #include "xg_world_clouds_source_capture.h"
 
 #include <limits.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct XgRenderWorldCloudsPending {
@@ -31,6 +34,54 @@ typedef struct XgRenderWorldCloudsPending {
 } XgRenderWorldCloudsPending;
 
 static XgRenderWorldCloudsPending pending;
+
+static bool publish_cloud_coverage(void) {
+    if (!xg_render_submission_native_work_mode()) return true;
+    const uint32_t total = pending.record_count + pending.temporal_record_count;
+    XgRenderTemporalComponent components[XG_WORLD_CLOUD_COUNT * 3u];
+    XgRenderTemporalCommandBinding bindings[XG_WORLD_CLOUD_PACKET_CAPACITY];
+    XgRenderTemporalSample *samples = calloc(total ? (size_t)total * 6u : 1u, sizeof(*samples));
+    uint32_t component_count = 0, sample_count = 0;
+    bool ok = false;
+    if (!samples) return false;
+    const uint64_t scene = xg_render_submission_temporal_scene();
+    for (uint32_t i = 0; i < total; ++i) {
+        const XgWorldCloudRecord *r = i < pending.record_count ? &pending.records[i] :
+            &pending.temporal_records[i - pending.record_count];
+        const uint64_t component = xg_world_cloud_component_id(r->source_index, r->lod);
+        uint32_t c = 0;
+        while (c < component_count && components[c].component_id != component) ++c;
+        if (c == component_count) components[component_count++] = (XgRenderTemporalComponent){
+            .component_id = component,
+            .geometry_id = UINT64_C(0x434c4f5544000000) | ((uint32_t)r->lod + 1u),
+            .scene_id = scene, .producer_id = UINT32_C(0x80086798),
+        };
+        GpuRenderSemantic semantic;
+        if (xg_render_backend_translate_primitive(&r->primitive, &semantic) != XG_RENDER_BACKEND_OK)
+            goto done;
+        for (uint32_t t = 0; t < semantic.triangle_count; ++t)
+            for (uint32_t v = 0; v < 3; ++v)
+                samples[sample_count++] = (XgRenderTemporalSample){component, semantic.triangles[t].vertices[v]};
+        if (i < pending.record_count) bindings[i] = (XgRenderTemporalCommandBinding){
+            pending.packet_base + i * 0x28u + 4u, component};
+    }
+    ok = xg_render_submission_publish_temporal_coverage(UINT32_C(0x80086798),
+        components, component_count, samples, sample_count, bindings, pending.record_count);
+done:
+    free(samples);
+    return ok;
+}
+
+bool xg_render_world_clouds_pending_return_matches(
+        uint32_t pc, uint32_t instruction_word) {
+    /* Route only the return of the observed invocation. This is not authority
+     * to publish: commit still verifies generation, saved RA, packets and OT. */
+    return (pc & UINT32_C(0x1fffffff)) == UINT32_C(0x000876dc) &&
+        instruction_word == UINT32_C(0x8fbf004c) &&
+        pending.depth != 0u && pending.owner_cpu != NULL &&
+        pending.entry_stack_pointer >= 0x50u &&
+        pending.owner_cpu->gpr[29] == pending.entry_stack_pointer - 0x50u;
+}
 
 static bool services_valid(const XgRenderWorldPendingServices *services) {
     return services != NULL && services->cutover_ready != NULL &&
@@ -194,6 +245,7 @@ void xg_render_world_clouds_prepare(
     }
     xg_render_world_clouds_clear_pending();
     pending.owner_cpu = cpu;
+    pending.entry_stack_pointer = cpu != NULL ? cpu->gpr[29] : 0u;
     pending.depth = 1u;
     if (!services->cutover_ready() ||
         !services->authentication_generation(&generation)) {
@@ -246,7 +298,6 @@ void xg_render_world_clouds_prepare(
     }
 
     pending.authentication_generation = generation;
-    pending.entry_stack_pointer = cpu->gpr[29];
     pending.position_base = capture.position_array_address;
     pending.expected_attempts = stats.quad_attempt_count -
         stats.far_preinsert_depth_stops - stats.far_postinsert_depth_stops;
@@ -471,6 +522,13 @@ void xg_render_world_clouds_commit(
             xg_render_world_clouds_clear_pending();
             return;
         }
+    }
+    if (!publish_cloud_coverage()) {
+        services->abort_submission();
+        services->coordinator_end();
+        poison(services);
+        xg_render_world_clouds_clear_pending();
+        return;
     }
     services->coordinator_end();
     if (!xg_world_clouds_shadow_record_native_cutover(pending.record_count)) {

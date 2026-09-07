@@ -6,6 +6,8 @@
 #include "xg_render_address_lookup.h"
 #include "xg_render_primitive_utils.h"
 #include "xg_render_quad_builder.h"
+#include "xg_render_resident_capture.h"
+#include "xg_render_submission.h"
 
 #include <limits.h>
 #include <stddef.h>
@@ -37,6 +39,10 @@ typedef struct XgRenderFieldSpriteBuilder {
     XgRenderFieldSpriteRecord records[BUILDER_CAPACITY];
     uint32_t count;
     uint8_t overlay_family;
+    XgRenderProducerLifecycle source_lifecycle;
+    uint32_t entry_sp;
+    uint32_t return_address;
+    bool source_pending;
 } XgRenderFieldSpriteBuilder;
 
 static XgRenderFieldSpriteBuilder builder;
@@ -82,6 +88,7 @@ void xg_render_field_sprite_clear_builder(
         return;
     builder.count = 0u;
     builder.overlay_family = 0u;
+    builder.source_pending = false;
     if (telemetry != NULL) telemetry->field_builder_pending = false;
 }
 
@@ -489,6 +496,120 @@ static bool begin(
     return true;
 }
 
+static bool authored_authorize(void *context, uint32_t pc, uint32_t instruction) {
+    const XgRenderFieldSpriteServices *services = context;
+    return physical_address_equals(pc, PRODUCER_PC) && instruction == 0x27bdffb0u &&
+        services->lifecycle->begin(PRODUCER_PC, &builder.source_lifecycle);
+}
+
+static bool authored_range(void *context, uint32_t address, uint32_t size,
+                           uint32_t alignment) {
+    const XgRenderFieldSpriteServices *services = context;
+    return services->lifecycle->guest_data_range_is_valid(address, size, alignment, false);
+}
+
+static bool authored_draw_state(void *context, XgRenderIrMaterialState *material) {
+    GpuDrawState draw = {0};
+    (void)context;
+    *material = (XgRenderIrMaterialState){0};
+    gpu_get_draw_state(&draw);
+    xg_render_material_apply_draw_state(material, &draw);
+    return true;
+}
+
+static bool authored_pending(void *context, uint32_t base, uint32_t parity,
+        const XgRenderResidentResourceTemplate *records, uint32_t count) {
+    (void)context;
+    (void)parity;
+    if (count > BUILDER_CAPACITY) return false;
+    for (uint32_t index = 0u; index < count; ++index) {
+        builder.records[index] = (XgRenderFieldSpriteRecord){
+            .primitive = records[index].primitive,
+            .lifecycle = builder.source_lifecycle,
+            .packet_address = records[index].destination_address,
+            .descriptor_address = records[index].descriptor_address,
+            .interpolation_producer_id = base & UINT32_C(0x1fffffff),
+            .interpolation_primitive_id = index,
+        };
+        XgRenderFieldSpriteRecord *record = &builder.records[index];
+        record->tpage = record->primitive.material.tpage;
+        record->clut = (uint16_t)((record->primitive.material.clut_y << 6u) |
+                                  (record->primitive.material.clut_x >> 4u));
+        for (uint32_t corner = 0u; corner < 4u; ++corner) {
+            const XgRenderIrVertex *vertex = corner < 3u
+                ? &record->primitive.triangles[0].vertices[corner]
+                : &record->primitive.triangles[1].vertices[2];
+            record->xy[corner] = (uint16_t)(vertex->x / 65536) |
+                ((uint32_t)(uint16_t)(vertex->y / 65536) << 16u);
+            record->uv[corner] = (uint8_t)(vertex->u / 65536) |
+                ((uint16_t)(uint8_t)(vertex->v / 65536) << 8u);
+        }
+    }
+    builder.count = count;
+    builder.source_pending = true;
+    field_sprite_diagnostics.field_builder_pending = true;
+    return true;
+}
+
+static void authored_begin(CPUState *cpu, const XgRenderFieldSpriteServices *services) {
+    const XgRenderResidentResourceTemplateServices capture = {
+        .context = (void *)services,
+        .authorize = authored_authorize,
+        .source_range_valid = authored_range,
+        .capture_draw_state = authored_draw_state,
+        .publish_templates = authored_pending,
+    };
+    xg_render_field_sprite_clear_builder(services);
+    if (cpu == NULL || services == NULL || services->lifecycle == NULL ||
+        services->lifecycle->begin == NULL || services->lifecycle->matches == NULL ||
+        services->lifecycle->guest_data_range_is_valid == NULL)
+        return;
+    builder.entry_sp = cpu->gpr[29];
+    builder.return_address = cpu->gpr[31];
+    builder.overlay_family = overlay_family(cpu->gpr[31]);
+    if (xg_render_resident_capture_resource_templates(cpu, PRODUCER_PC, 0x27bdffb0u,
+            &capture) != XG_RENDER_RESIDENT_CAPTURE_OK)
+        xg_render_field_sprite_clear_builder(services);
+}
+
+static void authored_finish(CPUState *cpu, const XgRenderFieldSpriteServices *services) {
+    if (!builder.source_pending) return;
+    if (cpu == NULL || services == NULL || services->lifecycle == NULL ||
+        services->lifecycle->matches == NULL ||
+        cpu->gpr[29] != builder.entry_sp || cpu->gpr[31] != builder.return_address ||
+        !services->lifecycle->matches(&builder.source_lifecycle) ||
+        !xg_render_submission_pre_scene_available(builder.count)) {
+        xg_render_field_sprite_clear_builder(services);
+        return;
+    }
+    for (uint32_t index = 0u; index < builder.count; ++index) {
+        const XgRenderFieldSpriteRecord *source = &builder.records[index];
+        const XgRenderPreScenePrimitive record = {
+            .primitive = source->primitive,
+            .packet_address = source->packet_address,
+            .source_primitive_index = index,
+            .payload_word_count = 9u,
+        };
+        /* Acceptance supplies final material, order and resources. Keep the
+         * immutable template too, for existing authored XY/material overrides. */
+        (void)capture_template(source, services);
+        if (builder.overlay_family != 0u && services->publish_overlay != NULL) {
+            const XgRenderFieldSpriteOverlayPublication publication = {
+                .primitive = source->primitive,
+                .lifecycle = source->lifecycle,
+                .packet_address = source->packet_address,
+                .source_primitive_index = index,
+                .family = builder.overlay_family,
+                .kind = XG_RENDER_FIELD_SPRITE_OVERLAY_FIELD,
+            };
+            uint32_t detail = 0u;
+            (void)services->publish_overlay(&publication, &detail);
+        }
+        if (!xg_render_submission_pre_scene_stage(&record)) break;
+    }
+    xg_render_field_sprite_clear_builder(services);
+}
+
 static bool publish_overlay(
         const XgRenderFieldSpriteRecord *record,
         XgRenderIrNativePrimitive primitive, uint32_t source_primitive_index,
@@ -627,6 +748,19 @@ static void finish(
             return;
         }
         for (uint32_t index = 0u; index < builder.count; ++index) {
+            uint32_t failure_detail = 0u;
+
+            if (services == NULL || services->resources_ready == NULL ||
+                !services->resources_ready(
+                    &builder.records[index].primitive, &failure_detail)) {
+                telemetry->field_builder_failure_detail =
+                    1000u + failure_detail;
+                ++telemetry->field_builder_resource_deferral_count;
+                xg_render_field_sprite_clear_builder(services);
+                return;
+            }
+        }
+        for (uint32_t index = 0u; index < builder.count; ++index) {
             if (!capture_template(&builder.records[index], services)) {
                 block_builder(9u, services);
                 return;
@@ -739,12 +873,25 @@ bool xg_render_field_sprite_observe(
         const XgRenderFieldSpriteServices *services) {
     if (physical_address_equals(pc, PRODUCER_PC) &&
         instruction_word == UINT32_C(0x27bdffb0)) {
+        if (render_mode == GUEST_RENDER_RENDER_NATIVE &&
+            xg_render_submission_native_work_mode()) {
+            authored_begin(cpu, services);
+            return true;
+        }
         (void)begin(cpu, render_mode, scene_active, services);
         return true;
     }
     if (physical_address_equals(pc, UINT32_C(0x800269cc)) &&
         instruction_word == UINT32_C(0x8fa90020)) {
+        if (render_mode == GUEST_RENDER_RENDER_NATIVE &&
+            xg_render_submission_native_work_mode()) return true;
         finish(cpu, render_mode, services);
+        return true;
+    }
+    if (physical_address_equals(pc, UINT32_C(0x80026a04)) &&
+        instruction_word == UINT32_C(0x03e00008)) {
+        if (render_mode == GUEST_RENDER_RENDER_NATIVE &&
+            xg_render_submission_native_work_mode()) authored_finish(cpu, services);
         return true;
     }
     if (physical_address_equals(pc, UINT32_C(0x801c9984)) &&
@@ -843,6 +990,7 @@ void xg_render_field_sprite_diagnostics_update_snapshot(
     COPY_FIELD(field_builder_match_count);
     COPY_FIELD(field_builder_mismatch_count);
     COPY_FIELD(field_builder_active_scene_count);
+    COPY_FIELD(field_builder_resource_deferral_count);
     COPY_FIELD(last_field_builder_caller);
     memcpy(in_out_snapshot->field_builder_caller_candidates,
            source->field_builder_caller_candidates,

@@ -219,6 +219,10 @@ paths. They carry independent image and palette relocation state but share the
 same sector-chunk upload grammar: a descriptor sector followed by one pixel
 sector per chunk, with `width_words * chunk_height * 2 <= 2048`. Field uses both
 channels in absolute-coordinate mode; neither channel inserts an OT packet.
+The resident async and host callbacks are both authenticated at their descriptor,
+per-sector `LoadImage`, and final-chunk sites. Native resource publication stages
+the sectors as one contiguous image or CLUT and exposes it only after the final
+chunk branch, so draws cannot acquire a partially streamed companion resource.
 
 ### 3.7 Field STR Presentation
 

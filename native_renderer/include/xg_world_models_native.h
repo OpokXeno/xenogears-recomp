@@ -106,6 +106,10 @@ typedef struct XgWorldModelsNativeWorkspace {
     uint32_t record_capacity;
     XgWorldModelsTransformNodeSource *transform_nodes;
     uint32_t transform_node_capacity;
+    /* Optional guest-owner snapshot, written before composing/culling records.
+     * records/transform_nodes point into this workspace, not guest memory. */
+    XgWorldModelsSource *captured_source;
+    uint32_t *captured_record_base;
 } XgWorldModelsNativeWorkspace;
 
 typedef struct XgWorldModelsNativeModelSource {
@@ -118,7 +122,8 @@ typedef struct XgWorldModelsNativeModelSource {
     uint32_t packet_capacity_bytes;
     XgHost3dVector bounds_min;
     XgHost3dVector bounds_max;
-    uint16_t vertex_count;
+    uint16_t vertex_count; /* header+0x02: AllocateModelDeformationState copies this many SVECTORs. */
+    uint16_t primitive_count; /* header+0x04: resident counter contribution. */
     uint16_t group_count;
 } XgWorldModelsNativeModelSource;
 

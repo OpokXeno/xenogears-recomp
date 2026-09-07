@@ -1,0 +1,103 @@
+schema = "xenogears-disc-overlay-sources/v1"
+disc_id = "disc2"
+disc_sha256 = "5eab85c683d4d7087d345b587472db9c44df29b35ce66553c2626d26018b947e"
+
+# Disc 2 stores the same 24 byte identities as Disc 1 at different sectors.
+# Keep hashes, sizes, storage forms, and load addresses authoritative there.
+identity_manifest = "disc1-images.toml"
+
+[[sources]]
+id = "movie-str-lib-image"
+source_sector = 172873
+
+[[sources]]
+id = "battling-image"
+source_sector = 173205
+
+[[sources]]
+id = "field-image"
+source_sector = 173245
+
+[[sources]]
+id = "world-image"
+source_sector = 173307
+
+[[sources]]
+id = "battle-image"
+source_sector = 173353
+
+[[sources]]
+id = "menu-image"
+source_sector = 173435
+
+[[sources]]
+id = "movie-image"
+source_sector = 173470
+
+[[sources]]
+id = "field-runtime-diagnostics-image"
+source_sector = 184997
+
+[[sources]]
+id = "battle-result-image"
+source_sector = 226551
+
+[[sources]]
+id = "member-change-menu-image"
+source_sector = 226640
+
+[[sources]]
+id = "enter-name-menu-image"
+source_sector = 226729
+
+[[sources]]
+id = "shop-menu-image"
+source_sector = 226744
+
+[[sources]]
+id = "gear-shop-menu-image"
+source_sector = 226771
+
+[[sources]]
+id = "gear-helper-image"
+source_sector = 226888
+
+[[sources]]
+id = "battle-debug-setup-menu-image"
+source_sector = 226919
+
+[[sources]]
+id = "battle-runtime-debug-image"
+source_sector = 226972
+
+[[sources]]
+id = "battle-loader-image"
+source_sector = 227006
+
+[[sources]]
+id = "battle-event-image"
+source_sector = 244380
+
+[[sources]]
+id = "battle-green-framebuffer-grid-image"
+source_sector = 254102
+
+[[sources]]
+id = "battle-curved-sprite-ribbon-image"
+source_sector = 254104
+
+[[sources]]
+id = "battle-polygon-shatter-image"
+source_sector = 254105
+
+[[sources]]
+id = "battle-velocity-sprite-clone-strip-image"
+source_sector = 254107
+
+[[sources]]
+id = "battle-fixed-origin-sprite-marquee-image"
+source_sector = 254109
+
+[[sources]]
+id = "battle-framebuffer-ripple-dissolve-image"
+source_sector = 254110

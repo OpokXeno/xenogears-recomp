@@ -135,7 +135,8 @@ class NativeRenderManifestFieldIdentityTests(unittest.TestCase):
             manifest.write_text(fixture_manifest, encoding="utf-8", newline="\n")
 
             ranged = self.run_tool("validate", str(manifest), "--exe", str(exe), "--overlays", str(overlays), expect=1)
-            self.assertIn("crc mismatch", ranged.stderr.lower())
+            self.assertIn("delay-slot window authentication mismatch",
+                          ranged.stderr.lower())
 
             fixture_manifest = self.replace_once(
                 fixture_manifest,

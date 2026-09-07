@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "xg-native-3d-census-review/v3",
-  "title": "Xenogears P10 Disc 1 native 3D static census review",
+  "title": "Xenogears Disc 1 native 3D static census review",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "artifacts", "functions", "render_targets", "classifications"],

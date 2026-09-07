@@ -2,9 +2,14 @@
 
 #include "gpu.h"
 #include "xg_render_backend.h"
+#include "xg_render_resource_watch.h"
+#include "xg_render_submission.h"
+#include "xg_render_primitive_utils.h"
 #include "xg_world_models_native.h"
 
 #include <limits.h>
+#include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 enum {
@@ -53,6 +58,10 @@ enum {
 };
 
 typedef struct XgRenderWorldModelsNativeState {
+    XgWorldModelsSource motion_source_values;
+    uint32_t motion_record_base;
+    XgRenderMotionRef motion_poses[XG_RENDER_WORLD_MODEL_RECORD_CAPACITY];
+    uint32_t motion_parts[XG_RENDER_WORLD_MODEL_RECORD_CAPACITY];
     XgWorldModelsRecordSource
         record_sources[XG_RENDER_WORLD_MODEL_RECORD_CAPACITY];
     XgWorldModelsTransformNodeSource
@@ -204,9 +213,8 @@ static bool begin_submission(void *context) {
         workspace->services->begin_submission();
 }
 
-static bool stage_primitive(
-        void *context, const XgRenderIrNativePrimitive *primitive,
-        uint32_t packet_address, uint32_t primitive_index) {
+static bool stage_primitive(void *context, const XgRenderIrNativePrimitive *primitive,
+                            uint32_t packet_address, uint32_t primitive_index) {
     const XgRenderWorldModelsNativeState *workspace = context;
     const XgWorldModelsNativePrimitiveSource *source;
 
@@ -214,15 +222,45 @@ static bool stage_primitive(
         primitive_index >= workspace->preparation.primitive_count)
         return false;
     source = &workspace->primitives[primitive_index];
-    if (source->source_index >
-        (UINT32_MAX - source->primitive_index) / 4096u)
+    if (source->source_index > (UINT32_MAX - source->primitive_index) / 4096u)
         return false;
-    return workspace->services->stage_native(
+    if (workspace->motion_poses[source->source_index].handle.resource_id) {
+        static const uint8_t split[2][3] = {{0, 1, 2}, {2, 1, 3}};
+        XgRenderMotionDrawBinding binding = {
+            .motion = workspace->motion_poses[source->source_index],
+            .motion_part_index = workspace->motion_parts[source->source_index],
+            .triangle_count = primitive->triangle_count,
+        };
+        for (uint32_t t = 0; t < binding.triangle_count; ++t)
+            for (unsigned v = 0; v < 3; ++v) {
+                const unsigned index = split[t][v];
+                binding.local[t][v] = source->vertices[index];
+                binding.local[t][v].pad = 0;
+                binding.vertex_ids[t][v] = source->topology[index];
+            }
+        (void)xg_render_motion_register_command(
+            packet_address + 4, &binding, source->model_header_address & 0x1fffffffu,
+            source->source_index * 4096u + source->primitive_index);
+    }
+    const bool staged=workspace->services->stage_native(
         primitive, packet_address,
-        UINT32_C(0x66000000) |
-            ((packet_address & UINT32_C(0x001ffffc)) >> 2u),
+        UINT32_C(0x66000000) | ((packet_address & UINT32_C(0x001ffffc)) >> 2u),
         source->model_header_address & UINT32_C(0x1fffffff),
         source->source_index * 4096u + source->primitive_index);
+    if (staged && xg_render_submission_native_work_mode() &&
+        workspace->motion_poses[source->source_index].handle.resource_id) {
+        GpuRenderSemantic semantic;
+        const XgRenderMotionPose *pose;
+        if (!xg_render_motion_view(workspace->motion_poses[source->source_index],&pose) ||
+            xg_render_backend_translate_primitive(primitive,&semantic)!=XG_RENDER_BACKEND_OK) return false;
+        xg_render_semantic_set_interpolation_identity(&semantic,pose->continuity_generation,
+            source->model_header_address&0x1fffffffu,
+            source->source_index*4096u+source->primitive_index);
+        semantic.submission_command_id=(packet_address+4)&0x1fffffffu;
+        return xg_render_submission_stage_exact((GpuRenderTransactionId){0},
+            semantic.submission_command_id,&semantic)==GUEST_RENDER_TRANSACTION_OK;
+    }
+    return staged;
 }
 
 static bool collect_interpolation_anchors(
@@ -312,6 +350,149 @@ static void record_failure(
     snapshot.last_anchor_count = anchor_count;
 }
 
+static void capture_world_motion(CPUState *cpu, XgRenderWorldModelsNativeState *workspace,
+                                 const XgRenderWorldModelsPipelineServices *services,
+                                 uint32_t record_count) {
+    const XgWorldModelsSource *values = &workspace->motion_source_values;
+    XgRenderMotionSource authority;
+    memset(workspace->motion_poses, 0, sizeof(workspace->motion_poses));
+    if (!services->motion_source ||
+        !services->motion_source(XG_WORLD_MODELS_PRODUCER_ENTRY, &authority))
+        return;
+    for (uint32_t i = 0; i < record_count; ++i) {
+        const XgWorldModelsRecordSource *record = &workspace->record_sources[i];
+        XgRenderMotionPose pose = {0};
+        if (record->state != 0 || record->transform_node_count >= XG_RENDER_MOTION_NODE_CAPACITY)
+            continue;
+        const uint32_t model = record->model_header_address;
+        if (!services->authorize_guest_range(model, 0x38, 4, false))
+            continue;
+        const uint32_t vertex_count = cpu->read_half(model + 2);
+        const uint32_t vertex_base = cpu->read_word(model + 8);
+        const uint32_t topology_base = cpu->read_word(model + 0x10);
+        const uint32_t packet_size = cpu->read_word(model + 0x34);
+        xg_render_motion_forget_range(record->packet_base[0], packet_size);
+        xg_render_motion_forget_range(record->packet_base[1], packet_size);
+        if (!vertex_count ||
+            !services->authorize_guest_range(vertex_base, vertex_count * 8, 4, false))
+            continue;
+        uint32_t topology_end = topology_base;
+        const uint32_t group_count = cpu->read_half(model + 6);
+        bool valid = group_count <= 256;
+        for (uint32_t j = 0; valid && j < group_count; ++j) {
+            if (!services->authorize_guest_range(topology_end, 4, 2, false)) {
+                valid = false;
+                break;
+            }
+            const uint32_t bytes = 4 + cpu->read_half(topology_end + 2) * 8u;
+            valid = topology_end <= UINT32_MAX - bytes &&
+                    services->authorize_guest_range(topology_end, bytes, 2, false);
+            if (valid)
+                topology_end += bytes;
+        }
+        if (!valid || !xg_render_motion_camera_from_view(&values->camera_matrix, &pose.camera))
+            continue;
+        const uint32_t record_address =
+            workspace->motion_record_base + i * XG_WORLD_MODELS_RECORD_STRIDE;
+        pose.entity_id = UINT64_C(0x574f524c00000000) | (record_address & 0x1fffffffu);
+        const uint32_t key[4] = {model, vertex_base, topology_base, vertex_count};
+        pose.geometry_id = xg_render_resource_digest(key, sizeof(key));
+        pose.geometry_generation = 1;
+        pose.camera_id = UINT64_C(0x574f524c8009c808);
+        pose.world_wrapped = 1;
+        pose.translation_stage = XG_RENDER_MOTION_TRANSLATION_WORLD;
+        pose.geometry_scale = 0.5;
+        pose.camera_origin[0] = floor(values->camera_x_12_12 / 4096.0);
+        pose.camera_origin[2] = -floor(values->camera_z_12_12 / 4096.0);
+        pose.wrap_span[0] = (double)values->wrap_x * 2048;
+        pose.wrap_span[2] = (double)values->wrap_z * 2048;
+        pose.screen_offset[0] = values->gte.screen_offset_x / 65536.0;
+        pose.screen_offset[1] = values->gte.screen_offset_y / 65536.0;
+        pose.projection_distance = values->gte.projection_distance;
+        pose.node_count = record->transform_node_count + 1;
+        XgHost3dMatrix source_locals[XG_RENDER_MOTION_NODE_CAPACITY];
+        for (uint32_t j = 0; j < pose.node_count; ++j) {
+            XgHost3dMatrix local;
+            XgRenderMotionNode *node = &pose.nodes[j];
+            if (j == record->transform_node_count) {
+                local = record->matrix;
+                local.translation[0] = record->position_x;
+                local.translation[1] = record->position_y;
+                local.translation[2] = (int32_t)(0u - (uint32_t)record->stored_z);
+                node->id = record_address & 0x1fffffffu;
+            } else {
+                const XgWorldModelsTransformNodeSource *parent =
+                    &record->transform_nodes[record->transform_node_count - 1 - j];
+                local = parent->matrix;
+                local.translation[0] = parent->position_x;
+                local.translation[1] = parent->position_y;
+                local.translation[2] = (int32_t)(0u - (uint32_t)parent->stored_z);
+                node->id = parent->guest_address & 0x1fffffffu;
+            }
+            node->parent = (int32_t)j - 1;
+            /* The leaf is a GTE RHS only when there is a parent. Parent
+             * positions are direct LHS translations, and a root-only World
+             * record remains an absolute s32 coordinate until map wrapping. */
+            if (j + 1 == pose.node_count && record->transform_node_count) {
+                node->translation_s16 = 1;
+                for (unsigned axis = 0; axis < 3; ++axis) {
+                    const int32_t value = xg_render_motion_s16_translation(local.translation[axis]);
+                    if (value != local.translation[axis])
+                        xg_render_motion_note(XG_MOTION_TRANSLATION_CANONICALIZED, node->id);
+                    local.translation[axis] = value;
+                }
+            }
+            source_locals[j] = local;
+            if (!xg_render_motion_decompose(&local, &node->local)) {
+                valid = false;
+                break;
+            }
+        }
+        if (valid) {
+            XgHost3dMatrix accumulated = source_locals[pose.node_count - 1];
+            for (uint32_t j = pose.node_count - 1; j > 0; --j) {
+                for (unsigned axis = 0; axis < 3; ++axis)
+                    if (accumulated.translation[axis] !=
+                        xg_render_motion_s16_translation(accumulated.translation[axis]))
+                        pose.discontinuity = 1;
+                if (!xg_host_3d_comp_matrix(&source_locals[j - 1], &accumulated, &accumulated)) {
+                    valid = false;
+                    break;
+                }
+            }
+            for (unsigned axis = 0; axis < 3; ++axis) {
+                double relative = accumulated.translation[axis] - pose.camera_origin[axis];
+                if (pose.wrap_span[axis] > 0) {
+                    if (relative < -16384)
+                        relative += pose.wrap_span[axis];
+                    else if (relative > 16384)
+                        relative -= pose.wrap_span[axis];
+                }
+                if (relative < -32768 || relative > 32767)
+                    pose.discontinuity = 1;
+            }
+        }
+        if (pose.discontinuity)
+            xg_render_motion_note(XG_MOTION_TRANSLATION_STAGE_DISCRETE, record_address);
+        pose.nodes[pose.node_count - 1].source_model_to_view = workspace->records[i].object_to_view;
+        pose.nodes[pose.node_count - 1].source_matrix_valid = 1;
+        if (!valid || !xg_render_motion_publish(&authority, &pose, &workspace->motion_poses[i]))
+            continue;
+        workspace->motion_parts[i] = pose.node_count - 1;
+        const uint32_t addresses[4] = {record_address + 0x40, model, vertex_base, topology_base};
+        const uint32_t sizes[4] = {4, 0x38, vertex_count * 8, topology_end - topology_base};
+        for (unsigned j = 0; j < 4; ++j) {
+            if (!sizes[j])
+                continue;
+            if (!xg_render_motion_watch(workspace->motion_poses[i], addresses[j], sizes[j]))
+                valid = false;
+            xg_render_resource_watch_add(addresses[j], sizes[j]);
+        }
+        if (!valid)
+            workspace->motion_poses[i] = (XgRenderMotionRef){0};
+    }
+}
+
 bool xg_render_world_models_prepare(
         CPUState *cpu, const XgRenderWorldModelsPipelineServices *services) {
     XgRenderWorldModelsNativeState *workspace = &native_state;
@@ -396,6 +577,8 @@ bool xg_render_world_models_prepare(
         .record_capacity = XG_RENDER_WORLD_MODEL_RECORD_CAPACITY,
         .transform_nodes = workspace->transform_nodes,
         .transform_node_capacity = XG_RENDER_WORLD_MODEL_NODE_CAPACITY,
+        .captured_source = &workspace->motion_source_values,
+        .captured_record_base = &workspace->motion_record_base,
     };
     memset(workspace->ot_touched, 0, sizeof(workspace->ot_touched));
     xg_render_world_model_repository_clear_template_read_failure();
@@ -638,7 +821,7 @@ bool xg_render_world_models_prepare(
         failure_detail = XG_RENDER_WORLD_MODELS_PREPARE_FAILURE_COMMIT_OVERFLOW;
         if ((dispatch->guest_bounds_accepted &&
              commit.resident_vertex_total > UINT32_MAX -
-                 dispatch->model.vertex_count) ||
+                 dispatch->model.primitive_count) ||
             commit.resident_emitted_count > UINT32_MAX -
                 output->emitted_count_delta ||
             commit.processed_primitive_count > UINT32_MAX -
@@ -647,7 +830,7 @@ bool xg_render_world_models_prepare(
                 output->accepted_primitive_count)
             goto fail;
         if (dispatch->guest_bounds_accepted)
-            commit.resident_vertex_total += dispatch->model.vertex_count;
+            commit.resident_vertex_total += dispatch->model.primitive_count;
         commit.resident_emitted_count += output->emitted_count_delta;
         commit.processed_primitive_count += output->processed_primitive_count;
         commit.accepted_primitive_count += output->accepted_primitive_count;
@@ -704,12 +887,73 @@ bool xg_render_world_models_prepare(
     workspace->owner_cpu = cpu;
     workspace->services = services;
     workspace->valid = true;
+    capture_world_motion(cpu,workspace,services,preparation.record_count);
     return true;
 
 fail:
     record_failure(PSX_XG_RENDER_WORLD_NATIVE_FAILURE_PREPARE,
                    failure_detail, 0u);
     return false;
+}
+
+static bool publish_model_coverage(XgRenderWorldModelsNativeState *workspace, uint32_t anchor_count) {
+    if (!xg_render_submission_native_work_mode()) return true;
+    const uint32_t count = workspace->preparation.record_count;
+    XgRenderTemporalComponent components[XG_RENDER_WORLD_MODEL_RECORD_CAPACITY] = {{0}};
+    uint32_t component_indices[XG_RENDER_WORLD_MODEL_RECORD_CAPACITY];
+    XgRenderTemporalSample *samples = calloc(anchor_count ? anchor_count : 1u, sizeof(*samples));
+    XgRenderTemporalCommandBinding *bindings = calloc(workspace->accepted_count ? workspace->accepted_count : 1u,
+                                                      sizeof(*bindings));
+    uint32_t component_count = 0, sample_count = 0, binding_count = 0;
+    bool ok = false;
+    if (!samples || !bindings || count > XG_RENDER_WORLD_MODEL_RECORD_CAPACITY) goto done;
+    memset(component_indices, 0xff, sizeof(component_indices));
+    for (uint32_t i = 0; i < count; ++i) {
+        const XgWorldModelsRecordSource *record = &workspace->record_sources[i];
+        if (record->state != 0) continue;
+        const uint32_t address = (workspace->motion_record_base + i * XG_WORLD_MODELS_RECORD_STRIDE) & 0x1fffffffu;
+        XgRenderTemporalComponent *c = &components[component_count];
+        component_indices[i] = component_count++;
+        c->component_id = ((uint64_t)address << 32) | (i + 1u);
+        c->producer_id = record->model_header_address & 0x1fffffffu;
+        c->scene_id = xg_render_submission_temporal_scene();
+        uint64_t key[3] = {record->model_header_address, 0, 0};
+        const XgRenderMotionPose *pose;
+        if (workspace->motion_poses[i].handle.resource_id) {
+            if (!xg_render_motion_view(workspace->motion_poses[i], &pose)) goto done;
+            c->scene_id = pose->continuity_generation;
+            key[1] = pose->geometry_id;
+            key[2] = pose->geometry_generation;
+        } else {
+            for (uint32_t j = 0; j < workspace->preparation.primitive_count; ++j)
+                if (workspace->primitives[j].source_index == i) {
+                    key[1] = workspace->primitives[j].resource_epoch;
+                    break;
+                }
+        }
+        c->geometry_id = xg_render_resource_digest(key, sizeof(key));
+    }
+    for (uint32_t i = 0; i < anchor_count; ++i) {
+        const GpuRenderSemanticVertex *v = &workspace->anchors[i].vertex;
+        const uint32_t instance = v->interpolation_vertex_id >> 16;
+        if (instance >= count || component_indices[instance] == UINT32_MAX) goto done;
+        samples[sample_count++] = (XgRenderTemporalSample){
+            components[component_indices[instance]].component_id, *v};
+    }
+    for (uint32_t i = 0; i < workspace->preparation.primitive_count; ++i) {
+        if (!workspace->outputs[i].accepted) continue;
+        const XgWorldModelsNativePrimitiveSource *s = &workspace->primitives[i];
+        if (s->source_index >= count || component_indices[s->source_index] == UINT32_MAX ||
+            binding_count >= workspace->accepted_count) goto done;
+        bindings[binding_count++] = (XgRenderTemporalCommandBinding){
+            s->packet_address + 4u, components[component_indices[s->source_index]].component_id};
+    }
+    ok = xg_render_submission_publish_temporal_coverage(XG_WORLD_MODELS_PRODUCER_ENTRY,
+        components, component_count, samples, sample_count, bindings, binding_count);
+done:
+    free(samples);
+    free(bindings);
+    return ok;
 }
 
 bool xg_render_world_models_commit(
@@ -926,6 +1170,11 @@ bool xg_render_world_models_commit(
             goto fail;
         }
     }
+    if (!publish_model_coverage(workspace, anchor_count)) {
+        failure_stage = PSX_XG_RENDER_WORLD_NATIVE_FAILURE_ANCHOR_RECORD;
+        failure_detail = UINT32_C(0x3000);
+        goto fail;
+    }
     ++snapshot.native_cutover_count;
     snapshot.native_primitive_count += workspace->accepted_count;
     snapshot.last_anchor_count = anchor_count;
@@ -1032,8 +1281,8 @@ bool xg_render_world_models_pending_ot_copy(
 }
 
 void xg_render_world_models_reset(void) {
-    native_state = (XgRenderWorldModelsNativeState){0};
-    snapshot = (PsxXgRenderWorldNativeSnapshot){0};
+    memset(&native_state, 0, sizeof(native_state));
+    memset(&snapshot, 0, sizeof(snapshot));
     xg_render_world_model_repository_reset();
 }
 

@@ -50,7 +50,9 @@ void xg_render_semantic_set_corner_identities(
     static const uint8_t quad_corners[2][3] = {{0u, 1u, 2u}, {2u, 1u, 3u}};
 
     if (semantic == NULL || semantic->topology != GPU_RENDER_SEMANTIC_TRIANGLES ||
-        semantic->triangle_count == 0u || primitive_id > UINT32_MAX / 4u)
+        semantic->triangle_count == 0u ||
+        semantic->triangle_count > GPU_RENDER_SEMANTIC_TRIANGLE_CAPACITY ||
+        primitive_id > UINT32_MAX / 4u)
         return;
     for (uint32_t triangle = 0u; triangle < semantic->triangle_count;
          ++triangle) {
@@ -71,7 +73,9 @@ void xg_render_semantic_set_corner_identities(
 
 bool xg_render_primitive_all_projective(
         const XgRenderIrNativePrimitive *primitive) {
-    if (primitive == NULL || primitive->triangle_count == 0u) return false;
+    if (primitive == NULL || primitive->triangle_count == 0u ||
+        primitive->triangle_count > XG_RENDER_IR_TRIANGLE_CAPACITY)
+        return false;
     for (uint32_t triangle = 0u; triangle < primitive->triangle_count;
          ++triangle)
         for (uint32_t vertex = 0u; vertex < 3u; ++vertex)

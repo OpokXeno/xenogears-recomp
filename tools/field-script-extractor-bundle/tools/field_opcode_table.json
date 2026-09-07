@@ -1,0 +1,2909 @@
+{
+  "schema": "xenogears-field-opcodes/v1",
+  "source": [
+    "docs/xenogears/field/05-primary-opcodes.md",
+    "docs/xenogears/field/06-extended-opcodes.md"
+  ],
+  "primary": {
+    "00": {
+      "bytes": "1",
+      "handler": "0x800A1B70",
+      "name": "Stop",
+      "behavior": "stops or yields the current Field script."
+    },
+    "01": {
+      "bytes": "3",
+      "handler": "0x800A1E74",
+      "name": "Jmp",
+      "behavior": "unconditional VM jump handler."
+    },
+    "02": {
+      "bytes": "8",
+      "handler": "0x800A1BD0",
+      "name": "ConditionalJmp",
+      "behavior": "conditional VM jump handler."
+    },
+    "03": {
+      "bytes": "4",
+      "handler": "0x8009C104",
+      "name": "OpenDialogueMode2",
+      "behavior": "opens the selected dialogue block through the common creation path in fixed-size mode 2 using the trailing control byte."
+    },
+    "04": {
+      "bytes": "1",
+      "handler": "0x800A1A8C",
+      "name": "StopAndRedirectWaiters",
+      "behavior": "redirects waiters before stopping."
+    },
+    "05": {
+      "bytes": "3",
+      "handler": "0x800A17F4",
+      "name": "CallRelative3",
+      "behavior": "pushes IP+3 and calls a relative script routine."
+    },
+    "06": {
+      "bytes": "5",
+      "handler": "0x800A1730",
+      "name": "CallRelative5",
+      "behavior": "pushes IP+5 and calls a relative script routine."
+    },
+    "07": {
+      "bytes": "3",
+      "handler": "0x8009EB78",
+      "name": "StartActorScript",
+      "behavior": "starts a target actor script without waiting."
+    },
+    "08": {
+      "bytes": "3",
+      "handler": "0x8009ED68",
+      "name": "StartActorScriptAndWait",
+      "behavior": "starts and waits for actor script completion."
+    },
+    "09": {
+      "bytes": "3",
+      "handler": "0x8009F0A0",
+      "name": "StartActorScriptAndWaitExtended",
+      "behavior": "extended start/wait state machine."
+    },
+    "0A": {
+      "bytes": "4",
+      "handler": "0x8009533C",
+      "name": "CallTriggerZone2D",
+      "behavior": "conditionally calls the encoded target when the physically controlled actor lies inside the indexed trigger's inclusive XZ quadrilateral, otherwise advances four bytes."
+    },
+    "0B": {
+      "bytes": "3",
+      "handler": "0x800A1624",
+      "name": "InitializeNpcActor",
+      "behavior": "initializes the current NPC from a selected field graphic, synchronizes placement, enables updates and visibility, and advances three bytes."
+    },
+    "0C": {
+      "bytes": "1",
+      "handler": "0x8009F5A8",
+      "name": "UpdatePlayerCharacterPreserveIP",
+      "behavior": "runs the player-control update and restores the caller's VM instruction pointer afterward."
+    },
+    "0D": {
+      "bytes": "1",
+      "handler": "0x800A18B8",
+      "name": "Return",
+      "behavior": "pops the Field script call stack."
+    },
+    "0E": {
+      "bytes": "1",
+      "handler": "0x80092404",
+      "name": "Opcode0EAdvance",
+      "behavior": "advances one byte without changing other state."
+    },
+    "0F": {
+      "bytes": "1",
+      "handler": "0x800923E4",
+      "name": "Opcode0FAdvance",
+      "behavior": "advances one byte without changing other state."
+    },
+    "10": {
+      "bytes": "2 or 9",
+      "handler": "0x80098C00",
+      "name": "MoveActorToPosition",
+      "behavior": "initializes unrestricted interpolated actor movement."
+    },
+    "11": {
+      "bytes": "13",
+      "handler": "0x80098C3C",
+      "name": "MoveActorToPositionWithLimit",
+      "behavior": "initializes bounded interpolated actor movement."
+    },
+    "12": {
+      "bytes": "9",
+      "handler": "0x80093200",
+      "name": "StartCustomFieldTransition",
+      "behavior": "waits for coordinator readiness, stages the destination field and entry parameter, records the transition mode and fade length, and yields for in-place map replacement."
+    },
+    "13": {
+      "bytes": "1",
+      "handler": "0x800A2FC0",
+      "name": "Nop",
+      "behavior": "Field script no-op handler."
+    },
+    "14": {
+      "bytes": "1",
+      "handler": "0x80093C48",
+      "name": "DisableRandomEncounters",
+      "behavior": "disables encounters."
+    },
+    "15": {
+      "bytes": "1",
+      "handler": "0x80093C6C",
+      "name": "EnableRandomEncounters",
+      "behavior": "enables random encounters."
+    },
+    "16": {
+      "bytes": "3",
+      "handler": "0x800A08B8",
+      "name": "InitializePlayableActor",
+      "behavior": "initializes a playable-character actor, updates player and party mappings, selects party or replacement graphics, applies entry placement, and handles missing-party fallback."
+    },
+    "17": {
+      "bytes": "18",
+      "handler": "0x8009E91C",
+      "name": "SetupMovementBoundingZone",
+      "behavior": "allocates and loads four movement-boundary vertices."
+    },
+    "18": {
+      "bytes": "5",
+      "handler": "0x8009E83C",
+      "name": "SetActorCollisionDimensions",
+      "behavior": "sets actor collision bounds."
+    },
+    "19": {
+      "bytes": "6",
+      "handler": "0x8009E4BC",
+      "name": "SetCoordinatesAndClearMovementState",
+      "behavior": "applies coordinates and clears movement state."
+    },
+    "1A": {
+      "bytes": "2",
+      "handler": "0x8009E428",
+      "name": "SetWalkmeshAtCurrentPosition",
+      "behavior": "changes walkmesh at the actor's current position."
+    },
+    "1B": {
+      "bytes": "7",
+      "handler": "0x8009E35C",
+      "name": "SetWalkmeshAndCoordinates",
+      "behavior": "assigns walkmesh and evaluated actor coordinates."
+    },
+    "1C": {
+      "bytes": "4",
+      "handler": "0x8009E2C8",
+      "name": "ApplySingleCoordinate",
+      "behavior": "applies one evaluated actor coordinate."
+    },
+    "1D": {
+      "bytes": "7",
+      "handler": "0x8009E248",
+      "name": "ApplyThreeImmediateCoordinates",
+      "behavior": "applies three immediate actor coordinates."
+    },
+    "1E": {
+      "bytes": "1",
+      "handler": "0x8009E208",
+      "name": "ResetActorElevationTracking",
+      "behavior": "clears the actor elevation offset, anchors elevation to the current Y position, and enables elevation updates."
+    },
+    "1F": {
+      "bytes": "2",
+      "handler": "0x8009E1A0",
+      "name": "SetActorLowFlagsFromPackedByte",
+      "behavior": "replaces low actor flags from a packed byte."
+    },
+    "20": {
+      "bytes": "3",
+      "handler": "0x8009E10C",
+      "name": "SetCurrentActorFlags",
+      "behavior": "decodes a script mask into current-actor flags."
+    },
+    "21": {
+      "bytes": "3",
+      "handler": "0x8009E094",
+      "name": "SetActorMovementSpeed",
+      "behavior": "writes the evaluated speed to ActorData+0x76, propagates it to the actor's bound field entity, and advances three bytecode bytes."
+    },
+    "22": {
+      "bytes": "1",
+      "handler": "0x8009DF10",
+      "name": "ShowActor",
+      "behavior": "shows the current actor."
+    },
+    "23": {
+      "bytes": "1",
+      "handler": "0x8009E040",
+      "name": "HideActor",
+      "behavior": "hides the current actor."
+    },
+    "24": {
+      "bytes": "2",
+      "handler": "0x8009DDEC",
+      "name": "ShowActorById",
+      "behavior": "shows an actor by ID."
+    },
+    "25": {
+      "bytes": "2",
+      "handler": "0x8009DE94",
+      "name": "HideActorById",
+      "behavior": "hides an actor by ID."
+    },
+    "26": {
+      "bytes": "3",
+      "handler": "0x8009DD34",
+      "name": "Sleep",
+      "behavior": "initializes the current slot's byte timer from the evaluated operand, yields on every dispatch, and advances after N+1 scheduler selections for timer value N."
+    },
+    "27": {
+      "bytes": "2",
+      "handler": "0x8009DC4C",
+      "name": "StopAndDisableActorVM",
+      "behavior": "stops movement and disables actor VM state."
+    },
+    "28": {
+      "bytes": "2",
+      "handler": "0x8009DBC8",
+      "name": "EnableActorVM",
+      "behavior": "enables an actor VM."
+    },
+    "29": {
+      "bytes": "2",
+      "handler": "0x8009DAC4",
+      "name": "DisableAndHideActorVM",
+      "behavior": "disables, hides, and closes actor dialogue."
+    },
+    "2A": {
+      "bytes": "1",
+      "handler": "0x8009DA1C",
+      "name": "DisableDialogActivation",
+      "behavior": "disables dialog."
+    },
+    "2B": {
+      "bytes": "1",
+      "handler": "0x8009DA44",
+      "name": "EnableDialogActivation",
+      "behavior": "enables dialog."
+    },
+    "2C": {
+      "bytes": "2",
+      "handler": "0x8009A130",
+      "name": "PlayAnimation",
+      "behavior": "starts an actor animation."
+    },
+    "2D": {
+      "bytes": "8",
+      "handler": "0x8009A024",
+      "name": "GetActorPosition",
+      "behavior": "gets actor position."
+    },
+    "2E": {
+      "bytes": "3",
+      "handler": "0x80099FC4",
+      "name": "GetActorDirection",
+      "behavior": "gets actor direction."
+    },
+    "2F": {
+      "bytes": "3",
+      "handler": "0x80099EF8",
+      "name": "WriteCurCharacterID",
+      "behavior": "writes current character ID."
+    },
+    "30": {
+      "bytes": "3",
+      "handler": "0x80099F48",
+      "name": "WritePartyLeaderCharacterID",
+      "behavior": "writes leader ID."
+    },
+    "31": {
+      "bytes": "5",
+      "handler": "0x800961A0",
+      "name": "CheckCurrentInputMask",
+      "behavior": "advances five bytes when the evaluated mask intersects currently held controller input, otherwise branches to the encoded destination."
+    },
+    "32": {
+      "bytes": "5",
+      "handler": "0x800961C8",
+      "name": "CheckAccumulatedInputMask",
+      "behavior": "advances five bytes when the evaluated mask intersects accumulated controller input, otherwise branches to the encoded destination."
+    },
+    "33": {
+      "bytes": "1",
+      "handler": "0x800961F0",
+      "name": "ResetAccumulatedInput",
+      "behavior": "clears the accumulated controller-input mask and advances one byte."
+    },
+    "34": {
+      "bytes": "5",
+      "handler": "0x80096214",
+      "name": "WriteInventoryObjectQuantity",
+      "behavior": "writes the encoded object's quantity to the requested script variable, using zero when the object is absent, and advances five bytes."
+    },
+    "35": {
+      "bytes": "6",
+      "handler": "0x8009D9A4",
+      "name": "VariableAssign",
+      "behavior": "assigns a variable."
+    },
+    "36": {
+      "bytes": "3",
+      "handler": "0x8009D960",
+      "name": "VariableSetTrue",
+      "behavior": "sets a variable true."
+    },
+    "37": {
+      "bytes": "3",
+      "handler": "0x8009D91C",
+      "name": "VariableSetFalse",
+      "behavior": "clears a variable."
+    },
+    "38": {
+      "bytes": "6",
+      "handler": "0x8009D890",
+      "name": "VariableAdd",
+      "behavior": "adds to a variable."
+    },
+    "39": {
+      "bytes": "6",
+      "handler": "0x8009D804",
+      "name": "VariableSub",
+      "behavior": "subtracts from a variable."
+    },
+    "3A": {
+      "bytes": "6",
+      "handler": "0x8009D644",
+      "name": "VariableSetBit",
+      "behavior": "evaluates a zero-based bit index, masks it to five bits, and sets that bit in the selected script variable."
+    },
+    "3B": {
+      "bytes": "6",
+      "handler": "0x8009D408",
+      "name": "VariableUnsetBit",
+      "behavior": "evaluates a zero-based bit index, masks it to five bits, and clears that bit in the selected script variable."
+    },
+    "3C": {
+      "bytes": "3",
+      "handler": "0x8009D340",
+      "name": "IncVariable",
+      "behavior": "increments a variable."
+    },
+    "3D": {
+      "bytes": "3",
+      "handler": "0x8009D3A4",
+      "name": "DecVariable",
+      "behavior": "decrements a variable."
+    },
+    "3E": {
+      "bytes": "6",
+      "handler": "0x8009D5B8",
+      "name": "VariableAND",
+      "behavior": "applies variable AND."
+    },
+    "3F": {
+      "bytes": "6",
+      "handler": "0x8009D52C",
+      "name": "VariableOR",
+      "behavior": "applies variable OR."
+    },
+    "40": {
+      "bytes": "6",
+      "handler": "0x8009D4A0",
+      "name": "VariableXOR",
+      "behavior": "applies variable XOR."
+    },
+    "41": {
+      "bytes": "5",
+      "handler": "0x8009D2D0",
+      "name": "LShiftVariable",
+      "behavior": "shifts a variable left."
+    },
+    "42": {
+      "bytes": "5",
+      "handler": "0x8009D260",
+      "name": "RShiftVariable",
+      "behavior": "shifts a variable right."
+    },
+    "43": {
+      "bytes": "3",
+      "handler": "0x8009D198",
+      "name": "RandVariable",
+      "behavior": "writes a random variable."
+    },
+    "44": {
+      "bytes": "5",
+      "handler": "0x80098184",
+      "name": "MoveActorAlongAngleWithStepLimit",
+      "behavior": "continues planar walking along a scripted angle until the step limit expires or the generated target is reached."
+    },
+    "45": {
+      "bytes": "8",
+      "handler": "0x80097864",
+      "name": "MoveActorAlongAngle3DWithStepLimit",
+      "behavior": "continues three-axis walking toward a point 32 units along a scripted angle with a vertical offset until the destination or step limit is reached."
+    },
+    "46": {
+      "bytes": "1",
+      "handler": "0x80092808",
+      "name": "StartYawDirectedMovement",
+      "behavior": "derives current-actor X and Z movement components from the field entity's Y rotation, marks scripted movement active, and advances one byte."
+    },
+    "47": {
+      "bytes": "6",
+      "handler": "0x80092EA0",
+      "name": "WalkPlayerAndChangeField",
+      "behavior": "waits for transition systems, enables scripted player control, and walks the player toward the current actor's offset exit point while committing the pending field transition."
+    },
+    "48": {
+      "bytes": "7",
+      "handler": "0x80093CD0",
+      "name": "WriteScriptU8ToVariable",
+      "behavior": "writes a script byte to a variable."
+    },
+    "49": {
+      "bytes": "8",
+      "handler": "0x80093D48",
+      "name": "WriteScriptS16ToVariable",
+      "behavior": "writes a script halfword to a variable."
+    },
+    "4A": {
+      "bytes": "6",
+      "handler": "0x80099980",
+      "name": "MoveActorToPositionUnlimited",
+      "behavior": "starts planar movement toward evaluated absolute coordinates with no step limit and waits for arrival."
+    },
+    "4B": {
+      "bytes": "8",
+      "handler": "0x80098430",
+      "name": "MoveActorToPositionWithStepLimit",
+      "behavior": "continues planar walking toward scripted absolute coordinates until the destination or step limit is reached."
+    },
+    "4C": {
+      "bytes": "8",
+      "handler": "0x800979F0",
+      "name": "MoveActorToPosition3D",
+      "behavior": "continues three-axis walking toward scripted absolute coordinates until the destination is reached."
+    },
+    "4D": {
+      "bytes": "10",
+      "handler": "0x80097954",
+      "name": "MoveActorToPosition3DWithStepLimit",
+      "behavior": "continues three-axis walking toward scripted absolute coordinates until the destination or step limit is reached."
+    },
+    "4E": {
+      "bytes": "6",
+      "handler": "0x80098370",
+      "name": "MoveActorByOffset",
+      "behavior": "continues planar walking toward coordinates relative to the starting position until the destination is reached."
+    },
+    "4F": {
+      "bytes": "8",
+      "handler": "0x80098274",
+      "name": "MoveActorByOffsetWithStepLimit",
+      "behavior": "continues planar walking toward coordinates relative to the starting position until the destination or step limit is reached."
+    },
+    "50": {
+      "bytes": "8",
+      "handler": "0x800977A4",
+      "name": "MoveActorByOffset3D",
+      "behavior": "continues three-axis walking toward a position relative to the starting coordinates until the destination is reached."
+    },
+    "51": {
+      "bytes": "10",
+      "handler": "0x800976A8",
+      "name": "MoveActorByOffset3DWithStepLimit",
+      "behavior": "continues three-axis walking toward a position relative to the starting coordinates until the destination or scripted step limit is reached."
+    },
+    "52": {
+      "bytes": "2",
+      "handler": "0x800980FC",
+      "name": "FollowActor",
+      "behavior": "continues planar walking toward a selected actor until contact range is reached."
+    },
+    "53": {
+      "bytes": "4",
+      "handler": "0x80098038",
+      "name": "FollowActorWithStepLimit",
+      "behavior": "continues planar walking toward a selected actor until contact range or the scripted step limit is reached."
+    },
+    "54": {
+      "bytes": "5",
+      "handler": "0x800975C0",
+      "name": "MoveTowardActorUnlimited",
+      "behavior": "copies a selected actor's position into the movement target, uses an unlimited step count, moves toward the target, and advances five bytes upon completion."
+    },
+    "55": {
+      "bytes": "7",
+      "handler": "0x8009749C",
+      "name": "MoveTowardActorWithStepLimit",
+      "behavior": "copies a selected actor's position into the movement target, initializes the current slot's step limit, moves toward the target, and advances seven bytes upon completion."
+    },
+    "56": {
+      "bytes": "10",
+      "handler": "0x80093014",
+      "name": "StartWorldMapTransition",
+      "behavior": "waits for loading and audio readiness, persists current Field state, disables encounters, stores the return field, initial position, camera yaw, and World Map mode, requests the World Map handoff, and advances ten bytes."
+    },
+    "57": {
+      "bytes": "2 or 11",
+      "handler": "0x80099214",
+      "name": "ContinueBallisticActorMove",
+      "behavior": "initializes or continues a timed parabolic move to scripted coordinates, optionally derives elevation from the walkmesh, updates facing and position each frame, and supports walkmesh-only refresh mode."
+    },
+    "58": {
+      "bytes": "4",
+      "handler": "0x80094918",
+      "name": "SetCurrentActorAxisRotation",
+      "behavior": "assigns one current-actor axis."
+    },
+    "59": {
+      "bytes": "1",
+      "handler": "0x8009F4CC",
+      "name": "RandomTurnWithSpecialDirection",
+      "behavior": "handles signed random turns."
+    },
+    "5A": {
+      "bytes": "1",
+      "handler": "0x8009524C",
+      "name": "ResetActorMovementState",
+      "behavior": "clears current movement state, marks movement inactive, yields, and advances one byte."
+    },
+    "5B": {
+      "bytes": "1",
+      "handler": "0x80095284",
+      "name": "ParkActorMovementUpdate",
+      "behavior": "clears movement vectors and render offsets, marks movement and rotation inactive, and yields without advancing, so repeated selection parks the invocation on this opcode without releasing its slot."
+    },
+    "5C": {
+      "bytes": "3",
+      "handler": "0x800A0228",
+      "name": "InitializePartySlotActor",
+      "behavior": "binds the current actor to a selected party slot, restores its saved map placement when applicable, initializes its sprite, and hides unavailable or off-map members."
+    },
+    "5D": {
+      "bytes": "2",
+      "handler": "0x8009A174",
+      "name": "PlayAnimationAndClearCompletion",
+      "behavior": "starts the immediate actor animation and clears its completion latch."
+    },
+    "5E": {
+      "bytes": "1",
+      "handler": "0x8009A1AC",
+      "name": "WaitForAnimationCompletion",
+      "behavior": "stalls until the actor animation completion latch is set, then removes the forced animation and advances."
+    },
+    "5F": {
+      "bytes": "2",
+      "handler": "0x8009AD6C",
+      "name": "SetImmediateActorCardinalDirection",
+      "behavior": "rotates the current actor to the immediate world-relative cardinal direction."
+    },
+    "60": {
+      "bytes": "1",
+      "handler": "0x8008FDD0",
+      "name": "ResetCameraTargetMovement",
+      "behavior": "resets camera-target movement."
+    },
+    "61": {
+      "bytes": "8",
+      "handler": "0x8008FE2C",
+      "name": "SetCameraTargetMovementFrom",
+      "behavior": "sets camera-target origin."
+    },
+    "62": {
+      "bytes": "2",
+      "handler": "0x8008FF04",
+      "name": "SetCameraTargetMovementDestToActor",
+      "behavior": "targets an actor."
+    },
+    "63": {
+      "bytes": "8",
+      "handler": "0x8008FF90",
+      "name": "SetCameraTargetMovementDest",
+      "behavior": "sets camera-target destination."
+    },
+    "64": {
+      "bytes": "1",
+      "handler": "0x80090068",
+      "name": "ResetCameraPosMovement",
+      "behavior": "resets camera-position movement."
+    },
+    "65": {
+      "bytes": "8",
+      "handler": "0x800900C4",
+      "name": "SetCameraPosMovementFrom",
+      "behavior": "sets camera-position origin."
+    },
+    "66": {
+      "bytes": "2",
+      "handler": "0x8009019C",
+      "name": "SetCameraPosMovementDestToActor",
+      "behavior": "moves camera to an actor."
+    },
+    "67": {
+      "bytes": "4",
+      "handler": "0x8009ABFC",
+      "name": "SetActorDirection",
+      "behavior": "sets actor direction."
+    },
+    "68": {
+      "bytes": "4",
+      "handler": "0x8009AC34",
+      "name": "SetTargetActorCameraRelativeDirection",
+      "behavior": "rotates a selected actor to a scripted cardinal direction relative to the camera."
+    },
+    "69": {
+      "bytes": "3",
+      "handler": "0x8009AC7C",
+      "name": "SetCurActorRotation",
+      "behavior": "sets current rotation."
+    },
+    "6A": {
+      "bytes": "3",
+      "handler": "0x8009ACB4",
+      "name": "SetCameraRelativeActorDirection",
+      "behavior": "maps a direction to camera-relative actor rotation."
+    },
+    "6B": {
+      "bytes": "3",
+      "handler": "0x8009AB5C",
+      "name": "RotateActorClockwise",
+      "behavior": "rotates actor clockwise."
+    },
+    "6C": {
+      "bytes": "3",
+      "handler": "0x8009ABAC",
+      "name": "RotateActorCounterClockwise",
+      "behavior": "rotates actor counter-clockwise."
+    },
+    "6D": {
+      "bytes": "8",
+      "handler": "0x8009A6AC",
+      "name": "Cos",
+      "behavior": "Field script cosine helper."
+    },
+    "6E": {
+      "bytes": "8",
+      "handler": "0x8009A768",
+      "name": "Sin",
+      "behavior": "Field script sine helper."
+    },
+    "6F": {
+      "bytes": "2",
+      "handler": "0x8009A2A8",
+      "name": "FaceActor",
+      "behavior": "turns the current actor toward the selected actor when that actor is valid."
+    },
+    "70": {
+      "bytes": "2",
+      "handler": "0x8009A1E4",
+      "name": "FacePartyMember",
+      "behavior": "turns the current actor toward the mapped party member when that member is present."
+    },
+    "71": {
+      "bytes": "3",
+      "handler": "0x80093568",
+      "name": "StartBattle",
+      "behavior": "waits for coordinator readiness, stores the requested battle configuration, marks the battle handoff pending, yields, and advances three bytes."
+    },
+    "72": {
+      "bytes": "3",
+      "handler": "0x8008F724",
+      "name": "PlayMusicModeZero",
+      "behavior": "waits for music authorization then selects request mode zero and processes the requested music ID."
+    },
+    "73": {
+      "bytes": "2 or 8",
+      "handler": "0x80086C34",
+      "name": "InitializeParticleSystemCommand",
+      "behavior": "skips the disabled subcommand or initializes default particle banks and global particle parameters from three script arguments."
+    },
+    "74": {
+      "bytes": "3",
+      "handler": "0x8008F668",
+      "name": "PlaySoundEffect",
+      "behavior": "starts or stops the requested sound effect on channel 3 and advances three bytes."
+    },
+    "75": {
+      "bytes": "3",
+      "handler": "0x8008F76C",
+      "name": "PlayMusicModeMinusOne",
+      "behavior": "waits for music authorization then selects request mode minus one and processes the requested music ID."
+    },
+    "76": {
+      "bytes": "1",
+      "handler": "0x80093A68",
+      "name": "ClearSceneFlag8000",
+      "behavior": "clears scene flag 0x8000."
+    },
+    "77": {
+      "bytes": "1",
+      "handler": "0x80093A98",
+      "name": "SetSceneFlag8000",
+      "behavior": "sets scene flag 0x8000."
+    },
+    "78": {
+      "bytes": "4",
+      "handler": "0x800973A4",
+      "name": "WaitForArchiveFile",
+      "behavior": "requests or waits for the selected archive file."
+    },
+    "79": {
+      "bytes": "1",
+      "handler": "0x80097264",
+      "name": "RestoreHp",
+      "behavior": "restores HP."
+    },
+    "7A": {
+      "bytes": "1",
+      "handler": "0x800972AC",
+      "name": "RestoreMp",
+      "behavior": "restores MP."
+    },
+    "7B": {
+      "bytes": "4",
+      "handler": "0x800969FC",
+      "name": "DecreasePartyHp",
+      "behavior": "VM party-HP decrease handler."
+    },
+    "7C": {
+      "bytes": "4",
+      "handler": "0x80096F18",
+      "name": "IncreasePartyMp",
+      "behavior": "increases party MP."
+    },
+    "7D": {
+      "bytes": "4",
+      "handler": "0x80097010",
+      "name": "DecreasePartyMp",
+      "behavior": "decreases party MP."
+    },
+    "7E": {
+      "bytes": "4",
+      "handler": "0x80097108",
+      "name": "IncreasePartyHp",
+      "behavior": "increases HP for each valid party member selected by the script mask, caps each result at maximum HP, and advances four bytes."
+    },
+    "7F": {
+      "bytes": "3",
+      "handler": "0x80095300",
+      "name": "SetWalkmeshMaterialMotionAngleOffset",
+      "behavior": "sets the global angular offset added to the current walkmesh material's motion direction before its XZ vector is accumulated."
+    },
+    "80": {
+      "bytes": "5",
+      "handler": "0x80092664",
+      "name": "SetWalkmeshMaterialByte",
+      "behavior": "writes a resolved value to the selected byte lane of a walkmesh material flag and advances five bytes."
+    },
+    "81": {
+      "bytes": "5",
+      "handler": "0x800926C8",
+      "name": "OrWalkmeshMaterialByte",
+      "behavior": "applies a bitwise OR with a resolved mask to the selected byte lane of a walkmesh material flag and advances five bytes."
+    },
+    "82": {
+      "bytes": "5",
+      "handler": "0x80093664",
+      "name": "WriteWalkmeshNormalByte",
+      "behavior": "reads a selected byte from a packed walkmesh-normal entry, writes it to the requested script variable, and advances five bytes."
+    },
+    "83": {
+      "bytes": "5",
+      "handler": "0x80092768",
+      "name": "AndWalkmeshMaterialByte",
+      "behavior": "applies a bitwise AND with a resolved mask to the selected byte lane of a walkmesh material flag and advances five bytes."
+    },
+    "84": {
+      "bytes": "5",
+      "handler": "0x80096644",
+      "name": "CheckScenarioFlagsLessThan",
+      "behavior": "compares scenario flags."
+    },
+    "85": {
+      "bytes": "5",
+      "handler": "0x800966B4",
+      "name": "CheckScenarioFlagsGreaterThan",
+      "behavior": "compares scenario flags."
+    },
+    "86": {
+      "bytes": "5",
+      "handler": "0x80096724",
+      "name": "CheckScenarioFlagsEqual",
+      "behavior": "compares scenario flags."
+    },
+    "87": {
+      "bytes": "3",
+      "handler": "0x80096790",
+      "name": "SetScenarioFlags",
+      "behavior": "writes scenario flags."
+    },
+    "88": {
+      "bytes": "3",
+      "handler": "0x800967E8",
+      "name": "GetScenarioFlags",
+      "behavior": "reads scenario flags."
+    },
+    "89": {
+      "bytes": "6",
+      "handler": "0x80095E48",
+      "name": "CheckActorDistance",
+      "behavior": "tests actor distance."
+    },
+    "8A": {
+      "bytes": "4",
+      "handler": "0x80095C00",
+      "name": "CheckActorOnScreen",
+      "behavior": "tests actor screen visibility."
+    },
+    "8B": {
+      "bytes": "5",
+      "handler": "0x800962C0",
+      "name": "CheckInventoryObject",
+      "behavior": "advances five bytes when the encoded object is present, otherwise branches to the encoded destination."
+    },
+    "8C": {
+      "bytes": "3",
+      "handler": "0x8009631C",
+      "name": "AddInventoryObject",
+      "behavior": "adds one unit of the encoded object and advances three bytes."
+    },
+    "8D": {
+      "bytes": "3",
+      "handler": "0x8009640C",
+      "name": "RemoveInventoryObject",
+      "behavior": "decrements an encoded object's quantity, clears its identifier when the quantity reaches zero, and advances three bytes."
+    },
+    "8E": {
+      "bytes": "7",
+      "handler": "0x80095F24",
+      "name": "CheckGoldAmount",
+      "behavior": "tests the current gold amount."
+    },
+    "8F": {
+      "bytes": "3",
+      "handler": "0x80095FB8",
+      "name": "IncreaseGold",
+      "behavior": "increases party gold."
+    },
+    "90": {
+      "bytes": "3",
+      "handler": "0x8009601C",
+      "name": "DecreaseGold",
+      "behavior": "decreases party gold."
+    },
+    "91": {
+      "bytes": "4",
+      "handler": "0x800964B0",
+      "name": "CheckPartyMember",
+      "behavior": "tests party membership."
+    },
+    "92": {
+      "bytes": "1",
+      "handler": "0x800A19B0",
+      "name": "InitializeActorScripts",
+      "behavior": "resets all actor script slots."
+    },
+    "93": {
+      "bytes": "3",
+      "handler": "0x800A1364",
+      "name": "AddCurrentActorToMechaList",
+      "behavior": "initializes the current actor's base graphic, synchronizes its transform, assigns a mecha-list slot and model identifier, and increments the mecha count."
+    },
+    "94": {
+      "bytes": "5",
+      "handler": "0x800945D4",
+      "name": "SetAndPauseEventTimer",
+      "behavior": "packs two evaluated bytes into VM variable 0x0A, pauses the event timer, and resets its update divider."
+    },
+    "95": {
+      "bytes": "2",
+      "handler": "0x80094650",
+      "name": "ConfigureEventTimer",
+      "behavior": "configures event-timer pause and count direction from the supplied control byte."
+    },
+    "96": {
+      "bytes": "1",
+      "handler": "0x8009468C",
+      "name": "PauseAndResetEventTimerDivider",
+      "behavior": "pauses the event timer and resets its update divider."
+    },
+    "97": {
+      "bytes": "3",
+      "handler": "0x8009A634",
+      "name": "SetAutomaticCameraRotationSectorMask",
+      "behavior": "sets the eight-sector mask that can trigger automatic camera orbit correction."
+    },
+    "98": {
+      "bytes": "5",
+      "handler": "0x800932D0",
+      "name": "ChangeFieldWhenReady",
+      "behavior": "waits for coordinator readiness, optionally saves the current field and directions, stages the destination field and entry parameter, marks replacement pending, then yields and advances five bytes."
+    },
+    "99": {
+      "bytes": "1",
+      "handler": "0x8008FB98",
+      "name": "EnterScriptCameraMode",
+      "behavior": "enters script-controlled camera mode, snapshots yaw, dip, and scaled depth, resets scale, initializes target and eye smoothing to twelve, and locks manual orbit."
+    },
+    "9A": {
+      "bytes": "3",
+      "handler": "0x8008FC4C",
+      "name": "LeaveOrReacquireFollowCamera",
+      "behavior": "in script mode, zero duration returns immediately to normal follow and advances six bytes, while nonzero duration starts asynchronous mode-2 reacquisition and advances three; an invocation already in mode 2 leaves the PC unchanged."
+    },
+    "9B": {
+      "bytes": "5",
+      "handler": "0x8008FD40",
+      "name": "SetCameraSmoothingDivisors",
+      "behavior": "sets independent target and eye smoothing divisors, normalizing either zero operand to one."
+    },
+    "9C": {
+      "bytes": "1",
+      "handler": "0x8009BB0C",
+      "name": "WaitForOwnedTextBox",
+      "behavior": "waits for the actor's owned text box, conditionally requests its closure, and copies the confirmed choice line to VM variable 0x14 after the slot is released."
+    },
+    "9D": {
+      "bytes": "4",
+      "handler": "0x8009A34C",
+      "name": "InterpolateSceneScale",
+      "behavior": "starts interpolation from the current scene scale to the scripted scale over the encoded duration."
+    },
+    "9E": {
+      "bytes": "1",
+      "handler": "0x8009B9A0",
+      "name": "SnapshotCameraGeometry",
+      "behavior": "waits for camera rotation to finish, then saves the current camera direction, projection distance, and depth-cue parameter and advances one byte."
+    },
+    "9F": {
+      "bytes": "1",
+      "handler": "0x8009BA0C",
+      "name": "RestoreCameraGeometry",
+      "behavior": "waits for camera rotation to finish, then interpolates camera direction, projection distance, and depth-cue parameter back to their saved values over 32 frames."
+    },
+    "A0": {
+      "bytes": "7",
+      "handler": "0x8009BA7C",
+      "name": "SetScreenGeometry",
+      "behavior": "sets depth cue, camera direction, and projection distance from three script operands, updates the geometry screen distance, and advances seven bytes."
+    },
+    "A1": {
+      "bytes": "3",
+      "handler": "0x8009A670",
+      "name": "SetBlockedCameraSectorMask",
+      "behavior": "sets the eight-sector mask used to reject or redirect manual camera orbit."
+    },
+    "A2": {
+      "bytes": "2",
+      "handler": "0x8009A58C",
+      "name": "WaitForCameraAnimationMask",
+      "behavior": "advances only after every camera animation flag selected by the immediate mask has cleared."
+    },
+    "A3": {
+      "bytes": "8",
+      "handler": "0x80090228",
+      "name": "SetCameraPosMovementDest",
+      "behavior": "sets camera-position destination."
+    },
+    "A4": {
+      "bytes": "4",
+      "handler": "0x8009A490",
+      "name": "InterpolateCameraDip",
+      "behavior": "starts interpolation from the current camera dip to the scripted dip over the encoded duration."
+    },
+    "A5": {
+      "bytes": "3",
+      "handler": "0x8009A534",
+      "name": "WriteCameraDirection",
+      "behavior": "writes camera direction."
+    },
+    "A6": {
+      "bytes": "3",
+      "handler": "0x80097410",
+      "name": "SkipScriptTriplets",
+      "behavior": "advances by three plus three times the evaluated signed count."
+    },
+    "A7": {
+      "bytes": "1",
+      "handler": "0x8009F5F4",
+      "name": "UpdatePlayerCharacter",
+      "behavior": "processes player movement eligibility, idle detection, directional input, movement triggers, and facing before advancing one byte."
+    },
+    "A8": {
+      "bytes": "5",
+      "handler": "0x8009D1F0",
+      "name": "MulVariableWithRand",
+      "behavior": "multiplies by random."
+    },
+    "A9": {
+      "bytes": "2",
+      "handler": "0x8009BC98",
+      "name": "SetupMultichoice",
+      "behavior": "waits for the current dialogue to accept choices, configures the packed first and last choice indices, initializes cursor state, and advances two bytes."
+    },
+    "AA": {
+      "bytes": "2",
+      "handler": "0x8009ACEC",
+      "name": "SetImmediateCameraRelativeActorDirection",
+      "behavior": "rotates the current actor to an immediate cardinal direction relative to the camera."
+    },
+    "AB": {
+      "bytes": "1",
+      "handler": "0x80090300",
+      "name": "ResetCameraMovements",
+      "behavior": "resets Field camera movements."
+    },
+    "AC": {
+      "bytes": "4",
+      "handler": "0x800903BC",
+      "name": "StartCameraMovement",
+      "behavior": "starts Field camera movement."
+    },
+    "AD": {
+      "bytes": "7",
+      "handler": "0x80090B18",
+      "name": "WriteCameraTweenTarget",
+      "behavior": "writes tween camera target."
+    },
+    "AE": {
+      "bytes": "7",
+      "handler": "0x80090B9C",
+      "name": "WriteCameraTweenPosition",
+      "behavior": "writes tween camera position."
+    },
+    "AF": {
+      "bytes": "4",
+      "handler": "0x80090C20",
+      "name": "ReadOrWriteCameraYaw",
+      "behavior": "writes the captured camera yaw to a variable when the control byte is zero or replaces it from the operand otherwise, then advances four bytes."
+    },
+    "B0": {
+      "bytes": "4",
+      "handler": "0x80090CB8",
+      "name": "ReadOrWriteCameraDip",
+      "behavior": "writes the captured projection dip to a variable when the control byte is zero or replaces it from the operand otherwise, then advances four bytes."
+    },
+    "B1": {
+      "bytes": "4",
+      "handler": "0x80090D50",
+      "name": "ReadOrWriteCameraDepth",
+      "behavior": "writes the captured scaled projection depth to a variable when the control byte is zero or replaces it with the unsigned operand otherwise, then advances four bytes."
+    },
+    "B2": {
+      "bytes": "2",
+      "handler": "0x8009A5E0",
+      "name": "YieldUntilCameraAnimationMaskClears",
+      "behavior": "yields script execution while any camera animation flag selected by the immediate mask remains set."
+    },
+    "B3": {
+      "bytes": "3",
+      "handler": "0x8009731C",
+      "name": "FadeOut",
+      "behavior": "starts a script fade-out."
+    },
+    "B4": {
+      "bytes": "3",
+      "handler": "0x80097364",
+      "name": "FadeIn",
+      "behavior": "starts a script fade-in."
+    },
+    "B5": {
+      "bytes": "5",
+      "handler": "0x8009B8E4",
+      "name": "SetCameraDirectionTimed",
+      "behavior": "snaps the camera direction when interpolation is disabled, otherwise waits for an active rotation or starts a timed direction change, then advances five bytes and yields."
+    },
+    "B6": {
+      "bytes": "5",
+      "handler": "0x8009B6AC",
+      "name": "InterpolateProjectionDepth",
+      "behavior": "applies or interpolates projection depth to the scripted value over the scripted duration."
+    },
+    "B7": {
+      "bytes": "1",
+      "handler": "0x8009ADDC",
+      "name": "DisableCameraHeightCheck",
+      "behavior": "disables automatic camera height checking and advances the script."
+    },
+    "B8": {
+      "bytes": "1",
+      "handler": "0x8009AE0C",
+      "name": "EnableCameraHeightCheck",
+      "behavior": "enables automatic camera height checking and advances the script."
+    },
+    "B9": {
+      "bytes": "4",
+      "handler": "0x80096534",
+      "name": "CheckAvailablePartyMember",
+      "behavior": "advances four bytes when the requested character is available, otherwise branches to the encoded destination."
+    },
+    "BA": {
+      "bytes": "2",
+      "handler": "0x800965A8",
+      "name": "AddAvailablePartyMember",
+      "behavior": "sets the requested character's availability bit and advances two bytes."
+    },
+    "BB": {
+      "bytes": "2",
+      "handler": "0x800965F4",
+      "name": "RemoveAvailablePartyMember",
+      "behavior": "clears the requested character's availability bit and advances two bytes."
+    },
+    "BC": {
+      "bytes": "1",
+      "handler": "0x800A0D3C",
+      "name": "InitializeActorSprite",
+      "behavior": "creates and initializes actor sprite state."
+    },
+    "BD": {
+      "bytes": "3",
+      "handler": "0x80094A5C",
+      "name": "IncreaseCurrentActorRotationX",
+      "behavior": "increments actor rotation X."
+    },
+    "BE": {
+      "bytes": "3",
+      "handler": "0x80094ACC",
+      "name": "DecreaseCurrentActorRotationX",
+      "behavior": "decrements actor rotation X."
+    },
+    "BF": {
+      "bytes": "3",
+      "handler": "0x80094B3C",
+      "name": "IncreaseCurrentActorRotationY",
+      "behavior": "increments actor rotation Y."
+    },
+    "C0": {
+      "bytes": "3",
+      "handler": "0x80094BAC",
+      "name": "DecreaseCurrentActorRotationY",
+      "behavior": "decrements actor rotation Y."
+    },
+    "C1": {
+      "bytes": "3",
+      "handler": "0x80094C1C",
+      "name": "IncreaseCurrentActorRotationZ",
+      "behavior": "increments actor rotation Z."
+    },
+    "C2": {
+      "bytes": "3",
+      "handler": "0x80094C8C",
+      "name": "DecreaseCurrentActorRotationZ",
+      "behavior": "decrements actor rotation Z."
+    },
+    "C3": {
+      "bytes": "1",
+      "handler": "0x800972F4",
+      "name": "YieldCurrentCycle",
+      "behavior": "requests a VM yield and advances one byte."
+    },
+    "C4": {
+      "bytes": "2",
+      "handler": "0x80093E30",
+      "name": "RotateActorAndSetStateFlag",
+      "behavior": "rotates an actor over 30 steps and sets its state flag."
+    },
+    "C5": {
+      "bytes": "2",
+      "handler": "0x80093FC0",
+      "name": "RotateActorAndClearStateFlag",
+      "behavior": "applies the inverse rotation and clears its state flag."
+    },
+    "C6": {
+      "bytes": "1",
+      "handler": "0x800A1E9C",
+      "name": "Yield32",
+      "behavior": "adds 32 instructions to the VM budget and yields."
+    },
+    "C7": {
+      "bytes": "3",
+      "handler": "0x8009B824",
+      "name": "StartCameraDollyMode0",
+      "behavior": "starts a positive one-eighth-turn camera dolly rotation over the requested duration when no rotation is active, then advances three bytes and yields."
+    },
+    "C8": {
+      "bytes": "3",
+      "handler": "0x8009B884",
+      "name": "StartCameraDollyMode0Alias",
+      "behavior": "starts a positive one-eighth-turn camera dolly rotation over the requested duration when no rotation is active, then advances three bytes and yields."
+    },
+    "C9": {
+      "bytes": "4",
+      "handler": "0x80095734",
+      "name": "BranchUnlessInsideTriggerZone2D",
+      "behavior": "advances four bytes when the physically controlled actor lies inside the indexed trigger's inclusive XZ quadrilateral, otherwise branches to the encoded target."
+    },
+    "CA": {
+      "bytes": "8",
+      "handler": "0x8009A824",
+      "name": "Atan2",
+      "behavior": "Field script atan2 helper."
+    },
+    "CB": {
+      "bytes": "4",
+      "handler": "0x800958C0",
+      "name": "BranchUnlessInsideTriggerZone3D",
+      "behavior": "advances four bytes when the physically controlled actor straddles the indexed trigger's Y plane and lies inside its inclusive XZ quadrilateral, otherwise branches to the encoded target."
+    },
+    "CC": {
+      "bytes": "4",
+      "handler": "0x80095520",
+      "name": "CallTriggerZone3D",
+      "behavior": "conditionally calls the encoded target when the physically controlled actor straddles the indexed trigger's Y plane and lies inside its inclusive XZ quadrilateral, otherwise advances four bytes."
+    },
+    "CD": {
+      "bytes": "1",
+      "handler": "0x8009DA70",
+      "name": "DisableAutomaticContactScript",
+      "behavior": "suppresses automatic contact routine 3 while leaving explicit interaction routine 2 available."
+    },
+    "CE": {
+      "bytes": "1",
+      "handler": "0x8009DA98",
+      "name": "EnableAutomaticContactScript",
+      "behavior": "re-enables automatic contact routine 3."
+    },
+    "CF": {
+      "bytes": "5",
+      "handler": "0x8009CE48",
+      "name": "SetDialogueWindowImmediate",
+      "behavior": "stores immediate forced X and Y positions, width in three-pixel character units, and height, then advances five bytes."
+    },
+    "D0": {
+      "bytes": "11",
+      "handler": "0x8009CEE0",
+      "name": "SetDialogueWindowEvaluated",
+      "behavior": "evaluates and stores forced X and Y positions, width in three-pixel character units, height, and window flags, then advances eleven bytes."
+    },
+    "D1": {
+      "bytes": "stall",
+      "handler": "0x8009CF70",
+      "name": "ImmediateNoop",
+      "behavior": "returns immediately without changing script or field state."
+    },
+    "D2": {
+      "bytes": "4",
+      "handler": "0x8009C0B4",
+      "name": "OpenActorDialogueMode0",
+      "behavior": "opens the selected dialogue block in actor-anchored mode 0 using the trailing control byte."
+    },
+    "D3": {
+      "bytes": "4",
+      "handler": "0x8009C0DC",
+      "name": "OpenDialogueMode1",
+      "behavior": "opens the selected dialogue block in window mode 1 using the trailing control byte."
+    },
+    "D4": {
+      "bytes": "5",
+      "handler": "0x8009C01C",
+      "name": "OpenDialogueAtActorMode0",
+      "behavior": "resolves the selected actor as the placement anchor for the current actor's mode-zero dialogue, skips six bytes for an invalid actor, or rewinds one byte to retry deferred creation."
+    },
+    "D5": {
+      "bytes": "3",
+      "handler": "0x80092628",
+      "name": "SetControllerBtnMask",
+      "behavior": "sets controller mask."
+    },
+    "D6": {
+      "bytes": "3",
+      "handler": "0x800925A0",
+      "name": "SetDialogAnimationSpeed",
+      "behavior": "stores the dialog animation mode and selects eight, six, or four opening frames for modes zero, one, or two before advancing three bytes."
+    },
+    "D7": {
+      "bytes": "3",
+      "handler": "0x800946BC",
+      "name": "SetObjectSwivelXAxis",
+      "behavior": "selects object swivel around X and stores the evaluated angle."
+    },
+    "D8": {
+      "bytes": "3",
+      "handler": "0x80094710",
+      "name": "SetObjectSwivelYAxis",
+      "behavior": "selects object swivel around Y and stores the evaluated angle."
+    },
+    "D9": {
+      "bytes": "3",
+      "handler": "0x80094764",
+      "name": "SetObjectSwivelZAxis",
+      "behavior": "selects object swivel around Z and stores the evaluated angle."
+    },
+    "DA": {
+      "bytes": "17",
+      "handler": "0x800921E8",
+      "name": "CreateLineScrollEffect",
+      "behavior": "allocates and fills a line-scroll byte buffer, allocates and initializes its descriptor from six geometry parameters, registers up to 32 effects, and advances seventeen bytes."
+    },
+    "DB": {
+      "bytes": "5",
+      "handler": "0x80091F84",
+      "name": "SetDeformationStrength",
+      "behavior": "caps a deformation strength at 0xFFF, stores it in the selected deformation slot when the current model supports deformation, and advances five bytes."
+    },
+    "DC": {
+      "bytes": "5",
+      "handler": "0x80092044",
+      "name": "SwapVariables",
+      "behavior": "exchanges the values of two script variables and advances five bytes."
+    },
+    "DD": {
+      "bytes": "6",
+      "handler": "0x80091E00",
+      "name": "SetCurrentActorBlendParameters",
+      "behavior": "replaces rendering blend bits 5 through 6 from the low two operand bits, stores the accompanying rendering value, and advances six bytes."
+    },
+    "DE": {
+      "bytes": "6",
+      "handler": "0x8009D6D8",
+      "name": "VariableMul",
+      "behavior": "multiplies a variable."
+    },
+    "DF": {
+      "bytes": "6",
+      "handler": "0x8009D768",
+      "name": "VariableDiv",
+      "behavior": "divides a variable."
+    },
+    "E0": {
+      "bytes": "7",
+      "handler": "0x80091E98",
+      "name": "SetSelectedActorBlendParameters",
+      "behavior": "resolves an actor and, when valid, replaces its rendering blend bits and accompanying rendering value before advancing seven bytes."
+    },
+    "E1": {
+      "bytes": "14",
+      "handler": "0x80091BBC",
+      "name": "MoveOrClearVramRectangle",
+      "behavior": "clears the rectangle defined by the final four operands when the first coordinate pair is zero, otherwise moves the rectangle defined by the first four operands to the final coordinate pair, then advances fourteen bytes."
+    },
+    "E2": {
+      "bytes": "5",
+      "handler": "0x80096150",
+      "name": "CheckCurrentInputExact",
+      "behavior": "conditionally branches on exact current input."
+    },
+    "E3": {
+      "bytes": "5",
+      "handler": "0x80096178",
+      "name": "CheckAccumulatedInputExact",
+      "behavior": "conditionally branches on exact accumulated input."
+    },
+    "E4": {
+      "bytes": "stall",
+      "handler": "0x80091AD4",
+      "name": "OpcodeE4NoOp",
+      "behavior": "returns immediately without changing state or advancing script execution."
+    },
+    "E5": {
+      "bytes": "17",
+      "handler": "0x80091944",
+      "name": "ConfigureFog",
+      "behavior": "stores near and far RGB colors plus near and far fog distances, enables fog, applies the new configuration, and advances seventeen bytes."
+    },
+    "E6": {
+      "bytes": "9",
+      "handler": "0x80091A08",
+      "name": "SetCameraLimits",
+      "behavior": "stores the signed camera-limit origin and extents while negating the final extent and advances nine bytes."
+    },
+    "E7": {
+      "bytes": "7",
+      "handler": "0x80091A78",
+      "name": "SetExtendedBackgroundClearColor",
+      "behavior": "stores the red, green, and blue background clear components and advances seven bytes."
+    },
+    "E8": {
+      "bytes": "7",
+      "handler": "0x80094158",
+      "name": "MoveActorAndSetStateFlag",
+      "behavior": "moves an actor for a scripted step count and sets its state flag."
+    },
+    "E9": {
+      "bytes": "7",
+      "handler": "0x800943AC",
+      "name": "MoveActorAndClearStateFlag",
+      "behavior": "applies complementary movement and clears its state flag."
+    },
+    "EA": {
+      "bytes": "6",
+      "handler": "0x80092DFC",
+      "name": "WalkPlayerToAlignedExit",
+      "behavior": "waits for transition systems, enables scripted player control, and walks the player toward the current actor's aligned exit point while committing any pending field transition."
+    },
+    "EB": {
+      "bytes": "20",
+      "handler": "0x800910C0",
+      "name": "ComputeOrbitPointFromCoordinates",
+      "behavior": "builds a camera-scale-adjusted orbit point around explicit coordinates from yaw, pitch, and magnitude inputs, writes its X, Z, and Y coordinates, and advances twenty bytes."
+    },
+    "EC": {
+      "bytes": "15",
+      "handler": "0x80091318",
+      "name": "ComputeCameraOrbitPoint",
+      "behavior": "computes a rotated camera endpoint."
+    },
+    "ED": {
+      "bytes": "8",
+      "handler": "0x800915C4",
+      "name": "WriteCameraMovementParameter",
+      "behavior": "writes a camera parameter."
+    },
+    "EE": {
+      "bytes": "3",
+      "handler": "0x80091720",
+      "name": "SetCameraMovementParameter",
+      "behavior": "sets a camera parameter."
+    },
+    "EF": {
+      "bytes": "3",
+      "handler": "0x8008FA38",
+      "name": "WaitForCameraMovement",
+      "behavior": "waits for camera movement."
+    },
+    "F0": {
+      "bytes": "7",
+      "handler": "0x80090DEC",
+      "name": "WriteCameraProjectionParameters",
+      "behavior": "writes captured camera yaw, projection dip, and scaled projection depth to three variables and advances seven bytes."
+    },
+    "F1": {
+      "bytes": "11",
+      "handler": "0x8008B248",
+      "name": "SetupRgbCalculationMode1",
+      "behavior": "configures RGB calculation mode 1 from five script parameters."
+    },
+    "F2": {
+      "bytes": "9",
+      "handler": "0x8008F90C",
+      "name": "SetupCameraShake",
+      "behavior": "configures target X, Z, and Y shake offsets and per-frame deltas for a nonzero duration, with an extended return-to-zero phase when every target is zero."
+    },
+    "F3": {
+      "bytes": "7",
+      "handler": "0x80090E70",
+      "name": "WriteCameraOrbitParameters",
+      "behavior": "writes yaw, pitch, and half-distance."
+    },
+    "F4": {
+      "bytes": "2",
+      "handler": "0x8009BE9C",
+      "name": "CloseDialogueOrResetWindowConfig",
+      "behavior": "control value zero requests closure of the actor's owned dialogue, while a nonzero value clears configured width, height, forced position, and window flags."
+    },
+    "F5": {
+      "bytes": "4",
+      "handler": "0x8009C12C",
+      "name": "OpenCenteredDialogueMode3",
+      "behavior": "opens the selected dialogue block in centered mode 3 using the trailing control byte."
+    },
+    "F6": {
+      "bytes": "2",
+      "handler": "0x8008E8C8",
+      "name": "ConfigureActorRotationLockMode",
+      "behavior": "clears rotation locking and residual motion for mode zero, locks and snapshots rotation for mode one, enables deferred motion cleanup for mode two, and advances two bytes."
+    },
+    "F7": {
+      "bytes": "5",
+      "handler": "0x8008E85C",
+      "name": "ConfigureRandomEncounterTimers",
+      "behavior": "evaluates the encounter timer range and active-timer count, caps the count at 32, and regenerates that many unique randomized countdowns."
+    },
+    "F8": {
+      "bytes": "4",
+      "handler": "0x8008E59C",
+      "name": "UpdateCurrentActorFlagQuarter",
+      "behavior": "sets or clears the selected lower or upper 16-bit quarter of either current actor flag group and advances four bytes."
+    },
+    "F9": {
+      "bytes": "2",
+      "handler": "0x8008DE64",
+      "name": "SetParentActor",
+      "behavior": "assigns an actor parent."
+    },
+    "FA": {
+      "bytes": "5",
+      "handler": "0x800947B0",
+      "name": "AdjustActorAxisRotation",
+      "behavior": "adjusts a selected actor rotation axis."
+    },
+    "FB": {
+      "bytes": "5",
+      "handler": "0x8008D780",
+      "name": "JumpIfIndexedBitClear",
+      "behavior": "conditionally branches on an indexed bit."
+    },
+    "FC": {
+      "bytes": "5",
+      "handler": "0x8009BF8C",
+      "name": "OpenDialogueAtActorWithCopiedPortrait",
+      "behavior": "resolves the selected actor, copies its portrait ID into the current actor, and opens the current actor's mode-zero dialogue anchored to the selected actor; an invalid selector skips six bytes and deferred creation retries."
+    },
+    "FD": {
+      "bytes": "1",
+      "handler": "0x800A2FC0",
+      "name": "Nop",
+      "behavior": "Field script no-op handler."
+    },
+    "FE": {
+      "bytes": "prefix",
+      "handler": "0x800869B8",
+      "name": "ExtendedDispatch",
+      "behavior": "executes the secondary Field script VM."
+    },
+    "FF": {
+      "bytes": "1",
+      "handler": "0x800A2FC0",
+      "name": "Nop",
+      "behavior": "Field script no-op handler."
+    }
+  },
+  "extended": {
+    "00": {
+      "bytes": "fallback",
+      "handler": "0x8008D2D8",
+      "name": "ExtendedOpcodeZeroNoOp",
+      "behavior": "returns immediately without changing runtime state."
+    },
+    "01": {
+      "bytes": "2",
+      "handler": "0x8009F424",
+      "name": "RandomTurn",
+      "behavior": "periodically selects a random turn."
+    },
+    "02": {
+      "bytes": "5",
+      "handler": "0x80095B3C",
+      "name": "FieldActorInnerProximityPredicate",
+      "behavior": "checks the near-screen actor range."
+    },
+    "03": {
+      "bytes": "4",
+      "handler": "0x8008D0F4",
+      "name": "SetCurrentActorUniformScale",
+      "behavior": "sets uniform actor scale, applies a three-quarter sprite scale, refreshes rotation, and advances three bytes."
+    },
+    "04": {
+      "bytes": "4",
+      "handler": "0x8008D26C",
+      "name": "SetCurrentActorSpriteGeometryScale",
+      "behavior": "doubles the supplied value into the current actor's sprite geometry scale and advances three bytes."
+    },
+    "05": {
+      "bytes": "7",
+      "handler": "0x80095CC4",
+      "name": "CheckActorWalkmeshId",
+      "behavior": "advances six bytes when the selected actor uses the requested walkmesh, otherwise branches to the encoded destination."
+    },
+    "06": {
+      "bytes": "7",
+      "handler": "0x80095D6C",
+      "name": "CheckActorWalkmeshMaterial",
+      "behavior": "advances six bytes when the selected actor's current triangle has the requested material byte, otherwise branches to the encoded destination."
+    },
+    "07": {
+      "bytes": "3",
+      "handler": "0x8008D604",
+      "name": "SetCurrentActorFlag400FromMode",
+      "behavior": "clears actor flag 0x400 for mode zero, sets it for mode one, and advances two bytes."
+    },
+    "08": {
+      "bytes": "8",
+      "handler": "0x8008D180",
+      "name": "SetCurrentActorAxisScales",
+      "behavior": "sets independent actor X, Y, and Z scales, restores the sprite scale to 0xC00, refreshes rotation, and advances seven bytes."
+    },
+    "09": {
+      "bytes": "4",
+      "handler": "0x8008D078",
+      "name": "ToggleActorMechaSuppression",
+      "behavior": "clears actor flag 0x800 for a zero operand and sets it otherwise, controlling mecha and shadow suppression."
+    },
+    "0A": {
+      "bytes": "4",
+      "handler": "0x8008D684",
+      "name": "VariableSetIndexedBit",
+      "behavior": "sets an indexed script-variable bit."
+    },
+    "0B": {
+      "bytes": "4",
+      "handler": "0x8008D700",
+      "name": "VariableClearIndexedBit",
+      "behavior": "clears an indexed script-variable bit."
+    },
+    "0C": {
+      "bytes": "14",
+      "handler": "0x8008CFEC",
+      "name": "SetSharedGeometryParameters",
+      "behavior": "sets six signed shared geometry parameters from script operands."
+    },
+    "0D": {
+      "bytes": "4",
+      "handler": "0x8008CF9C",
+      "name": "SetDialogPortraitCharacter",
+      "behavior": "resolves a character selector and stores it as the current actor's dialog portrait identifier."
+    },
+    "0E": {
+      "bytes": "6",
+      "handler": "0x8008C84C",
+      "name": "FadeMusicVolume",
+      "behavior": "transitions music volume to the requested target over the requested duration and retries when music startup is incomplete."
+    },
+    "0F": {
+      "bytes": "7",
+      "handler": "0x8008C938",
+      "name": "FadeMusicPitch",
+      "behavior": "transitions music pitch to a signed target over the requested duration and retries when music startup is incomplete."
+    },
+    "10": {
+      "bytes": "6",
+      "handler": "0x8008CA60",
+      "name": "FadeMusicTempo",
+      "behavior": "transitions music tempo to the requested target over the requested duration and retries when music startup is incomplete."
+    },
+    "11": {
+      "bytes": "7",
+      "handler": "0x8008CB4C",
+      "name": "FadeMusicPan",
+      "behavior": "transitions music pan to a signed target over the requested duration and retries when music startup is incomplete."
+    },
+    "12": {
+      "bytes": "4",
+      "handler": "0x8008CC74",
+      "name": "SetMusicChannelMask",
+      "behavior": "applies a channel-enable mask to the active music instance and updates affected voices."
+    },
+    "13": {
+      "bytes": "6",
+      "handler": "0x8008CD48",
+      "name": "ConfigureActorPositionalSound",
+      "behavior": "assigns the current actor's positional sound identifier and volume in mode 0, stops its previous channel, and marks zero identifiers inactive."
+    },
+    "14": {
+      "bytes": "6",
+      "handler": "0x8008CDD4",
+      "name": "ConfigureActorPositionalSoundMode80",
+      "behavior": "assigns the current actor's positional sound identifier and volume with mode 0x80, stops its previous channel, and marks zero identifiers inactive."
+    },
+    "15": {
+      "bytes": "6",
+      "handler": "0x800A14F0",
+      "name": "InitializeActorGraphicVariant",
+      "behavior": "initializes the current actor from a selected field graphic and variant, synchronizes placement, enables updates and visibility, and advances five bytes."
+    },
+    "16": {
+      "bytes": "2",
+      "handler": "0x8008C7D8",
+      "name": "FreeMovementBoundingZone",
+      "behavior": "releases the current actor's allocated movement-boundary vertices and clears their ownership flag."
+    },
+    "17": {
+      "bytes": "4",
+      "handler": "0x8009AA00",
+      "name": "FaceActorTowardActor",
+      "behavior": "turns the first selected actor toward the second selected actor when both are valid."
+    },
+    "18": {
+      "bytes": "5",
+      "handler": "0x8008BDD8",
+      "name": "AddImmediatePartyCharacter",
+      "behavior": "reserves a staging slot and begins loading an immediate party character, or marks an already staged character as present."
+    },
+    "19": {
+      "bytes": "3",
+      "handler": "0x8008C334",
+      "name": "RemovePartyCharacter",
+      "behavior": "removes a resolved party member, compacts party resources and slot metadata, and reactivates shifted actors."
+    },
+    "1A": {
+      "bytes": "2",
+      "handler": "0x8008B894",
+      "name": "FinalizePartyCharacterLoad",
+      "behavior": "waits for staged loading, decompresses the character resource, releases compressed data, and initializes the first entry actor targeting that character."
+    },
+    "1B": {
+      "bytes": "6",
+      "handler": "0x8008B5D4",
+      "name": "AdjustCurrentModelRedGreen",
+      "behavior": "adds signed red and green deltas to every current-model vertex and mirrors the colors into the alternate render buffer."
+    },
+    "1C": {
+      "bytes": "9",
+      "handler": "0x80098A7C",
+      "name": "SetActorPosition3DImmediate",
+      "behavior": "places the current actor at scripted XYZ coordinates and synchronizes its rendered and physical positions."
+    },
+    "1D": {
+      "bytes": "9",
+      "handler": "0x800984EC",
+      "name": "SetGlobalModelTranslationStep",
+      "behavior": "sets the global XYZ model translation increments and enables their application."
+    },
+    "1E": {
+      "bytes": "3",
+      "handler": "0x8009FB98",
+      "name": "SwitchMapToGears",
+      "behavior": "synchronizes assets and marks the Field map for Gear mode."
+    },
+    "1F": {
+      "bytes": "2",
+      "handler": "0x8009FDD4",
+      "name": "MountCurrentPartyActor",
+      "behavior": "maps the current actor to a party slot, mounts it when not already riding a gear, and advances one byte."
+    },
+    "20": {
+      "bytes": "3",
+      "handler": "0x8009FE4C",
+      "name": "DismountPartyCharacter",
+      "behavior": "resolves the selected character to a party slot, dismounts it when currently riding a gear, and advances two bytes."
+    },
+    "21": {
+      "bytes": "4",
+      "handler": "0x800A06E8",
+      "name": "InitializePartyCharacterActor",
+      "behavior": "resolves a character into the active party, binds its party graphics and synchronized transform, or creates a disabled placeholder when absent."
+    },
+    "22": {
+      "bytes": "4",
+      "handler": "0x8009B664",
+      "name": "WriteProjectionDepth",
+      "behavior": "writes the current projection depth to script memory."
+    },
+    "23": {
+      "bytes": "21",
+      "handler": "0x8009B398",
+      "name": "MovePartyToFormation",
+      "behavior": "moves the three party slots toward separate scripted positions and facings until all arrive, while the sentinel mode immediately normalizes their rotations."
+    },
+    "24": {
+      "bytes": "2",
+      "handler": "0x8009B210",
+      "name": "GatherPartyAtLeader",
+      "behavior": "moves all three party slots to the leader, stalls until every valid member arrives, then resets follow history."
+    },
+    "25": {
+      "bytes": "3",
+      "handler": "0x8008D5C8",
+      "name": "SetCameraFollowHeightMode",
+      "behavior": "loads the camera follow-height mode from the next byte and advances two bytes."
+    },
+    "26": {
+      "bytes": "16",
+      "handler": "0x8008B2F0",
+      "name": "SetupScreenDistortion",
+      "behavior": "initializes screen distortion mode 0 from seven script parameters."
+    },
+    "27": {
+      "bytes": "3 or 5",
+      "handler": "0x8008B328",
+      "name": "ControlScreenDistortion",
+      "behavior": "starts distortion fade-out, waits for completion, stops updates, or releases distortion resources according to its subcommand."
+    },
+    "28": {
+      "bytes": "4",
+      "handler": "0x8008E4EC",
+      "name": "WriteCurrentActorFlags1",
+      "behavior": "writes current actor flag word 1 to the indexed script variable and advances three bytes."
+    },
+    "29": {
+      "bytes": "4",
+      "handler": "0x8008E518",
+      "name": "WriteCurrentActorFlags2",
+      "behavior": "writes current actor flag word 2 to the indexed script variable and advances three bytes."
+    },
+    "2A": {
+      "bytes": "4",
+      "handler": "0x8008E544",
+      "name": "WriteCurrentActorFlags3",
+      "behavior": "writes current actor flag word 3 to the indexed script variable and advances three bytes."
+    },
+    "2B": {
+      "bytes": "4",
+      "handler": "0x8008E570",
+      "name": "WriteCurrentActorFlags4",
+      "behavior": "writes current actor flag word 4 to the indexed script variable and advances three bytes."
+    },
+    "2C": {
+      "bytes": "4",
+      "handler": "0x8008DEBC",
+      "name": "WriteActorFlags1",
+      "behavior": "writes actor flag group 1."
+    },
+    "2D": {
+      "bytes": "4",
+      "handler": "0x8008DF44",
+      "name": "WriteActorFlags2",
+      "behavior": "writes actor flag group 2."
+    },
+    "2E": {
+      "bytes": "4",
+      "handler": "0x8008DFCC",
+      "name": "WriteActorFlags3",
+      "behavior": "writes actor flag group 3."
+    },
+    "2F": {
+      "bytes": "4",
+      "handler": "0x8008E054",
+      "name": "WriteActorFlags4",
+      "behavior": "writes actor flag group 4."
+    },
+    "30": {
+      "bytes": "6",
+      "handler": "0x8008E3E8",
+      "name": "JumpUnlessCurrentActorFlags1Set",
+      "behavior": "branches to the encoded destination when the requested mask does not intersect current actor flag word 1, otherwise advances five bytes."
+    },
+    "31": {
+      "bytes": "6",
+      "handler": "0x8008E414",
+      "name": "JumpUnlessCurrentActorFlags2Set",
+      "behavior": "branches to the encoded destination when the requested mask does not intersect current actor flag word 2, otherwise advances five bytes."
+    },
+    "32": {
+      "bytes": "6",
+      "handler": "0x8008E440",
+      "name": "JumpUnlessCurrentActorFlags3Set",
+      "behavior": "branches to the encoded destination when the requested mask does not intersect current actor flag word 3, otherwise advances five bytes."
+    },
+    "33": {
+      "bytes": "6",
+      "handler": "0x8008E46C",
+      "name": "JumpUnlessCurrentActorFlags4Set",
+      "behavior": "branches to the encoded destination when the requested mask does not intersect current actor flag word 4, otherwise advances five bytes."
+    },
+    "34": {
+      "bytes": "7",
+      "handler": "0x8008E298",
+      "name": "JumpUnlessTargetActorFlags1Set",
+      "behavior": "branches to the encoded destination when the requested mask does not intersect target actor flag word 1, otherwise advances six bytes."
+    },
+    "35": {
+      "bytes": "7",
+      "handler": "0x8008E2EC",
+      "name": "JumpUnlessTargetActorFlags2Set",
+      "behavior": "branches to the encoded destination when the requested mask does not intersect target actor flag word 2, otherwise advances six bytes."
+    },
+    "36": {
+      "bytes": "7",
+      "handler": "0x8008E340",
+      "name": "JumpUnlessTargetActorFlags3Set",
+      "behavior": "branches to the encoded destination when the requested mask does not intersect target actor flag word 3, otherwise advances six bytes."
+    },
+    "37": {
+      "bytes": "7",
+      "handler": "0x8008E394",
+      "name": "JumpUnlessTargetActorFlags4Set",
+      "behavior": "branches to the encoded destination when the requested mask does not intersect target actor flag word 4, otherwise advances six bytes."
+    },
+    "38": {
+      "bytes": "6",
+      "handler": "0x8008E1B4",
+      "name": "WriteActorDistance",
+      "behavior": "resolves two actor selectors, computes their planar distance from fixed-point X/Z positions, writes zero if either actor is absent, and stores the result in the selected script variable."
+    },
+    "39": {
+      "bytes": "4",
+      "handler": "0x8008D230",
+      "name": "SetActorAnimationOffsetScale",
+      "behavior": "sets the global multiplier used to convert animation displacement samples into planar actor offsets and advances three bytes."
+    },
+    "3A": {
+      "bytes": "4",
+      "handler": "0x8008CED0",
+      "name": "SetPartyFrameMask",
+      "behavior": "resolves a character selector and sets that character's bit in the party frame mask."
+    },
+    "3B": {
+      "bytes": "4",
+      "handler": "0x8008CE64",
+      "name": "ClearPartyFrameMask",
+      "behavior": "resolves a character selector and clears that character's bit in the party frame mask."
+    },
+    "3C": {
+      "bytes": "6",
+      "handler": "0x8008B180",
+      "name": "PlayMechaAnimation",
+      "behavior": "starts the selected animation on a mecha slot and records its current animation identifier."
+    },
+    "3D": {
+      "bytes": "11",
+      "handler": "0x8008AEC8",
+      "name": "SetPrimaryMechaMatrixRow",
+      "behavior": "writes three signed values into a selected row of the primary mecha field matrix."
+    },
+    "3E": {
+      "bytes": "11",
+      "handler": "0x8008AFD8",
+      "name": "SetSecondaryMechaMatrixRow",
+      "behavior": "writes three signed values into a selected row of the secondary mecha field matrix."
+    },
+    "3F": {
+      "bytes": "8",
+      "handler": "0x8008B0E8",
+      "name": "SetBackgroundClearColor",
+      "behavior": "sets the background clear red, green, and blue components."
+    },
+    "40": {
+      "bytes": "8",
+      "handler": "0x80092148",
+      "name": "WriteLineScrollByte",
+      "behavior": "writes one byte at the requested offset of a line-scroll buffer when the offset is below its configured length and advances seven bytes."
+    },
+    "41": {
+      "bytes": "4",
+      "handler": "0x8009FC48",
+      "name": "PartyMemberRideGear",
+      "behavior": "mounts a party member in Gear."
+    },
+    "42": {
+      "bytes": "4",
+      "handler": "0x8009FCAC",
+      "name": "PartyMemberDisembarkGear",
+      "behavior": "disembarks a party member."
+    },
+    "43": {
+      "bytes": "2",
+      "handler": "0x8009B15C",
+      "name": "DisablePartyFollow",
+      "behavior": "disables party members following the leader."
+    },
+    "44": {
+      "bytes": "2",
+      "handler": "0x8009B184",
+      "name": "EnablePartyFollow",
+      "behavior": "enables party following, clears follow state, and seeds the complete movement history with the leader's current state."
+    },
+    "45": {
+      "bytes": "3",
+      "handler": "0x8009A0FC",
+      "name": "SetAnimationOverride",
+      "behavior": "replaces the current actor animation override with the immediate animation identifier."
+    },
+    "46": {
+      "bytes": "3",
+      "handler": "0x8008AE5C",
+      "name": "SetMechaRotationAuthority",
+      "behavior": "selects whether the current actor follows its mecha root rotation or drives that rotation."
+    },
+    "47": {
+      "bytes": "4",
+      "handler": "0x8008B144",
+      "name": "SetDefaultModelTurnRate",
+      "behavior": "sets the default angular step used when rotating field models toward their targets."
+    },
+    "48": {
+      "bytes": "9",
+      "handler": "0x8008B518",
+      "name": "SetCameraProjectionAngles",
+      "behavior": "sets the three signed camera projection angles."
+    },
+    "49": {
+      "bytes": "2",
+      "handler": "0x8008DAFC",
+      "name": "ClearCurrentActorParent",
+      "behavior": "sets the current actor's parent identifier to 0xFF and advances one byte."
+    },
+    "4A": {
+      "bytes": "4",
+      "handler": "0x8008ACE8",
+      "name": "BeginSpecialAnimationLoad",
+      "behavior": "replaces the current actor's special-animation allocation and begins loading the selected animation resource."
+    },
+    "4B": {
+      "bytes": "2",
+      "handler": "0x8008A9AC",
+      "name": "FinalizeSpecialAnimationLoad",
+      "behavior": "waits for loading to finish, attaches the special animation to the current sprite, and retries while busy."
+    },
+    "4C": {
+      "bytes": "3",
+      "handler": "0x8008A974",
+      "name": "SetForcedAnimationAndReleaseOverride",
+      "behavior": "sets the complemented forced-animation identifier and clears actor flag 0x10000."
+    },
+    "4D": {
+      "bytes": "3",
+      "handler": "0x8008A93C",
+      "name": "SetForcedAnimationComplement",
+      "behavior": "stores the bitwise complement of an immediate animation identifier as the current actor's forced animation."
+    },
+    "4E": {
+      "bytes": "2",
+      "handler": "0x8008AA60",
+      "name": "FreeSpecialAnimation",
+      "behavior": "releases the current actor's special-animation allocation and resets its resource identifier."
+    },
+    "4F": {
+      "bytes": "2",
+      "handler": "0x80093BB0",
+      "name": "EnableFieldMenu",
+      "behavior": "allows the player to open the normal Field menu."
+    },
+    "50": {
+      "bytes": "2",
+      "handler": "0x80093BD4",
+      "name": "DisableFieldMenu",
+      "behavior": "prevents the player from opening the normal Field menu."
+    },
+    "51": {
+      "bytes": "2",
+      "handler": "0x80093BFC",
+      "name": "EnableCompass",
+      "behavior": "enables the Field compass."
+    },
+    "52": {
+      "bytes": "2",
+      "handler": "0x80093C20",
+      "name": "DisableCompass",
+      "behavior": "disables the Field compass."
+    },
+    "53": {
+      "bytes": "2",
+      "handler": "0x80093AC8",
+      "name": "EnableEncountersFieldMenuAndCompass",
+      "behavior": "enables random encounters, the player-opened Field menu, and the Field compass."
+    },
+    "54": {
+      "bytes": "2",
+      "handler": "0x80093B10",
+      "name": "DisableEncountersFieldMenuAndCompass",
+      "behavior": "disables random encounters, the player-opened Field menu, and the Field compass."
+    },
+    "55": {
+      "bytes": "2",
+      "handler": "0x80093740",
+      "name": "OpenNormalMenu",
+      "behavior": "queues menu mode 0 with the configured menu argument, yields, increments the open-menu count, and advances one byte."
+    },
+    "56": {
+      "bytes": "4",
+      "handler": "0x80093930",
+      "name": "OpenMenuMode1WithSelection",
+      "behavior": "copies the evaluated selection into script variable 1 and persistent menu state, queues menu mode 1, yields, and advances three bytes."
+    },
+    "57": {
+      "bytes": "2",
+      "handler": "0x800937E0",
+      "name": "OpenLoadGameMenu",
+      "behavior": "queues menu mode 2, yields, increments the open-menu count, and advances one byte."
+    },
+    "58": {
+      "bytes": "4",
+      "handler": "0x80093824",
+      "name": "OpenEnterNameMenu",
+      "behavior": "queues the Enter Name menu for the selected character or name record and yields the current script."
+    },
+    "59": {
+      "bytes": "4",
+      "handler": "0x800939A0",
+      "name": "OpenShopMenu",
+      "behavior": "queues the selected shop inventory and yields the current script."
+    },
+    "5A": {
+      "bytes": "4",
+      "handler": "0x80093A04",
+      "name": "OpenGearShopMenu",
+      "behavior": "queues the selected Gear shop inventory and yields the current script."
+    },
+    "5B": {
+      "bytes": "4",
+      "handler": "0x8008B210",
+      "name": "SetActorModelTurnRate",
+      "behavior": "sets the current actor's model-specific angular rotation step."
+    },
+    "5C": {
+      "bytes": "3 or 5",
+      "handler": "0x800A0FD8",
+      "name": "LoadCurrentActorMecha",
+      "behavior": "waits for I/O, hides or frees the indexed mecha, asynchronously loads replacement files, then constructs and binds the replacement with the actor's scale and position."
+    },
+    "5D": {
+      "bytes": "8",
+      "handler": "0x8008F6AC",
+      "name": "PlaySoundEffectWithParameters",
+      "behavior": "plays the requested sound effect on channel 3 with resolved volume and pan values and advances seven bytes."
+    },
+    "5E": {
+      "bytes": "4",
+      "handler": "0x8008F2D8",
+      "name": "SetCurrentActorTransparencyMode",
+      "behavior": "applies the selected transparency mode to the current actor and advances three bytes."
+    },
+    "5F": {
+      "bytes": "9",
+      "handler": "0x8008F1C8",
+      "name": "SetCurrentActorDualLightingColors",
+      "behavior": "conditionally assigns either or both RGB lighting triplets to the current actor and advances eight bytes."
+    },
+    "60": {
+      "bytes": "10",
+      "handler": "0x8008EC30",
+      "name": "StartPreset2DPresentation",
+      "behavior": "starts a 2D presentation using resource, offset, limit, and mode arguments with mode-specific viewport defaults, or rewinds until resources are available."
+    },
+    "61": {
+      "bytes": "2",
+      "handler": "0x8008E9F8",
+      "name": "WaitFor2DPresentationReady",
+      "behavior": "rewinds while presentation readiness is clear, otherwise clears readiness and advances one byte, yielding after every check."
+    },
+    "62": {
+      "bytes": "6",
+      "handler": "0x8008F444",
+      "name": "SetSoundChannelVolume",
+      "behavior": "immediately sets the selected sound channel volume and advances five bytes."
+    },
+    "63": {
+      "bytes": "6",
+      "handler": "0x8008F4A0",
+      "name": "SetSoundChannelPan",
+      "behavior": "immediately sets the selected sound channel pan and advances five bytes."
+    },
+    "64": {
+      "bytes": "4",
+      "handler": "0x8008F5E4",
+      "name": "WaitForSoundChannelMaskClear",
+      "behavior": "rewinds while any selected sound channel remains active, otherwise advances three bytes, yielding after every check."
+    },
+    "65": {
+      "bytes": "6",
+      "handler": "0x8008F4FC",
+      "name": "PlayOrStopSoundEffectChannel",
+      "behavior": "stops the selected channel when the effect identifier is zero, otherwise starts that effect with default volume and pan, then advances five bytes."
+    },
+    "66": {
+      "bytes": "10",
+      "handler": "0x8008F558",
+      "name": "PlaySoundEffectChannelCustomized",
+      "behavior": "restarts the selected channel with the supplied effect identifier, volume, and pan, then advances nine bytes."
+    },
+    "67": {
+      "bytes": "20",
+      "handler": "0x8008EE14",
+      "name": "StartExplicit2DPresentation",
+      "behavior": "starts a 2D presentation with explicit resource, offsets, mode, dimensions, and scale values, then advances 19 bytes."
+    },
+    "68": {
+      "bytes": "7",
+      "handler": "0x80092C20",
+      "name": "WalkPlayerToPositionAndWait",
+      "behavior": "waits for transition systems to become ready, walks the player toward resolved X and Z coordinates, preserves the player's preexisting control flag, and completes after reaching or failing to reach the destination."
+    },
+    "69": {
+      "bytes": "6",
+      "handler": "0x8008A6E0",
+      "name": "GetPartyProgressTotal",
+      "behavior": "writes a selected character's base-plus-remainder progression to a script variable, or zero when no character resolves."
+    },
+    "6A": {
+      "bytes": "4",
+      "handler": "0x8008A604",
+      "name": "SetLinkOrderingTableIndex",
+      "behavior": "sets the ordering-table link index from an immediate or variable operand."
+    },
+    "6B": {
+      "bytes": "6",
+      "handler": "0x8008A640",
+      "name": "SetPartyProgressRemainder",
+      "behavior": "sets a selected character's progression remainder to the nonnegative difference between a requested total and its base progression."
+    },
+    "6C": {
+      "bytes": "2",
+      "handler": "0x8008A5A0",
+      "name": "ClearControllerEnableFlag",
+      "behavior": "clears the controller enable byte when the operand is zero, then advances one byte."
+    },
+    "6D": {
+      "bytes": "2",
+      "handler": "0x8008FB28",
+      "name": "SnapshotCameraProjectionBaseline",
+      "behavior": "snapshots the current scaled projection depth, projection dip, and camera yaw as script baselines, resets camera scale to 0x1000, and advances one byte."
+    },
+    "6E": {
+      "bytes": "5",
+      "handler": "0x8008FABC",
+      "name": "SetSceneAngleY",
+      "behavior": "assigns both scene Y-angle fields."
+    },
+    "6F": {
+      "bytes": "9",
+      "handler": "0x8008B45C",
+      "name": "SetGlobalModelRotation",
+      "behavior": "sets the three signed global model-rotation angles used to rebuild the rendering matrix."
+    },
+    "70": {
+      "bytes": "4",
+      "handler": "0x80089F54",
+      "name": "SetBackgroundModelRenderMode",
+      "behavior": "stores the script byte minus 0x80 as the mode controlling camera-offset application and forced rendering for background models, then advances three bytes."
+    },
+    "71": {
+      "bytes": "4",
+      "handler": "0x8009899C",
+      "name": "WriteCurrentActorRotationAngle",
+      "behavior": "writes the current actor rotation modulo one revolution to script memory."
+    },
+    "72": {
+      "bytes": "11",
+      "handler": "0x800988B8",
+      "name": "WriteInterpolatedAngle",
+      "behavior": "interpolates between two scripted angles by a scripted step and writes the resulting angle to script memory."
+    },
+    "73": {
+      "bytes": "13",
+      "handler": "0x8009861C",
+      "name": "WriteDistanceBetween2DPoints",
+      "behavior": "computes the planar distance between two scripted points and writes the result to script memory."
+    },
+    "74": {
+      "bytes": "4",
+      "handler": "0x800985BC",
+      "name": "DebugPrintVariableHexAndDecimal",
+      "behavior": "evaluates the encoded operand and prints it in hexadecimal and decimal when Field debug output is enabled."
+    },
+    "75": {
+      "bytes": "5",
+      "handler": "0x800989F0",
+      "name": "WriteActorRotationAngle",
+      "behavior": "writes a selected actor rotation modulo one revolution to script memory when that actor is valid."
+    },
+    "76": {
+      "bytes": "17",
+      "handler": "0x80098738",
+      "name": "WriteDistanceBetween3DPoints",
+      "behavior": "computes the spatial distance between two scripted points and writes the result to script memory."
+    },
+    "77": {
+      "bytes": "3 or 12",
+      "handler": "0x8008A2E8",
+      "name": "ManageOverlayImageAsset",
+      "behavior": "waits for archive I/O, then loads an indexed image into memory, uploads it with optional VRAM backup, or releases it according to the mode, and stops the current VM cycle."
+    },
+    "78": {
+      "bytes": "fallback",
+      "handler": "0x8008A4F0",
+      "name": "ReservedOpcode78NoOp",
+      "behavior": "returns immediately without changing state as the reserved opcode 0x78 entry."
+    },
+    "79": {
+      "bytes": "fallback",
+      "handler": "0x8008A4E8",
+      "name": "ReservedOpcode79NoOp",
+      "behavior": "returns immediately without changing state as the reserved opcode 0x79 entry."
+    },
+    "7A": {
+      "bytes": "fallback",
+      "handler": "0x8008A4E0",
+      "name": "ReservedOpcode7ANoOp",
+      "behavior": "returns immediately without changing state as the reserved opcode 0x7A entry."
+    },
+    "7B": {
+      "bytes": "fallback",
+      "handler": "0x8008A518",
+      "name": "ReservedOpcode7BNoOp",
+      "behavior": "returns immediately without changing state as the reserved opcode 0x7B entry."
+    },
+    "7C": {
+      "bytes": "fallback",
+      "handler": "0x8008A500",
+      "name": "ReservedOpcode7CNoOp",
+      "behavior": "returns immediately without changing state as the reserved opcode 0x7C entry."
+    },
+    "7D": {
+      "bytes": "fallback",
+      "handler": "0x8008A508",
+      "name": "ReservedOpcode7DNoOp",
+      "behavior": "returns immediately without changing state as the reserved opcode 0x7D entry."
+    },
+    "7E": {
+      "bytes": "fallback",
+      "handler": "0x8008A510",
+      "name": "ReservedOpcode7ENoOp",
+      "behavior": "returns immediately without changing state as the reserved opcode 0x7E entry."
+    },
+    "7F": {
+      "bytes": "2",
+      "handler": "0x8008A244",
+      "name": "WaitForVideoPlayback",
+      "behavior": "yields and repeats while video playback remains active, advances when playback finishes, and stops the current VM cycle."
+    },
+    "80": {
+      "bytes": "16",
+      "handler": "0x80089FD0",
+      "name": "SetPanoramaGeometryParameters",
+      "behavior": "stores eight panorama geometry and texture parameters, forces a zero third parameter to one, clears the fifth parameter, and advances fifteen bytes."
+    },
+    "81": {
+      "bytes": "9",
+      "handler": "0x8008A08C",
+      "name": "SetPanoramaOrientationVector",
+      "behavior": "evaluates and stores the panorama orientation vector's X, Z, and Y components and advances eight bytes."
+    },
+    "82": {
+      "bytes": "26",
+      "handler": "0x8008A148",
+      "name": "SetPanoramaColorParameters",
+      "behavior": "stores three RGB triplets and three additional panorama values, enables panorama rendering, and advances twenty-five bytes."
+    },
+    "83": {
+      "bytes": "4",
+      "handler": "0x80092FB4",
+      "name": "SetBootModeWhenReady",
+      "behavior": "when boot-mode changes are permitted, disables random encounters for the transition, clears the readiness gate, stores the requested boot mode, and advances three bytes."
+    },
+    "84": {
+      "bytes": "10",
+      "handler": "0x800933F8",
+      "name": "StartBattleWithReturnField",
+      "behavior": "waits for coordinator readiness, stores the requested battle and optional post-battle Field destination and variable 2 value, marks the battle handoff pending, yields, and advances nine bytes."
+    },
+    "85": {
+      "bytes": "4",
+      "handler": "0x8008A2A0",
+      "name": "WriteVideoPlaybackFrame",
+      "behavior": "writes the current video playback frame to a script variable and advances three bytes."
+    },
+    "86": {
+      "bytes": "3",
+      "handler": "0x80089F94",
+      "name": "SetVideoTransitionMode",
+      "behavior": "stores the raw video-transition mode byte and advances two bytes."
+    },
+    "87": {
+      "bytes": "2",
+      "handler": "0x800936E4",
+      "name": "WaitForMenuClose",
+      "behavior": "yields while a menu remains open by rewinding one byte, otherwise advances one byte."
+    },
+    "88": {
+      "bytes": "19",
+      "handler": "0x80089BF0",
+      "name": "ConfigureProximityLightGradient",
+      "behavior": "stores indexed near and far RGB triplets plus the interpolation range used for distance-dependent model lighting, then advances eighteen bytes."
+    },
+    "89": {
+      "bytes": "12",
+      "handler": "0x80089DCC",
+      "name": "SetProximityLightAnchor",
+      "behavior": "stores an indexed XYZ lighting anchor and its resolved actor association, using -1 when resolution fails, then advances eleven bytes."
+    },
+    "8A": {
+      "bytes": "4",
+      "handler": "0x80089F18",
+      "name": "SetSpatialAudioListenerSource",
+      "behavior": "selects the controlled actor, camera eye, or camera target as the spatial-audio listener source and advances three bytes."
+    },
+    "8B": {
+      "bytes": "4",
+      "handler": "0x80089B54",
+      "name": "WriteCurrentActorPartySlot",
+      "behavior": "writes the current actor's party slot from the three active mappings or 0xFF when absent, then advances three bytes."
+    },
+    "8C": {
+      "bytes": "8",
+      "handler": "0x8008F3D0",
+      "name": "RampSoundChannelVolume",
+      "behavior": "ramps the selected sound channel toward a supplied volume over a supplied duration and advances seven bytes."
+    },
+    "8D": {
+      "bytes": "4",
+      "handler": "0x8008F394",
+      "name": "SetSoundChannelPreserveMask",
+      "behavior": "sets the mask that exempts selected sound channels from the next field audio reset and advances three bytes."
+    },
+    "8E": {
+      "bytes": "6",
+      "handler": "0x8008F348",
+      "name": "SetScreenBoundsPadding",
+      "behavior": "sets horizontal and vertical padding used by actor screen-bound checks and advances five bytes."
+    },
+    "8F": {
+      "bytes": "9",
+      "handler": "0x80088790",
+      "name": "ResetParticleConfigResolvedActor",
+      "behavior": "resolves an actor with zero fallback, stores three particle modifiers, resets its default particle banks, normalizes mode values 1 through 3 to 0x10 through 0x30, adds four VM cycles, and advances eight bytes."
+    },
+    "90": {
+      "bytes": "10",
+      "handler": "0x80089004",
+      "name": "InitializeParticleBank",
+      "behavior": "initializes a script particle bank."
+    },
+    "91": {
+      "bytes": "15",
+      "handler": "0x80089174",
+      "name": "SetParticleBankPosition",
+      "behavior": "sets particle-bank position."
+    },
+    "92": {
+      "bytes": "15",
+      "handler": "0x80089374",
+      "name": "SetParticleBankPhysics",
+      "behavior": "sets particle-bank physics."
+    },
+    "93": {
+      "bytes": "12",
+      "handler": "0x80089574",
+      "name": "SetParticleBankParameters",
+      "behavior": "sets particle-bank parameters."
+    },
+    "94": {
+      "bytes": "11",
+      "handler": "0x800896D4",
+      "name": "SetParticleBankScale",
+      "behavior": "sets particle-bank scale."
+    },
+    "95": {
+      "bytes": "15",
+      "handler": "0x80089880",
+      "name": "SetParticleBankColor",
+      "behavior": "sets particle-bank color."
+    },
+    "96": {
+      "bytes": "2",
+      "handler": "0x80089A80",
+      "name": "ParticlesInitialize",
+      "behavior": "initializes script particles."
+    },
+    "97": {
+      "bytes": "3",
+      "handler": "0x80089AE4",
+      "name": "StopParticleActor",
+      "behavior": "stops an actor particle effect."
+    },
+    "98": {
+      "bytes": "4",
+      "handler": "0x800884CC",
+      "name": "SetSpatialAudioFalloffDistance",
+      "behavior": "stores the evaluated maximum distance used for spatial-audio attenuation and advances three bytes."
+    },
+    "99": {
+      "bytes": "3",
+      "handler": "0x8008848C",
+      "name": "SetMenuOpenArgument",
+      "behavior": "stores the inverse of the supplied one-bit menu argument and advances two bytes."
+    },
+    "9A": {
+      "bytes": "10",
+      "handler": "0x8008F0B4",
+      "name": "SetTargetActorDualLightingColors",
+      "behavior": "conditionally assigns either or both RGB lighting triplets to a resolved actor and advances nine bytes."
+    },
+    "9B": {
+      "bytes": "4",
+      "handler": "0x8008EF5C",
+      "name": "StartTransitionEffectMode1",
+      "behavior": "selects transition effect mode 1 with the supplied effect parameter and advances three bytes."
+    },
+    "9C": {
+      "bytes": "4",
+      "handler": "0x8008EFA0",
+      "name": "StartTransitionEffectMode2",
+      "behavior": "selects transition effect mode 2 with the supplied effect parameter and advances three bytes."
+    },
+    "9D": {
+      "bytes": "4",
+      "handler": "0x8008F070",
+      "name": "StartTransitionEffectMode3",
+      "behavior": "selects transition effect mode 3 with the supplied effect parameter and advances three bytes."
+    },
+    "9E": {
+      "bytes": "10",
+      "handler": "0x8008EFE4",
+      "name": "SetDrawClipRegion",
+      "behavior": "applies four supplied display clipping dimensions and advances nine bytes."
+    },
+    "9F": {
+      "bytes": "5",
+      "handler": "0x800883D4",
+      "name": "SetPartyFrameLock",
+      "behavior": "resolves a character and sets or clears that character's party-frame-lock bit according to the mode byte, then advances four bytes."
+    },
+    "A0": {
+      "bytes": "13",
+      "handler": "0x8008EA58",
+      "name": "StartSigned2DPresentation",
+      "behavior": "starts a signed-parameter 2D presentation with fixed viewport defaults, or rewinds and yields until presentation resources are available."
+    },
+    "A1": {
+      "bytes": "6",
+      "handler": "0x80088360",
+      "name": "SetCharacterGear",
+      "behavior": "assigns a character Gear."
+    },
+    "A2": {
+      "bytes": "2",
+      "handler": "0x8008825C",
+      "name": "WaitForMusicLoad",
+      "behavior": "yields and repeats while music loading is pending, advances when loading finishes, and stops the current VM cycle."
+    },
+    "A3": {
+      "bytes": "3",
+      "handler": "0x800881E8",
+      "name": "ToggleVramRegionBackup",
+      "behavior": "captures the fixed VRAM region when the mode is zero or restores and releases it otherwise, then advances two bytes."
+    },
+    "A4": {
+      "bytes": "2",
+      "handler": "0x80088198",
+      "name": "RestoreAllGearFuelAndEther",
+      "behavior": "restores fuel and ether to their maxima for all twenty Gears and advances one byte."
+    },
+    "A5": {
+      "bytes": "8",
+      "handler": "0x80088C1C",
+      "name": "SetParticleRotationAngle",
+      "behavior": "stores the active particle slot value, merges evaluated flags into its high byte, stores its rotation angle, adds four VM cycles, and advances seven bytes."
+    },
+    "A6": {
+      "bytes": "6",
+      "handler": "0x800888A4",
+      "name": "ConfigureSingleKeySpriteMotion",
+      "behavior": "initializes current-actor sprite motion mode 2, stores one nibble selector and one packed 9-bit key value, marks the motion active, and advances five bytes."
+    },
+    "A7": {
+      "bytes": "10",
+      "handler": "0x800889BC",
+      "name": "ConfigureDualKeySpriteMotion",
+      "behavior": "initializes current-actor sprite motion mode 3, stores two nibble selectors and two packed 9-bit key values, marks the motion active, and advances nine bytes."
+    },
+    "A8": {
+      "bytes": "8",
+      "handler": "0x80090A10",
+      "name": "WriteCurCameraTarget",
+      "behavior": "writes current camera target."
+    },
+    "A9": {
+      "bytes": "8",
+      "handler": "0x80090A94",
+      "name": "WriteCurCameraPosition",
+      "behavior": "writes current camera position."
+    },
+    "AA": {
+      "bytes": "3",
+      "handler": "0x8008DB2C",
+      "name": "SetCameraTrackedActor",
+      "behavior": "resolves the encoded actor and stores it as the camera tracking subject, then advances two bytes."
+    },
+    "AB": {
+      "bytes": "5",
+      "handler": "0x8008DC74",
+      "name": "IncreasePartyGearHp",
+      "behavior": "VM Gear-HP increase handler."
+    },
+    "AC": {
+      "bytes": "5",
+      "handler": "0x8008DD6C",
+      "name": "DecreasePartyGearHp",
+      "behavior": "VM Gear-HP decrease handler."
+    },
+    "AD": {
+      "bytes": "5",
+      "handler": "0x80096B58",
+      "name": "WritePartyMemberHp",
+      "behavior": "writes party-member HP."
+    },
+    "AE": {
+      "bytes": "8",
+      "handler": "0x80096AF4",
+      "name": "ConfigureSpecialMovementAnimation",
+      "behavior": "sets the special-movement enable value, animation identifier, and countdown reload, clears the active countdown, and advances seven bytes."
+    },
+    "AF": {
+      "bytes": "19",
+      "handler": "0x8008800C",
+      "name": "TransformActorJointOffset",
+      "behavior": "resolves an actor joint transform, applies it to a script-supplied vector, writes the transformed XYZ coordinates to three script variables, and advances eighteen bytes."
+    },
+    "B0": {
+      "bytes": "3 or 7",
+      "handler": "0x8008AACC",
+      "name": "LoadWdsSoundBankSlot",
+      "behavior": "replaces a selected WDS sound-bank slot through asynchronous loading and finalizes the bank on re-entry."
+    },
+    "B1": {
+      "bytes": "2",
+      "handler": "0x80087FD4",
+      "name": "InitializeCameraDirectionGauge",
+      "behavior": "loads the direction-gauge texture, allocates double-buffered packets, initializes 109 textured quads, and advances one byte."
+    },
+    "B2": {
+      "bytes": "5",
+      "handler": "0x80096D28",
+      "name": "SetPartyMemberHp",
+      "behavior": "sets party-member HP."
+    },
+    "B3": {
+      "bytes": "5",
+      "handler": "0x80096E20",
+      "name": "SetPartyMemberMp",
+      "behavior": "sets party-member MP."
+    },
+    "B4": {
+      "bytes": "5",
+      "handler": "0x80096C40",
+      "name": "WritePartyMemberMp",
+      "behavior": "writes party-member MP."
+    },
+    "B5": {
+      "bytes": "2",
+      "handler": "0x80087FA4",
+      "name": "IncrementPartyConvergenceOverride",
+      "behavior": "increments the party-convergence override counter and advances one byte."
+    },
+    "B6": {
+      "bytes": "3",
+      "handler": "0x80087E98",
+      "name": "SetControlledAndTrackedActor",
+      "behavior": "resolves the requested actor, assigns it as both the physically controlled and camera-tracked actor, records whether control differs from the normal party leader, clears control flags from every actor, assigns control to the selected actor, and advances two bytes."
+    },
+    "B7": {
+      "bytes": "4",
+      "handler": "0x80087E5C",
+      "name": "SetInteractionAvailabilityOverride",
+      "behavior": "stores an evaluated interaction-availability override and advances three bytes."
+    },
+    "B8": {
+      "bytes": "5",
+      "handler": "0x80087DE0",
+      "name": "SetTransitionMusicId",
+      "behavior": "writes an evaluated music ID to the field-transition slot when the selector is zero or the battle-transition slot otherwise, then advances four bytes."
+    },
+    "B9": {
+      "bytes": "10",
+      "handler": "0x80087B5C",
+      "name": "WriteCompleteWorldMapPosition",
+      "behavior": "writes all four saved world-map position components to script variables and advances nine bytes."
+    },
+    "BA": {
+      "bytes": "11",
+      "handler": "0x80087C34",
+      "name": "SetWorldMapPosition",
+      "behavior": "evaluates and stores all four saved world-map position components and advances ten bytes."
+    },
+    "BB": {
+      "bytes": "4",
+      "handler": "0x80087D30",
+      "name": "WriteWorldMapVehicleState",
+      "behavior": "writes the saved world-map vehicle state to a script variable and advances three bytes."
+    },
+    "BC": {
+      "bytes": "5",
+      "handler": "0x80087D80",
+      "name": "SetWorldMapVehicleState",
+      "behavior": "evaluates and stores the saved world-map vehicle state and advances four bytes."
+    },
+    "BD": {
+      "bytes": "8",
+      "handler": "0x80088B68",
+      "name": "SetParticleAttachmentMode",
+      "behavior": "sets particle flag 0x80 for mode 1 or 0x40 for mode 2, adds four VM cycles, and advances seven bytes."
+    },
+    "BE": {
+      "bytes": "2",
+      "handler": "0x80087C0C",
+      "name": "EnableVideoFrameTileAnimation",
+      "behavior": "enables animated video-frame tile cycling and advances one byte."
+    },
+    "BF": {
+      "bytes": "14",
+      "handler": "0x80087848",
+      "name": "SetupBattling",
+      "behavior": "waits for field resources and music readiness, then stores six battle parameters and requests battle setup."
+    },
+    "C0": {
+      "bytes": "4",
+      "handler": "0x80087800",
+      "name": "WriteBattlingMatchResultCode",
+      "behavior": "copies the Battling mode match-result code to a script variable."
+    },
+    "C1": {
+      "bytes": "8",
+      "handler": "0x80088508",
+      "name": "QueryPartySpriteAnimationStatus",
+      "behavior": "resolves a party actor, writes its sprite-animation status and actor index to script variables, clears nonterminal status values, adds four VM cycles, and advances seven bytes."
+    },
+    "C2": {
+      "bytes": "5",
+      "handler": "0x80088674",
+      "name": "ResetParticleConfigImmediateActor",
+      "behavior": "selects an immediate actor with zero fallback, stores three particle modifiers, resets its default particle banks, normalizes mode values 1 through 3 to 0x10 through 0x30, adds four VM cycles, and advances nine bytes."
+    },
+    "C3": {
+      "bytes": "2",
+      "handler": "0x8009E014",
+      "name": "SetCurrentActorFlags02000800",
+      "behavior": "sets flags 0x02000000 and 0x800 on the current actor."
+    },
+    "C4": {
+      "bytes": "3",
+      "handler": "0x8009DF78",
+      "name": "SetActorFlags02000800ById",
+      "behavior": "sets actor flags 0x02000000 and 0x800 by ID."
+    },
+    "C5": {
+      "bytes": "6",
+      "handler": "0x80086F7C",
+      "name": "SetModelAnimation",
+      "behavior": "assigns a model animation."
+    },
+    "C6": {
+      "bytes": "4",
+      "handler": "0x8008BC80",
+      "name": "QueueVariablePartyCharacterLoad",
+      "behavior": "resolves an immediate-or-variable character, reserves a staging slot, and begins loading when no duplicate or conflicting load exists."
+    },
+    "C7": {
+      "bytes": "6",
+      "handler": "0x800882B8",
+      "name": "WriteActorCharacterGearId",
+      "behavior": "resolves an actor selector, writes its character's Gear ID or 0xFF to a script variable, and advances five bytes."
+    },
+    "C8": {
+      "bytes": "19",
+      "handler": "0x80088CF8",
+      "name": "SetParticleDirections0To3",
+      "behavior": "sets particle directions 0 through 3."
+    },
+    "C9": {
+      "bytes": "19",
+      "handler": "0x80088D18",
+      "name": "SetParticleDirections4To7",
+      "behavior": "sets particle directions 4 through 7."
+    },
+    "CA": {
+      "bytes": "3",
+      "handler": "0x800A0EE8",
+      "name": "ReleaseCurrentActorMecha",
+      "behavior": "clears the actor's active-mecha flag, then either hides its indexed mecha or frees it and decrements the loaded-mecha count before yielding."
+    },
+    "CB": {
+      "bytes": "2",
+      "handler": "0x800A0EB0",
+      "name": "RequestDirectorModeExit",
+      "behavior": "increments the director-mode exit signal, advances one byte, and yields the current script."
+    },
+    "CC": {
+      "bytes": "2",
+      "handler": "0x800A0E54",
+      "name": "WaitForDirectorModeEnd",
+      "behavior": "advances when director-only mode is inactive, otherwise rewinds one byte and yields so the instruction is retried."
+    },
+    "CD": {
+      "bytes": "4",
+      "handler": "0x800A0DFC",
+      "name": "WriteCurrentDiscNumber",
+      "behavior": "queries the current disc number, writes it to the selected script variable, and advances three bytes."
+    },
+    "CE": {
+      "bytes": "4",
+      "handler": "0x800A0DC0",
+      "name": "SetMaxMechaCount",
+      "behavior": "sets the maximum mecha overlay entry count from a script operand and advances three bytes."
+    },
+    "CF": {
+      "bytes": "6",
+      "handler": "0x80093888",
+      "name": "OpenMenuMode1WithFieldContext",
+      "behavior": "disables field controls, saves field and direction state, installs the requested field and variable 2 value, queues menu mode 1, yields, and advances five bytes."
+    },
+    "D0": {
+      "bytes": "6",
+      "handler": "0x8008764C",
+      "name": "CloneGearAndAbilityState",
+      "behavior": "copies one Gear's persistent state and associated ability blocks to another slot and marks special destination slots present."
+    },
+    "D1": {
+      "bytes": "2",
+      "handler": "0x8008754C",
+      "name": "SetGameStateFlag4000",
+      "behavior": "sets game-state flag 0x4000."
+    },
+    "D2": {
+      "bytes": "4",
+      "handler": "0x8008752C",
+      "name": "SkipThreeByteInstruction",
+      "behavior": "advances past a three-byte no-op instruction."
+    },
+    "D3": {
+      "bytes": "18",
+      "handler": "0x80087420",
+      "name": "ScaleTwoRatios",
+      "behavior": "scales two script ratios and writes both results."
+    },
+    "D4": {
+      "bytes": "3 or 11",
+      "handler": "0x80086FD0",
+      "name": "ManageSpriteOverlayList",
+      "behavior": "mode 0 allocates and initializes a 33-entry sprite-overlay list, mode 1 links an indexed entry at evaluated screen coordinates, mode 2 frees the list, and mode 3 sets an indexed entry's RGB color."
+    },
+    "D5": {
+      "bytes": "6",
+      "handler": "0x80087960",
+      "name": "WriteWorldMapPosition",
+      "behavior": "writes both persistent world-map position values to script variables."
+    },
+    "D6": {
+      "bytes": "6",
+      "handler": "0x800879D0",
+      "name": "WriteGameState184EAnd1852",
+      "behavior": "writes two game-state fields to script memory."
+    },
+    "D7": {
+      "bytes": "7",
+      "handler": "0x80087AB8",
+      "name": "SetWorldMapMarkerPositionXZ",
+      "behavior": "writes evaluated X and Z coordinates into the saved world-map marker position, clears Y and padding, marks the position valid, and advances six bytes."
+    },
+    "D8": {
+      "bytes": "3",
+      "handler": "0x80087A40",
+      "name": "SetSpriteLightingBypass",
+      "behavior": "stores a script byte that enables or bypasses dynamic sprite color lighting."
+    },
+    "D9": {
+      "bytes": "3",
+      "handler": "0x80087A7C",
+      "name": "SetRandomTurnDirectionTable",
+      "behavior": "stores a script byte selecting the direction table used for random actor turns."
+    },
+    "DA": {
+      "bytes": "2",
+      "handler": "0x80093790",
+      "name": "OpenMenuMode6",
+      "behavior": "queues menu mode 6 with argument 1, yields, increments the open-menu count, and advances one byte."
+    },
+    "DB": {
+      "bytes": "4",
+      "handler": "0x80097200",
+      "name": "RestoreCharacterHpAndMp",
+      "behavior": "restores HP and MP."
+    },
+    "DC": {
+      "bytes": "6",
+      "handler": "0x800873C4",
+      "name": "SetPartySpriteColumnOffset",
+      "behavior": "writes an indexed byte controlling a party sprite's horizontal render column."
+    },
+    "DD": {
+      "bytes": "3 or 7",
+      "handler": "0x800871B0",
+      "name": "VramSnapshotCommand",
+      "behavior": "allocates and captures a 256-pixel-wide VRAM region, applies indexed brightness conversion, or releases the working buffers according to subcommand."
+    },
+    "DE": {
+      "bytes": "6",
+      "handler": "0x80087148",
+      "name": "OrCharacterRecordFlags",
+      "behavior": "applies bitwise OR with a script-supplied mask to the selected character's persistent flag field."
+    },
+    "DF": {
+      "bytes": "4",
+      "handler": "0x80086E1C",
+      "name": "ConfigureDisplayMode",
+      "behavior": "configures display/draw environments."
+    },
+    "E0": {
+      "bytes": "3",
+      "handler": "0x80086DE0",
+      "name": "SetPauseDisabled",
+      "behavior": "sets the Field pause-disable state."
+    },
+    "E1": {
+      "bytes": "6",
+      "handler": "0x80087580",
+      "name": "CopyGear",
+      "behavior": "copies Gear state from a Field script."
+    },
+    "E2": {
+      "bytes": "2",
+      "handler": "0x80086D4C",
+      "name": "SoftReset",
+      "behavior": "performs a software reset, requests script suspension, and advances the instruction pointer."
+    }
+  }
+}

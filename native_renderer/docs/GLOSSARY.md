@@ -114,6 +114,35 @@ The renderer manifests use Tom's Obvious, Minimal Language (TOML) syntax.
 
 The host implementation that reconstructs authenticated game render operations.
 
+### Native Work
+
+Immutable FIFO publications containing ordered DRAW, UPLOAD, COPY, FILL, and
+TARGET operations plus retained source metadata. Every operation is applied
+before ACK; a work item need not produce a visual endpoint.
+
+### ACK
+
+Acknowledgement that source work has been applied. An endpoint requires a ready
+compile fence before ACK; mutation-only work can return APPLIED without one.
+ACK is not a swap, and lifecycle cancellation is not an ACK.
+
+### Endpoint
+
+An immutable compiled visual with identity, storage, and fence-managed lifetime.
+It may include approved intermediate phases and an authored whole image.
+
+### Presentation phase
+
+A complete motion-evaluated image at an approved fraction of a source interval.
+Generation does not imply presentation or a successful swap. This is distinct
+from the generic `xg_render_fragment_runtime` fragment lane. Phases do not blend
+completed images.
+
+### Presenter
+
+The owner-thread service that composes and swaps endpoints on a host clock,
+independently of guest execution and its 60 Hz VBlank/IRQ cadence.
+
 ### Ordering table
 
 A linked list of PlayStation GPU packet addresses.
@@ -176,6 +205,12 @@ The frame interval that supplies current and temporal render data.
 ### Temporal semantic
 
 A semantic from a previous frame that remains eligible for presentation.
+
+### Temporal coverage
+
+An immutable, producer-scoped component/sample snapshot published at a FIFO
+operation gap. It replaces the scope completely, including empty snapshots;
+it is not an extra draw or a last-seen geometry cache.
 
 ### Transaction
 

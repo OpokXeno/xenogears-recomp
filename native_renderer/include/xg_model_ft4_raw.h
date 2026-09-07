@@ -20,11 +20,18 @@ typedef enum XgModelFt4RawResult {
 
 typedef enum XgModelFt4RawDispatchMode {
     XG_MODEL_FT4_RAW_DISPATCH_AVERAGE = 0,
+    XG_MODEL_FT4_RAW_DISPATCH_RELIT = 1,
     XG_MODEL_FT4_RAW_DISPATCH_FARTHEST = 2,
     XG_MODEL_FT4_RAW_DISPATCH_NEAREST = 3,
     XG_MODEL_FT4_RAW_DISPATCH_AVERAGE_DEPTH_CUE = 4,
     XG_MODEL_FT4_RAW_DISPATCH_FARTHEST_DEPTH_CUE = 5,
 } XgModelFt4RawDispatchMode;
+
+typedef enum XgModelFt4RawRelitColorSource {
+    XG_MODEL_FT4_RAW_RELIT_COLOR_UNRESOLVED = 0,
+    XG_MODEL_FT4_RAW_RELIT_COLOR_RESOLVED = 1,
+    XG_MODEL_FT4_RAW_RELIT_COLOR_CAPTURED = 2,
+} XgModelFt4RawRelitColorSource;
 
 typedef struct XgModelFt4RawSource {
     XgHost3dVector vertices[XG_HOST_3D_VERTEX_COUNT];
@@ -40,6 +47,8 @@ typedef struct XgModelFt4RawSource {
     uint32_t depth_cue_color_word;
     int32_t far_color[3];
     uint8_t dispatch_mode;
+    /* Mode 1 consumes material_word as final color; it never derives lighting. */
+    uint8_t relit_color_source;
 } XgModelFt4RawSource;
 
 typedef struct XgModelFt4RawRecord {

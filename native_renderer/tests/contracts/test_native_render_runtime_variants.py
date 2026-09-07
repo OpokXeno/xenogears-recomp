@@ -68,6 +68,10 @@ class NativeRenderRuntimeVariantsTests(unittest.TestCase):
             self.assertIn("0x800764b4", generated)
             self.assertIn("0x80075694", generated)
             self.assertIn("0x8007569c", generated)
+            self.assertIn("0x800771f8", generated)
+            self.assertIn("0x8007722c", generated)
+            self.assertIn("0x80077248", generated)
+            self.assertIn("0x80077260", generated)
             self.assertIn("emit PASS", result.stdout)
             compiler = shutil.which("cc")
             if compiler is not None:
@@ -157,6 +161,30 @@ class NativeRenderRuntimeVariantsTests(unittest.TestCase):
                 if 'handler = "zoom-initializer-writer"' in line)
             manifest.write_text(
                 original.replace(zoom_writer, ""), encoding="utf-8", newline="\n")
+            result = self.run_tool(
+                "validate", str(manifest), "--artifact", str(ARTIFACT), expect=1)
+            self.assertIn("initializer lifecycle", result.stderr.lower())
+            field_clut = next(
+                line for line in original.splitlines(keepends=True)
+                if 'handler = "field-clut-upload"' in line)
+            manifest.write_text(
+                original.replace(field_clut, ""), encoding="utf-8", newline="\n")
+            result = self.run_tool(
+                "validate", str(manifest), "--artifact", str(ARTIFACT), expect=1)
+            self.assertIn("initializer lifecycle", result.stderr.lower())
+            field_image = next(
+                line for line in original.splitlines(keepends=True)
+                if 'handler = "field-image-upload"' in line)
+            manifest.write_text(
+                original.replace(field_image, ""), encoding="utf-8", newline="\n")
+            result = self.run_tool(
+                "validate", str(manifest), "--artifact", str(ARTIFACT), expect=1)
+            self.assertIn("initializer lifecycle", result.stderr.lower())
+            tim_image = next(
+                line for line in original.splitlines(keepends=True)
+                if 'handler = "field-tim-image-upload"' in line)
+            manifest.write_text(
+                original.replace(tim_image, ""), encoding="utf-8", newline="\n")
             result = self.run_tool(
                 "validate", str(manifest), "--artifact", str(ARTIFACT), expect=1)
             self.assertIn("initializer lifecycle", result.stderr.lower())

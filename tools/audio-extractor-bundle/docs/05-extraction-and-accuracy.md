@@ -233,6 +233,7 @@ Each render record includes:
 | `path` | Output WAV filename |
 | `frames` | Stereo sample-frame count |
 | `note_count` | Number of simulated voice events |
+| `used_wds_ids` | Sorted WDS IDs used by emitted or unresolved voices |
 | `classification` | `audio`, `silent`, or known silent placeholder |
 | `callbacks` | Simulated 240 Hz callbacks |
 | `logical_ticks` | Tempo-driven ticks processed |
@@ -252,13 +253,21 @@ Rendering a directory creates one subdirectory per resource and:
 batch-manifest.json
 ```
 
+Each resource directory begins with its four-digit FAT index, for example
+`0123_seds_0001_abcd1234`. Deduplicated resources found at multiple FAT indexes
+include only the first and last index in the directory name, as in
+`0123-0456_seds_0001_abcd1234`. The batch manifest retains every distinct index
+in `fat_indexes`.
+
 Its schema is:
 
 ```text
 xenogears-sequence-render-batch/v1
 ```
 
-`--jobs N` uses isolated worker processes. Reduce it when RAM is limited.
+`--jobs N` uses isolated worker processes. Each process loads and indexes the WDS
+catalog once, then reuses it across resources. Reduce the job count when RAM is
+limited.
 
 ## 10. Loop Policy
 

@@ -22,6 +22,7 @@ import tempfile
 import wave
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import BinaryIO
 
 from census_disc_overlays import (
     DIRECTORY_COUNT,
@@ -33,7 +34,7 @@ from census_disc_overlays import (
     parse_directory_table,
     parse_fat_table,
 )
-from extract_disc_overlays import open_disc
+from extract_disc_overlays import DiscLayout, open_disc
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -410,6 +411,12 @@ class AudioResource:
 
 
 @dataclass(frozen=True)
+class AudioManifestIndex:
+    resources_by_sha256: dict[str, dict]
+    wds_by_id: dict[int, tuple[dict, ...]]
+
+
+@dataclass(frozen=True)
 class ResourceOccurrence:
     disc_index: int
     disc_name: str
@@ -494,6 +501,7 @@ class SequenceRenderResult:
     callbacks: int
     logical_ticks: int
     note_count: int
+    used_wds_ids: tuple[int, ...]
     ended_tracks: int
     approximated_opcodes: tuple[int, ...]
     unresolved_voices: tuple[tuple[int, int], ...]
@@ -2708,8 +2716,9 @@ def render_sequence(
                 event.physical_voice_index,
                 array.array("h", [0]) * maximum_mix_frames,
             )
-            for frame, sample in enumerate(captured_voice, start_frame):
-                track_output[frame] = sample
+            track_output[
+                start_frame : start_frame + len(captured_voice)
+            ] = captured_voice
         required_samples = start_frame * 2 + len(rendered)
         last_mix_frame = max(last_mix_frame, required_samples // 2)
         send_enabled = event.reverb_send
@@ -2749,17 +2758,26 @@ def render_sequence(
             else seds_reverb_depth or 0,
             simulation.reverb_depth_automation,
         )
-    else:
+        main_volume = SPU_MAIN_VOLUME << 1
         for index, sample in enumerate(mix):
-            mix[index] = _clamp16(sample)
-    main_volume = SPU_MAIN_VOLUME << 1
-    for index, sample in enumerate(mix):
-        mix[index] = _clamp16(_reverb_multiply(main_volume, sample))
+            mix[index] = _clamp16(_reverb_multiply(main_volume, sample))
+    else:
+        main_volume = SPU_MAIN_VOLUME << 1
+        for index, sample in enumerate(mix):
+            mix[index] = _clamp16(
+                _reverb_multiply(main_volume, _clamp16(sample))
+            )
     return SequenceRenderResult(
         mix,
         simulation.callbacks,
         simulation.logical_ticks,
         len(simulation.events),
+        tuple(
+            sorted(
+                {event.wds_id for event in simulation.events}
+                | {wds_id for wds_id, _ in simulation.unresolved_voices}
+            )
+        ),
         simulation.ended_tracks,
         simulation.approximated_opcodes,
         simulation.unresolved_voices,
@@ -2968,7 +2986,7 @@ def render_wds_voice(
 
     adpcm_offset = resource.metadata["adpcm_data_offset"]
     adpcm_size = resource.metadata["adpcm_data_size"]
-    adpcm = resource.payload[adpcm_offset : adpcm_offset + adpcm_size]
+    adpcm = memoryview(resource.payload)[adpcm_offset : adpcm_offset + adpcm_size]
     current_offset = (preset.start_units & 0xFFFF) * 8
     repeat_offset = ((preset.start_units + preset.repeat_units) & 0xFFFF) * 8
     if repeat_offset >= len(adpcm):
@@ -3193,7 +3211,7 @@ def extract_wds_preset(
         raise ValueError("preset extraction requires a WDS resource")
     adpcm_offset = resource.metadata["adpcm_data_offset"]
     adpcm_size = resource.metadata["adpcm_data_size"]
-    data = resource.payload[adpcm_offset : adpcm_offset + adpcm_size]
+    data = memoryview(resource.payload)[adpcm_offset : adpcm_offset + adpcm_size]
     start = preset.start_units * 8
     blocks = bytearray()
     end_flags = None
@@ -3267,10 +3285,11 @@ def write_stereo_pcm_wav(
         output.writeframes(pcm.tobytes())
 
 
-def load_wds_directory(
-    path: Path, preferred_sha256: dict[int, str] | None = None
-) -> tuple[dict[int, AudioResource], dict[int, list[str]]]:
-    preferred_sha256 = preferred_sha256 or {}
+WdsCandidate = tuple[Path, AudioResource, str]
+WdsCandidates = dict[int, tuple[WdsCandidate, ...]]
+
+
+def _load_wds_candidates(path: Path) -> WdsCandidates:
     candidates: dict[int, list[tuple[Path, AudioResource, str]]] = {}
     for resource_path in sorted(path.rglob("*.wds")):
         resource = parse_wds(resource_path.read_bytes())
@@ -3281,44 +3300,81 @@ def load_wds_directory(
         )
     if not candidates:
         raise ValueError(f"no WDS resources found under {path}")
+    return {wds_id: tuple(versions) for wds_id, versions in candidates.items()}
+
+
+def _select_wds_candidates(
+    path: Path,
+    candidates: WdsCandidates,
+    preferred_sha256: dict[int, str] | None = None,
+) -> tuple[dict[int, AudioResource], dict[int, list[str]]]:
+    preferred_sha256 = preferred_sha256 or {}
 
     selected = {}
     duplicates = {}
     for wds_id, versions in candidates.items():
         preferred = preferred_sha256.get(wds_id)
-        versions.sort(
+        ordered_versions = sorted(
+            versions,
             key=lambda item: (
                 item[2] != preferred if preferred else False,
                 -item[1].metadata["preset_count"],
                 str(item[0]),
             )
         )
-        selected[wds_id] = versions[0][1]
-        if preferred and versions[0][2] != preferred:
+        selected[wds_id] = ordered_versions[0][1]
+        if preferred and ordered_versions[0][2] != preferred:
             raise ValueError(
                 f"preferred WDS {wds_id} SHA-256 {preferred} was not found under {path}"
             )
-        if len(versions) > 1:
-            duplicates[wds_id] = [str(item[0]) for item in versions]
+        if len(ordered_versions) > 1:
+            duplicates[wds_id] = [str(item[0]) for item in ordered_versions]
     return selected, duplicates
 
 
-def find_contextual_wds_hashes(
-    resource_path: Path, resource: AudioResource, wds_dir: Path
-) -> tuple[dict[int, str], dict[int, list[str]]]:
-    manifest_path = wds_dir.parent.parent / "manifest.json"
-    if not manifest_path.is_file():
-        return {}, {}
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    resource_sha256 = hashlib.sha256(resource.payload).hexdigest()
-    resource_record = next(
-        (
-            record
-            for record in manifest["resources"]
-            if record["sha256"] == resource_sha256
-        ),
-        None,
+def load_wds_directory(
+    path: Path, preferred_sha256: dict[int, str] | None = None
+) -> tuple[dict[int, AudioResource], dict[int, list[str]]]:
+    return _select_wds_candidates(path, _load_wds_candidates(path), preferred_sha256)
+
+
+def _build_audio_manifest_index(manifest: dict) -> AudioManifestIndex:
+    resources_by_sha256 = {
+        resource["sha256"]: resource for resource in manifest["resources"]
+    }
+    wds_by_id: dict[int, list[dict]] = {}
+    for resource in manifest["resources"]:
+        if resource["kind"] == "wds":
+            wds_by_id.setdefault(resource["wds_id"], []).append(resource)
+    return AudioManifestIndex(
+        resources_by_sha256,
+        {wds_id: tuple(records) for wds_id, records in wds_by_id.items()},
     )
+
+
+def _load_audio_manifest_index(manifest_path: Path) -> AudioManifestIndex | None:
+    if not manifest_path.is_file():
+        return None
+    return _build_audio_manifest_index(
+        json.loads(manifest_path.read_text(encoding="utf-8"))
+    )
+
+
+def find_contextual_wds_hashes(
+    resource: AudioResource,
+    wds_dir: Path,
+    *,
+    manifest_index: AudioManifestIndex | None = None,
+    resource_sha256: str | None = None,
+) -> tuple[dict[int, str], dict[int, list[str]]]:
+    if manifest_index is None:
+        manifest_index = _load_audio_manifest_index(
+            wds_dir.parent.parent / "manifest.json"
+        )
+    if manifest_index is None:
+        return {}, {}
+    resource_sha256 = resource_sha256 or hashlib.sha256(resource.payload).hexdigest()
+    resource_record = manifest_index.resources_by_sha256.get(resource_sha256)
     if resource_record is None:
         return {}, {}
 
@@ -3357,11 +3413,7 @@ def find_contextual_wds_hashes(
     selected = {}
     ambiguous = {}
     for wds_id in used_wds_ids:
-        records = [
-            record
-            for record in manifest["resources"]
-            if record["kind"] == "wds" and record["wds_id"] == wds_id
-        ]
+        records = manifest_index.wds_by_id.get(wds_id, ())
         if len(records) < 2:
             continue
         same_container = {
@@ -3393,11 +3445,11 @@ def find_contextual_wds_hashes(
             for record in records
             if any(not occurrence["embedded"] for occurrence in record["occurrences"])
         }
-        candidates = same_container or preceding or direct
-        if len(candidates) == 1:
-            selected[wds_id] = next(iter(candidates))
-        elif candidates:
-            ambiguous[wds_id] = sorted(candidates)
+        candidate_hashes = same_container or preceding or direct
+        if len(candidate_hashes) == 1:
+            selected[wds_id] = next(iter(candidate_hashes))
+        elif candidate_hashes:
+            ambiguous[wds_id] = sorted(candidate_hashes)
     return selected, ambiguous
 
 
@@ -3470,6 +3522,7 @@ def _render_sequence_entry(
         "path": name,
         "frames": len(result.samples) // 2,
         "note_count": result.note_count,
+        "used_wds_ids": list(result.used_wds_ids),
         "classification": (
             "silent-placeholder"
             if resource.kind == "smds"
@@ -3531,14 +3584,25 @@ def render_sequence_resource(
     loop_count: int | None = None,
     seds_reverb_depth: int | None = DEFAULT_SEDS_REVERB_DEPTH,
     jobs: int = 1,
+    _wds_candidates: WdsCandidates | None = None,
+    _manifest_index: AudioManifestIndex | None = None,
 ) -> dict:
-    resource = parse_audio_resource(resource_path.read_bytes(), 0)
+    resource_data = resource_path.read_bytes()
+    resource = parse_audio_resource(resource_data, 0)
     if resource is None or resource.kind not in {"seds", "smds"}:
         raise ValueError(f"not an SEDS or SMDS resource: {resource_path}")
+    resource_sha256 = hashlib.sha256(resource.payload).hexdigest()
     contextual_banks, ambiguous_contextual_banks = find_contextual_wds_hashes(
-        resource_path, resource, wds_dir
+        resource,
+        wds_dir,
+        manifest_index=_manifest_index,
+        resource_sha256=resource_sha256,
     )
-    wds_by_id, duplicate_banks = load_wds_directory(wds_dir, contextual_banks)
+    wds_by_id, duplicate_banks = _select_wds_candidates(
+        wds_dir,
+        _wds_candidates or _load_wds_candidates(wds_dir),
+        contextual_banks,
+    )
     if resource.kind == "seds":
         if entry_index is None:
             entry_indexes = range(resource.metadata["effect_count"])
@@ -3620,32 +3684,79 @@ def render_sequence_resource(
     return manifest
 
 
+_resource_batch_worker_state: tuple[WdsCandidates, AudioManifestIndex | None] | None = None
+
+
+def _initialize_resource_batch_worker(
+    wds_dir: Path, extraction_manifest_path: Path | None
+) -> None:
+    global _resource_batch_worker_state
+    _resource_batch_worker_state = (
+        _load_wds_candidates(wds_dir),
+        _load_audio_manifest_index(extraction_manifest_path)
+        if extraction_manifest_path is not None
+        else None,
+    )
+
+
 def _render_resource_batch_worker(
-    arguments: tuple[Path, Path, Path, float, bool, int | None, int | None],
+    arguments: tuple[
+        Path, Path, Path, str, tuple[int, ...], float, bool, int | None, int | None
+    ],
 ) -> dict:
     (
         resource_path,
         wds_dir,
         output_root,
+        output_name,
+        fat_indexes,
         max_seconds,
         ignore_loops,
         loop_count,
         reverb_depth,
     ) = arguments
+    if _resource_batch_worker_state is None:
+        raise RuntimeError("resource render worker was not initialized")
+    wds_candidates, manifest_index = _resource_batch_worker_state
     manifest = render_sequence_resource(
         resource_path,
         wds_dir,
-        output_root / resource_path.stem,
+        output_root / output_name,
         max_seconds=max_seconds,
         ignore_loops=ignore_loops,
         loop_count=loop_count,
         seds_reverb_depth=reverb_depth,
+        _wds_candidates=wds_candidates,
+        _manifest_index=manifest_index,
     )
     return {
         "resource": resource_path.name,
-        "output": resource_path.stem,
+        "output": output_name,
+        "fat_indexes": list(fat_indexes),
         "renders": len(manifest["renders"]),
     }
+
+
+def _resource_fat_indexes(resource: dict) -> tuple[int, ...]:
+    return tuple(
+        sorted(
+            {
+                occurrence["fat_index"]
+                for occurrence in resource.get("occurrences", ())
+                if isinstance(occurrence.get("fat_index"), int)
+            }
+        )
+    )
+
+
+def _render_directory_name(resource_stem: str, fat_indexes: tuple[int, ...]) -> str:
+    if not fat_indexes:
+        return resource_stem
+    displayed_indexes = (
+        (fat_indexes[0], fat_indexes[-1]) if len(fat_indexes) > 1 else fat_indexes
+    )
+    index_prefix = "-".join(f"{fat_index:04d}" for fat_index in displayed_indexes)
+    return f"{index_prefix}_{resource_stem}"
 
 
 def render_sequence_directory(
@@ -3666,28 +3777,68 @@ def render_sequence_directory(
     if not resource_paths:
         raise ValueError(f"no SEDS or SMDS resources found in {resource_dir}")
     output_dir.mkdir(parents=True, exist_ok=True)
-    arguments = [
-        (
-            path,
-            wds_dir,
-            output_dir,
-            max_seconds,
-            ignore_loops,
-            loop_count,
-            seds_reverb_depth,
+    extraction_manifest_path = resource_dir.parent.parent / "manifest.json"
+    fat_indexes_by_name = {}
+    work_units_by_name = {}
+    if extraction_manifest_path.is_file():
+        extraction_manifest = json.loads(
+            extraction_manifest_path.read_text(encoding="utf-8")
         )
-        for path in resource_paths
-    ]
+        fat_indexes_by_name = {
+            Path(resource["path"]).name: _resource_fat_indexes(resource)
+            for resource in extraction_manifest["resources"]
+            if resource["kind"] in {"seds", "smds"}
+        }
+        work_units_by_name = {
+            Path(resource["path"]).name: resource.get("effect_count", 1)
+            for resource in extraction_manifest["resources"]
+            if resource["kind"] in {"seds", "smds"}
+        }
+    arguments = []
+    for path in resource_paths:
+        fat_indexes = fat_indexes_by_name.get(path.name, ())
+        arguments.append(
+            (
+                path,
+                wds_dir,
+                output_dir,
+                _render_directory_name(path.stem, fat_indexes),
+                fat_indexes,
+                max_seconds,
+                ignore_loops,
+                loop_count,
+                seds_reverb_depth,
+            )
+        )
+    # Start large SEDS banks first so one long resource does not become a serial
+    # tail after the other workers have gone idle.
+    arguments.sort(
+        key=lambda argument: (
+            -work_units_by_name.get(argument[0].name, 1),
+            argument[0].name,
+        )
+    )
     jobs = max(1, min(jobs, len(arguments)))
     if jobs > 1:
+        _load_fast_reverb()
         context = multiprocessing.get_context("spawn")
         with concurrent.futures.ProcessPoolExecutor(
             max_workers=jobs,
             mp_context=context,
+            initializer=_initialize_resource_batch_worker,
+            initargs=(
+                wds_dir,
+                extraction_manifest_path if extraction_manifest_path.is_file() else None,
+            ),
         ) as executor:
             records = list(executor.map(_render_resource_batch_worker, arguments))
     else:
+        _initialize_resource_batch_worker(
+            wds_dir,
+            extraction_manifest_path if extraction_manifest_path.is_file() else None,
+        )
         records = [_render_resource_batch_worker(argument) for argument in arguments]
+    records.sort(key=lambda record: record["resource"])
     manifest = {
         "schema": "xenogears-sequence-render-batch/v1",
         "resource_dir": str(resource_dir),
@@ -4079,8 +4230,14 @@ def apply_audio_names(audio_root: Path) -> dict:
     ]
     render_moves = [
         (
-            audio_root / "rendered" / resource["kind"] / old_stem,
-            audio_root / "rendered" / resource["kind"] / new_stem,
+            audio_root
+            / "rendered"
+            / resource["kind"]
+            / _render_directory_name(old_stem, _resource_fat_indexes(resource)),
+            audio_root
+            / "rendered"
+            / resource["kind"]
+            / _render_directory_name(new_stem, _resource_fat_indexes(resource)),
         )
         for resource, _, _, old_stem, new_stem in plans
         if resource["kind"] in {"seds", "smds"} and old_stem != new_stem
@@ -4095,7 +4252,12 @@ def apply_audio_names(audio_root: Path) -> dict:
     for resource, _, _, old_stem, _ in plans:
         if resource["kind"] not in {"seds", "smds"}:
             continue
-        old_render_dir = audio_root / "rendered" / resource["kind"] / old_stem
+        old_render_output = _render_directory_name(
+            old_stem, _resource_fat_indexes(resource)
+        )
+        old_render_dir = (
+            audio_root / "rendered" / resource["kind"] / old_render_output
+        )
         old_manifest_path = old_render_dir / "render-manifest.json"
         render_manifest = json.loads(old_manifest_path.read_text(encoding="utf-8"))
         for render in render_manifest["renders"]:
@@ -4121,7 +4283,10 @@ def apply_audio_names(audio_root: Path) -> dict:
                     ).as_posix()
             continue
 
-        render_dir = audio_root / "rendered" / resource["kind"] / new_stem
+        render_output = _render_directory_name(
+            new_stem, _resource_fat_indexes(resource)
+        )
+        render_dir = audio_root / "rendered" / resource["kind"] / render_output
         render_manifest_path = render_dir / "render-manifest.json"
         render_manifest = render_manifests[resource["sha256"]]
         render_manifest["resource"] = str(extracted_dir / new_relative)
@@ -4148,7 +4313,10 @@ def apply_audio_names(audio_root: Path) -> dict:
 
     moves_by_kind = {
         kind: {
-            old_relative.name: (new_relative.name, new_stem)
+            old_relative.name: (
+                new_relative.name,
+                _render_directory_name(new_stem, _resource_fat_indexes(resource)),
+            )
             for resource, old_relative, new_relative, _, new_stem in plans
             if resource["kind"] == kind
         }
@@ -4182,36 +4350,66 @@ def apply_audio_names(audio_root: Path) -> dict:
     }
 
 
+def _read_open_disc_user_data(
+    source: BinaryIO, disc: DiscLayout, lba: int, size: int
+) -> bytes:
+    if lba < 0 or size <= 0:
+        raise ValueError("disc extent must have a non-negative LBA and positive size")
+    sectors = (size + SECTOR_SIZE - 1) // SECTOR_SIZE
+    source.seek(lba * disc.sector_size)
+    raw = source.read(sectors * disc.sector_size)
+    if len(raw) != sectors * disc.sector_size:
+        raise ValueError(f"disc ends inside extent at LBA {lba + sectors - 1}")
+    if disc.sector_size == SECTOR_SIZE and disc.user_offset == 0:
+        return raw[:size]
+
+    output = bytearray(sectors * SECTOR_SIZE)
+    for index in range(sectors):
+        raw_offset = index * disc.sector_size + disc.user_offset
+        output_offset = index * SECTOR_SIZE
+        output[output_offset : output_offset + SECTOR_SIZE] = raw[
+            raw_offset : raw_offset + SECTOR_SIZE
+        ]
+    return bytes(output[:size])
+
+
 def scan_disc(
     path: Path, disc_index: int
 ) -> list[tuple[AudioResource, ResourceOccurrence]]:
     disc = open_disc(path)
     sector_count = disc.path.stat().st_size // disc.sector_size
-    fat_data = disc.read_user_data(FAT_LBA, FAT_SECTORS * SECTOR_SIZE)
-    entries, _ = parse_fat_table(fat_data, sector_count)
-    directory_data = disc.read_user_data(DIRECTORY_LBA, DIRECTORY_COUNT * 2)
-    routes = map_physical_routes(parse_directory_table(directory_data), len(entries))
+    with disc.path.open("rb") as source:
+        fat_data = _read_open_disc_user_data(
+            source, disc, FAT_LBA, FAT_SECTORS * SECTOR_SIZE
+        )
+        entries, _ = parse_fat_table(fat_data, sector_count)
+        directory_data = _read_open_disc_user_data(
+            source, disc, DIRECTORY_LBA, DIRECTORY_COUNT * 2
+        )
+        routes = map_physical_routes(
+            parse_directory_table(directory_data), len(entries)
+        )
 
-    found = []
-    for fat_index, entry in enumerate(entries):
-        if entry.size <= 0:
-            continue
-        container = disc.read_user_data(entry.lba, entry.size)
-        for container_offset, resource in scan_audio_resources(container):
-            found.append(
-                (
-                    resource,
-                    ResourceOccurrence(
-                        disc_index,
-                        path.name,
-                        fat_index,
-                        entry.lba,
-                        entry.size,
-                        container_offset,
-                        routes.get(fat_index, []),
-                    ),
+        found = []
+        for fat_index, entry in enumerate(entries):
+            if entry.size <= 0:
+                continue
+            container = _read_open_disc_user_data(source, disc, entry.lba, entry.size)
+            for container_offset, resource in scan_audio_resources(container):
+                found.append(
+                    (
+                        resource,
+                        ResourceOccurrence(
+                            disc_index,
+                            path.name,
+                            fat_index,
+                            entry.lba,
+                            entry.size,
+                            container_offset,
+                            routes.get(fat_index, []),
+                        ),
+                    )
                 )
-            )
     return found
 
 

@@ -1,4 +1,5 @@
 #include "xg_render_world_execution.h"
+#include "xg_render_world_pending_services.h"
 
 typedef struct XgRenderWorldEntry {
     uint32_t pc;
@@ -39,6 +40,8 @@ static bool physical_address_equals(uint32_t left, uint32_t right) {
 
 bool xg_render_world_execution_site_authorized(
         uint32_t pc, uint32_t instruction_word) {
+    if (xg_render_world_clouds_pending_return_matches(pc, instruction_word))
+        return true;
     for (uint32_t index = 0u;
          index < sizeof(world_entries) / sizeof(world_entries[0]); ++index) {
         if (physical_address_equals(pc, world_entries[index].pc) &&

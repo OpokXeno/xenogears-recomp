@@ -3,8 +3,10 @@
 
 #include "cpu_state.h"
 #include "guest_render_types.h"
+#include "xg_render_auth_candidate_types.h"
 #include "xg_render_snapshot_types.h"
 #include "xg_render_ir.h"
+#include "xg_render_motion.h"
 #include "xg_render_model_repository.h"
 #include "xg_render_producer_lifecycle.h"
 #include "xg_render_submission.h"
@@ -17,9 +19,11 @@ enum {
     XG_RENDER_MODEL_DISPATCH_CALLER_NONE = 0u,
     XG_RENDER_MODEL_DISPATCH_CALLER_RESIDENT,
     XG_RENDER_MODEL_DISPATCH_CALLER_OVERLAY,
+    XG_RENDER_MODEL_DISPATCH_CALLER_GEAR_HELPER,
 };
 
 typedef struct XgRenderModelSpritePipelineServices {
+    bool (*motion_source)(uint32_t producer_pc, XgRenderMotionSource *out);
     const XgRenderProducerLifecycleServices *lifecycle;
     const XgRenderModelRepositoryServices *repository;
     int32_t (*screen_x_cull_margin)(void);
@@ -53,6 +57,8 @@ void xg_render_model_sprite_pipeline_finish_ft3_link(
 void xg_render_model_sprite_pipeline_model_begin(
     CPUState *cpu, GuestRenderRenderMode render_mode,
     const XgRenderModelSpritePipelineServices *services);
+bool xg_render_model_sprite_pipeline_accept_gear_helper_mode1_proof(
+    CPUState *cpu, const PsxXgRenderAuthCandidate *proof);
 void xg_render_model_sprite_pipeline_model_ft4_seam(
     CPUState *cpu, uint32_t pc, GuestRenderRenderMode render_mode,
     const XgRenderModelSpritePipelineServices *services);
@@ -94,7 +100,8 @@ void xg_render_model_sprite_pipeline_record_ft3_replay(
     XgRenderModelReplayResult result,
     const GuestRenderNativeStreamMissContext *context);
 void xg_render_model_sprite_pipeline_record_ft4_replay(
-    XgRenderModelReplayResult result, bool sprite_opcode);
+    XgRenderModelReplayResult result, bool sprite_opcode,
+    uint32_t miss_source_id);
 
 void xg_render_model_sprite_pipeline_ft4_snapshot(
     PsxXgRenderModelFt4ShadowSnapshot *out_snapshot);

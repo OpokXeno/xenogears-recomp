@@ -2,6 +2,7 @@
 
 #include "game_identity.h"
 #include "xg_render_manifest_generated.h"
+#include "xg_render_scene_snapshot.h"
 
 #include <string.h>
 
@@ -54,6 +55,8 @@ XgRenderAuthProfile xg_render_static_auth_profile_from_metadata(void) {
 
     profile.producer_record_id = validation->producer_record_id;
     profile.site_record_id = validation->site_record_id;
+    profile.disc_id = validation->disc_id;
+    profile.semantic_module = XG_SEMANTIC_MODULE_FIELD;
     profile.producer_entry = validation->producer_entry;
     profile.static_game_identity.namespace_id = xg_render_namespace_crc32;
     memcpy(profile.static_game_identity.full_sha256.bytes, xg_render_game_identity,
@@ -62,7 +65,7 @@ XgRenderAuthProfile xg_render_static_auth_profile_from_metadata(void) {
     memcpy(profile.field_image_identity.full_sha256.bytes, producer->image_identity,
            sizeof(profile.field_image_identity.full_sha256.bytes));
     profile.validation = (XgRenderAuthValidation){
-        validation->field_base_crc32, validation->field_range_crc32, 1u,
+        1u,
         { { 0 } }, validation->instruction_window_start,
         validation->instruction_window_size, validation->caller_site,
         validation->static_callee, validation->return_site,

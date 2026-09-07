@@ -3,9 +3,34 @@
 #include <stddef.h>
 #include <stdatomic.h>
 
-static PsxXgRenderAuthInstrumentation instrumentation = { .revision = 1u };
+#ifdef XG_RENDER_INSTRUMENTATION_TESTING
+void xg_render_instrumentation_test_seed(
+    const PsxXgRenderAuthInstrumentation *seed, uint64_t sequence);
+#endif
+
+static PsxXgRenderAuthInstrumentation instrumentation = { .revision = 2u };
 static atomic_flag instrumentation_guard = ATOMIC_FLAG_INIT;
 static uint64_t next_sequence = 1u;
+
+static bool add_u64_saturating(uint64_t *counter, uint64_t increment) {
+    if (increment > UINT64_MAX - *counter) {
+        *counter = UINT64_MAX;
+        return false;
+    }
+    *counter += increment;
+    return true;
+}
+
+static void record_counter_overflow(void) {
+    instrumentation.counters_poisoned = true;
+    (void)add_u64_saturating(&instrumentation.counter_overflow_events, 1u);
+}
+
+static void add_instrumentation_counter(
+        uint64_t *counter, uint64_t increment) {
+    if (!add_u64_saturating(counter, increment))
+        record_counter_overflow();
+}
 
 static void lock_instrumentation(void) {
     while (atomic_flag_test_and_set_explicit(
@@ -17,12 +42,15 @@ static void unlock_instrumentation(void) {
 }
 
 static uint64_t allocate_sequence(void) {
-    return next_sequence++;
+    const uint64_t sequence = next_sequence;
+
+    add_instrumentation_counter(&next_sequence, 1u);
+    return sequence;
 }
 
 void xg_render_instrumentation_reset(void) {
     lock_instrumentation();
-    instrumentation = (PsxXgRenderAuthInstrumentation){ .revision = 1u };
+    instrumentation = (PsxXgRenderAuthInstrumentation){ .revision = 2u };
     next_sequence = 1u;
     unlock_instrumentation();
 }
@@ -30,9 +58,10 @@ void xg_render_instrumentation_reset(void) {
 void xg_render_instrumentation_record_reset(bool scene_boundary) {
     lock_instrumentation();
     if (scene_boundary)
-        ++instrumentation.scene_boundary_count;
+        add_instrumentation_counter(
+            &instrumentation.scene_boundary_count, 1u);
     else
-        ++instrumentation.disarm_count;
+        add_instrumentation_counter(&instrumentation.disarm_count, 1u);
     instrumentation.last_reset_sequence = allocate_sequence();
     unlock_instrumentation();
 }
@@ -54,20 +83,32 @@ void xg_render_instrumentation_record_variant_progress(
     lock_instrumentation();
     switch (event) {
     case XG_RENDER_RUNTIME_VARIANT_ACTIVATED:
-        ++instrumentation.activation_physical_count;
-        if (exact) ++instrumentation.activation_exact_count;
+        add_instrumentation_counter(
+            &instrumentation.activation_physical_count, 1u);
+        if (exact)
+            add_instrumentation_counter(
+                &instrumentation.activation_exact_count, 1u);
         break;
     case XG_RENDER_RUNTIME_VARIANT_ENTRY:
-        ++instrumentation.entry_physical_count;
-        if (exact) ++instrumentation.entry_exact_count;
+        add_instrumentation_counter(
+            &instrumentation.entry_physical_count, 1u);
+        if (exact)
+            add_instrumentation_counter(
+                &instrumentation.entry_exact_count, 1u);
         break;
     case XG_RENDER_RUNTIME_VARIANT_CAPTURE:
-        ++instrumentation.capture_physical_count;
-        if (exact) ++instrumentation.capture_exact_count;
+        add_instrumentation_counter(
+            &instrumentation.capture_physical_count, 1u);
+        if (exact)
+            add_instrumentation_counter(
+                &instrumentation.capture_exact_count, 1u);
         break;
     case XG_RENDER_RUNTIME_VARIANT_RETURN:
-        ++instrumentation.return_physical_count;
-        if (exact) ++instrumentation.return_exact_count;
+        add_instrumentation_counter(
+            &instrumentation.return_physical_count, 1u);
+        if (exact)
+            add_instrumentation_counter(
+                &instrumentation.return_exact_count, 1u);
         break;
     default:
         unlock_instrumentation();
@@ -79,20 +120,23 @@ void xg_render_instrumentation_record_variant_progress(
 
 void xg_render_instrumentation_record_completed_proof(void) {
     lock_instrumentation();
-    ++instrumentation.completed_proof_publication_count;
+    add_instrumentation_counter(
+        &instrumentation.completed_proof_publication_count, 1u);
     instrumentation.last_publish_sequence = allocate_sequence();
     unlock_instrumentation();
 }
 
 void xg_render_instrumentation_record_cold_hook(void) {
     lock_instrumentation();
-    ++instrumentation.cold_hook_ingress_count;
+    add_instrumentation_counter(
+        &instrumentation.cold_hook_ingress_count, 1u);
     unlock_instrumentation();
 }
 
 void xg_render_instrumentation_record_flush_attempt(void) {
     lock_instrumentation();
-    ++instrumentation.native_ir_flush_attempt_count;
+    add_instrumentation_counter(
+        &instrumentation.native_ir_flush_attempt_count, 1u);
     unlock_instrumentation();
 }
 
@@ -106,7 +150,8 @@ void xg_render_instrumentation_record_flush_failure(
         instrumentation.first_native_ir_flush_failure_packet = packet_address;
         instrumentation.first_native_ir_flush_failure_status = status;
     }
-    ++instrumentation.native_ir_flush_failure_count;
+    add_instrumentation_counter(
+        &instrumentation.native_ir_flush_failure_count, 1u);
     unlock_instrumentation();
 }
 
@@ -117,3 +162,14 @@ void xg_render_instrumentation_snapshot(
     *out_instrumentation = instrumentation;
     unlock_instrumentation();
 }
+
+#ifdef XG_RENDER_INSTRUMENTATION_TESTING
+void xg_render_instrumentation_test_seed(
+        const PsxXgRenderAuthInstrumentation *seed,
+        uint64_t sequence) {
+    lock_instrumentation();
+    instrumentation = *seed;
+    next_sequence = sequence;
+    unlock_instrumentation();
+}
+#endif

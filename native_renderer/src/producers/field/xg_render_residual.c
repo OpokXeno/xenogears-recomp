@@ -93,6 +93,15 @@ static bool store_template(
         !services->begin(producer_seam, &lifecycle))
         return false;
     record = find_template(command_address);
+    /* Packet rewrites invalidate captures, not the capacity to recapture them. */
+    if (record == NULL) {
+        for (uint32_t index = 0u; index < template_count; ++index) {
+            if (!templates[index].valid) {
+                record = &templates[index];
+                break;
+            }
+        }
+    }
     if (record == NULL) {
         if (template_count == TEMPLATE_CAPACITY) return false;
         record = &templates[template_count++];
@@ -349,6 +358,37 @@ static void capture_tile_write(
     }
 }
 
+static void capture_battle_fader(
+        CPUState *cpu, GuestRenderRenderMode render_mode,
+        const XgRenderProducerLifecycleServices *services) {
+    XgRenderQuadSource source = {0};
+    uint32_t packet;
+    uint32_t command;
+
+    if (cpu == NULL || cpu->read_word == NULL || services == NULL ||
+        services->guest_data_range_is_valid == NULL ||
+        render_mode != GUEST_RENDER_RENDER_NATIVE)
+        return;
+    packet = cpu->gpr[18];
+    if (!services->guest_data_range_is_valid(packet, 0x18u, 4u, false))
+        return;
+    command = cpu->read_word(packet + 4u);
+    if ((command >> 24u) != 0x2au) return;
+    source_material(&source.material, XG_RENDER_IR_SHADING_FLAT, true);
+    /* FUN_800b3878 authors this overscan rectangle before addPrim (800b393c). */
+    for (uint32_t v = 0u; v < 4u; ++v) {
+        source.vertices[v] = (XgRenderQuadSourceVertex){
+            .x = (v & 1u) != 0u ? 320 : -32,
+            .y = (v & 2u) != 0u ? 240 : -32,
+            .red = (uint8_t)command,
+            .green = (uint8_t)(command >> 8u),
+            .blue = (uint8_t)(command >> 16u),
+        };
+    }
+    (void)store_template(
+        packet + 4u, UINT32_C(0x800b3878), 0x14u, &source, services);
+}
+
 static void capture_static_gouraud(
         CPUState *cpu, GuestRenderRenderMode render_mode,
         const XgRenderProducerLifecycleServices *services) {
@@ -450,7 +490,47 @@ void xg_render_residual_capture(
     case XG_RENDER_RESIDUAL_CAPTURE_PROJECTED_GOURAUD:
         capture_projected_gouraud(request->cpu, render_mode, services);
         break;
+    case XG_RENDER_RESIDUAL_CAPTURE_BATTLE_FADER:
+        capture_battle_fader(request->cpu, render_mode, services);
+        break;
     }
+}
+
+bool xg_render_residual_is_transition_mask(
+        const GpuRenderSemantic *semantic,
+        const XgRenderProducerLifecycleServices *services) {
+    const XgRenderResidualTemplate *record;
+
+    if (semantic == NULL || services == NULL || services->matches == NULL ||
+        semantic->submission_command_id > UINT32_C(0x001ffffc) ||
+        (semantic->submission_command_id & 3u) != 0u ||
+        semantic->topology != GPU_RENDER_SEMANTIC_TRIANGLES ||
+        semantic->triangle_count != 2u || semantic->material.textured ||
+        semantic->material.raw_texture || !semantic->material.semi_transparent ||
+        semantic->material.shading != GPU_RENDER_SHADING_FLAT ||
+        semantic->native_view_effect != GPU_RENDER_NATIVE_VIEW_EFFECT_NONE)
+        return false;
+    record = find_indexed((uint32_t)semantic->submission_command_id);
+    if (record == NULL ||
+        (record->producer_seam != UINT32_C(0x80079784) &&
+         record->producer_seam != UINT32_C(0x8007da44) &&
+         record->producer_seam != UINT32_C(0x800b3878)) ||
+        record->lifecycle.artifact_generation == 0u ||
+        record->primitive.triangle_count != semantic->triangle_count)
+        return false;
+    for (uint32_t t = 0u; t < semantic->triangle_count; ++t) {
+        for (uint32_t v = 0u; v < 3u; ++v) {
+            const GpuRenderSemanticVertex *actual =
+                &semantic->triangles[t].vertices[v];
+            const XgRenderIrVertex *captured =
+                &record->primitive.triangles[t].vertices[v];
+            if (actual->native_view_position ||
+                actual->x != captured->x || actual->y != captured->y)
+                return false;
+        }
+    }
+    /* Query current scene/code authority only for a matching live template. */
+    return services->matches(&record->lifecycle);
 }
 
 bool xg_render_residual_resolve(

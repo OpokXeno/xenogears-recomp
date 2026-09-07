@@ -37,6 +37,7 @@ class FileIdentity:
 @dataclass(frozen=True, slots=True)
 class GameSpec:
     identity: FileIdentity
+    disc_id: int
     namespace_crc32: int
     base_address: int
     image_format: str
@@ -210,7 +211,10 @@ def parse_game(raw: ManifestValue) -> GameSpec:
         fail("game image mapping must describe a PS-X EXE header")
     if header_size + loaded_size > identity.size:
         fail("game loaded payload exceeds full image size")
-    return GameSpec(identity, hex_value(value["namespace_crc32"], "game.namespace_crc32", 8), address(value["base_address"], "game.base_address"), image_format, header_size, loaded_size)
+    return GameSpec(identity, integer(value["disc"], "game.disc", True),
+                    hex_value(value["namespace_crc32"], "game.namespace_crc32", 8),
+                    address(value["base_address"], "game.base_address"),
+                    image_format, header_size, loaded_size)
 
 
 def parse_field_overlay(raw: ManifestValue) -> AuthenticatedOverlay | BlockedOverlay:

@@ -36,6 +36,8 @@ set(XG_OVERLAY_AOT_ROOTS
     "${CMAKE_CURRENT_SOURCE_DIR}/annotations/overlays/aot-dispatch-roots.toml")
 set(XG_OVERLAY_EXTRACTOR
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/extract_disc_overlays.py")
+set(XG_OVERLAY_SOURCE_PLAN_RUNNER
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_with_source_observation_plan.py")
 set(XG_RENDER_MANIFEST_TOOL_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest_fixture.py"
@@ -54,7 +56,10 @@ set(XG_OVERLAY_CODEGEN_INPUTS
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_manifest_model.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_overlay_codegen.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_overlay_ranges.py"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_runtime_variant_model.py")
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_runtime_variant_model.py"
+    "${XG_OVERLAY_SOURCE_PLAN_RUNNER}")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    ${XG_OVERLAY_CODEGEN_INPUTS})
 set(XG_OVERLAY_PLAN_HASH_INPUT "")
 foreach(XG_OVERLAY_CODEGEN_INPUT IN LISTS XG_OVERLAY_CODEGEN_INPUTS)
     file(SHA256 "${XG_OVERLAY_CODEGEN_INPUT}" XG_OVERLAY_CODEGEN_INPUT_SHA256)
@@ -82,6 +87,11 @@ if(BUILD_TESTING)
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_generate_emulator_field_pacing_patch.py")
     set_tests_properties(emulator_field_pacing_patch PROPERTIES
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+    add_test(NAME finalize_static_overlays
+        COMMAND "${Python3_EXECUTABLE}" -m pytest
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_finalize_static_overlays.py")
+    set_tests_properties(finalize_static_overlays PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/tools")
 endif()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${XG_RENDER_MANIFEST}"
@@ -298,6 +308,8 @@ foreach(XG_OVERLAY_INDEX RANGE 0 ${XG_OVERLAY_PLAN_LAST})
         "${XG_OVERLAY_NATIVE_DIR}/${XG_OVERLAY_ID}_full.ranges")
     set(XG_OVERLAY_NATIVE_PROVENANCE
         "${XG_OVERLAY_NATIVE_DIR}/${XG_OVERLAY_ID}_input.json")
+    set(XG_OVERLAY_SOURCE_PLAN
+        "${XG_OVERLAY_AOT_DIR}/plans/${XG_OVERLAY_ID}.plan")
     set(XG_OVERLAY_NATIVE_DISPATCH
         "${XG_OVERLAY_NATIVE_DIR}/${XG_OVERLAY_ID}_dispatch.c")
     set(XG_OVERLAY_BODY_PREFIX
@@ -336,6 +348,25 @@ foreach(XG_OVERLAY_INDEX RANGE 0 ${XG_OVERLAY_PLAN_LAST})
         VERBATIM)
 
     add_custom_command(
+        OUTPUT "${XG_OVERLAY_SOURCE_PLAN}"
+        COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_overlay_ranges.py"
+            emit-source-plan
+            --manifest "${XG_RENDER_OVERLAY_RANGES}"
+            --runtime-variants "${XG_RENDER_RUNTIME_VARIANTS}"
+            --artifact "${XG_OVERLAY_RAW}"
+            --load-address "${XG_OVERLAY_LOAD_ADDRESS}"
+            --output "${XG_OVERLAY_SOURCE_PLAN}"
+        DEPENDS "${XG_OVERLAY_RAW}"
+            "${XG_RENDER_OVERLAY_RANGES}"
+            "${XG_RENDER_RUNTIME_VARIANTS}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_overlay_ranges.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_overlay_codegen.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_render_runtime_variant_model.py"
+        COMMENT "Generating authenticated source plan for ${XG_OVERLAY_ID}"
+        VERBATIM)
+
+    add_custom_command(
         OUTPUT "${XG_OVERLAY_NATIVE_C}" "${XG_OVERLAY_NATIVE_RANGES}"
                "${XG_OVERLAY_NATIVE_PROVENANCE}"
         BYPRODUCTS "${XG_OVERLAY_NATIVE_DISPATCH}"
@@ -344,6 +375,8 @@ foreach(XG_OVERLAY_INDEX RANGE 0 ${XG_OVERLAY_PLAN_LAST})
             "${Python3_EXECUTABLE}" "${XG_OVERLAY_JOB_RUNNER}"
             --lock-dir "${XG_OVERLAY_JOB_LOCK_DIR}"
             --jobs "${XG_OVERLAY_CODEGEN_JOBS}" --
+            "${Python3_EXECUTABLE}" "${XG_OVERLAY_SOURCE_PLAN_RUNNER}"
+            --plan "${XG_OVERLAY_SOURCE_PLAN}" --
             "${XG_RECOMPILER_EXECUTABLE}"
             --raw-image "${XG_OVERLAY_RAW}"
             --load-address "${XG_OVERLAY_LOAD_ADDRESS}"
@@ -360,11 +393,13 @@ foreach(XG_OVERLAY_INDEX RANGE 0 ${XG_OVERLAY_PLAN_LAST})
             --project-root "${CMAKE_CURRENT_SOURCE_DIR}"
             --runtime-include "${PSXRECOMP_ROOT}/runtime/include"
         DEPENDS "${XG_OVERLAY_RAW}" "${XG_OVERLAY_SEEDS}"
+            "${XG_OVERLAY_SOURCE_PLAN}"
             "${XG_RECOMPILER_EXECUTABLE}"
             psxrecomp_codegen_hash
             "${XG_OVERLAY_CODEGEN_HASH_HEADER}"
             "${CMAKE_CURRENT_SOURCE_DIR}/game.toml"
             "${XG_OVERLAY_JOB_RUNNER}"
+            "${XG_OVERLAY_SOURCE_PLAN_RUNNER}"
             ${XG_OVERLAY_CODEGEN_INPUTS}
         COMMENT "Native recompiling ${XG_OVERLAY_ID}"
         VERBATIM)
@@ -494,7 +529,10 @@ target_link_libraries(psx-runtime PRIVATE
     xg_visual_state
     xg_render_ir
     xg_render_static_auth
-    xg_field_character_runtime)
+    xg_field_character_runtime
+    xg_render_fragment_runtime
+    xg_render_resident_capture
+    xg_render_battle_fx)
 target_sources(psx-runtime PRIVATE
         native_renderer/src/core/xg_native_render_baseline.c
         src/mods/xenogears_field_pacing.c
@@ -516,7 +554,10 @@ if(TARGET psx-runtime-pgxp)
         xg_visual_state
         xg_render_ir
         xg_render_static_auth
-        xg_field_character_runtime)
+        xg_field_character_runtime
+        xg_render_fragment_runtime
+        xg_render_resident_capture
+        xg_render_battle_fx)
     target_sources(psx-runtime-pgxp PRIVATE
         native_renderer/src/core/xg_native_render_baseline.c
         src/mods/xenogears_field_pacing.c
@@ -603,6 +644,7 @@ if(BUILD_TESTING)
         native_renderer/tests/auth/xg_render_auth_runtime_test_adapter.c
         native_renderer/src/runtime/xg_render_runtime_composition.c
         native_renderer/src/runtime/xg_render_cutover_dispatch.c
+        native_renderer/src/producers/resident/xg_render_resident_text.c
         native_renderer/src/producers/world/xg_render_world_coordinator.c
         native_renderer/src/producers/field/xg_render_field_character_pipeline.c
         native_renderer/src/producers/field/xg_field_render_services.c
@@ -639,6 +681,7 @@ if(BUILD_TESTING)
         native_renderer/src/producers/field/xg_field_zoom.c
         native_renderer/src/producers/field/xg_field_projected.c
         native_renderer/src/producers/field/xg_field_compass.c
+        native_renderer/src/infrastructure/xg_render_vram_resources.c
         native_renderer/src/auth/xg_render_runtime_variant_auth.c
         native_renderer/src/auth/xg_render_auth.c
         native_renderer/src/core/xg_render_ir.c
@@ -656,6 +699,7 @@ if(BUILD_TESTING)
         native_renderer/src/infrastructure
         native_renderer/src/producers/field
         native_renderer/src/producers/model
+        native_renderer/src/producers/resident
         native_renderer/src/producers/world
         native_renderer/src/runtime
         native_renderer/tests/auth
@@ -670,6 +714,8 @@ if(BUILD_TESTING)
     target_link_libraries(xg_input_replay_auth_proof PRIVATE
         xg_host_3d xg_native_view xg_field_character_shadow
         xg_field_character_runtime
+        xg_render_fragment_runtime
+        xg_semantic_presentation
         xg_model_ft4_raw xg_sprite_ft4 xg_world_clouds xg_world_decorations
         xg_world_effects xg_world_entity_shadows xg_world_horizon
         xg_world_minimap xg_world_models xg_world_actor_sprites xg_world_sky

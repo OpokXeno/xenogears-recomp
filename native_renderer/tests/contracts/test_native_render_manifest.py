@@ -436,11 +436,12 @@ class NativeRenderManifestTests(unittest.TestCase):
             manifest.write_text(manifest.read_text().replace("0x8006f000", "0x8006f004"), newline="\n")
             self.assertIn("base mismatch", self.run_tool("validate", str(manifest), "--exe", str(exe), "--overlays", str(overlays), expect=1).stderr.lower())
 
-    def test_rejects_crc_mismatch(self) -> None:
+    def test_crc_diagnostic_does_not_gate_authentication(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             manifest, exe, overlays = write_fixture(Path(directory))
             manifest.write_text(re.sub(r'range_crc32 = "[0-9a-f]{8}"', 'range_crc32 = "00000000"', manifest.read_text()), newline="\n")
-            self.assertIn("crc mismatch", self.run_tool("validate", str(manifest), "--exe", str(exe), "--overlays", str(overlays), expect=1).stderr.lower())
+            self.run_tool("validate", str(manifest), "--exe", str(exe),
+                          "--overlays", str(overlays), expect=0)
 
     def test_rejects_delay_slot_window_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

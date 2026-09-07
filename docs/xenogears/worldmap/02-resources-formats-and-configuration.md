@@ -222,6 +222,18 @@ rows, and World generates two 32-row fog banks used by terrain depth cueing.
 File `+3` supplies configuration-specific model, effect, radar, icon, cloud,
 horizon, and decoration images and a palette row used to generate 16 CLUT rows.
 
+`WorldMapLoadGroundTextures` at `0x800979C8` reads the two base rows, generates
+the complete `256 x 64` bank, and uploads it at `0x80097AC8` to VRAM `(0,432)`.
+Native begins staging at `0x800979CC`. The `0x80097ADC` seam is after the
+following `DrawSync(0)`, so it publishes one scene-owned CLUT generation only
+at that seam.
+
+`WorldMapLoadSharedTextureResources` at `0x8008440C` reads the combined row at
+VRAM `(0,496)`, generates the first 15 interpolated rows, and uploads the
+contiguous `256 x 15` bank at `0x80084508`. Native stages from `0x80084410` and
+publishes one scene-owned CLUT generation at `0x8008451C`, after `DrawSync(0)`.
+The existing 8-bit CLUT row at `y=511` remains independently owned.
+
 ### Animated Texture Streams
 
 Archive sections 7 and 8 contain the two animated texture sets. Each section

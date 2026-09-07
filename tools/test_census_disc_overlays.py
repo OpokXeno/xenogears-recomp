@@ -1,16 +1,26 @@
 from __future__ import annotations
 
 import struct
+import tomllib
+from pathlib import Path
 
 import pytest
 
+import census_disc_overlays as census
 from census_disc_overlays import (
+    DISC2_MANIFEST,
+    KNOWN_DISC1_SHA256,
+    KNOWN_DISC2_SHA256,
     SENTINEL_LBA,
+    _manifest_images,
+    _zero_extent_hashes,
     analyze_mips,
     lzss_decompress_with_status,
     map_physical_routes,
     packet_offsets,
     parse_fat_table,
+    recognize_disc,
+    select_source_manifest,
 )
 
 
@@ -105,3 +115,135 @@ def test_mips_analysis_retains_call_sparse_code_as_a_weak_candidate() -> None:
 
     assert result["signal"] == "weak"
     assert result["recovered_base"] is None
+
+
+def test_disc_identity_selects_its_manifest_unless_explicitly_overridden(
+    tmp_path: Path,
+) -> None:
+    disc1 = recognize_disc(KNOWN_DISC1_SHA256)
+    disc2 = recognize_disc(KNOWN_DISC2_SHA256)
+
+    assert disc1 is not None and disc1.id == "disc1" and disc1.number == 1
+    assert disc2 is not None and disc2.id == "disc2" and disc2.number == 2
+    assert select_source_manifest(disc2, None) == DISC2_MANIFEST
+    assert select_source_manifest(disc2, tmp_path / "explicit.toml") == (
+        tmp_path / "explicit.toml"
+    )
+    assert recognize_disc("0" * 64) is None
+    assert select_source_manifest(None, None) is None
+
+
+def test_disc2_source_manifest_reuses_disc1_byte_identities() -> None:
+    expected_sectors = {
+        "movie-str-lib-image": 172873,
+        "battling-image": 173205,
+        "field-image": 173245,
+        "world-image": 173307,
+        "battle-image": 173353,
+        "menu-image": 173435,
+        "movie-image": 173470,
+        "field-runtime-diagnostics-image": 184997,
+        "battle-result-image": 226551,
+        "member-change-menu-image": 226640,
+        "enter-name-menu-image": 226729,
+        "shop-menu-image": 226744,
+        "gear-shop-menu-image": 226771,
+        "gear-helper-image": 226888,
+        "battle-debug-setup-menu-image": 226919,
+        "battle-runtime-debug-image": 226972,
+        "battle-loader-image": 227006,
+        "battle-event-image": 244380,
+        "battle-green-framebuffer-grid-image": 254102,
+        "battle-curved-sprite-ribbon-image": 254104,
+        "battle-polygon-shatter-image": 254105,
+        "battle-velocity-sprite-clone-strip-image": 254107,
+        "battle-fixed-origin-sprite-marquee-image": 254109,
+        "battle-framebuffer-ripple-dissolve-image": 254110,
+    }
+    source_document = tomllib.loads(DISC2_MANIFEST.read_text(encoding="utf-8"))
+    identity_path = DISC2_MANIFEST.parent / source_document["identity_manifest"]
+    disc1_images = {image["id"]: image for image in _manifest_images(identity_path)}
+    disc2_images = _manifest_images(DISC2_MANIFEST, KNOWN_DISC2_SHA256)
+
+    assert source_document["disc_sha256"] == KNOWN_DISC2_SHA256
+    assert all(
+        set(source) == {"id", "source_sector"}
+        for source in source_document["sources"]
+    )
+    assert {
+        image["id"]: image["source_sector"] for image in disc2_images
+    } == expected_sectors
+    for image in disc2_images:
+        shared_identity = {
+            key: value for key, value in image.items() if key != "source_sector"
+        }
+        disc1_identity = {
+            key: value
+            for key, value in disc1_images[image["id"]].items()
+            if key != "source_sector"
+        }
+        assert shared_identity == disc1_identity
+
+    with pytest.raises(ValueError, match="does not match the disc SHA-256"):
+        _manifest_images(DISC2_MANIFEST, KNOWN_DISC1_SHA256)
+
+
+def test_build_census_reports_recognized_disc2_and_automatic_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    disc_path = tmp_path / "disc2.bin"
+    disc_path.write_bytes(bytes(2048))
+
+    class SyntheticDisc:
+        path = disc_path
+        sector_size = 2048
+        user_offset = 0
+
+        @staticmethod
+        def read_user_data(lba: int, size: int) -> bytes:
+            if lba == census.FAT_LBA:
+                return b"".join(
+                    (
+                        _entry(0, -1),
+                        _entry(0, 0),
+                        _entry(SENTINEL_LBA, 0),
+                    )
+                )
+            if lba == census.DIRECTORY_LBA:
+                return bytes(census.DIRECTORY_COUNT * 2)
+            raise AssertionError(f"unexpected synthetic disc read at {lba} for {size}")
+
+    loaded_manifests: list[tuple[Path, str | None]] = []
+    monkeypatch.setattr(census, "open_disc", lambda _path: SyntheticDisc())
+    monkeypatch.setattr(census, "_file_sha256", lambda _path: KNOWN_DISC2_SHA256)
+    monkeypatch.setattr(
+        census,
+        "_manifest_images",
+        lambda path, sha256=None: loaded_manifests.append((path, sha256)) or [],
+    )
+
+    result = census.build_census(disc_path)
+
+    assert result["recognized_disc"] == "disc2"
+    assert result["source_manifest"] == "annotations/overlays/disc2-images.toml"
+    assert "known_disc1" not in result
+    assert loaded_manifests == [(DISC2_MANIFEST, KNOWN_DISC2_SHA256)]
+
+
+def test_large_zero_extent_is_classified_without_code_analysis() -> None:
+    class ZeroDisc:
+        @staticmethod
+        def read_user_data(_lba: int, size: int) -> bytes:
+            return bytes(size)
+
+    class NonzeroDisc:
+        @staticmethod
+        def read_user_data(_lba: int, size: int) -> bytes:
+            return bytes(size - 1) + b"X"
+
+    assert _zero_extent_hashes(ZeroDisc(), 100, 2 * 1024 * 1024 + 17) == (
+        "0b5f645725e6aa767bcaa0838f4e22a623d0f308b45127aaf5c1c7d20b51eb14",
+        "4107AAB4",
+    )
+    assert _zero_extent_hashes(NonzeroDisc(), 100, 4096) is None

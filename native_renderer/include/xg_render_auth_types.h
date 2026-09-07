@@ -49,6 +49,8 @@ typedef enum XgRenderAuthHook {
 typedef struct XgRenderAuthLogicalIdentity {
     uint32_t producer_record_id;
     uint32_t site_record_id;
+    uint32_t disc_id;
+    uint32_t semantic_module;
     uint32_t producer_entry;
     uint32_t capture_site;
     uint32_t return_site;
@@ -65,6 +67,7 @@ typedef struct XgRenderAuthSnapshot {
     XgRenderAuthReason reject_reason;
     XgRenderAuthIdentity field_image_identity;
     XgRenderAuthLogicalIdentity logical_identity;
+    GuestRenderProducerHandle producer_handle;
     size_t producer_begin_count;
     size_t native_item_count;
     size_t hook_count;

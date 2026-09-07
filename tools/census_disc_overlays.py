@@ -29,6 +29,23 @@ DEFAULT_BASE_LO = 0x80010000
 DEFAULT_BASE_HI = 0x80800000
 DEFAULT_MAX_IMAGE_SIZE = 8 * 1024 * 1024
 KNOWN_DISC1_SHA256 = "39c547a9afc6da15d847ef81a2c6cea1a6516bdfa562cf13b0999b04e8598bda"
+KNOWN_DISC2_SHA256 = "5eab85c683d4d7087d345b587472db9c44df29b35ce66553c2626d26018b947e"
+DISC2_MANIFEST = ROOT / "annotations" / "overlays" / "disc2-images.toml"
+SOURCE_MANIFEST_SCHEMA = "xenogears-disc-overlay-sources/v1"
+
+
+@dataclass(frozen=True)
+class DiscIdentity:
+    id: str
+    number: int
+    sha256: str
+    source_manifest: Path
+
+
+DISC_IDENTITIES = (
+    DiscIdentity("disc1", 1, KNOWN_DISC1_SHA256, DEFAULT_MANIFEST),
+    DiscIdentity("disc2", 2, KNOWN_DISC2_SHA256, DISC2_MANIFEST),
+)
 
 
 @dataclass(frozen=True)
@@ -290,13 +307,62 @@ def _psx_exe_representation(data: bytes, base_lo: int, base_hi: int) -> dict | N
     )
 
 
-def _manifest_images(path: Path) -> list[dict]:
+def recognize_disc(sha256: str) -> DiscIdentity | None:
+    return next(
+        (identity for identity in DISC_IDENTITIES if identity.sha256 == sha256),
+        None,
+    )
+
+
+def select_source_manifest(
+    identity: DiscIdentity | None,
+    explicit_manifest: Path | None,
+) -> Path | None:
+    if explicit_manifest is not None:
+        return explicit_manifest
+    return identity.source_manifest if identity is not None else None
+
+
+def _manifest_images(path: Path, disc_sha256: str | None = None) -> list[dict]:
     document = tomllib.loads(path.read_text(encoding="utf-8"))
-    if document.get("schema") != "xenogears-disc-overlay-images/v1":
+    schema = document.get("schema")
+    if schema == "xenogears-disc-overlay-images/v1":
+        images = document.get("images")
+        if not isinstance(images, list):
+            raise ValueError(f"{path}: images must be an array")
+        return images
+    if schema != SOURCE_MANIFEST_SCHEMA:
         raise ValueError(f"{path}: unsupported disc image manifest schema")
-    images = document.get("images")
-    if not isinstance(images, list):
-        raise ValueError(f"{path}: images must be an array")
+
+    expected_disc_sha256 = document.get("disc_sha256")
+    if not isinstance(expected_disc_sha256, str) or len(expected_disc_sha256) != 64:
+        raise ValueError(f"{path}: disc_sha256 must be a SHA-256 digest")
+    if disc_sha256 is not None and disc_sha256 != expected_disc_sha256:
+        raise ValueError(f"{path}: source manifest does not match the disc SHA-256")
+    identity_manifest = document.get("identity_manifest")
+    if not isinstance(identity_manifest, str):
+        raise ValueError(f"{path}: identity_manifest must be a path")
+    identities = _manifest_images((path.parent / identity_manifest).resolve())
+    identities_by_id = {image.get("id"): image for image in identities}
+    if len(identities_by_id) != len(identities) or None in identities_by_id:
+        raise ValueError(f"{path}: identity manifest has malformed or duplicate IDs")
+
+    sources = document.get("sources")
+    if not isinstance(sources, list):
+        raise ValueError(f"{path}: sources must be an array")
+    source_ids = [source.get("id") for source in sources if isinstance(source, dict)]
+    if len(source_ids) != len(sources) or len(set(source_ids)) != len(source_ids):
+        raise ValueError(f"{path}: sources have malformed or duplicate IDs")
+    if set(source_ids) != set(identities_by_id):
+        raise ValueError(f"{path}: source and identity manifest image sets differ")
+
+    images = []
+    for source in sources:
+        if set(source) != {"id", "source_sector"}:
+            raise ValueError(f"{path}: sources may only define id and source_sector")
+        if not isinstance(source["source_sector"], int) or source["source_sector"] < 0:
+            raise ValueError(f"{path}: source_sector must be a non-negative integer")
+        images.append({**identities_by_id[source["id"]], **source})
     return images
 
 
@@ -449,9 +515,28 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _zero_extent_hashes(disc: object, lba: int, size: int) -> tuple[str, str] | None:
+    digest = hashlib.sha256()
+    crc32 = 0
+    offset = 0
+    chunk_size = 1024 * 1024
+    while offset < size:
+        count = min(chunk_size, size - offset)
+        chunk_lba = lba + offset // SECTOR_SIZE
+        chunk_offset = offset % SECTOR_SIZE
+        raw = disc.read_user_data(chunk_lba, chunk_offset + count)
+        chunk = raw[chunk_offset : chunk_offset + count]
+        if len(chunk) != count or any(chunk):
+            return None
+        digest.update(chunk)
+        crc32 = binascii.crc32(chunk, crc32)
+        offset += count
+    return digest.hexdigest(), f"{crc32 & 0xFFFFFFFF:08X}"
+
+
 def build_census(
     disc_path: Path,
-    manifest_path: Path = DEFAULT_MANIFEST,
+    manifest_path: Path | None = None,
     max_image_size: int = DEFAULT_MAX_IMAGE_SIZE,
     base_lo: int = DEFAULT_BASE_LO,
     base_hi: int = DEFAULT_BASE_HI,
@@ -461,6 +546,9 @@ def build_census(
     if base_lo < 0x80000000 or base_hi <= base_lo:
         raise ValueError("invalid MIPS base search aperture")
     disc = open_disc(disc_path)
+    disc_sha256 = _file_sha256(disc.path)
+    disc_identity = recognize_disc(disc_sha256)
+    source_manifest = select_source_manifest(disc_identity, manifest_path)
     sector_count = disc.path.stat().st_size // disc.sector_size
     fat_bytes = disc.read_user_data(FAT_LBA, FAT_SECTORS * SECTOR_SIZE)
     entries, xa_children = parse_fat_table(fat_bytes, sector_count)
@@ -468,7 +556,11 @@ def build_census(
         disc.read_user_data(DIRECTORY_LBA, DIRECTORY_COUNT * 2)
     )
     routes = map_physical_routes(directory_table, len(entries))
-    manifest_images = _manifest_images(manifest_path)
+    manifest_images = (
+        _manifest_images(source_manifest, disc_sha256)
+        if source_manifest is not None
+        else []
+    )
 
     records = []
     analysis_cache: dict[tuple[int, int], dict] = {}
@@ -492,12 +584,24 @@ def build_census(
         }
         if kind == "file":
             if entry.size > max_image_size:
-                record.update(
-                    {
-                        "classification": "analysis-skipped",
-                        "skip_reason": "stored extent exceeds configured image aperture",
-                    }
-                )
+                zero_hashes = _zero_extent_hashes(disc, entry.lba, entry.size)
+                if zero_hashes is None:
+                    record.update(
+                        {
+                            "classification": "analysis-skipped",
+                            "skip_reason": "stored extent exceeds configured image aperture",
+                        }
+                    )
+                else:
+                    record.update(
+                        {
+                            "classification": "data/container",
+                            "stored_sha256": zero_hashes[0],
+                            "stored_crc32": zero_hashes[1],
+                            "signatures": ["all-zero"],
+                            "non_render_reason": "authenticated all-zero extent",
+                        }
+                    )
             else:
                 cache_key = (entry.lba, entry.size)
                 if cache_key not in analysis_cache:
@@ -530,12 +634,16 @@ def build_census(
             "packet-code-candidate",
         }
     ]
-    disc_sha256 = _file_sha256(disc.path)
     return {
         "schema": "xenogears-disc-overlay-census/v1",
         "disc_file": disc.path.name,
         "disc_sha256": disc_sha256,
-        "known_disc1": disc_sha256 == KNOWN_DISC1_SHA256,
+        "recognized_disc": disc_identity.id if disc_identity is not None else None,
+        "source_manifest": (
+            str(source_manifest.relative_to(ROOT))
+            if source_manifest is not None and source_manifest.is_relative_to(ROOT)
+            else str(source_manifest) if source_manifest is not None else None
+        ),
         "sector_size": disc.sector_size,
         "user_data_offset": disc.user_offset,
         "sector_count": sector_count,
@@ -556,7 +664,11 @@ def build_census(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--disc", type=Path, default=DEFAULT_DISC)
-    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        help="override the source manifest selected from the recognized disc identity",
+    )
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--max-image-size", type=lambda value: int(value, 0), default=DEFAULT_MAX_IMAGE_SIZE)
     parser.add_argument("--base-lo", type=lambda value: int(value, 0), default=DEFAULT_BASE_LO)

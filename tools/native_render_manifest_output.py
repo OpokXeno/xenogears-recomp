@@ -77,7 +77,6 @@ def render_c(verified: VerifiedManifest) -> bytes:
         f"const uint32_t xg_render_namespace_crc32 = UINT32_C(0x{verified.namespace_crc32:08x});",
         "const XgRenderManifestValidation xg_render_manifest_validation = {",
         f"    {verified.validation.producer_record_id}u, {verified.validation.site_record_id}u,",
-        f"    UINT32_C(0x{verified.validation.field_base_crc32:08x}), UINT32_C(0x{verified.validation.field_range_crc32:08x}),",
         f"    UINT32_C(0x{verified.validation.field_range_start:08x}), {verified.validation.field_range_size}u,",
         f"    UINT32_C(0x{verified.validation.producer_entry:08x}), UINT32_C(0x{verified.validation.caller_site:08x}),",
         f"    UINT32_C(0x{verified.validation.static_callee:08x}), UINT32_C(0x{verified.validation.return_site:08x}),",
@@ -85,6 +84,7 @@ def render_c(verified: VerifiedManifest) -> bytes:
         f"    {{{byte_initializer(verified.validation.instruction_window_identity)}}},",
         f"    {verified.validation.required_jal_opcode}u, UINT32_C(0x{verified.validation.jal_target:08x}),",
         f"    {verified.validation.required_delay_slot_instructions}u, {verified.validation.required_delay_slot_non_control_transfer}u,",
+        f"    {verified.disc_id}u,",
         "};",
         "const XgRenderManifestRecord xg_render_manifest_records[] = {",
         *rows,
@@ -108,8 +108,6 @@ def table_payload(verified: VerifiedManifest) -> MetadataDocument:
         "validation": {
             "producer_record_id": verified.validation.producer_record_id,
             "site_record_id": verified.validation.site_record_id,
-            "field_base_crc32": f"{verified.validation.field_base_crc32:08x}",
-            "field_range_crc32": f"{verified.validation.field_range_crc32:08x}",
             "field_range_start": verified.validation.field_range_start,
             "field_range_size": verified.validation.field_range_size,
             "producer_entry": verified.validation.producer_entry,
@@ -123,6 +121,7 @@ def table_payload(verified: VerifiedManifest) -> MetadataDocument:
             "jal_target": verified.validation.jal_target,
             "required_delay_slot_instructions": verified.validation.required_delay_slot_instructions,
             "required_delay_slot_non_control_transfer": verified.validation.required_delay_slot_non_control_transfer,
+            "disc_id": verified.disc_id,
         },
     }
 

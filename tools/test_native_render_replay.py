@@ -126,7 +126,7 @@ def write_trace_with_state_count(path: Path, vblank_budget: int, state_count: in
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def p0_matrix_rows(replay: ModuleType) -> list[dict[str, object]]:
+def mode_matrix_rows(replay: ModuleType) -> list[dict[str, object]]:
     modes = {"original": 0, "shadow": 1, "native": 2}
     digest_fields = {
         "ot_digest", "topology_digest", "material_digest", "vram_digest",
@@ -141,7 +141,7 @@ def p0_matrix_rows(replay: ModuleType) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for mode, mode_id in modes.items():
         baseline: dict[str, object] = {}
-        for field in replay.P0_BASELINE_FIELDS:
+        for field in replay.MODE_MATRIX_BASELINE_FIELDS:
             if field in digest_fields:
                 baseline[field] = "1" * 16
             elif field == "gte_tier_counts":
@@ -498,23 +498,23 @@ def test_task15_matrix_schema_accepts_only_three_closed_metadata_rows() -> None:
         replay.assert_task15_matrix_evidence(payload)
 
 
-def test_p0_matrix_requires_two_equal_runs_and_cross_mode_digests() -> None:
+def test_mode_matrix_requires_two_equal_runs_and_cross_mode_digests() -> None:
     replay = replay_module()
-    payload = replay.build_p0_mode_matrix_evidence(p0_matrix_rows(replay))
+    payload = replay.build_mode_matrix_evidence(mode_matrix_rows(replay))
 
     assert payload["status"] == "PASS"
     assert all(row["determinism"]["equal"] for row in payload["rows"])
     assert all(comparison["equal"] for comparison in payload["comparisons"])
-    replay.assert_p0_mode_matrix_evidence(payload)
+    replay.assert_mode_matrix_evidence(payload)
 
 
-def test_p0_matrix_records_native_mismatch_as_post_gte_milestone() -> None:
+def test_mode_matrix_records_native_mismatch_as_post_gte_milestone() -> None:
     replay = replay_module()
-    rows = p0_matrix_rows(replay)
+    rows = mode_matrix_rows(replay)
     for repetition in rows[2]["runs"]:
         repetition["baseline"]["material_digest"] = "2" * 16
 
-    payload = replay.build_p0_mode_matrix_evidence(rows)
+    payload = replay.build_mode_matrix_evidence(rows)
 
     assert payload["status"] == "PASS"
     assert payload["rows"][2]["determinism"]["equal"] is True
@@ -525,16 +525,16 @@ def test_p0_matrix_records_native_mismatch_as_post_gte_milestone() -> None:
         "equal": False,
         "differences": ["material_digest"],
     }
-    replay.assert_p0_mode_matrix_evidence(payload)
+    replay.assert_mode_matrix_evidence(payload)
 
 
-def test_p0_matrix_when_shadow_digest_differs_is_blocked() -> None:
+def test_mode_matrix_when_shadow_digest_differs_is_blocked() -> None:
     replay = replay_module()
-    rows = p0_matrix_rows(replay)
+    rows = mode_matrix_rows(replay)
     for repetition in rows[1]["runs"]:
         repetition["baseline"]["material_digest"] = "2" * 16
 
-    payload = replay.build_p0_mode_matrix_evidence(rows)
+    payload = replay.build_mode_matrix_evidence(rows)
 
     assert payload["status"] == "BLOCKED"
     assert payload["rows"][1]["determinism"]["equal"] is True
@@ -545,15 +545,15 @@ def test_p0_matrix_when_shadow_digest_differs_is_blocked() -> None:
         "equal": False,
         "differences": ["material_digest"],
     }
-    replay.assert_p0_mode_matrix_evidence(payload)
+    replay.assert_mode_matrix_evidence(payload)
 
 
-def test_p0_matrix_when_repetitions_diverge_is_blocked() -> None:
+def test_mode_matrix_when_repetitions_diverge_is_blocked() -> None:
     replay = replay_module()
-    rows = p0_matrix_rows(replay)
+    rows = mode_matrix_rows(replay)
     rows[1]["runs"][1]["baseline"]["ot_digest"] = "3" * 16
 
-    payload = replay.build_p0_mode_matrix_evidence(rows)
+    payload = replay.build_mode_matrix_evidence(rows)
 
     assert payload["status"] == "BLOCKED"
     assert payload["rows"][1]["determinism"] == {
@@ -561,7 +561,7 @@ def test_p0_matrix_when_repetitions_diverge_is_blocked() -> None:
         "baseline_differences": ["ot_digest"],
         "native_render_difference": False,
     }
-    replay.assert_p0_mode_matrix_evidence(payload)
+    replay.assert_mode_matrix_evidence(payload)
 
 
 @pytest.mark.parametrize(

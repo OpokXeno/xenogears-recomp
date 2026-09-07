@@ -1,0 +1,120 @@
+schema = "xg-render-ui-owners/v2"
+
+[[owners]]
+id = "resident"
+enum_value = 1
+blocker = "none"
+roots = [
+    { image_id = "main-disc1-exe", base = "0x80010000", artifact_size = 303104, sha256 = "dc0b2dd786203d4cce5927c5a3fc85a18f39a3f7406078860076ebb0bbae7119", address = "0x80033558" },
+    { image_id = "main-disc1-exe", base = "0x80010000", artifact_size = 303104, sha256 = "dc0b2dd786203d4cce5927c5a3fc85a18f39a3f7406078860076ebb0bbae7119", address = "0x80034888" },
+]
+
+[[owners]]
+id = "field-dialogue"
+enum_value = 2
+blocker = "none"
+roots = [
+    { image_id = "field-overlay", base = "0x8006FAF0", artifact_size = 260862, sha256 = "38a1ce829a6f094c505f67143d6ace2d328418c65425a7383991179467e1fdfc", address = "0x8008004C" },
+]
+
+[[owners]]
+id = "field-credits-generated-glyph-cache"
+enum_value = 3
+blocker = "none"
+roots = [
+    { image_id = "field-overlay", base = "0x8006FAF0", artifact_size = 260862, sha256 = "38a1ce829a6f094c505f67143d6ace2d328418c65425a7383991179467e1fdfc", address = "0x800AC0F0" },
+    { image_id = "field-overlay", base = "0x8006FAF0", artifact_size = 260862, sha256 = "38a1ce829a6f094c505f67143d6ace2d328418c65425a7383991179467e1fdfc", address = "0x800ACB90" },
+]
+
+[[owners]]
+id = "battle-font"
+enum_value = 4
+blocker = "none"
+roots = [
+    { image_id = "battle-loader-overlay", base = "0x801E4000", artifact_size = 22528, sha256 = "31a7c8828e87fc854da310925b91fd2221c19dc1a6987b800ca1a4d250632abf", address = "0x801E5384" },
+    { image_id = "battle-overlay", base = "0x8006FAF0", artifact_size = 343936, sha256 = "1830b4ef1fe37129972fc310dfad534f8161d6c0b123e74254c3711334a3e291", address = "0x80076A10" },
+    { image_id = "battle-overlay", base = "0x8006FAF0", artifact_size = 343936, sha256 = "1830b4ef1fe37129972fc310dfad534f8161d6c0b123e74254c3711334a3e291", address = "0x80076A6C" },
+]
+
+[[owners]]
+id = "battle-ui-atlas-portraits"
+enum_value = 5
+blocker = "none"
+roots = [
+    { image_id = "battle-loader-overlay", base = "0x801E4000", artifact_size = 22528, sha256 = "31a7c8828e87fc854da310925b91fd2221c19dc1a6987b800ca1a4d250632abf", address = "0x801E5384" },
+    { image_id = "battle-loader-overlay", base = "0x801E4000", artifact_size = 22528, sha256 = "31a7c8828e87fc854da310925b91fd2221c19dc1a6987b800ca1a4d250632abf", address = "0x801E5924" },
+    { image_id = "battle-overlay", base = "0x8006FAF0", artifact_size = 343936, sha256 = "1830b4ef1fe37129972fc310dfad534f8161d6c0b123e74254c3711334a3e291", address = "0x80073538" },
+    { image_id = "battle-overlay", base = "0x8006FAF0", artifact_size = 343936, sha256 = "1830b4ef1fe37129972fc310dfad534f8161d6c0b123e74254c3711334a3e291", address = "0x80073A58" },
+    { image_id = "battle-overlay", base = "0x8006FAF0", artifact_size = 343936, sha256 = "1830b4ef1fe37129972fc310dfad534f8161d6c0b123e74254c3711334a3e291", address = "0x80076418" },
+    { image_id = "battle-overlay", base = "0x8006FAF0", artifact_size = 343936, sha256 = "1830b4ef1fe37129972fc310dfad534f8161d6c0b123e74254c3711334a3e291", address = "0x80077990" },
+    { image_id = "battle-overlay", base = "0x8006FAF0", artifact_size = 343936, sha256 = "1830b4ef1fe37129972fc310dfad534f8161d6c0b123e74254c3711334a3e291", address = "0x80078310" },
+]
+
+[[owners]]
+id = "battling-menu"
+enum_value = 6
+blocker = "none"
+roots = [
+    { image_id = "battling-overlay", base = "0x8006FAF0", artifact_size = 142953, sha256 = "3e6df915e9c7f05f5fb997cb331392f1333e867dfb2628cd65e5e1ea1575646e", address = "0x8007E634" },
+    { image_id = "battling-overlay", base = "0x8006FAF0", artifact_size = 142953, sha256 = "3e6df915e9c7f05f5fb997cb331392f1333e867dfb2628cd65e5e1ea1575646e", address = "0x8007E8AC" },
+    { image_id = "battling-overlay", base = "0x8006FAF0", artifact_size = 142953, sha256 = "3e6df915e9c7f05f5fb997cb331392f1333e867dfb2628cd65e5e1ea1575646e", address = "0x8007E954" },
+    { image_id = "battling-overlay", base = "0x8006FAF0", artifact_size = 142953, sha256 = "3e6df915e9c7f05f5fb997cb331392f1333e867dfb2628cd65e5e1ea1575646e", address = "0x8007E964" },
+]
+
+[[owners]]
+id = "general-menu"
+enum_value = 7
+blocker = "none"
+roots = [
+    { image_id = "menu-overlay", base = "0x801C5000", artifact_size = 153864, sha256 = "82f84a24ac1fd1979754e1cc9c861405fb59ce95dd78db00a76f00c8f1bd177d", address = "0x801C62A8" },
+    { image_id = "menu-overlay", base = "0x801C5000", artifact_size = 153864, sha256 = "82f84a24ac1fd1979754e1cc9c861405fb59ce95dd78db00a76f00c8f1bd177d", address = "0x801C7BF4" },
+]
+
+[[owners]]
+id = "member-change"
+enum_value = 8
+blocker = "none"
+roots = [
+    { image_id = "member-change-menu-overlay", base = "0x801C5000", artifact_size = 26624, sha256 = "3b9e2b890c27ae0de97fe343ac75cd35c05fe7f9605ae387d2166da0be78109c", address = "0x801C94A0" },
+    { image_id = "member-change-menu-overlay", base = "0x801C5000", artifact_size = 26624, sha256 = "3b9e2b890c27ae0de97fe343ac75cd35c05fe7f9605ae387d2166da0be78109c", address = "0x801CB0A8" },
+]
+
+[[owners]]
+id = "enter-name"
+enum_value = 9
+blocker = "none"
+roots = [
+    { image_id = "enter-name-menu-overlay", base = "0x801C5000", artifact_size = 30720, sha256 = "b0c6226511fdf0d3b874cf5e8658ed1fe19fd06833c0e0d61c4762aeb6a6f1b0", address = "0x801C9C34" },
+    { image_id = "enter-name-menu-overlay", base = "0x801C5000", artifact_size = 30720, sha256 = "b0c6226511fdf0d3b874cf5e8658ed1fe19fd06833c0e0d61c4762aeb6a6f1b0", address = "0x801CBDBC" },
+]
+
+[[owners]]
+id = "shop"
+enum_value = 10
+blocker = "none"
+roots = [
+    { image_id = "shop-menu-overlay", base = "0x801C5000", artifact_size = 55296, sha256 = "7890e14bcabddcf85368de10783ecff8daa166dc5ac254e06db5e27959cab4cf", address = "0x801CB014" },
+    { image_id = "shop-menu-overlay", base = "0x801C5000", artifact_size = 55296, sha256 = "7890e14bcabddcf85368de10783ecff8daa166dc5ac254e06db5e27959cab4cf", address = "0x801CCD28" },
+]
+
+[[owners]]
+id = "gear-shop"
+enum_value = 11
+blocker = "none"
+roots = [
+    { image_id = "gear-shop-menu-overlay", base = "0x801C5000", artifact_size = 83968, sha256 = "c7a1982f0ea624c81fd0f85e1a1335c7517723f12ba3e2d08395842392423691", address = "0x801CC1C4" },
+    { image_id = "gear-shop-menu-overlay", base = "0x801C5000", artifact_size = 83968, sha256 = "c7a1982f0ea624c81fd0f85e1a1335c7517723f12ba3e2d08395842392423691", address = "0x801CE024" },
+    { image_id = "gear-shop-menu-overlay", base = "0x801C5000", artifact_size = 83968, sha256 = "c7a1982f0ea624c81fd0f85e1a1335c7517723f12ba3e2d08395842392423691", address = "0x801CE7E0" },
+    { image_id = "gear-shop-menu-overlay", base = "0x801C5000", artifact_size = 83968, sha256 = "c7a1982f0ea624c81fd0f85e1a1335c7517723f12ba3e2d08395842392423691", address = "0x801D5D38" },
+    { image_id = "gear-shop-menu-overlay", base = "0x801C5000", artifact_size = 83968, sha256 = "c7a1982f0ea624c81fd0f85e1a1335c7517723f12ba3e2d08395842392423691", address = "0x801D5EB8" },
+]
+
+[[owners]]
+id = "gear-helper"
+enum_value = 12
+blocker = "none"
+roots = [
+    { image_id = "gear-helper-overlay", base = "0x801DC000", artifact_size = 51200, sha256 = "14395a9f54c124fed016f07906cc882b2a9256d5ade2d10eef99e10fe9366523", address = "0x801E738C" },
+    { image_id = "gear-helper-overlay", base = "0x801DC000", artifact_size = 51200, sha256 = "14395a9f54c124fed016f07906cc882b2a9256d5ade2d10eef99e10fe9366523", address = "0x801E7D14" },
+    { image_id = "gear-helper-overlay", base = "0x801DC000", artifact_size = 51200, sha256 = "14395a9f54c124fed016f07906cc882b2a9256d5ade2d10eef99e10fe9366523", address = "0x801E7FD4" },
+]

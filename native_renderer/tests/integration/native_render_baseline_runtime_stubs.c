@@ -78,6 +78,14 @@ void gpu_get_draw_state(GpuDrawState *out) {
     if (out != NULL) memset(out, 0, sizeof(*out));
 }
 
+void gpu_get_display_info(GpuDisplayInfo *out) {
+    if (out == NULL) return;
+    *out = (GpuDisplayInfo){
+        .width = 320u,
+        .height = 240u,
+    };
+}
+
 void gpu_native_environment_get(GpuNativeDrawEnvironment *out) {
     if (out != NULL) memset(out, 0, sizeof(*out));
 }

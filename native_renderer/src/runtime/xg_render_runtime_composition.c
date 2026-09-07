@@ -1,4 +1,9 @@
 #include "xg_render_runtime_composition.h"
+#include "xg_render_auth_runtime_diagnostics.h"
+#include "xg_render_backend.h"
+#include "xg_render_primitive_utils.h"
+#include "xg_render_source_frame.h"
+#include "xg_render_semantic_presentation.h"
 
 #include "guest_render_bridge.h"
 #include "guest_render_native_stream.h"
@@ -16,24 +21,36 @@
 #include "xg_render_field_character_pipeline.h"
 #include "xg_render_field_polyline.h"
 #include "xg_render_field_sprite.h"
+#include "xg_render_vram_resources.h"
 #include "xg_render_invalidation_dispatch.h"
 #include "xg_render_invalidation_modules.h"
 #include "xg_render_local_producer_auth.h"
+#include "xg_render_manifest_generated.h"
 #include "xg_render_model_repository.h"
+#include "xg_render_model_resources.h"
 #include "xg_render_model_sprite_pipeline.h"
+#include "xg_render_gear_motion.h"
 #include "xg_render_mutation_classifier.h"
 #include "xg_render_overlay_ft4.h"
 #include "xg_render_overlay_cutovers_generated.h"
+#include "xg_render_fragment_runtime.h"
 #include "xg_render_producer_lifecycle.h"
 #include "xg_render_residual.h"
 #include "xg_render_resident_line_f2.h"
+#include "xg_render_resident_text.h"
+#include "xg_render_native_target.h"
 #include "xg_render_resolver_registry.h"
+#include "xg_render_resource_repository.h"
 #include "xg_render_resource_watch.h"
 #include "xg_render_runtime_variant_auth.h"
+#include "xg_render_auth_runtime_hooks.h"
 #include "xg_render_shared_packet_resolver.h"
 #include "xg_render_static_auth_metadata.h"
 #include "xg_render_submission.h"
+#include "xg_render_surface_graph.h"
 #include "xg_render_ui_ot.h"
+#include "xg_render_ui_owner_catalog.h"
+#include "xg_render_ui_resources.h"
 #include "xg_render_world_coordinator.h"
 #include "xg_render_world_execution.h"
 #include "xg_render_world_models_pipeline.h"
@@ -43,6 +60,7 @@
 #include "xg_world_clouds_shadow.h"
 #include "xg_world_models_native.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 static XgRenderRuntimeAuthSceneServices auth_scene;
@@ -50,6 +68,37 @@ static bool configured;
 static bool local_auth_configured;
 static uint64_t next_resource_generation = 1u;
 static XgNativeView native_view;
+static struct {
+    XgRenderResourceProvenance provenance;
+    uint64_t owner_generation;
+    bool active;
+    bool streaming;
+} vram_resource_route_transaction;
+enum { FIELD_PACKED_IMAGE_REGION_CAPACITY = 64u };
+static uint64_t invalidation_kind_counts[XG_RENDER_INVALIDATION_RESET + 1u];
+static uint64_t invalidation_mutation_counts[12];
+static PsxXgRenderTimRouteDiagnostics tim_route_diagnostics;
+
+static uint32_t tim_route_index(uint32_t handler) {
+    return handler - XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_BEGIN;
+}
+
+static bool is_tim_route(uint32_t handler) {
+    return handler >= XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_BEGIN &&
+        handler <= XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_COMMIT;
+}
+
+static void record_tim_route_result(
+        uint32_t handler, XgRenderVramResourceResult result,
+        PsxXgRenderTimRouteBlocker blocker) {
+    const uint32_t index = tim_route_index(handler);
+
+    tim_route_diagnostics.last_result[index] = result;
+    tim_route_diagnostics.last_blocker[index] = blocker;
+    if (result == XG_RENDER_VRAM_RESOURCE_OK &&
+        blocker == PSX_XG_RENDER_TIM_ROUTE_OK)
+        tim_route_diagnostics.successes[index]++;
+}
 
 #ifdef XG_RENDER_RUNTIME_COMPOSITION_TESTING
 static bool test_registration_failure_enabled;
@@ -78,6 +127,15 @@ static bool physical_address_equals(uint32_t left, uint32_t right) {
         (right & UINT32_C(0x1fffffff));
 }
 
+static bool physical_range_contains(uint32_t range_start, uint32_t range_size,
+                                    uint32_t address, uint32_t size) {
+    const uint64_t start = range_start & UINT32_C(0x1fffffff);
+    const uint64_t target = address & UINT32_C(0x1fffffff);
+
+    return range_size != 0u && size != 0u && target >= start &&
+        target + size <= start + range_size;
+}
+
 static bool guest_data_range_is_valid(uint32_t address, uint32_t size,
                                       uint32_t alignment,
                                       bool allow_scratchpad) {
@@ -95,6 +153,51 @@ static bool guest_data_range_is_valid(uint32_t address, uint32_t size,
         (address & (alignment - 1u)) == 0u &&
         (uint64_t)address + size - 1u <= UINT32_MAX &&
         (in_ram || in_scratchpad);
+}
+
+static void vram_resource_route_transaction_bind(
+        const XgRenderResourceProvenance *provenance,
+        uint64_t owner_generation, bool streaming) {
+    vram_resource_route_transaction.provenance = *provenance;
+    vram_resource_route_transaction.owner_generation = owner_generation;
+    vram_resource_route_transaction.active = true;
+    vram_resource_route_transaction.streaming = streaming;
+}
+
+static bool vram_resource_route_transaction_matches(
+        const XgRenderResourceProvenance *provenance,
+        uint64_t owner_generation) {
+    return vram_resource_route_transaction.active && provenance != NULL &&
+        provenance->kind == vram_resource_route_transaction.provenance.kind &&
+        provenance->receipt == vram_resource_route_transaction.provenance.receipt &&
+        provenance->capability ==
+            vram_resource_route_transaction.provenance.capability &&
+        provenance->synthetic ==
+            vram_resource_route_transaction.provenance.synthetic &&
+        owner_generation == vram_resource_route_transaction.owner_generation;
+}
+
+static void vram_resource_route_transaction_clear(void) {
+    memset(&vram_resource_route_transaction, 0,
+           sizeof(vram_resource_route_transaction));
+}
+
+static void vram_resource_route_transaction_abort(void) {
+    if (!vram_resource_route_transaction.active) return;
+    /* Poison the loader before draining it so staged imports cannot publish. */
+    if (vram_resource_route_transaction.streaming) {
+        (void)xg_render_vram_stream_upload(
+            NULL, vram_resource_route_transaction.owner_generation, NULL);
+        (void)xg_render_vram_stream_finish(
+            vram_resource_route_transaction.owner_generation);
+    } else {
+        (void)xg_render_vram_resources_upload(
+            NULL, XG_RENDER_RESOURCE_TEXTURE,
+            vram_resource_route_transaction.owner_generation, NULL);
+        (void)xg_render_vram_resources_commit(
+            vram_resource_route_transaction.owner_generation);
+    }
+    vram_resource_route_transaction_clear();
 }
 
 static uint64_t interpolation_scene_generation(void) {
@@ -136,14 +239,30 @@ static bool local_authority_matches(uint32_t pc, uint64_t generation) {
         pc, generation, state.scene_generation);
 }
 
-static uint64_t artifact_generation_for_pc(uint32_t pc) {
-    XgRenderRuntimeAuthSceneState state;
+static bool artifact_authority_for_pc(
+        uint32_t pc, XgRenderArtifactAuthority *out_authority) {
+    if (out_authority != NULL)
+        *out_authority = (XgRenderArtifactAuthority){0};
+    return auth_scene.artifact_authority_for_pc != NULL &&
+        auth_scene.artifact_authority_for_pc(pc, out_authority);
+}
 
-    query_state(&state);
-    if (auth_scene.artifact_authorizes_pc != NULL &&
-        auth_scene.artifact_authorizes_pc(pc))
-        return state.artifact_generation;
-    return local_generation_for_pc(pc);
+static bool artifact_authority_for_cutover(
+        const XgRenderCutoverRouteDescriptor *route,
+        XgRenderArtifactAuthority *out_authority) {
+    if (route == NULL || out_authority == NULL) return false;
+    if (artifact_authority_for_pc(route->pc, out_authority)) return true;
+    *out_authority = (XgRenderArtifactAuthority){0};
+    return auth_scene.static_artifact_authority_for_cutover != NULL &&
+        auth_scene.static_artifact_authority_for_cutover(
+            route->pc, route->instruction_word, out_authority);
+}
+
+static uint64_t artifact_generation_for_pc(uint32_t pc) {
+    XgRenderArtifactAuthority authority;
+
+    return artifact_authority_for_pc(pc, &authority)
+        ? authority.generation : 0u;
 }
 
 static bool resident_lifecycle_pc(uint32_t pc) {
@@ -193,6 +312,7 @@ static bool lifecycle_begin(uint32_t producer_pc,
 
 static bool lifecycle_matches(const XgRenderProducerLifecycle *lifecycle) {
     XgRenderRuntimeAuthSceneState state;
+    XgRenderArtifactAuthority authority;
 
     query_state(&state);
     if (lifecycle == NULL || lifecycle->resource_generation == 0u)
@@ -211,10 +331,9 @@ static bool lifecycle_matches(const XgRenderProducerLifecycle *lifecycle) {
                                     lifecycle->artifact_generation);
     return lifecycle->scene_resource == 1u &&
         lifecycle->artifact_generation != 0u &&
-        lifecycle->artifact_generation == state.artifact_generation &&
         lifecycle->scene_generation == state.scene_generation &&
-        auth_scene.artifact_is_authorized != NULL &&
-        auth_scene.artifact_is_authorized();
+        artifact_authority_for_pc(lifecycle->producer_pc, &authority) &&
+        lifecycle->artifact_generation == authority.generation;
 }
 
 static bool replay_container_matches_command(
@@ -282,10 +401,15 @@ static const XgRenderModelRepositoryServices *model_repository_services(void) {
     return &services;
 }
 
+static bool motion_source(uint32_t pc, XgRenderMotionSource *out) {
+    return xg_render_submission_native_work_mode() && psx_xg_render_motion_source(pc,out);
+}
+
 static const XgRenderModelSpritePipelineServices *model_sprite_services(void) {
     static XgRenderModelSpritePipelineServices services;
 
     services = (XgRenderModelSpritePipelineServices){
+        .motion_source = motion_source,
         .lifecycle = lifecycle_services(),
         .repository = model_repository_services(),
         .screen_x_cull_margin = screen_x_cull_margin,
@@ -322,6 +446,44 @@ static const XgRenderResidentLineF2Services *resident_line_services(void) {
         .stage_semantic =
             xg_render_submission_stage_standalone_semantic_identified,
         .abort_submission = xg_render_submission_standalone_abort,
+    };
+    return &services;
+}
+
+static bool resident_text_authorizes_pc(uint32_t owner_entry) {
+    bool identity_bound = false;
+    bool identity_gate_passed = false;
+
+    return auth_scene.native_text_authorizes_pc != NULL &&
+        xg_render_static_auth_metadata_is_valid() &&
+        xg_render_static_auth_bind_identity(
+            &identity_bound, &identity_gate_passed) &&
+        identity_bound && identity_gate_passed &&
+        auth_scene.native_text_authorizes_pc(owner_entry);
+}
+
+static const XgRenderResidentTextServices *resident_text_services(void) {
+    static const XgRenderResidentTextServices services = {
+        .native_text_authorizes_pc = resident_text_authorizes_pc,
+        .guest_data_range_is_valid = guest_data_range_is_valid,
+        .watch_resource = watch_resource,
+    };
+    return &services;
+}
+
+static uint64_t native_target_generation(void) {
+    XgRenderRuntimeAuthSceneState state;
+    query_state(&state);
+    return state.scene_generation;
+}
+
+static const XgRenderNativeTargetServices *native_target_services(void) {
+    static XgRenderNativeTargetServices services;
+    services = (XgRenderNativeTargetServices){
+        .native_text_authorizes_pc = resident_text_authorizes_pc,
+        .guest_data_range_is_valid = guest_data_range_is_valid,
+        .generation = native_target_generation,
+        .read_word = auth_scene.read_guest_word,
     };
     return &services;
 }
@@ -381,6 +543,39 @@ static bool publish_field_sprite_overlay(
         publication, overlay_services(), failure_detail);
 }
 
+static bool field_sprite_resources_ready(
+        const XgRenderIrNativePrimitive *primitive,
+        uint32_t *failure_detail) {
+    XgRenderVramResourceResolvedResources resolved = {0};
+    XgSemanticSceneIdentity scene = {0};
+    uint32_t generation = 0u;
+
+    if (failure_detail != NULL) *failure_detail = 0u;
+    if (primitive == NULL) return false;
+    if (!primitive->material.textured) return true;
+    /* Field/World captures are resource-independent until their OT is ready.
+     * Animation uploads and framebuffer moves precede texture consumption. */
+    if (auth_scene.standalone_source_identity != NULL &&
+        auth_scene.standalone_source_identity(&scene, &generation) &&
+        (scene.module == XG_SEMANTIC_MODULE_FIELD ||
+         scene.module == XG_SEMANTIC_MODULE_WORLD))
+        return true;
+    if (!xg_render_vram_resources_resolve_draw(primitive, &resolved)) {
+        if (failure_detail != NULL) *failure_detail = 530u;
+        return false;
+    }
+    if (!resolved.has_texture) {
+        if (failure_detail != NULL) *failure_detail = 531u;
+        return false;
+    }
+    if (primitive->material.texture_depth != XG_RENDER_IR_TEXTURE_15_BIT &&
+        !resolved.has_clut) {
+        if (failure_detail != NULL) *failure_detail = 532u;
+        return false;
+    }
+    return true;
+}
+
 static const XgRenderFieldSpriteServices *field_sprite_services(void) {
     static XgRenderFieldSpriteServices services;
 
@@ -388,6 +583,7 @@ static const XgRenderFieldSpriteServices *field_sprite_services(void) {
         .lifecycle = lifecycle_services(),
         .stage_primitive =
             xg_render_submission_stage_standalone_primitive_with_detail,
+        .resources_ready = field_sprite_resources_ready,
         .publish_overlay = publish_field_sprite_overlay,
         .register_replay_command = register_field_sprite_command,
         .watch_resource = watch_resource,
@@ -490,7 +686,9 @@ static bool submission_auth_available(void) {
     return state.active && !state.completed;
 }
 
-static bool submission_auth_snapshot(GpuRenderTransactionId *out_visual_id) {
+static bool submission_auth_snapshot(
+        GpuRenderTransactionId *out_visual_id,
+        XgRenderIrProvenanceKey *out_provenance) {
     XgRenderAuthSnapshot snapshot = {0};
 
     if (out_visual_id == NULL || auth_scene.auth_snapshot == NULL ||
@@ -500,7 +698,150 @@ static bool submission_auth_snapshot(GpuRenderTransactionId *out_visual_id) {
         snapshot.logical_identity.state_id.scene_epoch,
         snapshot.logical_identity.state_id.state_sequence,
     };
+    if (out_provenance != NULL)
+        *out_provenance = snapshot.producer_handle;
     return true;
+}
+
+static uint64_t identity_prefix(const XgRenderAuthIdentity *identity) {
+    uint64_t value = 0u;
+
+    if (identity == NULL) return 0u;
+    for (uint32_t index = 0u; index < sizeof(value); ++index)
+        value |= (uint64_t)identity->full_sha256.bytes[index] << (index * 8u);
+    return value;
+}
+
+static bool submission_source_frame_from_identity(
+        const XgSemanticSceneIdentity *scene, uint32_t scene_generation,
+        XgRenderSourceFrameDescription *out_description) {
+    GpuDisplayInfo display = {0};
+
+    if (scene == NULL || out_description == NULL || scene->disc_id == 0u ||
+        scene->executable_identity == 0u ||
+        scene->primary_overlay_identity == 0u ||
+        scene->module > XG_SEMANTIC_MODULE_MOVIE || scene_generation == 0u)
+        return false;
+    gpu_get_display_info(&display);
+    if (display.width == 0u || display.width > UINT16_MAX ||
+        display.height == 0u || display.height > UINT16_MAX ||
+        display.display_x > UINT16_MAX || display.display_y > UINT16_MAX)
+        return false;
+    *out_description = (XgRenderSourceFrameDescription){
+        .scene = *scene,
+        .display = {
+            .width = (uint16_t)display.width,
+            .height = (uint16_t)display.height,
+            .display_x = (uint16_t)display.display_x,
+            .display_y = (uint16_t)display.display_y,
+            .aspect_num = native_view.enabled ? native_view.aspect_num : 4u,
+            .aspect_den = native_view.enabled ? native_view.aspect_den : 3u,
+            .depth24 = display.depth24 != 0,
+            .interlaced = display.interlaced != 0,
+            .disabled = display.disabled != 0,
+        },
+        .scene_generation = scene_generation,
+        .temporally_eligible = true,
+    };
+    return true;
+}
+
+static bool submission_source_frame_description(
+        XgRenderSourceFrameDescription *out_description) {
+    XgRenderRuntimeAuthSceneState runtime;
+    XgRenderAuthSnapshot auth = {0};
+    XgSemanticSceneIdentity scene;
+
+    query_state(&runtime);
+    if (out_description == NULL || runtime.render_mode !=
+            GUEST_RENDER_RENDER_NATIVE || !runtime.active ||
+        runtime.scene_generation == 0u ||
+        runtime.scene_generation > UINT32_MAX ||
+        auth_scene.auth_snapshot == NULL ||
+        !auth_scene.auth_snapshot(&auth) ||
+        auth.reject_reason != XG_RENDER_AUTH_REJECT_NONE ||
+        auth.logical_identity.disc_id == 0u ||
+        auth.logical_identity.semantic_module > XG_SEMANTIC_MODULE_MOVIE)
+        return false;
+    scene = (XgSemanticSceneIdentity){
+        .disc_id = auth.logical_identity.disc_id,
+        .executable_identity = identity_prefix(
+            &auth.logical_identity.static_game_identity),
+        .primary_overlay_identity = identity_prefix(
+            &auth.logical_identity.field_image_identity),
+        .module = (XgSemanticModuleKind)
+            auth.logical_identity.semantic_module,
+    };
+    return submission_source_frame_from_identity(
+        &scene, (uint32_t)runtime.scene_generation, out_description);
+}
+
+static bool field_packed_image_upload(
+        CPUState *cpu, uint64_t owner_generation,
+        const XgRenderVramResourceServices *services) {
+    const uint32_t packed_address = cpu != NULL ? cpu->gpr[4] : 0u;
+    const uint32_t base_x = cpu != NULL ? cpu->gpr[5] : UINT32_MAX;
+    const uint32_t base_y = cpu != NULL ? cpu->gpr[6] : UINT32_MAX;
+    uint32_t image_count;
+    uint32_t offset_table_size;
+
+    if (cpu == NULL || cpu->read_word == NULL || cpu->read_half == NULL ||
+        services == NULL || services->authorize_guest_range == NULL ||
+        base_x > UINT16_MAX || base_y > UINT16_MAX ||
+        !services->authorize_guest_range(packed_address, 4u, 4u, false))
+        return false;
+    image_count = cpu->read_word(packed_address);
+    if (image_count == 0u ||
+        image_count > FIELD_PACKED_IMAGE_REGION_CAPACITY)
+        return false;
+    offset_table_size = 4u + image_count * 4u;
+    if (!services->authorize_guest_range(
+            packed_address, offset_table_size, 4u, false))
+        return false;
+
+    for (uint32_t index = 0u; index < image_count; ++index) {
+        const uint32_t offset = cpu->read_word(
+            packed_address + 4u + index * 4u);
+        const uint64_t block_address_64 = (uint64_t)packed_address + offset;
+        const uint64_t x_64 = (uint64_t)base_x + index * 64u;
+        uint32_t block_address;
+        uint16_t width;
+        uint16_t height;
+        uint64_t byte_count_64;
+
+        if (block_address_64 > UINT32_MAX - 4u || x_64 > UINT16_MAX)
+            return false;
+        block_address = (uint32_t)block_address_64;
+        if (!services->authorize_guest_range(block_address, 4u, 2u, false))
+            return false;
+        width = cpu->read_half(block_address);
+        height = cpu->read_half(block_address + 2u);
+        byte_count_64 = (uint64_t)width * height * 2u;
+        if (width == 0u || height == 0u || byte_count_64 > SIZE_MAX ||
+            byte_count_64 > UINT32_MAX ||
+            !services->authorize_guest_range(
+                block_address + 4u, (uint32_t)byte_count_64, 2u, false))
+            return false;
+        if (
+            xg_render_vram_resources_upload_region(
+                cpu, XG_RENDER_RESOURCE_TEXTURE, owner_generation,
+                (uint16_t)x_64, (uint16_t)base_y, width, height,
+                block_address + 4u, services) != XG_RENDER_VRAM_RESOURCE_OK)
+            return false;
+    }
+    return true;
+}
+
+static bool submission_standalone_source_frame_description(
+        XgRenderSourceFrameDescription *out_description) {
+    XgSemanticSceneIdentity scene = {0};
+    uint32_t scene_generation = 0u;
+
+    return auth_scene.standalone_source_identity != NULL &&
+        auth_scene.standalone_source_identity(
+            &scene, &scene_generation) &&
+        submission_source_frame_from_identity(
+            &scene, scene_generation, out_description);
 }
 
 static bool submission_scene_config(GuestRenderSceneConfig *out_config) {
@@ -514,6 +855,13 @@ static bool submission_scene_config(GuestRenderSceneConfig *out_config) {
     return true;
 }
 
+static bool submission_source_frame_target(
+        const XgRenderSourceFrameDescription *description,
+        XgSemanticResourceRef *out_target) {
+    return auth_scene.prepare_source_target != NULL &&
+        auth_scene.prepare_source_target(description, out_target);
+}
+
 static const XgRenderSubmissionServices *submission_services(void) {
     static XgRenderSubmissionServices services;
 
@@ -522,8 +870,14 @@ static const XgRenderSubmissionServices *submission_services(void) {
         .active_auth_snapshot = submission_auth_snapshot,
         .active_auth_append = auth_scene.append_authenticated_ir,
         .standalone_scene_config = submission_scene_config,
+        .source_frame_description = submission_source_frame_description,
+        .standalone_source_frame_description =
+            submission_standalone_source_frame_description,
+        .source_frame_target = submission_source_frame_target,
         .presentation_gate = auth_scene.presentation_gate,
         .interpolation_generation = interpolation_scene_generation,
+        .scene_generation = field_character_scene_generation,
+        .materialize_semantic_draw = xg_render_submission_materialize_semantic_draw,
     };
     return &services;
 }
@@ -663,8 +1017,7 @@ static bool observe_local_producer(CPUState *cpu, uint32_t pc,
             cpu, &cutover, state.scene_generation, state.render_mode);
         return true;
     case XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_INITIALIZER_BEGIN:
-        if (auth_scene.artifact_authorizes_pc != NULL &&
-            auth_scene.artifact_authorizes_pc(pc)) {
+        if (artifact_generation_for_pc(pc) != 0u) {
             xg_render_local_producer_auth_clear_kind(
                 XG_RENDER_LOCAL_PRODUCER_ZOOM);
             return false;
@@ -722,8 +1075,7 @@ static bool authorize_dispatch_pc(uint32_t pc, uint32_t instruction_word) {
         xg_render_world_execution_site_authorized(pc, instruction_word) ||
         resident_site ||
         local_generation_for_pc(pc) != 0u ||
-        (auth_scene.artifact_authorizes_pc != NULL &&
-         auth_scene.artifact_authorizes_pc(pc));
+        artifact_generation_for_pc(pc) != 0u;
 }
 
 static bool world_authentication_generation(uint64_t *out_generation) {
@@ -759,6 +1111,7 @@ static bool world_authorize_direct_dispatch(void) {
 static const XgNativeView *current_native_view(void) { return &native_view; }
 
 static bool finalize_temporal_with_model_anchors(void) {
+    if (xg_render_submission_native_work_mode()) return true;
     return xg_render_model_repository_record_active_producer_anchors(
                model_repository_services()) &&
         xg_render_submission_finalize_temporal();
@@ -766,6 +1119,7 @@ static bool finalize_temporal_with_model_anchors(void) {
 
 static const XgRenderWorldCoordinatorPolicy *world_policy(void) {
     static const XgRenderWorldCoordinatorPolicy policy = {
+        .motion_source = motion_source,
         .readiness_blocker = world_readiness_blocker,
         .authorize_direct_dispatch = world_authorize_direct_dispatch,
         .authentication_generation = world_authentication_generation,
@@ -778,6 +1132,8 @@ static const XgRenderWorldCoordinatorPolicy *world_policy(void) {
         .begin_submission = xg_render_submission_standalone_begin,
         .stage_native =
             xg_render_submission_stage_standalone_primitive_identified,
+        .stage_native_deferred_anchors =
+            xg_render_submission_stage_standalone_primitive_deferred_anchors,
         .stage_temporal =
             xg_render_submission_stage_temporal_primitive_identified,
         .abort_submission = xg_render_submission_standalone_abort,
@@ -813,8 +1169,7 @@ static bool compass_cutover(CPUState *cpu, uint32_t pc,
         (auth_scene.artifact_is_authorized == NULL ||
          !auth_scene.artifact_is_authorized()))
         return false;
-    if (auth_scene.artifact_authorizes_pc == NULL ||
-        !auth_scene.artifact_authorizes_pc(pc)) {
+    if (artifact_generation_for_pc(pc) == 0u) {
         xg_field_compass_fail(8u);
         return false;
     }
@@ -840,8 +1195,7 @@ static bool particle_cutover(CPUState *cpu, uint32_t pc) {
     if (guest_render_bridge_snapshot(&bridge) != GUEST_RENDER_OK) goto fail;
     if (bridge.modes.effective_render_mode != GUEST_RENDER_RENDER_NATIVE)
         return false;
-    if (auth_scene.artifact_authorizes_pc == NULL ||
-        !auth_scene.artifact_authorizes_pc(pc))
+    if (artifact_generation_for_pc(pc) == 0u)
         goto fail;
     return xg_field_particles_cutover(cpu, pc, particle_services());
 fail:
@@ -905,9 +1259,8 @@ static bool zoom_authorize_replay(
     XgRenderRuntimeAuthSceneState state;
     query_state(&state);
     return source != NULL && context != NULL &&
-        (((auth_scene.artifact_is_authorized != NULL &&
-           auth_scene.artifact_is_authorized()) &&
-          source->artifact_generation == state.artifact_generation) ||
+        ((source->artifact_generation == artifact_generation_for_pc(
+              XG_RENDER_ZOOM_TEMPLATE_STORE_PC)) ||
          local_authority_matches(
              XG_RENDER_ZOOM_TEMPLATE_STORE_PC, source->artifact_generation)) &&
         replay_container_matches_command(context) &&
@@ -969,7 +1322,9 @@ static bool model_ft4_resolve(
     query_state(&state);
     result = xg_render_model_repository_resolve_ft4(
         context, state.render_mode, out_semantic, model_repository_services());
-    xg_render_model_sprite_pipeline_record_ft4_replay(result, sprite_opcode);
+    xg_render_model_sprite_pipeline_record_ft4_replay(
+        result, sprite_opcode,
+        context != NULL ? (uint32_t)context->command_id : 0u);
     return result == XG_RENDER_MODEL_REPLAY_RESOLVED;
 }
 
@@ -1070,9 +1425,12 @@ static const XgRenderResolverRegistryServices *resolver_services(void) {
 
 static bool record_resolved_semantic_anchors(
         uint64_t command_id, const GpuRenderSemantic *semantic) {
+    /* Native DRAW already owns these identities; its legacy anchor sink is
+     * inactive, so do not expand the producer's geometry for that sink. */
     return xg_render_submission_record_interpolation_anchors(semantic) &&
-        xg_render_model_repository_record_resolved_producer_anchors(
-            command_id, semantic, model_repository_services());
+        (xg_render_submission_native_work_mode() ||
+         xg_render_model_repository_record_resolved_producer_anchors(
+            command_id, semantic, model_repository_services()));
 }
 
 static XgRenderInvalidationServices invalidation_services(void) {
@@ -1107,6 +1465,10 @@ bool xg_render_runtime_composition_configure(
         services->auth_snapshot == NULL ||
         services->auth_ir_item_get == NULL ||
         services->append_authenticated_ir == NULL ||
+        services->prepare_source_target == NULL ||
+        services->retained_movie_surface == NULL ||
+        services->artifact_authority_for_pc == NULL ||
+        services->static_artifact_authority_for_cutover == NULL ||
         services->artifact_authorizes_pc == NULL ||
         services->artifact_is_authorized == NULL ||
         services->completed_proof_matches_tier == NULL ||
@@ -1120,8 +1482,18 @@ bool xg_render_runtime_composition_configure(
             auth_scene.auth_ir_item_get == services->auth_ir_item_get &&
             auth_scene.append_authenticated_ir ==
                 services->append_authenticated_ir &&
+            auth_scene.prepare_source_target ==
+                services->prepare_source_target &&
+            auth_scene.retained_movie_surface ==
+                services->retained_movie_surface &&
+            auth_scene.artifact_authority_for_pc ==
+                services->artifact_authority_for_pc &&
+            auth_scene.static_artifact_authority_for_cutover ==
+                services->static_artifact_authority_for_cutover &&
             auth_scene.artifact_authorizes_pc ==
                 services->artifact_authorizes_pc &&
+            auth_scene.native_text_authorizes_pc ==
+                services->native_text_authorizes_pc &&
             auth_scene.artifact_is_authorized ==
                 services->artifact_is_authorized &&
             auth_scene.completed_proof_matches_tier ==
@@ -1205,18 +1577,32 @@ static XgRenderCutoverDispatchResult observe_f4_route(
         (void)xg_render_f4_sources_capture_fixed_2a(
             cpu, render_mode, f4_services());
         return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
-    case XG_CUTOVER_F4_BATTLE_FADER:
-        (void)xg_render_f4_sources_capture_battle_fader(
+    case XG_CUTOVER_F4_OBSERVE_2A_OT:
+        xg_render_f4_sources_observe_2a_ot(
             cpu, render_mode, f4_services());
-        return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+        /* The resident call seam also covers AOT bodies without the interior
+         * 800b393c observation. Only the fader's first addPrim owns this F4. */
+        if (cpu == NULL || cpu->gpr[31] != UINT32_C(0x800b3950) ||
+            cpu->gpr[5] != cpu->gpr[18])
+            return XG_RENDER_CUTOVER_DISPATCH_CONTINUE;
+        /* fall through */
+    case XG_CUTOVER_F4_BATTLE_FADER: {
+        if (xg_render_f4_sources_capture_battle_fader(
+                cpu, render_mode, f4_services())) {
+            const XgRenderResidualCaptureRequest request = {
+                .kind = XG_RENDER_RESIDUAL_CAPTURE_BATTLE_FADER,
+                .cpu = cpu,
+            };
+            xg_render_residual_capture(&request, render_mode, lifecycle_services());
+        }
+        return route->action == XG_CUTOVER_F4_BATTLE_FADER
+            ? XG_RENDER_CUTOVER_DISPATCH_OBSERVED
+            : XG_RENDER_CUTOVER_DISPATCH_CONTINUE;
+    }
     case XG_CUTOVER_F4_PROJECTED_2A:
         (void)xg_render_f4_sources_capture_projected_2a(
             cpu, render_mode, f4_services());
         return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
-    case XG_CUTOVER_F4_OBSERVE_2A_OT:
-        xg_render_f4_sources_observe_2a_ot(
-            cpu, render_mode, f4_services());
-        return XG_RENDER_CUTOVER_DISPATCH_CONTINUE;
     default:
         return XG_RENDER_CUTOVER_DISPATCH_CONTINUE;
     }
@@ -1241,6 +1627,177 @@ static XgRenderCutoverDispatchResult observe_residual_route(
         return XG_RENDER_CUTOVER_DISPATCH_CONTINUE;
     }
     xg_render_residual_capture(&request, render_mode, lifecycle_services());
+    return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+}
+
+static XgRenderCutoverDispatchResult observe_resident_resource_route(
+        CPUState *cpu, const XgRenderCutoverRouteDescriptor *route,
+        const XgRenderRuntimeAuthSceneState *state) {
+    XgRenderVramResourceServices services = {
+        .authorize_guest_range = guest_data_range_is_valid,
+    };
+    XgRenderResourceCapabilityMetadata metadata = {
+        .kind = XG_RENDER_RESOURCE_PROVENANCE_ARTIFACT,
+        .lifetime = XG_RENDER_RESOURCE_CAPABILITY_SCENE,
+        .owner_kind = XG_RENDER_RESOURCE_OWNER_SCENE,
+        .owner_generation = state->scene_generation,
+    };
+    bool resident_artifact_found = false;
+
+    if (cpu == NULL) return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+    for (size_t index = 0u; index < xg_render_ui_owner_catalog_count; ++index) {
+        const XgRenderArtifactIdentity *artifact =
+            &xg_render_ui_owner_catalog[index].artifact;
+
+        if (memcmp(artifact->sha256, xg_render_game_identity,
+                   sizeof(artifact->sha256)) != 0 ||
+            !physical_range_contains(
+                artifact->base, artifact->size, route->pc, 4u))
+            continue;
+        metadata.artifact = *artifact;
+        resident_artifact_found = true;
+        break;
+    }
+    metadata.receipt = resident_artifact_found
+        ? xg_render_resource_digest(metadata.artifact.sha256,
+                                    sizeof(metadata.artifact.sha256))
+        : 0u;
+    if (!resident_artifact_found || metadata.receipt == 0u ||
+        !xg_render_static_auth_metadata_is_valid() ||
+        xg_render_resource_capability_register(
+            &metadata, &services.provenance) !=
+                XG_RENDER_RESOURCE_CAPABILITY_OK) {
+        vram_resource_route_transaction_abort();
+        return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+    }
+    switch ((XgRenderCutoverAction)route->action) {
+    case XG_CUTOVER_RESIDENT_RESOURCE_BEGIN: {
+        const uint32_t tag = cpu->gpr[8];
+        const XgRenderResourceKind kind = tag == UINT32_C(0x1200)
+            ? XG_RENDER_RESOURCE_TEXTURE : XG_RENDER_RESOURCE_CLUT;
+
+        vram_resource_route_transaction_abort();
+        if ((tag == UINT32_C(0x1200) || tag == UINT32_C(0x1201)) &&
+            xg_render_vram_stream_begin(
+                kind, state->render_mode, state->scene_generation) ==
+                    XG_RENDER_VRAM_RESOURCE_OK)
+            vram_resource_route_transaction_bind(
+                &services.provenance, state->scene_generation, true);
+        break;
+    }
+    case XG_CUTOVER_RESIDENT_RESOURCE_UPLOAD:
+        if (vram_resource_route_transaction_matches(
+                &services.provenance, state->scene_generation))
+            (void)xg_render_vram_stream_upload(
+                cpu, state->scene_generation, &services);
+        else
+            vram_resource_route_transaction_abort();
+        break;
+    case XG_CUTOVER_RESIDENT_RESOURCE_FINISH:
+        if ((int32_t)cpu->gpr[2] <= 0) {
+            if (vram_resource_route_transaction_matches(
+                    &services.provenance, state->scene_generation)) {
+                (void)xg_render_vram_stream_finish(state->scene_generation);
+                vram_resource_route_transaction_clear();
+            } else {
+                vram_resource_route_transaction_abort();
+            }
+        }
+        break;
+    default:
+        return XG_RENDER_CUTOVER_DISPATCH_CONTINUE;
+    }
+    return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+}
+
+static XgRenderCutoverDispatchResult observe_world_resource_route(
+        CPUState *cpu, const XgRenderCutoverRouteDescriptor *route,
+        const XgRenderRuntimeAuthSceneState *state) {
+    XgRenderArtifactAuthority authority;
+    XgRenderVramResourceServices services = {
+        .authorize_guest_range = guest_data_range_is_valid,
+    };
+
+    switch ((XgRenderCutoverAction)route->action) {
+    case XG_CUTOVER_WORLD_GROUND_CLUT_BEGIN:
+    case XG_CUTOVER_WORLD_GROUND_CLUT_UPLOAD:
+    case XG_CUTOVER_WORLD_GROUND_CLUT_COMMIT:
+    case XG_CUTOVER_WORLD_SHARED_CLUT_BEGIN:
+    case XG_CUTOVER_WORLD_SHARED_CLUT_UPLOAD:
+    case XG_CUTOVER_WORLD_SHARED_CLUT_COMMIT:
+    case XG_CUTOVER_WORLD_ANIMATED_TEXTURE_BEGIN:
+    case XG_CUTOVER_WORLD_ANIMATED_TEXTURE_UPLOAD:
+    case XG_CUTOVER_WORLD_ANIMATED_TEXTURE_COMMIT:
+        break;
+    default:
+        return XG_RENDER_CUTOVER_DISPATCH_CONTINUE;
+    }
+    if (cpu == NULL ||
+        !artifact_authority_for_pc(route->pc, &authority) ||
+        authority.generation == 0u || authority.provenance.receipt == 0u) {
+        vram_resource_route_transaction_abort();
+        return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+    }
+    services.provenance = authority.provenance;
+    switch ((XgRenderCutoverAction)route->action) {
+    case XG_CUTOVER_WORLD_GROUND_CLUT_BEGIN:
+    case XG_CUTOVER_WORLD_SHARED_CLUT_BEGIN:
+        vram_resource_route_transaction_abort();
+        if (xg_render_vram_clut_begin(
+                state->render_mode, state->scene_generation) ==
+                    XG_RENDER_VRAM_RESOURCE_OK)
+            vram_resource_route_transaction_bind(
+                &services.provenance, state->scene_generation, false);
+        break;
+    case XG_CUTOVER_WORLD_ANIMATED_TEXTURE_BEGIN:
+        vram_resource_route_transaction_abort();
+        if (xg_render_vram_image_begin(
+                state->render_mode, state->scene_generation) ==
+                    XG_RENDER_VRAM_RESOURCE_OK)
+            vram_resource_route_transaction_bind(
+                &services.provenance, state->scene_generation, false);
+        break;
+    case XG_CUTOVER_WORLD_GROUND_CLUT_UPLOAD:
+    case XG_CUTOVER_WORLD_SHARED_CLUT_UPLOAD:
+        if (vram_resource_route_transaction_matches(
+                &services.provenance, state->scene_generation))
+            (void)xg_render_vram_resources_upload(
+                cpu, XG_RENDER_RESOURCE_CLUT, state->scene_generation,
+                &services);
+        else
+            vram_resource_route_transaction_abort();
+        break;
+    case XG_CUTOVER_WORLD_ANIMATED_TEXTURE_UPLOAD:
+        if (vram_resource_route_transaction_matches(
+                &services.provenance, state->scene_generation))
+            (void)xg_render_vram_resources_upload(
+                cpu, XG_RENDER_RESOURCE_TEXTURE, state->scene_generation,
+                &services);
+        else
+            vram_resource_route_transaction_abort();
+        break;
+    case XG_CUTOVER_WORLD_GROUND_CLUT_COMMIT:
+    case XG_CUTOVER_WORLD_SHARED_CLUT_COMMIT:
+        if (vram_resource_route_transaction_matches(
+                &services.provenance, state->scene_generation)) {
+            (void)xg_render_vram_resources_commit(state->scene_generation);
+            vram_resource_route_transaction_clear();
+        } else {
+            vram_resource_route_transaction_abort();
+        }
+        break;
+    case XG_CUTOVER_WORLD_ANIMATED_TEXTURE_COMMIT:
+        if (vram_resource_route_transaction_matches(
+                &services.provenance, state->scene_generation)) {
+            (void)xg_render_vram_resources_commit_optional(state->scene_generation);
+            vram_resource_route_transaction_clear();
+        } else {
+            vram_resource_route_transaction_abort();
+        }
+        break;
+    default:
+        break;
+    }
     return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
 }
 
@@ -1372,35 +1929,227 @@ static XgRenderCutoverDispatchResult observe_model_post_field_route(
 static XgRenderCutoverDispatchResult observe_variant_route(
         CPUState *cpu, const XgRenderCutoverRouteDescriptor *route,
         const XgRenderRuntimeAuthSceneState *state) {
-    const uint64_t artifact_generation = artifact_generation_for_pc(route->pc);
+    XgRenderArtifactAuthority authority;
+    const bool artifact_authorized =
+        artifact_authority_for_cutover(route, &authority);
+    const uint64_t artifact_generation = artifact_authorized
+        ? authority.generation : 0u;
+    const uint64_t producer_generation = artifact_authorized
+        ? authority.generation : local_generation_for_pc(route->pc);
+    const XgRenderVramResourceServices vram_resource_services = {
+        .authorize_guest_range = guest_data_range_is_valid,
+        .provenance = artifact_authorized
+            ? authority.provenance : (XgRenderResourceProvenance){0},
+    };
+    const uint32_t handler = route->action;
 
-    switch ((XgRenderRuntimeVariantCutoverHandler)route->action) {
+    if (is_tim_route(handler)) {
+        const uint32_t index = tim_route_index(handler);
+
+        tim_route_diagnostics.attempts[index]++;
+        if (artifact_generation != 0u)
+            tim_route_diagnostics.authorized[index]++;
+    }
+
+    switch ((XgRenderRuntimeVariantCutoverHandler)handler) {
+    case XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_CLUT_BEGIN:
+        vram_resource_route_transaction_abort();
+        if (artifact_generation != 0u &&
+            xg_render_vram_clut_begin(
+                state->render_mode, state->scene_generation) ==
+                    XG_RENDER_VRAM_RESOURCE_OK)
+            vram_resource_route_transaction_bind(
+                &vram_resource_services.provenance,
+                state->scene_generation, false);
+        else
+            vram_resource_route_transaction_abort();
+        return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+    case XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_CLUT_UPLOAD:
+        if (artifact_generation != 0u &&
+            vram_resource_route_transaction_matches(
+                &vram_resource_services.provenance, state->scene_generation))
+            (void)xg_render_vram_resources_upload(
+                cpu, XG_RENDER_RESOURCE_CLUT, state->scene_generation,
+                &vram_resource_services);
+        else
+            vram_resource_route_transaction_abort();
+        return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+    case XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_CLUT_COMMIT:
+        if (artifact_generation != 0u &&
+            vram_resource_route_transaction_matches(
+                &vram_resource_services.provenance, state->scene_generation)) {
+            (void)xg_render_vram_resources_commit(state->scene_generation);
+            vram_resource_route_transaction_clear();
+        } else {
+            vram_resource_route_transaction_abort();
+        }
+        return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+    case XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_IMAGE_BEGIN:
+        vram_resource_route_transaction_abort();
+        if (artifact_generation != 0u &&
+            xg_render_vram_image_begin(
+                state->render_mode, state->scene_generation) ==
+                    XG_RENDER_VRAM_RESOURCE_OK)
+            vram_resource_route_transaction_bind(
+                &vram_resource_services.provenance,
+                state->scene_generation, false);
+        else {
+            vram_resource_route_transaction_abort();
+        }
+        return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+    case XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_IMAGE_UPLOAD:
+        if (artifact_generation != 0u &&
+            vram_resource_route_transaction_matches(
+                &vram_resource_services.provenance, state->scene_generation)) {
+            const bool packed = physical_address_equals(
+                route->pc, UINT32_C(0x80070f80));
+            const XgRenderVramResourceResult result = packed
+                ? (field_packed_image_upload(
+                       cpu, state->scene_generation, &vram_resource_services)
+                       ? XG_RENDER_VRAM_RESOURCE_OK
+                       : XG_RENDER_VRAM_RESOURCE_INVALID_RANGE)
+                : xg_render_vram_resources_upload(
+                      cpu, XG_RENDER_RESOURCE_TEXTURE,
+                      state->scene_generation, &vram_resource_services);
+
+            if (result != XG_RENDER_VRAM_RESOURCE_OK) {
+                vram_resource_route_transaction_abort();
+            }
+        } else {
+            vram_resource_route_transaction_abort();
+        }
+        return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+    case XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_IMAGE_COMMIT:
+        if (artifact_generation != 0u &&
+            vram_resource_route_transaction_matches(
+                &vram_resource_services.provenance, state->scene_generation)) {
+            (void)xg_render_vram_resources_commit(state->scene_generation);
+            vram_resource_route_transaction_clear();
+        } else {
+            vram_resource_route_transaction_abort();
+        }
+        return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+    case XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_BEGIN: {
+        XgRenderVramResourceResult result =
+            XG_RENDER_VRAM_RESOURCE_INVALID_ARGUMENT;
+
+        vram_resource_route_transaction_abort();
+        if (artifact_generation != 0u) {
+            result = xg_render_vram_resources_begin(
+                cpu, state->render_mode, state->scene_generation,
+                &vram_resource_services);
+            if (result == XG_RENDER_VRAM_RESOURCE_OK)
+                vram_resource_route_transaction_bind(
+                    &vram_resource_services.provenance,
+                    state->scene_generation, false);
+            else
+                vram_resource_route_transaction_abort();
+        } else {
+            vram_resource_route_transaction_abort();
+        }
+        record_tim_route_result(
+            handler, result, artifact_generation == 0u
+                ? PSX_XG_RENDER_TIM_ROUTE_AUTHORITY
+                : result == XG_RENDER_VRAM_RESOURCE_OK
+                    ? PSX_XG_RENDER_TIM_ROUTE_OK
+                    : PSX_XG_RENDER_TIM_ROUTE_RESOURCE);
+        return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+    }
+    case XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_CLUT_UPLOAD: {
+        XgRenderVramResourceResult result =
+            XG_RENDER_VRAM_RESOURCE_INVALID_TRANSITION;
+        const bool transaction_matches = artifact_generation != 0u &&
+            vram_resource_route_transaction_matches(
+                &vram_resource_services.provenance, state->scene_generation);
+
+        if (transaction_matches)
+            result = xg_render_vram_resources_upload(
+                cpu, XG_RENDER_RESOURCE_CLUT, state->scene_generation,
+                &vram_resource_services);
+        else
+            vram_resource_route_transaction_abort();
+        record_tim_route_result(
+            handler, result, artifact_generation == 0u
+                ? PSX_XG_RENDER_TIM_ROUTE_AUTHORITY
+                : !transaction_matches
+                    ? PSX_XG_RENDER_TIM_ROUTE_TRANSACTION
+                    : result == XG_RENDER_VRAM_RESOURCE_OK
+                        ? PSX_XG_RENDER_TIM_ROUTE_OK
+                        : PSX_XG_RENDER_TIM_ROUTE_RESOURCE);
+        return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+    }
+    case XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_IMAGE_UPLOAD: {
+        XgRenderVramResourceResult result =
+            XG_RENDER_VRAM_RESOURCE_INVALID_TRANSITION;
+        const bool transaction_matches = artifact_generation != 0u &&
+            vram_resource_route_transaction_matches(
+                &vram_resource_services.provenance, state->scene_generation);
+
+        if (transaction_matches)
+            result = xg_render_vram_resources_upload(
+                cpu, XG_RENDER_RESOURCE_TEXTURE, state->scene_generation,
+                &vram_resource_services);
+        else
+            vram_resource_route_transaction_abort();
+        record_tim_route_result(
+            handler, result, artifact_generation == 0u
+                ? PSX_XG_RENDER_TIM_ROUTE_AUTHORITY
+                : !transaction_matches
+                    ? PSX_XG_RENDER_TIM_ROUTE_TRANSACTION
+                    : result == XG_RENDER_VRAM_RESOURCE_OK
+                        ? PSX_XG_RENDER_TIM_ROUTE_OK
+                        : PSX_XG_RENDER_TIM_ROUTE_RESOURCE);
+        return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+    }
+    case XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_COMMIT: {
+        XgRenderVramResourceResult result =
+            XG_RENDER_VRAM_RESOURCE_INVALID_TRANSITION;
+        const bool transaction_matches = artifact_generation != 0u &&
+            vram_resource_route_transaction_matches(
+                &vram_resource_services.provenance, state->scene_generation);
+
+        if (transaction_matches) {
+            result = xg_render_vram_resources_commit(state->scene_generation);
+            vram_resource_route_transaction_clear();
+        } else {
+            vram_resource_route_transaction_abort();
+        }
+        record_tim_route_result(
+            handler, result, artifact_generation == 0u
+                ? PSX_XG_RENDER_TIM_ROUTE_AUTHORITY
+                : !transaction_matches
+                    ? PSX_XG_RENDER_TIM_ROUTE_TRANSACTION
+                    : result == XG_RENDER_VRAM_RESOURCE_OK
+                        ? PSX_XG_RENDER_TIM_ROUTE_OK
+                        : PSX_XG_RENDER_TIM_ROUTE_RESOURCE);
+        return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+    }
     case XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_INITIALIZER_BEGIN:
         xg_field_zoom_observe_initializer_begin(
-            cpu, state->render_mode, artifact_generation);
+            cpu, state->render_mode, producer_generation);
         return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
     case XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_INITIALIZER_COMMIT:
-        xg_field_zoom_observe_initializer_commit(cpu, artifact_generation);
+        xg_field_zoom_observe_initializer_commit(cpu, producer_generation);
         if (xg_field_zoom_source_valid())
             xg_field_zoom_register_resource_watches(watch_resource);
         return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
     case XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_RGB_BEGIN:
         xg_field_zoom_observe_rgb_begin(
-            cpu, state->render_mode, artifact_generation);
+            cpu, state->render_mode, producer_generation);
         return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
     case XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_RGB_COMMIT:
-        xg_field_zoom_observe_rgb_commit(cpu, artifact_generation);
+        xg_field_zoom_observe_rgb_commit(cpu, producer_generation);
         return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
     case XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_ENTRY:
         xg_field_zoom_observe_entry(
-            cpu, state->render_mode, artifact_generation);
+            cpu, state->render_mode, producer_generation);
         return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
     case XG_RENDER_RUNTIME_VARIANT_CUTOVER_ZOOM_NATIVE:
         return cutover_terminal(zoom_cutover(cpu, route->continuation));
     case XG_RENDER_RUNTIME_VARIANT_CUTOVER_PARTICLE_INITIALIZER:
         (void)xg_field_particles_observe_initializer(
             cpu, state->render_mode,
-            auth_scene.artifact_authorizes_pc(route->pc), route->pc);
+            artifact_authorized, route->pc);
         return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
     case XG_RENDER_RUNTIME_VARIANT_CUTOVER_PARTICLE_NATIVE:
         return cutover_terminal(particle_cutover(cpu, route->pc));
@@ -1427,6 +2176,16 @@ static XgRenderCutoverDispatchResult observe_cutover_route(
     switch (route->module) {
     case XG_RENDER_CUTOVER_MODULE_PREAMBLE:
         return observe_cutover_preamble(cpu, route, &state);
+    case XG_RENDER_CUTOVER_MODULE_GEAR_MOTION: {
+        const XgRenderGearMotionServices services = {
+            .source = motion_source,
+            .range = guest_data_range_is_valid,
+            .watch = watch_resource,
+        };
+        if (state.render_mode == GUEST_RENDER_RENDER_NATIVE)
+            xg_render_gear_motion_observe(cpu,route->pc,&services);
+        return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+    }
     case XG_RENDER_CUTOVER_MODULE_F4:
         return observe_f4_route(cpu, route, state.render_mode);
     case XG_RENDER_CUTOVER_MODULE_OVERLAY_ADD_PRIM:
@@ -1447,10 +2206,15 @@ static XgRenderCutoverDispatchResult observe_cutover_route(
     case XG_RENDER_CUTOVER_MODULE_OVERLAY:
         return observe_overlay_route(cpu, route, state.render_mode);
     case XG_RENDER_CUTOVER_MODULE_WORLD: {
+        const XgRenderCutoverDispatchResult resource_result =
+            observe_world_resource_route(cpu, route, &state);
         const XgRenderWorldCoordinatorResult result =
-            xg_render_world_coordinator_observe_route(
-                cpu, route->pc, route->instruction_word, state.render_mode,
-                state.scene_generation, model_sprite_services(), world_policy());
+            resource_result == XG_RENDER_CUTOVER_DISPATCH_CONTINUE
+                ? xg_render_world_coordinator_observe_route(
+                    cpu, route->pc, route->instruction_word, state.render_mode,
+                    state.scene_generation, model_sprite_services(),
+                    world_policy())
+                : XG_RENDER_WORLD_COORDINATOR_OBSERVED;
         if (result == XG_RENDER_WORLD_COORDINATOR_BYPASS)
             return XG_RENDER_CUTOVER_DISPATCH_BYPASS;
         return result == XG_RENDER_WORLD_COORDINATOR_NONE
@@ -1492,6 +2256,39 @@ static XgRenderCutoverDispatchResult observe_cutover_route(
         return cutover_terminal(xg_render_field_character_native_bypass(
             cpu, route->pc, route->instruction_word,
             field_character_services()));
+    case XG_RENDER_CUTOVER_MODULE_RESIDENT_RESOURCE:
+        return observe_resident_resource_route(cpu, route, &state);
+    case XG_RENDER_CUTOVER_MODULE_MOVIE:
+        switch ((XgRenderCutoverAction)route->action) {
+        case XG_CUTOVER_MOVIE_STANDALONE_START:
+            (void)psx_xg_render_auth_movie_standalone_start(cpu);
+            break;
+        case XG_CUTOVER_MOVIE_STANDALONE_STOP:
+            (void)psx_xg_render_auth_movie_standalone_stop();
+            break;
+        case XG_CUTOVER_MOVIE_FIELD_START:
+            (void)psx_xg_render_auth_movie_field_start(cpu);
+            break;
+        case XG_CUTOVER_MOVIE_FIELD_STOP:
+            (void)psx_xg_render_auth_movie_field_stop();
+            break;
+        case XG_CUTOVER_MOVIE_FRAME_COMPLETE:
+            (void)psx_xg_render_auth_movie_frame_complete(cpu);
+            break;
+        default:
+            return XG_RENDER_CUTOVER_DISPATCH_CONTINUE;
+        }
+        return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+    case XG_RENDER_CUTOVER_MODULE_RESIDENT_TEXT:
+        (void)xg_render_resident_text_observe(
+            cpu, route->action, route->pc, route->instruction_word,
+            state.render_mode, resident_text_services());
+        return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
+    case XG_RENDER_CUTOVER_MODULE_NATIVE_TARGET:
+        if (state.render_mode == GUEST_RENDER_RENDER_NATIVE)
+            (void)xg_render_native_target_observe(
+                cpu, route->pc, route->instruction_word, native_target_services());
+        return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
     }
     return XG_RENDER_CUTOVER_DISPATCH_CONTINUE;
 }
@@ -1552,14 +2349,18 @@ bool xg_render_runtime_composition_observe_auth_hook(
         descriptor.kind == XG_RENDER_HOOK_ROUTE_UI_DRAW_OT &&
         configured && auth_scene.frame_count != NULL) {
         GpuRenderTransactionId visual_id = {0};
+        XgRenderSourceFrameDescription description;
 
-        if (submission_auth_snapshot(&visual_id) &&
+        if ((submission_standalone_source_frame_description(&description) ||
+             submission_source_frame_description(&description)) &&
+            description.scene.module == XG_SEMANTIC_MODULE_FIELD &&
+            submission_auth_snapshot(&visual_id, NULL) &&
             visual_id.state_sequence != UINT64_MAX) {
             ++visual_id.state_sequence;
             xg_render_ui_ot_note_draw_observation(
                 (uint32_t)auth_scene.frame_count(),
                 cpu != NULL ? cpu->gpr[2] + cpu->gpr[4] : 0u,
-                visual_id);
+                visual_id, &description);
         }
     }
     if (hook == PSX_XG_RENDER_AUTH_HOOK_SOURCE_PRE) {
@@ -1620,6 +2421,11 @@ void xg_render_runtime_composition_capture_model_ft3_link(CPUState *cpu) {
     query_state(&state);
     xg_render_model_sprite_pipeline_capture_ft3_link(
         cpu, state.render_mode, model_sprite_services());
+}
+
+bool xg_render_runtime_composition_is_transition_mask(
+        const GpuRenderSemantic *semantic) {
+    return xg_render_residual_is_transition_mask(semantic, lifecycle_services());
 }
 
 void xg_render_runtime_composition_capture_clear_tile(CPUState *cpu) {
@@ -1693,7 +2499,99 @@ bool xg_render_runtime_composition_resource_write_needs_invalidation(
 void xg_render_runtime_composition_handle_invalidation(
         const XgRenderInvalidationEvent *event) {
     const XgRenderInvalidationServices services = invalidation_services();
+    XgRenderRuntimeAuthSceneState state;
+    const bool native_work = xg_render_submission_native_work_mode();
+    const bool code_write_affects_building = event != NULL &&
+        event->kind == XG_RENDER_INVALIDATION_CODE_WRITE &&
+        (event->code_write_mask != 0u ||
+         event->mutation.watched_range_mutation ||
+         event->mutation.runtime_variant_mutation ||
+         event->mutation.executable_mutation ||
+         event->mutation.artifact_mutation ||
+         event->mutation.descriptor_mutation ||
+         event->mutation.resource_mutation ||
+         event->mutation.shared_data_mutation ||
+         event->mutation.semantic_authority_loss ||
+         event->mutation.authentication_mutation ||
+         event->mutation.authority_loss);
+    bool movie_runtime_mutation;
+
+    /* Scene/overlay authority changes do not destroy resident SDK packets.
+     * Native target consumption checks the owning code and current E3/E4/E5. */
+    if (event != NULL &&
+        (event->kind == XG_RENDER_INVALIDATION_RESET ||
+         event->kind == XG_RENDER_INVALIDATION_DISABLE))
+        xg_render_native_target_reset();
+
+    if (event != NULL && event->kind <= XG_RENDER_INVALIDATION_RESET)
+        ++invalidation_kind_counts[event->kind];
+    if (event != NULL) {
+        const bool mutations[] = {
+            event->mutation.watched_range_mutation,
+            event->mutation.runtime_variant_mutation,
+            event->mutation.executable_mutation,
+            event->mutation.artifact_mutation,
+            event->mutation.descriptor_mutation,
+            event->mutation.resource_mutation,
+            event->mutation.shared_data_mutation,
+            event->mutation.semantic_authority_loss,
+            event->mutation.authentication_mutation,
+            event->mutation.authority_loss,
+            event->mutation.interpolation_reset,
+            event->mutation.reset_runtime_variant,
+        };
+        for (size_t index = 0u;
+             index < sizeof(mutations) / sizeof(mutations[0]); ++index)
+            if (mutations[index]) ++invalidation_mutation_counts[index];
+    }
+    if (!native_work) {
+        query_state(&state);
+        movie_runtime_mutation = state.movie_owner_active && event != NULL &&
+            (event->kind == XG_RENDER_INVALIDATION_CODE_WRITE ||
+             event->kind == XG_RENDER_INVALIDATION_RESOURCE_OVERLAP);
+        /* Scene fragments own a mutable legacy builder. GPU-accepted native
+         * work does not: later RAM writes must not churn its unused banks. */
+        if (!state.movie_owner_active &&
+            (code_write_affects_building ||
+            (event != NULL &&
+             (event->kind == XG_RENDER_INVALIDATION_LOADER_MISMATCH ||
+              event->kind == XG_RENDER_INVALIDATION_RESOURCE_OVERLAP ||
+              event->kind == XG_RENDER_INVALIDATION_AUTHORITY_LOST)))) {
+            xg_render_fragment_runtime_invalidate_building();
+        } else if (!movie_runtime_mutation &&
+                   (event == NULL ||
+                    event->kind != XG_RENDER_INVALIDATION_CODE_WRITE)) {
+            xg_render_fragment_runtime_invalidate();
+        }
+    } else if (event != NULL &&
+               (event->kind == XG_RENDER_INVALIDATION_RESET ||
+                event->kind == XG_RENDER_INVALIDATION_SCENE_BOUNDARY ||
+                event->kind == XG_RENDER_INVALIDATION_DISABLE)) {
+        xg_render_fragment_runtime_invalidate();
+    }
+    /* Do not gate source invalidation: code authentication, material/geometry
+     * watches and pending producer captures still see every original event. */
     xg_render_invalidation_dispatch(event, &services);
+}
+
+void xg_render_runtime_composition_invalidation_counts(
+        uint64_t *out_counts, size_t capacity,
+        uint64_t *out_mutation_counts, size_t mutation_capacity) {
+    const size_t count = sizeof(invalidation_kind_counts) /
+        sizeof(invalidation_kind_counts[0]);
+    const size_t mutation_count = sizeof(invalidation_mutation_counts) /
+        sizeof(invalidation_mutation_counts[0]);
+    if (out_counts != NULL) {
+        if (capacity > count) capacity = count;
+        memcpy(out_counts, invalidation_kind_counts,
+               capacity * sizeof(*out_counts));
+    }
+    if (out_mutation_counts != NULL) {
+        if (mutation_capacity > mutation_count)
+            mutation_capacity = mutation_count;
+        memcpy(out_mutation_counts, invalidation_mutation_counts,
+               mutation_capacity * sizeof(*out_mutation_counts));
+    }
 }
 
 void xg_render_runtime_composition_configure_invalidation(void) {
@@ -1709,17 +2607,157 @@ void xg_render_runtime_composition_register_code_watches(
 bool xg_render_runtime_composition_configure_native_view(
         bool enabled, uint16_t aspect_num, uint16_t aspect_den,
         uint16_t canonical_width, uint16_t canonical_height) {
-    return xg_native_view_configure(
+    const XgNativeView previous = native_view;
+    if (xg_native_view_configure(
         &native_view, enabled, aspect_num, aspect_den,
-        canonical_width, canonical_height);
+        canonical_width, canonical_height)) return true;
+    /* Invalid host settings must not disable the last accepted projection. */
+    (void)xg_native_view_configure(&native_view, previous.enabled,
+        previous.aspect_num, previous.aspect_den,
+        previous.canonical_width, previous.canonical_height);
+    return false;
 }
 
 void xg_render_runtime_composition_before_gpu_submission(void) {
     xg_render_world_coordinator_before_gpu_submission(world_policy());
 }
 
-void xg_render_runtime_composition_complete_gpu_source_frame(void) {
+void xg_render_runtime_composition_set_native_work_mode(bool enabled) {
+    if (!enabled) xg_render_native_target_reset();
+    xg_render_ui_ot_clear_pending();
+    if (xg_render_submission_native_work_mode() != enabled) {
+        /* Retire legacy state once at the mode boundary, not on every RAM
+         * mutation. It must not reappear when returning from native work. */
+        xg_render_fragment_runtime_invalidate();
+        xg_render_source_frame_reset();
+    }
+    xg_render_submission_set_native_work_mode(enabled);
+}
+
+void xg_render_runtime_composition_native_work_view(XgSemanticDisplayState *display) {
+    if (display == NULL) return;
+    display->native_width = 0u;
+    display->native_height = 0u;
+    display->native_offset_x = 0u;
+    if (!native_view.enabled) return;
+    /* Projection configuration is not scanout state. Movie/display switches
+     * must not destroy the device's VIEW planes between source chunks. */
+    display->native_width = (uint16_t)(native_view.surface_width_16_16 >> 16u);
+    display->native_height = native_view.canonical_height;
+    display->native_offset_x = (uint16_t)(native_view.center_offset_x_16_16 >> 16u);
+    if (display->depth24 || display->width != native_view.canonical_width) return;
+    display->aspect_num = native_view.aspect_num;
+    display->aspect_den = native_view.aspect_den;
+}
+
+void xg_render_runtime_composition_prepare_gpu_source_boundary(void) {
+    XgRenderSourceFrameDescription description;
+    XgSemanticResourceRef target;
+
+    if (xg_render_submission_native_work_mode()) return;
+    if (!submission_standalone_source_frame_description(&description) ||
+        description.scene.module != XG_SEMANTIC_MODULE_FIELD ||
+        !xg_render_semantic_compositor_field_boundary_target_required(
+            &description) ||
+        !submission_source_frame_target(&description, &target))
+        return;
+    (void)xg_render_semantic_compositor_set_field_boundary_target(
+        &description, &target);
+}
+
+/* Existing diagnostic endpoints now describe the shared Field/World OT path. */
+static uint64_t title_restage_attempts = 0u;
+static uint32_t title_restage_last_result = 0u;
+static uint32_t title_restage_last_detail = 0u;
+static uint32_t title_restage_fail_index = 0u;
+static uint32_t title_restage_tpage = 0u;
+static uint32_t title_restage_clut = 0u;
+static PsxXgRenderPreScenePrimitiveSnapshot field_fragment_snapshot[16];
+static size_t field_fragment_snapshot_count;
+
+static void pre_scene_primitive_snapshot(
+        const XgRenderPreScenePrimitive *record,
+        PsxXgRenderPreScenePrimitiveSnapshot *out_snapshot) {
+    XgRenderVramResourceResolvedResources resolved = {0};
+    PsxXgRenderPreScenePrimitiveSnapshot snapshot = {
+        .min_u = UINT16_MAX,
+        .min_v = UINT16_MAX,
+        .min_x = INT32_MAX,
+        .min_y = INT32_MAX,
+        .max_x = INT32_MIN,
+        .max_y = INT32_MIN,
+    };
+
+    if (record == NULL || out_snapshot == NULL) return;
+    snapshot.packet_address = record->packet_address;
+    snapshot.interpolation_producer_id = record->interpolation_producer_id;
+    snapshot.interpolation_primitive_id = record->interpolation_primitive_id;
+    snapshot.tpage = record->primitive.material.tpage;
+    snapshot.texture_page_x = record->primitive.material.texture_page_x;
+    snapshot.texture_page_y = record->primitive.material.texture_page_y;
+    snapshot.texture_depth = record->primitive.material.texture_depth;
+    snapshot.draw_area_left = record->primitive.material.draw_area_left;
+    snapshot.draw_area_top = record->primitive.material.draw_area_top;
+    snapshot.draw_area_right = record->primitive.material.draw_area_right;
+    snapshot.draw_area_bottom = record->primitive.material.draw_area_bottom;
+    snapshot.draw_offset_x = record->primitive.material.draw_offset_x;
+    snapshot.draw_offset_y = record->primitive.material.draw_offset_y;
+    snapshot.blend_mode = record->primitive.material.blend_mode;
+    snapshot.triangle_count = record->primitive.triangle_count;
+    snapshot.semi_transparent = record->primitive.material.semi_transparent;
+    for (uint32_t triangle = 0u;
+         triangle < record->primitive.triangle_count; ++triangle) {
+        for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
+            const XgRenderIrVertex *source =
+                &record->primitive.triangles[triangle].vertices[vertex];
+            const uint16_t u = (uint16_t)((uint32_t)source->u >> 16u);
+            const uint16_t v = (uint16_t)((uint32_t)source->v >> 16u);
+            const int32_t x = source->x / INT32_C(65536);
+            const int32_t y = source->y / INT32_C(65536);
+
+            if (u < snapshot.min_u) snapshot.min_u = u;
+            if (u > snapshot.max_u) snapshot.max_u = u;
+            if (v < snapshot.min_v) snapshot.min_v = v;
+            if (v > snapshot.max_v) snapshot.max_v = v;
+            if (x < snapshot.min_x) snapshot.min_x = x;
+            if (x > snapshot.max_x) snapshot.max_x = x;
+            if (y < snapshot.min_y) snapshot.min_y = y;
+            if (y > snapshot.max_y) snapshot.max_y = y;
+            if (triangle == 0u && vertex == 0u) {
+                snapshot.red = source->r;
+                snapshot.green = source->g;
+                snapshot.blue = source->b;
+            }
+        }
+    }
+    (void)xg_render_vram_resources_resolve_draw(
+        &record->primitive, &resolved);
+    snapshot.has_texture = resolved.has_texture;
+    snapshot.has_clut = resolved.has_clut;
+    if (resolved.has_texture)
+        snapshot.texture_resource_id = resolved.texture.resource_id;
+    *out_snapshot = snapshot;
+}
+
+XgRenderSourceFrameResult
+xg_render_runtime_composition_complete_gpu_source_frame(void) {
+    XgRenderSourceFrameDescription description;
+    if (xg_render_submission_native_work_mode()) return XG_RENDER_SOURCE_FRAME_EMPTY;
     xg_render_world_coordinator_complete_gpu_source_frame(world_policy());
+    if (submission_standalone_source_frame_description(&description))
+        xg_render_fragment_runtime_set_boundary_description(&description);
+    return xg_render_fragment_runtime_finalize_source_frame();
+}
+
+bool xg_render_runtime_composition_ensure_source_frame(
+        const XgRenderSourceFrameDescription *description) {
+    return xg_render_submission_ensure_source_frame(description);
+}
+
+bool xg_render_runtime_composition_begin_source_frame(
+        const XgRenderSourceFrameDescription *description,
+        XgSemanticResourceRef *out_target) {
+    return xg_render_submission_begin_source_frame(description, out_target);
 }
 
 void xg_render_runtime_composition_disable(void) {
@@ -1737,6 +2775,58 @@ bool xg_render_runtime_composition_flush_pre_scene(void) {
     return false;
 }
 
+void xg_render_runtime_composition_pre_scene_status(
+        uint32_t *out_count, uint32_t *out_blocker) {
+    if (out_count != NULL)
+        *out_count = xg_render_submission_pre_scene_count();
+    if (out_blocker != NULL)
+        *out_blocker = xg_render_submission_pre_scene_blocker();
+}
+
+void xg_render_runtime_composition_title_restage_status(
+        uint64_t *out_attempts, uint32_t *out_last_result,
+        uint32_t *out_last_detail, uint32_t *out_fail_index,
+        uint32_t *out_tpage, uint32_t *out_clut) {
+    if (out_attempts != NULL) *out_attempts = title_restage_attempts;
+    if (out_last_result != NULL)
+        *out_last_result = title_restage_last_result;
+    if (out_last_detail != NULL)
+        *out_last_detail = title_restage_last_detail;
+    if (out_fail_index != NULL) *out_fail_index = title_restage_fail_index;
+    if (out_tpage != NULL) *out_tpage = title_restage_tpage;
+    if (out_clut != NULL) *out_clut = title_restage_clut;
+}
+
+size_t xg_render_runtime_composition_pre_scene_snapshot(
+        PsxXgRenderPreScenePrimitiveSnapshot *out_snapshots,
+        size_t capacity) {
+    const uint32_t count = xg_render_submission_pre_scene_count();
+
+    for (uint32_t index = 0u; index < count; ++index) {
+        XgRenderPreScenePrimitive record;
+        PsxXgRenderPreScenePrimitiveSnapshot snapshot;
+
+        if (!xg_render_submission_pre_scene_item_copy(index, &record))
+            continue;
+        pre_scene_primitive_snapshot(&record, &snapshot);
+        if (out_snapshots != NULL && index < capacity)
+            out_snapshots[index] = snapshot;
+    }
+    return count;
+}
+
+size_t xg_render_runtime_composition_field_fragment_snapshot(
+        PsxXgRenderPreScenePrimitiveSnapshot *out_snapshots,
+        size_t capacity) {
+    const size_t copy_count = field_fragment_snapshot_count < capacity
+        ? field_fragment_snapshot_count : capacity;
+
+    if (out_snapshots != NULL && copy_count != 0u)
+        memcpy(out_snapshots, field_fragment_snapshot,
+               copy_count * sizeof(*out_snapshots));
+    return field_fragment_snapshot_count;
+}
+
 bool xg_render_runtime_composition_producer_family_enabled(void) {
     return xg_render_field_character_producer_family_enabled();
 }
@@ -1748,14 +2838,47 @@ void xg_render_runtime_composition_enable_producer_family(bool enabled) {
 }
 
 void xg_render_runtime_composition_scene_boundary(bool generation_advanced) {
+    XgRenderRuntimeAuthSceneState state;
+
+    query_state(&state);
+    xg_render_model_resources_scene_boundary();
+    xg_render_ui_resources_scene_boundary(
+        generation_advanced ? state.scene_generation : 0u);
+    xg_render_resource_invalidate_scene_boundary();
     xg_render_world_coordinator_scene_boundary(generation_advanced);
+    xg_render_fragment_runtime_invalidate();
+    if (generation_advanced) {
+        field_fragment_snapshot_count = 0u;
+        vram_resource_route_transaction_clear();
+        xg_render_vram_resources_scene_boundary(state.scene_generation);
+        xg_render_surface_graph_reset();
+    }
 }
 
 void xg_render_runtime_composition_reset(void) {
+    xg_render_native_target_reset();
     next_resource_generation = 1u;
+    memset(invalidation_kind_counts, 0, sizeof(invalidation_kind_counts));
+    memset(invalidation_mutation_counts, 0,
+           sizeof(invalidation_mutation_counts));
+    memset(&tim_route_diagnostics, 0, sizeof(tim_route_diagnostics));
+    field_fragment_snapshot_count = 0u;
+    xg_render_model_resources_reset();
+    xg_render_ui_resources_reset();
+    vram_resource_route_transaction_clear();
+    xg_render_vram_resources_reset();
+    xg_render_surface_graph_reset();
     xg_render_resolver_registry_reset();
     xg_render_world_coordinator_reset();
-    (void)xg_native_view_configure(&native_view, false, 0u, 0u, 0u, 0u);
+    xg_render_fragment_runtime_invalidate();
+    /* User projection settings outlive guest/resource resets. Only the host's
+     * configure_native_view call may change them. */
+}
+
+void xg_render_runtime_composition_tim_route_diagnostics(
+        PsxXgRenderTimRouteDiagnostics *out_diagnostics) {
+    if (out_diagnostics != NULL)
+        *out_diagnostics = tim_route_diagnostics;
 }
 
 void xg_render_runtime_composition_set_terrain_temporal_coverage(bool enabled) {
@@ -1769,15 +2892,155 @@ void xg_render_runtime_composition_set_exec_phase_exchange(
 
 void xg_render_runtime_composition_note_gpu_semantic_current(
         const GpuRenderSemantic *semantic) {
+    xg_render_submission_note_semantic_current(semantic);
     (void)xg_render_submission_cover_temporal_current(semantic);
 }
 
 bool xg_render_runtime_composition_prepare_ui_ot(uint32_t start_addr) {
     XgRenderRuntimeAuthSceneState state;
+    XgRenderSourceFrameDescription description;
+    GpuRenderTransactionId visual_id = {0};
+    GuestRenderBridgeSnapshot bridge;
+    GuestRenderCompletedState completed;
+    uint32_t context;
+    uint32_t root;
+
+    if (xg_render_submission_native_work_mode()) return true;
     query_state(&state);
-    return xg_render_ui_ot_prepare(
+    if (!configured || state.render_mode != GUEST_RENDER_RENDER_NATIVE ||
+        auth_scene.artifact_is_authorized == NULL ||
+        !auth_scene.artifact_is_authorized() ||
+        !(submission_standalone_source_frame_description(&description) ||
+          submission_source_frame_description(&description)) ||
+        (description.scene.module != XG_SEMANTIC_MODULE_FIELD &&
+         description.scene.module != XG_SEMANTIC_MODULE_WORLD))
+        return true;
+    if (!xg_render_ui_ot_pending_matches(start_addr, &description)) {
+        /* Authenticated module context roots cover both Field A/B and current
+         * World producers. Draw-environment and image-transfer DMA roots must
+         * not consume those captures. No order is inferred from bucket values.
+         */
+        context = auth_scene.read_guest_word(description.scene.module ==
+                                                     XG_SEMANTIC_MODULE_FIELD
+                                                 ? UINT32_C(0x800c426c)
+                                                 : UINT32_C(0x8009be3c));
+        if (description.scene.module == XG_SEMANTIC_MODULE_FIELD) {
+            if (!guest_data_range_is_valid(context, 0x80f4u, 4u, false))
+                return true;
+            root = context + 0x80f0u;
+        } else {
+            if (!guest_data_range_is_valid(context, 0x78u, 4u, false))
+                return true;
+            root = auth_scene.read_guest_word(context + 0x70u);
+            if (!guest_data_range_is_valid(root, 0x1000u, 4u, false))
+                return true;
+            root += 0xffcu;
+        }
+        if ((root & UINT32_C(0x001ffffc)) !=
+            (start_addr & UINT32_C(0x001ffffc))) {
+            /* A queued list can start after the CPU selected the other arena.
+             * Admit only the other context in the authenticated module's pair.
+             */
+            if (description.scene.module == XG_SEMANTIC_MODULE_FIELD) {
+                context =
+                    physical_address_equals(context, UINT32_C(0x800b249c))
+                        ? UINT32_C(0x800ba590)
+                    : physical_address_equals(context, UINT32_C(0x800ba590))
+                        ? UINT32_C(0x800b249c)
+                        : 0u;
+                if (context == 0u) return true;
+                root = context + 0x80f0u;
+            } else {
+                context =
+                    physical_address_equals(context, UINT32_C(0x8009bbc8))
+                        ? UINT32_C(0x8009bc40)
+                    : physical_address_equals(context, UINT32_C(0x8009bc40))
+                        ? UINT32_C(0x8009bbc8)
+                        : 0u;
+                if (context == 0u) return true;
+                root = auth_scene.read_guest_word(context + 0x70u);
+                if (!guest_data_range_is_valid(root, 0x1000u, 4u, false))
+                    return true;
+                root += 0xffcu;
+            }
+            if ((root & UINT32_C(0x001ffffc)) !=
+                (start_addr & UINT32_C(0x001ffffc)))
+                return true;
+        }
+        if (!submission_auth_snapshot(&visual_id, NULL) ||
+            visual_id.scene_epoch == 0u) {
+            if (guest_render_bridge_last_completed(&bridge, &completed) ==
+                GUEST_RENDER_OK)
+                visual_id = (GpuRenderTransactionId){
+                    completed.id.scene_epoch,
+                    completed.id.state_sequence,
+                };
+            else
+                visual_id =
+                    (GpuRenderTransactionId){state.scene_generation + 1u, 0u};
+        }
+        xg_render_ui_ot_note_draw_observation(
+            (uint32_t)auth_scene.frame_count(), start_addr, visual_id,
+            &description);
+    }
+    ++title_restage_attempts;
+    const bool success = xg_render_ui_ot_prepare(
         start_addr, state.render_mode, (uint32_t)auth_scene.frame_count(),
         auth_scene.read_guest_word);
+    title_restage_last_result = success ? 8u : 15u;
+    xg_render_submission_ordering_table_status(
+        &title_restage_last_detail, &title_restage_fail_index,
+        &title_restage_tpage, &title_restage_clut);
+    if (success && description.scene.module == XG_SEMANTIC_MODULE_FIELD) {
+        field_fragment_snapshot_count = 0u;
+        for (uint32_t index = 0u;
+             index < sizeof(field_fragment_snapshot) /
+                         sizeof(field_fragment_snapshot[0]);
+             ++index) {
+            XgSemanticDrawRecord draw;
+            uint32_t command_id;
+            if (!xg_render_submission_prepared_draw_copy(index, &draw,
+                                                         &command_id))
+                break;
+            const XgRenderPreScenePrimitive record = {
+                .primitive = draw.primitive,
+                .packet_address = command_id - 4u,
+                .source_primitive_index = draw.source_primitive_index,
+                .interpolation_producer_id =
+                    (uint32_t)(draw.interpolation_id >> 32u),
+                .interpolation_primitive_id = (uint32_t)draw.interpolation_id,
+            };
+            pre_scene_primitive_snapshot(
+                &record,
+                &field_fragment_snapshot[field_fragment_snapshot_count++]);
+        }
+    }
+    return success;
+}
+
+void xg_render_runtime_composition_complete_ordering_table(
+    uint32_t start_addr, uint32_t transferred_words) {
+    GpuDrawArea draw_area = {0};
+    bool published = false;
+
+    if (!xg_render_ui_ot_complete(start_addr, transferred_words, &published)) {
+        title_restage_last_result = 15u;
+        xg_render_submission_ordering_table_status(
+            &title_restage_last_detail, &title_restage_fail_index,
+            &title_restage_tpage, &title_restage_clut);
+        xg_render_fragment_runtime_reject_source_frame();
+        return;
+    }
+    if (!published) return;
+    title_restage_last_result = 13u;
+    gpu_get_draw_area(&draw_area);
+    if (draw_area.left > UINT16_MAX || draw_area.top > UINT16_MAX ||
+        draw_area.right > UINT16_MAX || draw_area.bottom > UINT16_MAX)
+        return;
+    xg_render_semantic_compositor_complete_field_submission(
+        start_addr, transferred_words, (uint16_t)draw_area.left,
+        (uint16_t)draw_area.top, (uint16_t)draw_area.right,
+        (uint16_t)draw_area.bottom);
 }
 
 void xg_render_runtime_composition_ui_ot_snapshot(
@@ -1796,9 +3059,13 @@ void xg_render_runtime_composition_source_collector_snapshot(
 }
 
 void xg_render_runtime_composition_source_reset(void) {
+    xg_render_native_target_reset();
     xg_render_field_character_source_reset();
     xg_render_submission_source_reset();
     xg_field_zoom_counters_reset();
+    vram_resource_route_transaction_clear();
+    xg_render_vram_resources_reset();
+    xg_render_surface_graph_reset();
 }
 
 void xg_render_runtime_composition_ft4_geometry_enable(bool enabled) {
@@ -1908,4 +3175,9 @@ void xg_render_runtime_composition_world_sky_native_snapshot(
 void xg_render_runtime_composition_world_execution_snapshot(
         PsxXgRenderWorldExecutionSnapshot *out_snapshot) {
     xg_render_world_execution_snapshot(out_snapshot);
+}
+
+void xg_render_runtime_composition_resident_text_snapshot(
+        PsxXgRenderResidentTextSnapshot *out_snapshot) {
+    xg_render_resident_text_snapshot(out_snapshot);
 }

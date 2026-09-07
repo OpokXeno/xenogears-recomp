@@ -15,6 +15,16 @@ The native renderer uses four separate operations:
 
 Do not combine these operations in one module.
 
+## Current Native path
+
+1. Authenticated producers capture source geometry, motion, and resource identities.
+2. `xg_render_native_work.c` copies DRAW, UPLOAD, COPY, FILL, and TARGET operations
+   into immutable source commits, preserving their order and resource lifetimes.
+3. The semantic worker applies every operation, including offscreen and
+   display-disabled work. Mutation-only work is ACKed without an endpoint;
+   endpoint work is ACKed after its compile fence is ready.
+4. The separate presentation owner composes ready endpoints on its own clock.
+
 ## Design rules
 
 ### Fail closed
@@ -101,6 +111,9 @@ The infrastructure layer contains services that multiple producers use.
 | `xg_render_temporal_submission.c` | Stages previous-frame temporal candidates. |
 | `xg_render_ui_ot.c` | Traverses and stages a user interface (UI) ordering table. |
 | `xg_render_instrumentation.c` | Stores synchronized counters and failure data. |
+| `xg_render_native_work.c` | Collects immutable ordered device work and temporal metadata. |
+| `xg_render_source_frame.c` / `xg_render_source_commit.c` | Builds and seals owned source publications. |
+| `xg_render_semantic_presentation.c` | Owns FIFO ACKs, endpoint lifetime, and swap authorization. |
 
 This layer receives authentication state through callbacks.
 It does not read runtime authentication storage.
@@ -112,6 +125,9 @@ Locations:
 - `src/producers/field/`
 - `src/producers/model/`
 - `src/producers/world/`
+- `src/producers/resident/`
+- `src/producers/battle/`
+- `src/producers/movie/`
 
 A producer converts one authenticated game operation into render primitives.
 A producer owns all data that is specific to that operation.
@@ -154,6 +170,8 @@ The runtime layer connects host events to authentication and producers.
 | `xg_render_mutation_classifier.c` | Classifies a memory change. |
 | `xg_render_invalidation_dispatch.c` | Sends an invalidation event to registered owners. |
 | `xg_render_invalidation_modules.c` | Registers invalidation owners. |
+| `xg_render_fragment_runtime.c` | Finalizes the generic non-Native-Work fragment lane. |
+| `xg_render_presentation_host.c` | Runs the asynchronous worker and owner-thread presentation service. |
 
 `xg_render_auth_runtime.c` is the public runtime facade.
 It must not contain primitive decoding or producer repositories.
@@ -219,7 +237,10 @@ The visual state must be active.
 The visual identifier must match.
 The command identifier must be unique.
 
-### Temporal submission
+### Temporal submission candidates
+
+This producer submission mechanism is distinct from Native Work motion-phase
+generation and the separate presentation clock described above.
 
 A temporal candidate can use data from the previous frame.
 The current frame must not contain a primitive with the same interpolation identity.
@@ -327,12 +348,5 @@ A full store must not overwrite authenticated data.
 Capacity exhaustion is a normal fail-closed condition.
 Use a diagnostic snapshot to identify the applicable blocker.
 
-## Test boundary
-
-Production builds do not enable test-only control paths.
-Composition has a compile-time registration-failure test seam.
-The macro `XG_RENDER_RUNTIME_COMPOSITION_TESTING` controls this seam.
-Test adapters stay in `tests/`.
-Tests use the same producer modules as production.
-
-See [the development guide](docs/DEVELOPMENT.md) for the required test groups.
+See [the development guide](DEVELOPMENT.md) for build, replay, and static-review
+guidance, and [the runtime interface](RUNTIME_API.md) for ownership contracts.

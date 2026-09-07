@@ -57,6 +57,7 @@ static int test_dispatch_modes(void) {
         bool depth_cued;
     } cases[] = {
         {XG_MODEL_FT4_RAW_DISPATCH_AVERAGE, 32u, false},
+        {XG_MODEL_FT4_RAW_DISPATCH_RELIT, 32u, false},
         {XG_MODEL_FT4_RAW_DISPATCH_FARTHEST, 8u, false},
         {XG_MODEL_FT4_RAW_DISPATCH_NEAREST, 8u, false},
         {XG_MODEL_FT4_RAW_DISPATCH_AVERAGE_DEPTH_CUE, 32u, true},
@@ -69,6 +70,9 @@ static int test_dispatch_modes(void) {
         XgModelFt4RawRecord record;
 
         source.dispatch_mode = cases[index].mode;
+        if (source.dispatch_mode == XG_MODEL_FT4_RAW_DISPATCH_RELIT)
+            source.relit_color_source =
+                XG_MODEL_FT4_RAW_RELIT_COLOR_RESOLVED;
         CHECK(xg_model_ft4_raw_build(&source, &record) ==
               XG_MODEL_FT4_RAW_OK);
         CHECK(record.counter_incremented);
@@ -81,6 +85,28 @@ static int test_dispatch_modes(void) {
         else
             CHECK(record.material_word == source.material_word);
     }
+    return 1;
+}
+
+static int test_relit_requires_final_color_without_relighting(void) {
+    XgModelFt4RawSource source = source_fixture();
+    XgModelFt4RawRecord record;
+
+    source.dispatch_mode = XG_MODEL_FT4_RAW_DISPATCH_RELIT;
+    source.far_color[0] = 4096;
+    source.far_color[1] = 2048;
+    source.far_color[2] = 1024;
+    CHECK(xg_model_ft4_raw_build(&source, &record) ==
+          XG_MODEL_FT4_RAW_INVALID_SOURCE);
+
+    source.relit_color_source = XG_MODEL_FT4_RAW_RELIT_COLOR_CAPTURED;
+    CHECK(xg_model_ft4_raw_build(&source, &record) == XG_MODEL_FT4_RAW_OK);
+    CHECK(record.ordering_bucket == 32u);
+    CHECK(record.material_word == source.material_word);
+    CHECK(record.primitive.material.raw_texture);
+    CHECK(record.primitive.triangles[0].vertices[0].r == 0x33u);
+    CHECK(record.primitive.triangles[0].vertices[0].g == 0x22u);
+    CHECK(record.primitive.triangles[0].vertices[0].b == 0x11u);
     return 1;
 }
 
@@ -122,6 +148,7 @@ static int test_native_view_widens_host_screen_cull(void) {
 
 int main(void) {
     return test_builds_raw_ft4() && test_dispatch_modes() &&
+           test_relit_requires_final_color_without_relighting() &&
            test_rejects_culled_and_invalid_sources() &&
            test_native_view_widens_host_screen_cull()
         ? 0 : 1;

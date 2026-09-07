@@ -7,6 +7,8 @@
 #include "xg_render_manifest_generated.h"
 #include "xg_render_auth.h"
 #include "xg_render_auth_runtime.h"
+#include "xg_render_auth_runtime_hooks.h"
+#include "xg_render_backend.h"
 #include "xg_host_3d.h"
 #include "xg_model_ft4_raw.h"
 #include "xg_sprite_ft4.h"
@@ -23,17 +25,26 @@
 #include "xg_world_terrain_water_shadow.h"
 #include "xg_render_runtime_variants_generated.h"
 #include "xg_render_cutover_dispatch.h"
+#include "xg_render_vram_resources.h"
+#include "xg_render_movie_publisher.h"
+#include "xg_render_surface_graph.h"
+#include "xg_render_vram_journal.h"
 #include "xg_render_f4_sources.h"
 #include "xg_render_model_repository.h"
 #include "xg_render_mutation_classifier.h"
 #include "xg_render_overlay_cutovers_generated.h"
+#include "xg_render_runtime_composition.h"
 #include "xg_render_runtime_variant_auth.h"
+#include "xg_render_source_frame.h"
 #include "xg_render_static_auth.h"
+#include "xg_render_ui_resources.h"
+#include "xg_render_ui_owner_catalog.h"
 #include "xg_render_ui_ot.h"
 #include "xg_render_auth_runtime_test_adapter.h"
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define CHECK(expression) do { if (!(expression)) return 0; } while (0)
@@ -66,6 +77,7 @@
 #define UI_DRAW_OT_SITE UINT32_C(0x800759cc)
 #define UI_DRAW_OT_JAL UINT32_C(0x0c0112f4)
 #define KUSEG_ADDRESS(address) ((address) & UINT32_C(0x1fffffff))
+#define STATIC_AUTH_PRESENTER_OWNER UINT64_C(0x5354415449434155)
 
 static uint32_t test_hook_return_address(uint32_t hook, uint32_t pc) {
     if (hook == PSX_XG_RENDER_AUTH_HOOK_CAPTURE) return pc + 8u;
@@ -156,14 +168,14 @@ const uint8_t xg_render_manifest_identity[XG_RENDER_MANIFEST_DIGEST_SIZE] = {
 };
 const uint32_t xg_render_namespace_crc32 = 0x25adc86eu;
 const XgRenderManifestValidation xg_render_manifest_validation = {
-    3u, 4u, 0x11223344u, 0x55667788u, 0x8006f000u, FIELD_RANGE_SIZE,
+    3u, 4u, 0x8006f000u, FIELD_RANGE_SIZE,
     PRODUCER_ENTRY, CALLER_SITE, STATIC_CALLEE, RETURN_SITE,
     0x800781b4u, 16u,
     {0x50u, 0x51u, 0x52u, 0x53u, 0x54u, 0x55u, 0x56u, 0x57u,
      0x58u, 0x59u, 0x5au, 0x5bu, 0x5cu, 0x5du, 0x5eu, 0x5fu,
      0x60u, 0x61u, 0x62u, 0x63u, 0x64u, 0x65u, 0x66u, 0x67u,
      0x68u, 0x69u, 0x6au, 0x6bu, 0x6cu, 0x6du, 0x6eu, 0x6fu},
-    3u, STATIC_CALLEE, 1u, 1u,
+    3u, STATIC_CALLEE, 1u, 1u, 1u,
 };
 const XgRenderManifestRecord xg_render_manifest_records[] = {
     {3u, "producer", 3u, PRODUCER_ENTRY, 0u,
@@ -1280,6 +1292,22 @@ static uint16_t world_read_half(uint32_t address) {
     return (uint16_t)(word >> ((address & 2u) * 8u));
 }
 
+static uint8_t world_read_byte(uint32_t address) {
+    const uint32_t word = world_read_word(address & ~3u);
+
+    return (uint8_t)(word >> ((address & 3u) * 8u));
+}
+
+static bool checkpoint_test_authorize_range(
+        uint32_t address, uint32_t size, uint32_t alignment,
+        bool allow_scratchpad) {
+    (void)allow_scratchpad;
+    return alignment != 0u && (address % alignment) == 0u &&
+        address >= WORLD_MEMORY_BASE &&
+        (uint64_t)address + size <=
+            (uint64_t)WORLD_MEMORY_BASE + sizeof(world_memory);
+}
+
 static void world_write_word(uint32_t address, uint32_t value) {
     uint32_t quad;
 
@@ -1657,6 +1685,15 @@ static const uint32_t model_shadow_resident_caller_instructions[] = {
     UINT32_C(0x8c65002c), UINT32_C(0x0c00b1c0),
     UINT32_C(0x30e70004),
 };
+static const uint32_t model_shadow_gear_helper_caller_instructions[] = {
+    UINT32_C(0x8fa6004c), UINT32_C(0x8fa80050),
+    UINT32_C(0x8ee30000), UINT32_C(0x00081080),
+    UINT32_C(0x00511021), UINT32_C(0x8c450068),
+    UINT32_C(0x96420000), UINT32_C(0x8fa70048),
+    UINT32_C(0x00021080), UINT32_C(0x00431021),
+    UINT32_C(0x8c440000), UINT32_C(0x0c00b1c0),
+    UINT32_C(0x00000000),
+};
 static const uint32_t field_polyline_contract_entry_instructions[] = {
     UINT32_C(0x3c038006), UINT32_C(0x8c6325a0),
     UINT32_C(0x27bdffb8), UINT32_C(0xafbf0040),
@@ -1710,6 +1747,12 @@ static uint32_t model_shadow_read_word(uint32_t address) {
         (address & 3u) == 0u)
         return model_shadow_resident_caller_instructions[
             (address - UINT32_C(0x800257b0)) / 4u];
+    if (address >= UINT32_C(0x801dcd14) &&
+        address < UINT32_C(0x801dcd14) +
+            sizeof(model_shadow_gear_helper_caller_instructions) &&
+        (address & 3u) == 0u)
+        return model_shadow_gear_helper_caller_instructions[
+            (address - UINT32_C(0x801dcd14)) / 4u];
     return 0u;
 }
 
@@ -2031,6 +2074,15 @@ void gpu_get_draw_state(GpuDrawState *out) {
     out->bottom = 239u;
 }
 
+void gpu_get_display_info(GpuDisplayInfo *out) {
+    *out = (GpuDisplayInfo){
+        .display_x = 0u,
+        .display_y = 0u,
+        .width = 320u,
+        .height = 240u,
+    };
+}
+
 void gpu_native_environment_get(GpuNativeDrawEnvironment *out) {
     memset(out, 0, sizeof(*out));
     gpu_get_draw_state(&out->draw);
@@ -2046,6 +2098,78 @@ uint64_t gpu_render_vram_mutation_serial(void) {
 
 void gpu_native_interpolation_scene_boundary(uint64_t scene_id) {
     (void)scene_id;
+}
+
+static uint32_t movie_frame_note_count;
+static uint32_t movie_frame_note_number;
+static uint16_t movie_frame_note_width;
+static uint16_t movie_frame_note_height;
+static uint32_t movie_frame_note_callback;
+static uint32_t movie_owner_start_count;
+static uint32_t movie_owner_stop_count;
+static GpuMovieOwnerKind movie_owner_kind;
+static uint32_t movie_owner_callback;
+static uint64_t movie_owner_receipt;
+static uint64_t movie_owner_receipt_counter;
+static GpuMovieOwnerKind movie_pending_owner_kind;
+static uint64_t movie_pending_owner_receipt;
+
+bool gpu_note_movie_owner_start(
+        GpuMovieOwnerKind owner, uint32_t callback_target) {
+    ++movie_owner_start_count;
+    if ((owner != GPU_MOVIE_OWNER_STANDALONE &&
+         owner != GPU_MOVIE_OWNER_FIELD) ||
+        callback_target == 0u || movie_owner_receipt_counter == UINT64_MAX)
+        return false;
+    ++movie_owner_receipt_counter;
+    movie_owner_kind = owner;
+    movie_owner_callback = callback_target;
+    movie_owner_receipt = movie_owner_receipt_counter;
+    movie_pending_owner_kind = GPU_MOVIE_OWNER_NONE;
+    movie_pending_owner_receipt = 0u;
+    return true;
+}
+
+bool gpu_note_movie_owner_stop(GpuMovieOwnerKind owner) {
+    ++movie_owner_stop_count;
+    if (owner == GPU_MOVIE_OWNER_NONE || movie_owner_kind != owner)
+        return false;
+    movie_owner_kind = GPU_MOVIE_OWNER_NONE;
+    movie_owner_callback = 0u;
+    movie_owner_receipt = 0u;
+    movie_pending_owner_kind = GPU_MOVIE_OWNER_NONE;
+    movie_pending_owner_receipt = 0u;
+    return true;
+}
+
+bool gpu_note_movie_frame_complete(
+        uint32_t frame_number, uint32_t callback_target) {
+    movie_frame_note_count++;
+    movie_frame_note_number = frame_number;
+    movie_frame_note_width = 320u;
+    movie_frame_note_height = 240u;
+    movie_frame_note_callback = callback_target;
+    if (movie_owner_kind == GPU_MOVIE_OWNER_NONE || callback_target == 0u ||
+        callback_target != movie_owner_callback)
+        return false;
+    movie_pending_owner_kind = movie_owner_kind;
+    movie_pending_owner_receipt = movie_owner_receipt;
+    return true;
+}
+
+static bool movie_gpu_consume_pending_frame(GpuVramEvent *event) {
+    if (event == NULL || movie_pending_owner_kind == GPU_MOVIE_OWNER_NONE ||
+        movie_pending_owner_receipt == 0u)
+        return false;
+    event->movie_frame_number = movie_frame_note_number;
+    event->movie_frame_width = movie_frame_note_width;
+    event->movie_frame_height = movie_frame_note_height;
+    event->movie_frame_complete = true;
+    event->movie_owner_kind = movie_pending_owner_kind;
+    event->movie_owner_receipt = movie_pending_owner_receipt;
+    movie_pending_owner_kind = GPU_MOVIE_OWNER_NONE;
+    movie_pending_owner_receipt = 0u;
+    return true;
 }
 
 bool gpu_render_vram_mutation_overflowed(void) {
@@ -2085,12 +2209,59 @@ static void set_matching_runtime_identity(void) {
 static void set_candidate_provenance(PsxXgRenderAuthCandidate *candidate,
                                      uint32_t artifact_base,
                                      uint32_t artifact_size,
-                                     uint32_t artifact_crc32) {
+                                     uint32_t artifact_tag) {
+    static const uint8_t standalone_movie_sha256[32] = {
+        0x50,0xe1,0xa9,0xd9,0xe0,0x8b,0x90,0xee,0xd0,0xc2,0xda,0x1c,0x28,0x95,0x07,0xe7,
+        0x1c,0xbf,0x51,0x74,0x98,0x93,0xa9,0x2f,0x45,0x7c,0xe7,0x9a,0x59,0x70,0x1f,0x9a,
+    };
+    static const uint8_t movie_str_sha256[32] = {
+        0x2a,0x84,0x69,0x09,0x5f,0xd3,0x3d,0xae,0xf6,0x1d,0xbb,0xf0,0x9d,0x4f,0x10,0x6b,
+        0xa1,0xd7,0x29,0x04,0xa5,0x02,0x76,0x3c,0xb8,0x90,0x57,0xcb,0xb6,0x15,0xa4,0x40,
+    };
+    static const uint8_t ft4_2c_sha256[32] = {
+        0x6b,0x9f,0x50,0x5b,0x5e,0xa7,0x7f,0x3b,0xb7,0x22,0x2e,0x78,0xd2,0xb2,0x55,0x0f,
+        0x03,0x8f,0xb3,0x19,0xdb,0x39,0x9b,0x7d,0x86,0x2b,0x4b,0xd2,0x36,0xbb,0x2d,0xbe,
+    };
+    static const uint8_t ft4_2e_sha256[32] = {
+        0x75,0xc6,0x75,0xf9,0x73,0x63,0x65,0xdd,0xed,0x53,0x73,0xbb,0xd8,0x51,0xb4,0xa8,
+        0xc7,0x63,0xba,0x34,0xc1,0x67,0xef,0x22,0x3c,0x47,0x03,0x2e,0x80,0x68,0xf6,0x9f,
+    };
     memcpy(&candidate->identity, &runtime_identity, sizeof(candidate->identity));
     candidate->pair_id = UINT64_C(0x1020304050607080);
     candidate->artifact_base = artifact_base;
     candidate->artifact_size = artifact_size;
-    candidate->artifact_crc32 = artifact_crc32;
+    for (size_t index = 0u; index < xg_render_ui_owner_catalog_count; ++index) {
+        const XgRenderUiOwnerCatalogEntry *entry =
+            &xg_render_ui_owner_catalog[index];
+        if ((entry->artifact.base & UINT32_C(0x1fffffff)) ==
+                (artifact_base & UINT32_C(0x1fffffff)) &&
+            entry->artifact.size == artifact_size) {
+            memcpy(candidate->artifact_sha256, entry->artifact.sha256,
+                   sizeof(candidate->artifact_sha256));
+            break;
+        }
+    }
+    if ((artifact_base & UINT32_C(0x1fffffff)) == UINT32_C(0x0006faf0) &&
+        artifact_size == 29779u)
+        memcpy(candidate->artifact_sha256, standalone_movie_sha256,
+               sizeof(candidate->artifact_sha256));
+    else if ((artifact_base & UINT32_C(0x1fffffff)) == UINT32_C(0x001d3000) &&
+             artifact_size == 90112u)
+        memcpy(candidate->artifact_sha256, movie_str_sha256,
+               sizeof(candidate->artifact_sha256));
+    else if ((artifact_base & UINT32_C(0x1fffffff)) == UINT32_C(0x001b2000) &&
+             artifact_size == 270340u &&
+             (candidate->producer_entry & UINT32_C(0x1fffffff)) ==
+                 UINT32_C(0x001e927c))
+        memcpy(candidate->artifact_sha256, ft4_2c_sha256,
+               sizeof(candidate->artifact_sha256));
+    else if ((artifact_base & UINT32_C(0x1fffffff)) == UINT32_C(0x001b2000) &&
+             artifact_size == 270340u)
+        memcpy(candidate->artifact_sha256, ft4_2e_sha256,
+               sizeof(candidate->artifact_sha256));
+    if (candidate->artifact_sha256[0] == 0u)
+        memcpy(candidate->artifact_sha256, &artifact_tag,
+               sizeof(artifact_tag));
     candidate->authority_provenance = true;
     candidate->pair_bound = true;
 }
@@ -2104,7 +2275,7 @@ static void note_matching_candidate(void) {
     set_candidate_provenance(&candidate,
                              xg_render_manifest_validation.field_range_start,
                              xg_render_manifest_validation.field_range_size,
-                             xg_render_manifest_validation.field_base_crc32);
+                             UINT32_C(0x11223344));
     psx_xg_render_auth_note_candidate_dispatch(&candidate);
 }
 
@@ -2117,6 +2288,9 @@ static PsxXgRenderAuthCandidate matching_runtime_variant_candidate(void) {
 
     set_candidate_provenance(&candidate, 0x0006f000u, 282628u,
                              UINT32_C(0xb7ce1120));
+    memcpy(candidate.artifact_sha256,
+           xg_render_runtime_variant_descriptors[0].artifact_identity,
+           sizeof(candidate.artifact_sha256));
     memcpy(candidate.runtime_variant_identity,
            xg_render_runtime_variant_descriptors[0].companion_manifest_identity,
            sizeof(candidate.runtime_variant_identity));
@@ -2138,6 +2312,17 @@ static void note_matching_overlay_artifact_candidate(void) {
 
     set_candidate_provenance(&candidate, UINT32_C(0x801b2000), 270340u,
                              UINT32_C(0x12345678));
+    psx_xg_render_auth_note_artifact_candidate(&candidate);
+}
+
+static void note_matching_overlay_2e_artifact_candidate(void) {
+    PsxXgRenderAuthCandidate candidate = {
+        UINT32_C(0x801e53cc), UINT32_C(0x801b2000), 270340u,
+        UINT32_C(0x801e53cc),
+    };
+
+    set_candidate_provenance(&candidate, UINT32_C(0x801b2000), 270340u,
+                             UINT32_C(0x87654321));
     psx_xg_render_auth_note_artifact_candidate(&candidate);
 }
 
@@ -2620,9 +2805,9 @@ static int test_runtime_idle_activation_hook_is_relevant(void) {
     CHECK(psx_xg_render_auth_cold_hook_relevant(
         PSX_XG_RENDER_AUTH_HOOK_ENTRY, PRODUCER_ENTRY,
         UINT32_C(0x27bdff18)));
-    candidate.artifact_crc32 ^= 1u;
+    candidate.artifact_sha256[0] ^= 1u;
     psx_xg_render_auth_note_artifact_candidate(&candidate);
-    CHECK(psx_xg_render_auth_cold_hook_relevant(
+    CHECK(!psx_xg_render_auth_cold_hook_relevant(
         PSX_XG_RENDER_AUTH_HOOK_ENTRY, PRODUCER_ENTRY,
         UINT32_C(0x27bdff18)));
     CHECK(psx_xg_render_auth_cold_hook_relevant(
@@ -2660,8 +2845,81 @@ static int test_runtime_variant_accepts_bound_code_contract_artifact(void) {
     const XgRenderRuntimeVariantDescriptor *descriptor =
         &xg_render_runtime_variant_descriptors[0];
     PsxXgRenderAuthCandidate candidate = matching_runtime_variant_candidate();
+    static const uint32_t tim_pcs[] = {
+        UINT32_C(0x80070340), UINT32_C(0x80070414),
+        UINT32_C(0x8007044c), UINT32_C(0x80070480),
+        UINT32_C(0x800771f8), UINT32_C(0x8007722c),
+        UINT32_C(0x80077248), UINT32_C(0x80077260),
+    };
+    static const uint32_t tim_instructions[] = {
+        UINT32_C(0x27bdffb0), UINT32_C(0x0c011225),
+        UINT32_C(0x0c011225), UINT32_C(0x03e00008),
+        UINT32_C(0x27bdffd0), UINT32_C(0x0c011225),
+        UINT32_C(0x0c011225), UINT32_C(0x03e00008),
+    };
+    static const XgRenderRuntimeVariantCutoverHandler tim_handlers[] = {
+        XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_BEGIN,
+        XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_CLUT_UPLOAD,
+        XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_IMAGE_UPLOAD,
+        XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_COMMIT,
+        XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_BEGIN,
+        XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_CLUT_UPLOAD,
+        XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_IMAGE_UPLOAD,
+        XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_TIM_COMMIT,
+    };
+    static const uint32_t image_pcs[] = {
+        UINT32_C(0x800ab808), UINT32_C(0x800aba0c),
+        UINT32_C(0x800aba90),
+    };
+    static const uint32_t image_instructions[] = {
+        UINT32_C(0x27bdff80), UINT32_C(0x0c011225),
+        UINT32_C(0x03e00008),
+    };
+    static const XgRenderRuntimeVariantCutoverHandler image_handlers[] = {
+        XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_IMAGE_BEGIN,
+        XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_IMAGE_UPLOAD,
+        XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_IMAGE_COMMIT,
+    };
+    static const uint32_t clut_pcs[] = {
+        UINT32_C(0x80074108), UINT32_C(0x800741ec),
+        UINT32_C(0x80074694),
+    };
+    static const uint32_t clut_instructions[] = {
+        UINT32_C(0x27bdff08), UINT32_C(0x0c011225),
+        UINT32_C(0x03e00008),
+    };
+    static const XgRenderRuntimeVariantCutoverHandler clut_handlers[] = {
+        XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_CLUT_BEGIN,
+        XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_CLUT_UPLOAD,
+        XG_RENDER_RUNTIME_VARIANT_CUTOVER_FIELD_CLUT_COMMIT,
+    };
 
-    candidate.artifact_crc32 ^= 1u;
+    CHECK(descriptor->cutover_count == 32u);
+    for (uint32_t index = 0u; index < 8u; ++index) {
+        XgRenderRuntimeVariantCutover cutover;
+
+        CHECK(xg_render_runtime_variant_native_cutover_contract_lookup(
+            tim_pcs[index], tim_instructions[index], &cutover));
+        CHECK(cutover.handler == tim_handlers[index]);
+        CHECK(cutover.transfer == 0u && cutover.continuation == 0u);
+    }
+    for (uint32_t index = 0u; index < 3u; ++index) {
+        XgRenderRuntimeVariantCutover cutover;
+
+        CHECK(xg_render_runtime_variant_native_cutover_contract_lookup(
+            image_pcs[index], image_instructions[index], &cutover));
+        CHECK(cutover.handler == image_handlers[index]);
+        CHECK(cutover.transfer == 0u && cutover.continuation == 0u);
+    }
+    for (uint32_t index = 0u; index < 3u; ++index) {
+        XgRenderRuntimeVariantCutover cutover;
+
+        CHECK(xg_render_runtime_variant_native_cutover_contract_lookup(
+            clut_pcs[index], clut_instructions[index], &cutover));
+        CHECK(cutover.handler == clut_handlers[index]);
+        CHECK(cutover.transfer == 0u && cutover.continuation == 0u);
+    }
+    candidate.artifact_sha256[0] ^= 1u;
     memset(candidate.runtime_variant_identity, 0,
            sizeof(candidate.runtime_variant_identity));
     candidate.runtime_variant_bound = false;
@@ -2704,7 +2962,7 @@ static int test_runtime_ignores_nonrender_dispatch_from_current_artifact(void) {
     CHECK(psx_xg_render_auth_runtime_test_artifact_active());
     CHECK(psx_xg_render_auth_runtime_test_artifact_generation() == generation);
 
-    candidate.artifact_crc32 ^= 1u;
+    candidate.artifact_sha256[0] ^= 1u;
     psx_xg_render_auth_note_artifact_candidate(&candidate);
     CHECK(!psx_xg_render_auth_runtime_test_artifact_active());
     psx_xg_render_auth_scene_boundary();
@@ -2927,11 +3185,14 @@ static int test_ui_ot_accepts_one_vblank_submission_delay(void) {
     const uint32_t frame = 7u;
     const GpuRenderTransactionId ui_visual = {5001u, 8u};
     GpuRenderSemantic consumed = {0};
+    GuestRenderNativeDiagnosticsV1 diagnostics = {0};
     PsxXgRenderUiOtSnapshot ui_ot = {0};
 
     guest_render_native_stream_test_reset();
     guest_render_native_stream_set_enabled(true);
     xg_render_ui_ot_reset();
+    CHECK(guest_render_native_stream_diagnostics_reset() ==
+          GUEST_RENDER_NATIVE_STREAM_OK);
     psx_xg_render_auth_runtime_test_enable_ui_ot_gpu(true);
     memset(ui_ot_words, 0, sizeof(ui_ot_words));
     ui_ot_words[0] = UINT32_C(0x08ffffff);
@@ -2953,6 +3214,16 @@ static int test_ui_ot_accepts_one_vblank_submission_delay(void) {
     CHECK(guest_render_native_stream_consume_exact(
               ui_visual, UINT32_C(0x114),
               &consumed) == GUEST_RENDER_NATIVE_STREAM_OK);
+    CHECK(guest_render_native_stream_diagnostics_snapshot(
+              GUEST_RENDER_NATIVE_DIAGNOSTICS_VERSION_1, &diagnostics,
+              sizeof(diagnostics)) == GUEST_RENDER_NATIVE_STREAM_OK);
+    CHECK(diagnostics.target_ot_payload_geometry_or_material_reads == 2u);
+    CHECK(diagnostics.first_offender[
+              GUEST_RENDER_NATIVE_DIAGNOSTIC_TARGET_OT_PAYLOAD_READ]
+              .command_id == UINT32_C(0x104));
+    CHECK(diagnostics.first_offender[
+              GUEST_RENDER_NATIVE_DIAGNOSTIC_TARGET_OT_PAYLOAD_READ]
+              .visual_id.scene_epoch == ui_visual.scene_epoch);
 
     xg_render_ui_ot_note_draw_observation(
         frame, UINT32_C(0x100), ui_visual);
@@ -2973,6 +3244,27 @@ static int test_ui_ot_accepts_one_vblank_submission_delay(void) {
     CHECK(ui_ot.pending);
     CHECK(ui_ot.blocked);
     CHECK(ui_ot.blocked_count == 2u);
+
+    CHECK(guest_render_native_stream_diagnostics_reset() ==
+          GUEST_RENDER_NATIVE_STREAM_OK);
+    CHECK(guest_render_native_stream_test_set_diagnostic_counter(
+              GUEST_RENDER_NATIVE_DIAGNOSTIC_TARGET_OT_PAYLOAD_READ,
+              UINT64_MAX) == GUEST_RENDER_NATIVE_STREAM_OK);
+    xg_render_ui_ot_note_draw_observation(
+        frame, UINT32_C(0x100), ui_visual);
+    CHECK(!xg_render_ui_ot_prepare(
+        UINT32_C(0x100), GUEST_RENDER_RENDER_NATIVE, frame,
+        ui_ot_read_word));
+    CHECK(guest_render_native_stream_diagnostics_snapshot(
+              GUEST_RENDER_NATIVE_DIAGNOSTICS_VERSION_1, &diagnostics,
+              sizeof(diagnostics)) ==
+          GUEST_RENDER_NATIVE_STREAM_COUNTER_OVERFLOW);
+    CHECK(diagnostics.target_ot_payload_geometry_or_material_reads ==
+          UINT64_MAX);
+    CHECK(diagnostics.counter_overflowed);
+    CHECK(diagnostics.first_overflow_kind ==
+          GUEST_RENDER_NATIVE_DIAGNOSTIC_TARGET_OT_PAYLOAD_READ);
+    CHECK(diagnostics.first_overflow_source.command_id == UINT32_C(0x104));
 
     psx_xg_render_auth_runtime_test_enable_ui_ot_gpu(false);
     guest_render_native_stream_test_reset();
@@ -5070,6 +5362,254 @@ static int test_overlay_artifact_authority_is_not_runtime_variant_specific(void)
     return 1;
 }
 
+static uint32_t movie_stack_callback;
+
+static uint32_t movie_stack_read_word(uint32_t address) {
+    return address == UINT32_C(0x801ff030) ? movie_stack_callback : 0u;
+}
+
+static void reset_movie_gpu_model(void) {
+    movie_frame_note_count = 0u;
+    movie_frame_note_number = 0u;
+    movie_frame_note_width = 0u;
+    movie_frame_note_height = 0u;
+    movie_frame_note_callback = 0u;
+    movie_owner_start_count = 0u;
+    movie_owner_stop_count = 0u;
+    movie_owner_kind = GPU_MOVIE_OWNER_NONE;
+    movie_owner_callback = 0u;
+    movie_owner_receipt = 0u;
+    movie_owner_receipt_counter = 0u;
+    movie_pending_owner_kind = GPU_MOVIE_OWNER_NONE;
+    movie_pending_owner_receipt = 0u;
+}
+
+static int test_movie_owner_routes_require_exact_artifact_and_callback(void) {
+    CPUState cpu = {
+        .read_word = movie_stack_read_word,
+    };
+    PsxXgRenderAuthCandidate standalone = {
+        UINT32_C(0x80076698), UINT32_C(0x8006faf0), 29779u,
+        UINT32_C(0x80076698),
+    };
+    PsxXgRenderAuthCandidate field = {
+        UINT32_C(0x800a72fc), UINT32_C(0x8006faf0), 260862u,
+        UINT32_C(0x800a72fc),
+    };
+    PsxXgRenderAuthCandidate mismatch;
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    set_candidate_provenance(
+        &standalone, UINT32_C(0x8006faf0), 29779u,
+        UINT32_C(0x0b5b82a1));
+    set_candidate_provenance(
+        &field, UINT32_C(0x8006faf0), 260862u,
+        UINT32_C(0xb8874993));
+    psx_xg_render_auth_note_artifact_candidate(&standalone);
+    reset_movie_gpu_model();
+    cpu.gpr[29] = UINT32_C(0x801ff000);
+    movie_stack_callback = UINT32_C(0x800768d8);
+    CHECK(psx_xg_render_auth_movie_standalone_start(&cpu));
+    CHECK(movie_owner_start_count == 1u);
+    CHECK(movie_owner_kind == GPU_MOVIE_OWNER_STANDALONE);
+    CHECK(movie_owner_callback == UINT32_C(0x800768d8));
+    CHECK(movie_owner_receipt == 1u);
+    CHECK(psx_xg_render_auth_movie_standalone_start(&cpu));
+    CHECK(movie_owner_start_count == 2u);
+    CHECK(movie_owner_receipt == 2u);
+    reset_movie_gpu_model();
+    (void)psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80076698), UINT32_C(0x0c074df3));
+    CHECK(movie_owner_start_count == 1u);
+    CHECK(movie_owner_kind == GPU_MOVIE_OWNER_STANDALONE);
+    CHECK(movie_owner_callback == UINT32_C(0x800768d8));
+    (void)psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80076698), UINT32_C(0x0c074df2));
+    CHECK(movie_owner_start_count == 1u);
+    psx_xg_render_auth_note_artifact_candidate(&field);
+    CHECK(!psx_xg_render_auth_movie_field_stop());
+    CHECK(movie_owner_stop_count == 1u);
+    CHECK(movie_owner_kind == GPU_MOVIE_OWNER_STANDALONE);
+    psx_xg_render_auth_note_artifact_candidate(&standalone);
+    (void)psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80076834), UINT32_C(0x0c0750c6));
+    CHECK(movie_owner_stop_count == 2u);
+    CHECK(movie_owner_kind == GPU_MOVIE_OWNER_NONE);
+    CHECK(!psx_xg_render_auth_movie_standalone_stop());
+    CHECK(movie_owner_stop_count == 3u);
+
+    movie_stack_callback = UINT32_C(0x800768dc);
+    CHECK(!psx_xg_render_auth_movie_standalone_start(&cpu));
+    CHECK(movie_owner_start_count == 1u);
+    movie_stack_callback = 0u;
+    CHECK(!psx_xg_render_auth_movie_standalone_start(&cpu));
+    CHECK(movie_owner_start_count == 1u);
+    CHECK(!psx_xg_render_auth_movie_standalone_start(NULL));
+    CHECK(movie_owner_start_count == 1u);
+    cpu.read_word = NULL;
+    CHECK(!psx_xg_render_auth_movie_standalone_start(&cpu));
+    cpu.read_word = movie_stack_read_word;
+    cpu.gpr[29] = UINT32_C(0x801fffd8);
+    CHECK(!psx_xg_render_auth_movie_standalone_start(&cpu));
+    CHECK(movie_owner_start_count == 1u);
+
+    mismatch = standalone;
+    mismatch.artifact_sha256[0] ^= 1u;
+    psx_xg_render_auth_note_artifact_candidate(&mismatch);
+    cpu.gpr[29] = UINT32_C(0x801ff000);
+    movie_stack_callback = UINT32_C(0x800768d8);
+    CHECK(!psx_xg_render_auth_movie_standalone_start(&cpu));
+    CHECK(movie_owner_start_count == 1u);
+    mismatch = standalone;
+    mismatch.artifact_base += 4u;
+    psx_xg_render_auth_note_artifact_candidate(&mismatch);
+    CHECK(!psx_xg_render_auth_movie_standalone_start(&cpu));
+    CHECK(movie_owner_start_count == 1u);
+    psx_xg_render_auth_scene_boundary();
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    psx_xg_render_auth_note_artifact_candidate(&field);
+    reset_movie_gpu_model();
+    cpu.gpr[29] = UINT32_C(0x801ff000);
+    movie_stack_callback = UINT32_C(0x800a7120);
+    CHECK(psx_xg_render_auth_movie_field_start(&cpu));
+    CHECK(movie_owner_start_count == 1u);
+    CHECK(movie_owner_kind == GPU_MOVIE_OWNER_FIELD);
+    CHECK(movie_owner_callback == UINT32_C(0x800a7120));
+    CHECK(movie_owner_receipt == 1u);
+    reset_movie_gpu_model();
+    (void)psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x800a72fc), UINT32_C(0x0c074df3));
+    CHECK(movie_owner_start_count == 1u);
+    CHECK(movie_owner_kind == GPU_MOVIE_OWNER_FIELD);
+    CHECK(movie_owner_callback == UINT32_C(0x800a7120));
+    CHECK(!psx_xg_render_auth_movie_standalone_stop());
+    CHECK(movie_owner_stop_count == 0u);
+    (void)psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x800a80c4), UINT32_C(0x0c0750ec));
+    CHECK(movie_owner_stop_count == 1u);
+    CHECK(movie_owner_kind == GPU_MOVIE_OWNER_NONE);
+    CHECK(!psx_xg_render_auth_movie_field_stop());
+    CHECK(movie_owner_stop_count == 2u);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_movie_static_artifact_authority_fails_closed(void) {
+    CPUState cpu = {
+        .read_word = movie_stack_read_word,
+    };
+    PsxXgRenderAuthCandidate candidate = {
+        UINT32_C(0x80076698), UINT32_C(0x8006faf0), 29779u,
+        UINT32_C(0x80076698),
+    };
+
+    cpu.gpr[29] = UINT32_C(0x801ff000);
+    movie_stack_callback = UINT32_C(0x800768d8);
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    set_candidate_provenance(
+        &candidate, UINT32_C(0x8006faf0), 29779u,
+        UINT32_C(0x0b5b82a1));
+    candidate.pair_id = 0u;
+    psx_xg_render_auth_note_artifact_candidate(&candidate);
+    reset_movie_gpu_model();
+    CHECK(!psx_xg_render_auth_movie_standalone_start(&cpu));
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    set_candidate_provenance(
+        &candidate, UINT32_C(0x8006faf0), 29779u,
+        UINT32_C(0x0b5b82a1));
+    candidate.identity.game_sha256[0] ^= 1u;
+    psx_xg_render_auth_note_artifact_candidate(&candidate);
+    reset_movie_gpu_model();
+    CHECK(!psx_xg_render_auth_movie_standalone_start(&cpu));
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    set_candidate_provenance(
+        &candidate, UINT32_C(0x8006faf0), 29779u,
+        UINT32_C(0x0b5b82a1));
+    candidate.dispatch_pc = UINT32_C(0x8006faf0) + 29779u - 3u;
+    psx_xg_render_auth_note_artifact_candidate(&candidate);
+    reset_movie_gpu_model();
+    CHECK(!psx_xg_render_auth_movie_standalone_start(&cpu));
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    set_candidate_provenance(
+        &candidate, UINT32_C(0x8006faf0), 29779u,
+        UINT32_C(0x0b5b82a1));
+    candidate.dispatch_pc = UINT32_C(0x8006faf0) + 29779u - 4u;
+    psx_xg_render_auth_note_artifact_candidate(&candidate);
+    reset_movie_gpu_model();
+    CHECK(psx_xg_render_auth_movie_standalone_start(&cpu));
+    CHECK(movie_owner_start_count == 1u);
+    reset_movie_gpu_model();
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_movie_frame_boundary_requires_exact_str_artifact(void) {
+    CPUState cpu = {0};
+    GpuVramEvent scanout = {0};
+    PsxXgRenderAuthCandidate candidate = {
+        UINT32_C(0x801d3480), UINT32_C(0x801d3000), 90112u,
+        UINT32_C(0x801d3480),
+    };
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    set_candidate_provenance(
+        &candidate, UINT32_C(0x801d3000), 90112u,
+        UINT32_C(0x2bb071fe));
+    psx_xg_render_auth_note_artifact_candidate(&candidate);
+    reset_movie_gpu_model();
+    CHECK(gpu_note_movie_owner_start(
+        GPU_MOVIE_OWNER_STANDALONE, UINT32_C(0x800768d8)));
+    cpu.gpr[4] = 0u;
+    cpu.gpr[5] = 320u;
+    cpu.gpr[6] = 224u;
+    cpu.gpr[7] = UINT32_C(0x800768d8);
+    (void)psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x801d3480), UINT32_C(0x00e0f809));
+    CHECK(movie_frame_note_count == 1u);
+    CHECK(movie_frame_note_number == 0u);
+    CHECK(movie_frame_note_width == 320u);
+    CHECK(movie_frame_note_height == 240u);
+    CHECK(movie_frame_note_callback == UINT32_C(0x800768d8));
+    CHECK(movie_gpu_consume_pending_frame(&scanout));
+    CHECK(scanout.movie_frame_complete);
+    CHECK(scanout.movie_frame_number == 0u);
+    CHECK(scanout.movie_owner_kind == GPU_MOVIE_OWNER_STANDALONE);
+    CHECK(scanout.movie_owner_receipt == 1u);
+    CHECK(!movie_gpu_consume_pending_frame(&scanout));
+    (void)psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x801d3480), UINT32_C(0x00e0f808));
+    CHECK(movie_frame_note_count == 1u);
+    CHECK(psx_xg_render_auth_movie_frame_complete(&cpu));
+    CHECK(movie_frame_note_count == 2u);
+    cpu.gpr[7] = 0u;
+    CHECK(!psx_xg_render_auth_movie_frame_complete(&cpu));
+    CHECK(movie_frame_note_count == 3u);
+    CHECK(movie_frame_note_callback == 0u);
+    psx_xg_render_auth_scene_boundary();
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    candidate.artifact_sha256[0] ^= 1u;
+    psx_xg_render_auth_note_artifact_candidate(&candidate);
+    (void)psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x801d3480), UINT32_C(0x00e0f809));
+    CHECK(movie_frame_note_count == 3u);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
 static int test_overlay_ft4_2c_projected_contract_uses_only_sources(void) {
     CPUState cpu = {0};
     PsxXgRenderOverlayFt4Snapshot snapshot = {0};
@@ -5162,7 +5702,7 @@ static int test_overlay_ft4_2e_projected_contract_uses_only_producers(void) {
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
-    note_matching_overlay_artifact_candidate();
+    note_matching_overlay_2e_artifact_candidate();
     configure_projected_memory();
     projected_use_overlay_2e = true;
     projected_store_word(PROJECTED_OBJECT + 0x308u, 0u);
@@ -5685,12 +6225,7 @@ static int test_field_sprite_identity_normalizes_packet_buffer(void) {
           GUEST_RENDER_NATIVE_STREAM_OK);
     CHECK(guest_render_native_stream_activate_visual(visual_id) ==
           GUEST_RENDER_NATIVE_STREAM_OK);
-    CHECK(guest_render_native_stream_resolve_miss(&miss, &retained));
-    CHECK(retained.interpolation_identity.valid);
-    CHECK(retained.interpolation_identity.producer_id ==
-          resolved[1].interpolation_identity.producer_id);
-    CHECK(retained.interpolation_identity.primitive_id ==
-          resolved[1].interpolation_identity.primitive_id);
+    CHECK(!guest_render_native_stream_resolve_miss(&miss, &retained));
     psx_xg_render_auth_scene_boundary();
     guest_render_native_stream_set_enabled(false);
     return 1;
@@ -5706,7 +6241,7 @@ static int test_overlay_ft4_2e_descriptor_templates_do_not_read_packets(void) {
 
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
     set_matching_runtime_identity();
-    note_matching_overlay_artifact_candidate();
+    note_matching_overlay_2e_artifact_candidate();
     memset(model_shadow_memory, 0, sizeof(model_shadow_memory));
     memset(model_shadow_stack, 0, sizeof(model_shadow_stack));
     model_shadow_store_word(SOURCE + 4u, DESCRIPTOR - SOURCE);
@@ -6425,6 +6960,1664 @@ static int test_native_world_sky_cutover_is_packet_free(void) {
     psx_xg_render_auth_before_gpu_submission();
     CHECK(guest_render_bridge_present(&completed) == GUEST_RENDER_OK);
     CHECK(completed.binding_count == 3u);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int resource_ref_has_artifact_provenance(
+        const XgSemanticResourceRef *resource, uint64_t receipt) {
+    XgRenderResourceView view = {0};
+
+    CHECK(resource != NULL);
+    CHECK(xg_render_resource_view(
+              (XgRenderResourceHandle){resource->resource_id,
+                                       resource->generation},
+              &view) == XG_RENDER_RESOURCE_OK);
+    CHECK(view.provenance.kind == XG_RENDER_RESOURCE_PROVENANCE_ARTIFACT);
+    CHECK(view.provenance.receipt == receipt);
+    CHECK(!view.provenance.synthetic);
+    return 1;
+}
+
+static int test_world_ground_clut_publication_requires_artifact_authority(void) {
+    const uint32_t rect = WORLD_MEMORY_BASE;
+    const uint32_t payload = WORLD_MEMORY_BASE + 0x1000u;
+    PsxXgRenderAuthCandidate candidate = {
+        UINT32_C(0x800979c8), UINT32_C(0x8006faf0), 180422u,
+        UINT32_C(0x800979cc),
+    };
+    PsxXgRenderAuthCandidate wrong_receipt =
+        matching_runtime_variant_candidate();
+    CPUState cpu = {
+        .read_half = world_read_half,
+        .read_byte = world_read_byte,
+    };
+    XgRenderVramResourceSnapshot snapshot = {0};
+    XgSemanticResourceRef clut = {0};
+    uint64_t artifact_generation;
+    uint64_t completed_loaders;
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x800979cc), UINT32_C(0x3c04800a)));
+    xg_render_vram_resources_snapshot(&snapshot);
+    CHECK(!snapshot.loader_active && snapshot.completed_loaders == 0u);
+
+    set_candidate_provenance(&candidate, UINT32_C(0x8006f000), 183222u,
+                             UINT32_C(0x082b6ba5));
+    CHECK(xg_render_authoritative_overlay_artifact_candidate_matches(
+        &candidate));
+    CHECK(xg_render_authoritative_overlay_artifact_candidate_authorizes_pc(
+        &candidate, UINT32_C(0x800979cc)));
+    psx_xg_render_auth_note_artifact_candidate(&candidate);
+    artifact_generation = psx_xg_render_auth_runtime_test_artifact_generation();
+    CHECK(artifact_generation != 0u);
+
+    memset(world_memory, 0, sizeof(world_memory));
+    world_store_half(rect, 0u);
+    world_store_half(rect + 2u, 432u);
+    world_store_half(rect + 4u, 256u);
+    world_store_half(rect + 6u, 64u);
+    for (uint32_t index = 0u; index < 256u * 64u * 2u; ++index)
+        world_memory[payload - WORLD_MEMORY_BASE + index] =
+            (uint8_t)(index + 17u);
+
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x800979cc), UINT32_C(0x3c04800a)));
+    xg_render_vram_resources_snapshot(&snapshot);
+    CHECK(snapshot.loader_active && snapshot.completed_loaders == 0u);
+    cpu.gpr[4] = rect;
+    cpu.gpr[5] = payload;
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80097ac8), UINT32_C(0x0c011225)));
+    CHECK(!xg_render_vram_resources_lookup(
+        XG_RENDER_RESOURCE_CLUT, 0u, 432u, 256u, 64u, &clut));
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80097adc), UINT32_C(0x87a50012)));
+    xg_render_vram_resources_snapshot(&snapshot);
+    CHECK(!snapshot.loader_active && snapshot.completed_loaders == 1u);
+    CHECK(snapshot.published_cluts == 1u);
+    CHECK(xg_render_vram_resources_lookup(
+        XG_RENDER_RESOURCE_CLUT, 0u, 432u, 256u, 64u, &clut));
+    CHECK(resource_ref_has_artifact_provenance(
+        &clut, artifact_generation));
+    xg_render_vram_resources_snapshot(&snapshot);
+    completed_loaders = snapshot.completed_loaders;
+
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x800979cc), UINT32_C(0x3c04800a)));
+    psx_xg_render_auth_note_artifact_candidate(&wrong_receipt);
+    CHECK(psx_xg_render_auth_runtime_test_artifact_generation() !=
+          artifact_generation);
+    CHECK(xg_render_runtime_composition_observe_dispatch(
+              &cpu, UINT32_C(0x80097ac8), UINT32_C(0x0c011225)) ==
+          XG_RENDER_RUNTIME_COMPOSITION_OBSERVED);
+    xg_render_vram_resources_snapshot(&snapshot);
+    CHECK(!snapshot.loader_active);
+    CHECK(snapshot.completed_loaders == completed_loaders);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_world_shared_clut_publication_requires_artifact_authority(void) {
+    const uint32_t rect = WORLD_MEMORY_BASE;
+    const uint32_t payload = WORLD_MEMORY_BASE + 0x1000u;
+    PsxXgRenderAuthCandidate candidate = {
+        UINT32_C(0x8008440c), UINT32_C(0x8006faf0), 180422u,
+        UINT32_C(0x80084410),
+    };
+    PsxXgRenderAuthCandidate wrong_receipt =
+        matching_runtime_variant_candidate();
+    CPUState cpu = {
+        .read_half = world_read_half,
+        .read_byte = world_read_byte,
+    };
+    XgRenderVramResourceSnapshot snapshot = {0};
+    XgSemanticResourceRef clut = {0};
+    uint64_t artifact_generation;
+    uint64_t completed_loaders;
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80084410), UINT32_C(0xafbf0038)));
+    xg_render_vram_resources_snapshot(&snapshot);
+    CHECK(!snapshot.loader_active && snapshot.completed_loaders == 0u);
+
+    set_candidate_provenance(&candidate, UINT32_C(0x8006f000), 183222u,
+                             UINT32_C(0x082b6ba5));
+    CHECK(xg_render_authoritative_overlay_artifact_candidate_matches(
+        &candidate));
+    CHECK(xg_render_authoritative_overlay_artifact_candidate_authorizes_pc(
+        &candidate, UINT32_C(0x80084410)));
+    psx_xg_render_auth_note_artifact_candidate(&candidate);
+    artifact_generation = psx_xg_render_auth_runtime_test_artifact_generation();
+    CHECK(artifact_generation != 0u);
+
+    memset(world_memory, 0, sizeof(world_memory));
+    world_store_half(rect, 0u);
+    world_store_half(rect + 2u, 496u);
+    world_store_half(rect + 4u, 256u);
+    world_store_half(rect + 6u, 15u);
+    for (uint32_t index = 0u; index < 256u * 15u * 2u; ++index)
+        world_memory[payload - WORLD_MEMORY_BASE + index] =
+            (uint8_t)(index + 23u);
+
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80084410), UINT32_C(0xafbf0038)));
+    xg_render_vram_resources_snapshot(&snapshot);
+    CHECK(snapshot.loader_active && snapshot.completed_loaders == 0u);
+    cpu.gpr[4] = rect;
+    cpu.gpr[5] = payload;
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80084508), UINT32_C(0x0c011225)));
+    CHECK(!xg_render_vram_resources_lookup(
+        XG_RENDER_RESOURCE_CLUT, 0u, 496u, 256u, 15u, &clut));
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8008451c), UINT32_C(0x87a50012)));
+    xg_render_vram_resources_snapshot(&snapshot);
+    CHECK(!snapshot.loader_active && snapshot.completed_loaders == 1u);
+    CHECK(snapshot.published_cluts == 1u);
+    CHECK(xg_render_vram_resources_lookup(
+        XG_RENDER_RESOURCE_CLUT, 0u, 496u, 256u, 15u, &clut));
+    CHECK(resource_ref_has_artifact_provenance(
+        &clut, artifact_generation));
+    xg_render_vram_resources_snapshot(&snapshot);
+    completed_loaders = snapshot.completed_loaders;
+
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80084410), UINT32_C(0xafbf0038)));
+    psx_xg_render_auth_note_artifact_candidate(&wrong_receipt);
+    CHECK(psx_xg_render_auth_runtime_test_artifact_generation() !=
+          artifact_generation);
+    CHECK(xg_render_runtime_composition_observe_dispatch(
+              &cpu, UINT32_C(0x80084508), UINT32_C(0x0c011225)) ==
+          XG_RENDER_RUNTIME_COMPOSITION_OBSERVED);
+    xg_render_vram_resources_snapshot(&snapshot);
+    CHECK(!snapshot.loader_active);
+    CHECK(snapshot.completed_loaders == completed_loaders);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_world_animated_texture_updates_are_transactional(void) {
+    const uint32_t rect = WORLD_MEMORY_BASE;
+    const uint32_t payload = WORLD_MEMORY_BASE + 0x1000u;
+    const uint16_t overwrite = UINT16_C(0x7fff);
+    PsxXgRenderAuthCandidate candidate = {
+        UINT32_C(0x80074f2c), UINT32_C(0x8006faf0), 180422u,
+        UINT32_C(0x80074f30),
+    };
+    PsxXgRenderAuthCandidate wrong_receipt =
+        matching_runtime_variant_candidate();
+    CPUState cpu = {
+        .read_half = world_read_half,
+        .read_byte = world_read_byte,
+    };
+    XgRenderVramResourceSnapshot snapshot = {0};
+    XgSemanticResourceRef texture = {0};
+    uint64_t completed_loaders;
+    uint64_t rejected_operations;
+    uint64_t artifact_generation;
+    GpuVramEvent vram_event = {
+        .operation = GPU_VRAM_EVENT_UPLOAD,
+        .destination_x = 320u,
+        .destination_y = 128u,
+        .width = 1u,
+        .height = 1u,
+        .pixel_count = 1u,
+        .pixels = &overwrite,
+    };
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80074f30), UINT32_C(0x8c42cc9c)));
+    xg_render_vram_resources_snapshot(&snapshot);
+    CHECK(!snapshot.loader_active && snapshot.completed_loaders == 0u);
+
+    set_candidate_provenance(&candidate, UINT32_C(0x8006f000), 183222u,
+                             UINT32_C(0x082b6ba5));
+    CHECK(xg_render_authoritative_overlay_artifact_candidate_matches(
+        &candidate));
+    CHECK(xg_render_authoritative_overlay_artifact_candidate_authorizes_pc(
+        &candidate, UINT32_C(0x80075210)));
+    psx_xg_render_auth_note_artifact_candidate(&candidate);
+    artifact_generation = psx_xg_render_auth_runtime_test_artifact_generation();
+    CHECK(artifact_generation != 0u);
+
+    memset(world_memory, 0, sizeof(world_memory));
+    world_store_half(rect, 320u);
+    world_store_half(rect + 2u, 128u);
+    world_store_half(rect + 4u, 8u);
+    world_store_half(rect + 6u, 2u);
+    for (uint32_t index = 0u; index < 8u * 2u * 2u; ++index)
+        world_memory[payload - WORLD_MEMORY_BASE + index] =
+            (uint8_t)(index + 31u);
+
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80074f30), UINT32_C(0x8c42cc9c)));
+    cpu.gpr[4] = rect;
+    cpu.gpr[5] = payload;
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80074fec), UINT32_C(0x0c011225)));
+    CHECK(!xg_render_vram_resources_lookup(
+        XG_RENDER_RESOURCE_TEXTURE, 320u, 128u, 8u, 2u, &texture));
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80075018), UINT32_C(0x8fb20020)));
+    CHECK(xg_render_vram_resources_lookup(
+        XG_RENDER_RESOURCE_TEXTURE, 320u, 128u, 8u, 2u, &texture));
+    CHECK(resource_ref_has_artifact_provenance(
+        &texture, artifact_generation));
+
+    xg_render_vram_resources_snapshot(&snapshot);
+    completed_loaders = snapshot.completed_loaders;
+    rejected_operations = snapshot.rejected_operations;
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80075108), UINT32_C(0x8c42cd64)));
+    psx_xg_render_auth_note_artifact_candidate(&wrong_receipt);
+    CHECK(psx_xg_render_auth_runtime_test_artifact_generation() !=
+          artifact_generation);
+    CHECK(xg_render_runtime_composition_observe_dispatch(
+              &cpu, UINT32_C(0x80075210), UINT32_C(0x8fb20020)) ==
+          XG_RENDER_RUNTIME_COMPOSITION_OBSERVED);
+    xg_render_vram_resources_snapshot(&snapshot);
+    CHECK(!snapshot.loader_active);
+    CHECK(snapshot.completed_loaders == completed_loaders);
+    CHECK(snapshot.rejected_operations > rejected_operations);
+    CHECK(psx_xg_render_auth_note_vram_event(20u, 1241u, &vram_event));
+    CHECK(!xg_render_vram_resources_lookup(
+        XG_RENDER_RESOURCE_TEXTURE, 320u, 128u, 8u, 2u, &texture));
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_resident_tim_publication_uses_stable_artifact_receipt(void) {
+    const uint32_t rect = WORLD_MEMORY_BASE;
+    const uint32_t payload = WORLD_MEMORY_BASE + 0x1000u;
+    PsxXgRenderAuthCandidate replacement = {
+        UINT32_C(0x800979c8), UINT32_C(0x8006faf0), 180422u,
+        UINT32_C(0x800979cc),
+    };
+    CPUState cpu = {
+        .read_half = world_read_half,
+        .read_byte = world_read_byte,
+    };
+    XgRenderVramResourceSnapshot snapshot = {0};
+    XgSemanticResourceRef texture = {0};
+    uint64_t artifact_generation;
+    uint64_t completed_loaders;
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    cpu.gpr[8] = UINT32_C(0x1200);
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8002bc10), UINT32_C(0x34021200)));
+    xg_render_vram_resources_snapshot(&snapshot);
+    CHECK(!snapshot.loader_active && snapshot.completed_loaders == 0u);
+
+    note_matching_runtime_variant_candidate();
+    artifact_generation = psx_xg_render_auth_runtime_test_artifact_generation();
+    CHECK(artifact_generation != 0u);
+    memset(world_memory, 0, sizeof(world_memory));
+    world_store_half(rect, 512u);
+    world_store_half(rect + 2u, 320u);
+    world_store_half(rect + 4u, 8u);
+    world_store_half(rect + 6u, 2u);
+    for (uint32_t index = 0u; index < 8u * 2u * 2u; ++index)
+        world_memory[payload - WORLD_MEMORY_BASE + index] =
+            (uint8_t)(index + 41u);
+
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8002bc10), UINT32_C(0x34021200)));
+    cpu.gpr[4] = rect;
+    cpu.gpr[5] = payload;
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8002be14), UINT32_C(0x0c011225)));
+    cpu.gpr[2] = 0u;
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8002be5c), UINT32_C(0x1c40002a)));
+    CHECK(xg_render_vram_resources_lookup(
+        XG_RENDER_RESOURCE_TEXTURE, 512u, 320u, 8u, 2u, &texture));
+    CHECK(resource_ref_has_artifact_provenance(
+        &texture, artifact_generation));
+    xg_render_vram_resources_snapshot(&snapshot);
+    completed_loaders = snapshot.completed_loaders;
+
+    cpu.gpr[8] = UINT32_C(0x1200);
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8002bff8), UINT32_C(0x34021200)));
+    set_candidate_provenance(&replacement, UINT32_C(0x8006f000), 183222u,
+                             UINT32_C(0x082b6ba5));
+    psx_xg_render_auth_note_artifact_candidate(&replacement);
+    CHECK(psx_xg_render_auth_runtime_test_artifact_generation() !=
+          artifact_generation);
+    world_store_half(rect, 544u);
+    cpu.gpr[4] = rect;
+    cpu.gpr[5] = payload;
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8002c1fc), UINT32_C(0x0c011225)));
+    cpu.gpr[2] = 0u;
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8002c24c), UINT32_C(0x1c400024)));
+    CHECK(!xg_render_vram_resources_lookup(
+        XG_RENDER_RESOURCE_TEXTURE, 544u, 320u, 8u, 2u, &texture));
+    xg_render_vram_resources_snapshot(&snapshot);
+    CHECK(!snapshot.loader_active);
+    CHECK(snapshot.completed_loaders == completed_loaders);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_variant_tim_publication_uses_stable_artifact_receipt(void) {
+    const uint32_t rect = WORLD_MEMORY_BASE;
+    const uint32_t clut_payload = WORLD_MEMORY_BASE + 0x1000u;
+    const uint32_t image_payload = WORLD_MEMORY_BASE + 0x1100u;
+    PsxXgRenderAuthCandidate replacement = {
+        UINT32_C(0x800979c8), UINT32_C(0x8006faf0), 180422u,
+        UINT32_C(0x800979cc),
+    };
+    CPUState cpu = {
+        .read_half = world_read_half,
+        .read_byte = world_read_byte,
+    };
+    XgRenderVramResourceSnapshot snapshot = {0};
+    XgSemanticResourceRef clut = {0};
+    XgSemanticResourceRef texture = {0};
+    uint64_t artifact_generation;
+    uint64_t completed_loaders;
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    cpu.gpr[4] = rect;
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80070340), UINT32_C(0x27bdffb0)));
+    xg_render_vram_resources_snapshot(&snapshot);
+    CHECK(!snapshot.loader_active && snapshot.completed_loaders == 0u);
+
+    note_matching_runtime_variant_candidate();
+    artifact_generation = psx_xg_render_auth_runtime_test_artifact_generation();
+    CHECK(artifact_generation != 0u);
+    memset(world_memory, 0, sizeof(world_memory));
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80070340), UINT32_C(0x27bdffb0)));
+    world_store_half(rect, 256u);
+    world_store_half(rect + 2u, 240u);
+    world_store_half(rect + 4u, 16u);
+    world_store_half(rect + 6u, 1u);
+    for (uint32_t index = 0u; index < 16u * 2u; ++index)
+        world_memory[clut_payload - WORLD_MEMORY_BASE + index] =
+            (uint8_t)(index + 61u);
+    cpu.gpr[5] = clut_payload;
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80070414), UINT32_C(0x0c011225)));
+    world_store_half(rect, 640u);
+    world_store_half(rect + 2u, 256u);
+    world_store_half(rect + 4u, 4u);
+    world_store_half(rect + 6u, 2u);
+    for (uint32_t index = 0u; index < 4u * 2u * 2u; ++index)
+        world_memory[image_payload - WORLD_MEMORY_BASE + index] =
+            (uint8_t)(index + 81u);
+    cpu.gpr[5] = image_payload;
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8007044c), UINT32_C(0x0c011225)));
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x80070480), UINT32_C(0x03e00008)));
+    CHECK(xg_render_vram_resources_lookup(
+        XG_RENDER_RESOURCE_CLUT, 256u, 240u, 16u, 1u, &clut));
+    CHECK(xg_render_vram_resources_lookup(
+        XG_RENDER_RESOURCE_TEXTURE, 640u, 256u, 4u, 2u, &texture));
+    CHECK(resource_ref_has_artifact_provenance(&clut, artifact_generation));
+    CHECK(resource_ref_has_artifact_provenance(&texture, artifact_generation));
+    xg_render_vram_resources_snapshot(&snapshot);
+    completed_loaders = snapshot.completed_loaders;
+
+    cpu.gpr[4] = rect;
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x800771f8), UINT32_C(0x27bdffd0)));
+    set_candidate_provenance(&replacement, UINT32_C(0x8006f000), 183222u,
+                             UINT32_C(0x082b6ba5));
+    psx_xg_render_auth_note_artifact_candidate(&replacement);
+    CHECK(psx_xg_render_auth_runtime_test_artifact_generation() !=
+          artifact_generation);
+    world_store_half(rect, 672u);
+    cpu.gpr[5] = clut_payload;
+    CHECK(xg_render_runtime_composition_observe_dispatch(
+              &cpu, UINT32_C(0x80097ac8), UINT32_C(0x0c011225)) ==
+          XG_RENDER_RUNTIME_COMPOSITION_OBSERVED);
+    CHECK(!xg_render_vram_resources_lookup(
+        XG_RENDER_RESOURCE_CLUT, 672u, 240u, 16u, 1u, &clut));
+    xg_render_vram_resources_snapshot(&snapshot);
+    CHECK(!snapshot.loader_active);
+    CHECK(snapshot.completed_loaders == completed_loaders);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_gpu_upload_commit_publishes_vram_mutation(void) {
+    const uint16_t pixels[] = {
+        UINT16_C(0x1122), UINT16_C(0x3344),
+        UINT16_C(0x5566), UINT16_C(0x7788),
+    };
+    XgRenderVramJournalSnapshot before = {0};
+    XgRenderVramJournalSnapshot after = {0};
+    uint8_t *checkpoint;
+    size_t checkpoint_size;
+    GpuVramEvent event = {
+        .operation = GPU_VRAM_EVENT_SCANOUT,
+        .source_x = 320u,
+        .source_y = 16u,
+        .width = 2u,
+        .height = 2u,
+        .pixel_count = 4u,
+        .mutation_serial = 99u,
+    };
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    xg_render_vram_journal_snapshot(&before);
+    CHECK(psx_xg_render_auth_note_vram_upload(
+        17u, 1234u, 1023u, 511u, 2u, 2u,
+        pixels, sizeof(pixels) / sizeof(pixels[0])));
+    xg_render_vram_journal_snapshot(&after);
+    CHECK(after.mutation_serial == before.mutation_serial + 1u);
+    CHECK(after.completed_transfers == before.completed_transfers + 1u);
+    CHECK(after.active_transfers == 0u);
+    CHECK(psx_xg_render_auth_note_vram_readback_digest(
+        17u, 1235u, 1023u, 511u, 2u, 2u,
+        sizeof(pixels) / sizeof(pixels[0]), UINT64_C(0x123456789abcdef0)));
+    xg_render_vram_journal_snapshot(&before);
+    CHECK(before.event_serial == after.event_serial + 1u);
+    CHECK(before.mutation_serial == after.mutation_serial);
+    CHECK(before.completed_transfers == after.completed_transfers + 1u);
+    CHECK(before.readback_transfers == after.readback_transfers + 1u);
+    CHECK(psx_xg_render_auth_note_vram_move(
+        17u, 1236u, 10u, 20u, 2u, 2u,
+        pixels, sizeof(pixels) / sizeof(pixels[0])));
+    xg_render_vram_journal_snapshot(&after);
+    CHECK(after.mutation_serial == before.mutation_serial + 1u);
+    CHECK(after.completed_transfers == before.completed_transfers + 1u);
+    CHECK(psx_xg_render_auth_note_vram_clear(
+        17u, 1237u, 16u, 511u, 2u, 2u,
+        pixels, sizeof(pixels) / sizeof(pixels[0])));
+    xg_render_vram_journal_snapshot(&before);
+    CHECK(before.mutation_serial == after.mutation_serial + 1u);
+    CHECK(before.completed_transfers == after.completed_transfers + 1u);
+    CHECK(!psx_xg_render_auth_note_vram_upload(
+        17u, 1238u, 0u, 0u, 2u, 2u, pixels, 3u));
+    xg_render_vram_journal_snapshot(&after);
+    CHECK(after.mutation_serial == before.mutation_serial);
+    CHECK(after.completed_transfers == before.completed_transfers);
+    CHECK(psx_xg_render_auth_note_vram_event(18u, 1239u, &event));
+    xg_render_vram_journal_snapshot(&before);
+    CHECK(before.event_serial == after.event_serial + 1u);
+    CHECK(before.mutation_serial == after.mutation_serial);
+    CHECK(before.scanouts == after.scanouts + 1u);
+    event = (GpuVramEvent){
+        .operation = GPU_VRAM_EVENT_RESTORE,
+        .width = 1024u,
+        .height = 512u,
+        .pixel_count = 1024u * 512u,
+        .mutation_serial = 7u,
+    };
+    CHECK(psx_xg_render_auth_note_vram_event(19u, 1240u, &event));
+    xg_render_vram_journal_snapshot(&after);
+    CHECK(after.event_serial == before.event_serial + 1u);
+    CHECK(after.mutation_serial == before.mutation_serial + 1u);
+    CHECK(after.completed_transfers == 1u);
+    CHECK(after.restorations == 1u);
+    checkpoint_size = psx_xg_render_auth_checkpoint_size();
+    CHECK(checkpoint_size != 0u);
+    checkpoint = (uint8_t *)malloc(checkpoint_size);
+    CHECK(checkpoint != NULL);
+    CHECK(psx_xg_render_auth_checkpoint_write(checkpoint, checkpoint_size));
+    checkpoint[0] ^= 1u;
+    CHECK(!psx_xg_render_auth_checkpoint_restore(
+        checkpoint, checkpoint_size));
+    checkpoint[0] ^= 1u;
+    CHECK(psx_xg_render_auth_checkpoint_restore(checkpoint, checkpoint_size));
+    free(checkpoint);
+    return 1;
+}
+
+static int test_mdec_upload_publishes_authenticated_generated_surface(void) {
+    uint16_t pixels15[] = {
+        UINT16_C(0x1111), UINT16_C(0x2222),
+        UINT16_C(0x3333), UINT16_C(0x4444),
+    };
+    const uint16_t pixels24[] = {
+        UINT16_C(0x0201), UINT16_C(0x0403), UINT16_C(0x0605),
+    };
+    GpuVramEvent event = {
+        .operation = GPU_VRAM_EVENT_UPLOAD,
+        .destination_x = 320u,
+        .destination_y = 32u,
+        .width = 2u,
+        .height = 2u,
+        .pixels = pixels15,
+        .pixel_count = 4u,
+        .payload_source = GPU_VRAM_PAYLOAD_SOURCE_MDEC_DMA1,
+        .payload_format = 3u,
+        .payload_source_receipt = 7u,
+    };
+    XgRenderSurfacePublication publications[2];
+    XgRenderSurfaceGraphSnapshot graph;
+    XgRenderResourceDiagnostics resources_before;
+    XgRenderResourceDiagnostics resources_after;
+    XgRenderResourceProvenance stale_provenance;
+    XgRenderResourceView view;
+    size_t publication_count = 0u;
+    uint64_t first_generation;
+    uint64_t owner_generation;
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    xg_render_surface_graph_reset();
+    CHECK(psx_xg_render_auth_note_vram_event(21u, 2000u, &event));
+    xg_render_surface_graph_snapshot(&graph);
+    CHECK(graph.node_count == 1u && graph.publications == 1u);
+    CHECK(xg_render_surface_graph_copy_publications(
+              publications, 2u, &publication_count) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(publication_count == 1u);
+    CHECK(publications[0].kind == XG_RENDER_RESOURCE_GENERATED_SURFACE);
+    CHECK(publications[0].format == XG_RENDER_SURFACE_VRAM16);
+    CHECK(publications[0].width == 2u && publications[0].height == 2u);
+    CHECK(xg_render_resource_view(publications[0].handle, &view) ==
+          XG_RENDER_RESOURCE_OK);
+    CHECK(view.byte_count == sizeof(pixels15));
+    CHECK(view.provenance.kind == XG_RENDER_RESOURCE_PROVENANCE_SOURCE);
+    CHECK(view.provenance.receipt == 7u && !view.provenance.synthetic);
+    first_generation = publications[0].handle.generation;
+    stale_provenance = publications[0].provenance;
+    owner_generation = publications[0].owner_generation;
+    xg_render_resource_repository_diagnostics(&resources_before);
+
+    pixels15[0] ^= UINT16_C(0x001f);
+    event.payload_source_receipt++;
+    CHECK(psx_xg_render_auth_note_vram_event(21u, 2001u, &event));
+    CHECK(xg_render_surface_graph_copy_publications(
+              publications, 2u, &publication_count) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(publication_count == 1u);
+    CHECK(publications[0].handle.generation != first_generation);
+    CHECK(xg_render_resource_view(publications[0].handle, &view) ==
+          XG_RENDER_RESOURCE_OK);
+    CHECK(view.provenance.kind == XG_RENDER_RESOURCE_PROVENANCE_SOURCE);
+    CHECK(view.provenance.receipt == 8u && !view.provenance.synthetic);
+    xg_render_resource_repository_diagnostics(&resources_after);
+    CHECK(resources_after.live_capabilities ==
+          resources_before.live_capabilities);
+    CHECK(resources_after.capability_slots == resources_before.capability_slots);
+    CHECK(xg_render_resource_capability_validate(
+              &stale_provenance, XG_RENDER_RESOURCE_OWNER_SCENE,
+              owner_generation, NULL) != XG_RENDER_RESOURCE_CAPABILITY_OK);
+
+    event = (GpuVramEvent){
+        .operation = GPU_VRAM_EVENT_UPLOAD,
+        .destination_x = 400u,
+        .destination_y = 64u,
+        .width = 3u,
+        .height = 1u,
+        .pixels = pixels24,
+        .pixel_count = 3u,
+        .payload_source = GPU_VRAM_PAYLOAD_SOURCE_MDEC_DMA1,
+        .payload_format = 2u,
+        .payload_source_receipt = 9u,
+    };
+    CHECK(psx_xg_render_auth_note_vram_event(21u, 2002u, &event));
+    CHECK(xg_render_surface_graph_copy_publications(
+              publications, 2u, &publication_count) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(publication_count == 2u);
+    CHECK((publications[0].format == XG_RENDER_SURFACE_DEPTH24 &&
+           publications[0].width == 2u) ||
+          (publications[1].format == XG_RENDER_SURFACE_DEPTH24 &&
+           publications[1].width == 2u));
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_mdec_upload_retains_two_max_width_display_pages(void) {
+    uint16_t pixels[24] = {0};
+    GpuVramEvent event = {
+        .operation = GPU_VRAM_EVENT_UPLOAD,
+        .width = 24u,
+        .height = 1u,
+        .pixels = pixels,
+        .pixel_count = 24u,
+        .payload_source = GPU_VRAM_PAYLOAD_SOURCE_MDEC_DMA1,
+        .payload_format = 2u,
+        .payload_source_receipt = 1u,
+    };
+    XgRenderSurfaceGraphSnapshot graph;
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    xg_render_surface_graph_reset();
+    for (uint32_t page = 0u; page < 2u; ++page) {
+        event.destination_y = (uint16_t)(page * 240u);
+        for (uint32_t strip = 0u; strip < 40u; ++strip) {
+            event.destination_x = (uint16_t)(strip * event.width);
+            event.payload_source_receipt++;
+            CHECK(psx_xg_render_auth_note_vram_event(
+                21u, 2000u + page * 40u + strip, &event));
+        }
+    }
+    xg_render_surface_graph_snapshot(&graph);
+    CHECK(graph.node_count == 80u);
+    CHECK(graph.publications == 80u);
+    CHECK(graph.rejected_operations == 0u);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_mdec_scanout_publishes_matching_framebuffer_edges(void) {
+    const uint16_t pixels15[] = {
+        UINT16_C(0x1111), UINT16_C(0x2222),
+        UINT16_C(0x3333), UINT16_C(0x4444),
+    };
+    const uint16_t pixels24[] = {
+        UINT16_C(0x0605), UINT16_C(0x0807), UINT16_C(0x0a09),
+    };
+    uint16_t framebuffer15[16] = {0};
+    uint16_t framebuffer24[6] = {0};
+    GpuVramEvent event = {
+        .operation = GPU_VRAM_EVENT_UPLOAD,
+        .destination_x = 321u,
+        .destination_y = 33u,
+        .width = 2u,
+        .height = 2u,
+        .pixels = pixels15,
+        .pixel_count = 4u,
+        .payload_source = GPU_VRAM_PAYLOAD_SOURCE_MDEC_DMA1,
+        .payload_format = 3u,
+        .payload_source_receipt = 11u,
+    };
+    XgRenderSurfacePublication publications[4];
+    XgSemanticSurfaceEdge edges[4];
+    XgRenderMovieFramePublication movie_publication;
+    XgRenderMovieDiagnostics movie_diagnostics;
+    XgRenderResourceView framebuffer_view;
+    size_t publication_count = 0u;
+    size_t edge_count = 0u;
+    uint64_t framebuffer_generation = 0u;
+    uint64_t movie_generation = 0u;
+    uint64_t standalone_movie_id;
+    uint64_t mismatched_owner_movie_id;
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    xg_render_surface_graph_reset();
+    xg_render_movie_publisher_reset();
+    CHECK(psx_xg_render_auth_note_vram_event(22u, 2100u, &event));
+    framebuffer15[5] = pixels15[0];
+    framebuffer15[6] = pixels15[1];
+    framebuffer15[9] = pixels15[2];
+    framebuffer15[10] = pixels15[3];
+    event = (GpuVramEvent){
+        .operation = GPU_VRAM_EVENT_SCANOUT,
+        .source_x = 320u,
+        .source_y = 32u,
+        .width = 4u,
+        .height = 4u,
+        .pixels = framebuffer15,
+        .pixel_count = 16u,
+        .mutation_serial = 101u,
+        .payload_format = 3u,
+        .movie_frame_number = 7u,
+        .movie_frame_width = 4u,
+        .movie_frame_height = 4u,
+        .movie_frame_complete = true,
+        .movie_owner_kind = GPU_MOVIE_OWNER_STANDALONE,
+        .movie_owner_receipt = 101u,
+    };
+    CHECK(psx_xg_render_auth_note_vram_event(22u, 2101u, &event));
+    CHECK(xg_render_surface_graph_copy_publications(
+              publications, 4u, &publication_count) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(publication_count == 2u);
+    for (size_t index = 0u; index < publication_count; ++index) {
+        if (publications[index].kind == XG_RENDER_RESOURCE_FRAMEBUFFER) {
+            CHECK(publications[index].format == XG_RENDER_SURFACE_VRAM16);
+            CHECK(publications[index].width == 4u &&
+                  publications[index].height == 4u);
+            framebuffer_generation = publications[index].handle.generation;
+            CHECK(xg_render_resource_view(
+                      publications[index].handle, &framebuffer_view) ==
+                  XG_RENDER_RESOURCE_OK);
+            CHECK(framebuffer_view.provenance.kind ==
+                  XG_RENDER_RESOURCE_PROVENANCE_SOURCE);
+            CHECK(framebuffer_view.provenance.receipt == 101u &&
+                  !framebuffer_view.provenance.synthetic);
+        }
+    }
+    CHECK(framebuffer_generation != 0u);
+    CHECK(xg_render_surface_graph_copy_edges(edges, 2u, &edge_count) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(edge_count == 1u);
+    CHECK(edges[0].kind == XG_SEMANTIC_SURFACE_MOVIE);
+    CHECK(edges[0].target_generation == framebuffer_generation);
+    xg_render_movie_publisher_diagnostics(&movie_diagnostics);
+    CHECK(movie_diagnostics.complete_frames == 0u);
+
+    framebuffer15[5] ^= UINT16_C(0x0001);
+    event.mutation_serial = 102u;
+    CHECK(psx_xg_render_auth_note_vram_event(22u, 2102u, &event));
+    CHECK(xg_render_surface_graph_copy_edges(edges, 2u, &edge_count) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(edge_count == 0u);
+
+    xg_render_surface_graph_reset();
+    event = (GpuVramEvent){
+        .operation = GPU_VRAM_EVENT_UPLOAD,
+        .destination_x = 401u,
+        .destination_y = 64u,
+        .width = 3u,
+        .height = 1u,
+        .pixels = pixels24,
+        .pixel_count = 3u,
+        .payload_source = GPU_VRAM_PAYLOAD_SOURCE_MDEC_DMA1,
+        .payload_format = 2u,
+        .payload_source_receipt = 12u,
+    };
+    CHECK(psx_xg_render_auth_note_vram_event(22u, 2103u, &event));
+    memcpy(framebuffer24 + 1u, pixels24, sizeof(pixels24));
+    event = (GpuVramEvent){
+        .operation = GPU_VRAM_EVENT_SCANOUT,
+        .source_x = 400u,
+        .source_y = 64u,
+        .width = 6u,
+        .height = 1u,
+        .pixels = framebuffer24,
+        .pixel_count = 6u,
+        .mutation_serial = 103u,
+        .payload_format = 2u,
+        .movie_frame_number = 8u,
+        .movie_frame_width = 4u,
+        .movie_frame_height = 1u,
+        .movie_frame_complete = true,
+        .movie_owner_kind = GPU_MOVIE_OWNER_FIELD,
+        .movie_owner_receipt = 102u,
+    };
+    CHECK(psx_xg_render_auth_note_vram_event(22u, 2104u, &event));
+    CHECK(xg_render_surface_graph_copy_publications(
+              publications, 4u, &publication_count) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(publication_count == 2u);
+    framebuffer_generation = 0u;
+    for (size_t index = 0u; index < publication_count; ++index) {
+        if (publications[index].kind == XG_RENDER_RESOURCE_FRAMEBUFFER) {
+            CHECK(publications[index].format == XG_RENDER_SURFACE_DEPTH24);
+            CHECK(publications[index].width == 4u &&
+                  publications[index].height == 1u);
+            framebuffer_generation = publications[index].handle.generation;
+        }
+    }
+    CHECK(framebuffer_generation != 0u);
+    CHECK(xg_render_surface_graph_copy_edges(edges, 2u, &edge_count) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(edge_count == 1u);
+    CHECK(edges[0].kind == XG_SEMANTIC_SURFACE_MOVIE);
+    CHECK(edges[0].target_generation == framebuffer_generation);
+
+    xg_render_surface_graph_reset();
+    event = (GpuVramEvent){
+        .operation = GPU_VRAM_EVENT_UPLOAD,
+        .destination_x = 320u,
+        .destination_y = 32u,
+        .width = 2u,
+        .height = 1u,
+        .pixels = pixels15,
+        .pixel_count = 2u,
+        .payload_source = GPU_VRAM_PAYLOAD_SOURCE_MDEC_DMA1,
+        .payload_format = 3u,
+        .payload_source_receipt = 13u,
+    };
+    CHECK(psx_xg_render_auth_note_vram_event(22u, 2105u, &event));
+    event.destination_y = 33u;
+    event.pixels = pixels15 + 2u;
+    event.payload_source_receipt = 14u;
+    CHECK(psx_xg_render_auth_note_vram_event(22u, 2106u, &event));
+    event = (GpuVramEvent){
+        .operation = GPU_VRAM_EVENT_SCANOUT,
+        .source_x = 320u,
+        .source_y = 32u,
+        .width = 2u,
+        .height = 2u,
+        .pixels = pixels15,
+        .pixel_count = 4u,
+        .mutation_serial = 104u,
+        .payload_format = 3u,
+        .movie_frame_number = 0u,
+        .movie_frame_width = 1u,
+        .movie_frame_height = 2u,
+        .movie_frame_complete = true,
+        .movie_owner_kind = GPU_MOVIE_OWNER_STANDALONE,
+        .movie_owner_receipt = 201u,
+    };
+    CHECK(psx_xg_render_auth_note_vram_event(22u, 2107u, &event));
+    xg_render_movie_publisher_diagnostics(&movie_diagnostics);
+    CHECK(movie_diagnostics.complete_frames == 0u);
+    event.mutation_serial = 105u;
+    event.movie_frame_width = 2u;
+    event.movie_owner_kind = (GpuMovieOwnerKind)99;
+    CHECK(psx_xg_render_auth_note_vram_event(22u, 2108u, &event));
+    xg_render_movie_publisher_diagnostics(&movie_diagnostics);
+    CHECK(movie_diagnostics.complete_frames == 0u);
+    event.mutation_serial = 106u;
+    event.movie_owner_kind = GPU_MOVIE_OWNER_STANDALONE;
+    event.movie_owner_receipt = 0u;
+    CHECK(psx_xg_render_auth_note_vram_event(22u, 2109u, &event));
+    xg_render_movie_publisher_diagnostics(&movie_diagnostics);
+    CHECK(movie_diagnostics.complete_frames == 0u);
+    event.mutation_serial = 107u;
+    event.movie_owner_receipt = 201u;
+    CHECK(psx_xg_render_auth_note_vram_event(22u, 2110u, &event));
+    xg_render_movie_publisher_diagnostics(&movie_diagnostics);
+    CHECK(movie_diagnostics.complete_frames == 1u);
+    CHECK(xg_render_movie_frame_hold(&movie_publication) == XG_RENDER_MOVIE_OK);
+    CHECK(movie_publication.width == 2u && movie_publication.height == 2u);
+    CHECK(!movie_publication.depth24);
+    CHECK(movie_publication.owner_kind ==
+          XG_RENDER_MOVIE_OWNER_STANDALONE);
+    CHECK(movie_publication.owner_receipt == 201u);
+    standalone_movie_id = movie_publication.surface.resource_id;
+    CHECK(xg_render_surface_graph_copy_publications(
+              publications, 4u, &publication_count) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(publication_count == 4u);
+    framebuffer_generation = 0u;
+    for (size_t index = 0u; index < publication_count; ++index) {
+        if (publications[index].kind == XG_RENDER_RESOURCE_FRAMEBUFFER)
+            framebuffer_generation = publications[index].handle.generation;
+        if (publications[index].kind == XG_RENDER_RESOURCE_MOVIE_FRAME) {
+            movie_generation = publications[index].handle.generation;
+            CHECK(publications[index].handle.resource_id == standalone_movie_id);
+            CHECK(publications[index].owner_kind ==
+                  XG_RENDER_RESOURCE_OWNER_SOURCE);
+            CHECK(publications[index].owner_generation != 0u);
+            CHECK(publications[index].provenance.kind ==
+                  XG_RENDER_RESOURCE_PROVENANCE_SOURCE);
+            CHECK(publications[index].provenance.receipt == 201u);
+        }
+    }
+    CHECK(framebuffer_generation != 0u && movie_generation != 0u);
+    CHECK(movie_generation == movie_publication.surface.generation);
+    CHECK(xg_render_surface_graph_copy_edges(edges, 4u, &edge_count) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(edge_count == 3u);
+    CHECK(edges[0].target_generation == framebuffer_generation);
+    CHECK(edges[1].target_generation == framebuffer_generation);
+    CHECK(edges[2].kind == XG_SEMANTIC_SURFACE_MOVIE);
+    CHECK(edges[2].source_generation == framebuffer_generation);
+    CHECK(edges[2].target_generation == movie_generation);
+
+    event.mutation_serial = 108u;
+    event.movie_owner_kind = GPU_MOVIE_OWNER_FIELD;
+    event.movie_owner_receipt = 201u;
+    CHECK(psx_xg_render_auth_note_vram_event(22u, 2111u, &event));
+    xg_render_movie_publisher_diagnostics(&movie_diagnostics);
+    CHECK(movie_diagnostics.complete_frames == 2u);
+    CHECK(xg_render_movie_frame_hold(&movie_publication) == XG_RENDER_MOVIE_OK);
+    CHECK(movie_publication.owner_kind == XG_RENDER_MOVIE_OWNER_FIELD);
+    CHECK(movie_publication.owner_receipt == 201u);
+    CHECK(movie_publication.surface.resource_id != standalone_movie_id);
+    mismatched_owner_movie_id = movie_publication.surface.resource_id;
+
+    event.mutation_serial = 109u;
+    event.movie_owner_receipt = 202u;
+    CHECK(psx_xg_render_auth_note_vram_event(22u, 2112u, &event));
+    xg_render_movie_publisher_diagnostics(&movie_diagnostics);
+    CHECK(movie_diagnostics.complete_frames == 3u);
+    CHECK(xg_render_movie_frame_hold(&movie_publication) == XG_RENDER_MOVIE_OK);
+    CHECK(movie_publication.owner_kind == XG_RENDER_MOVIE_OWNER_FIELD);
+    CHECK(movie_publication.owner_receipt == 202u);
+    CHECK(movie_publication.surface.resource_id != mismatched_owner_movie_id);
+
+    xg_render_surface_graph_reset();
+    event = (GpuVramEvent){
+        .operation = GPU_VRAM_EVENT_UPLOAD,
+        .destination_x = 400u,
+        .destination_y = 64u,
+        .width = 3u,
+        .height = 1u,
+        .pixels = pixels24,
+        .pixel_count = 3u,
+        .payload_source = GPU_VRAM_PAYLOAD_SOURCE_MDEC_DMA1,
+        .payload_format = 2u,
+        .payload_source_receipt = 15u,
+    };
+    CHECK(psx_xg_render_auth_note_vram_event(22u, 2108u, &event));
+    event = (GpuVramEvent){
+        .operation = GPU_VRAM_EVENT_SCANOUT,
+        .source_x = 400u,
+        .source_y = 64u,
+        .width = 3u,
+        .height = 1u,
+        .pixels = pixels24,
+        .pixel_count = 3u,
+        .mutation_serial = 110u,
+        .payload_format = 2u,
+        .movie_frame_number = 1u,
+        .movie_frame_width = 2u,
+        .movie_frame_height = 1u,
+        .movie_frame_complete = true,
+        .movie_owner_kind = GPU_MOVIE_OWNER_FIELD,
+        .movie_owner_receipt = 203u,
+    };
+    CHECK(psx_xg_render_auth_note_vram_event(22u, 2114u, &event));
+    xg_render_movie_publisher_diagnostics(&movie_diagnostics);
+    CHECK(movie_diagnostics.complete_frames == 4u);
+    CHECK(xg_render_movie_frame_hold(&movie_publication) == XG_RENDER_MOVIE_OK);
+    CHECK(movie_publication.width == 2u && movie_publication.height == 1u);
+    CHECK(movie_publication.depth24);
+    CHECK(movie_publication.owner_kind == XG_RENDER_MOVIE_OWNER_FIELD);
+    CHECK(movie_publication.owner_receipt == 203u);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_movie_publication_transaction_rolls_back_every_failure(void) {
+    uint16_t pixels[] = {
+        UINT16_C(0x1111), UINT16_C(0x2222),
+        UINT16_C(0x3333), UINT16_C(0x4444),
+    };
+    GpuVramEvent upload = {
+        .operation = GPU_VRAM_EVENT_UPLOAD,
+        .destination_x = 320u,
+        .destination_y = 32u,
+        .width = 2u,
+        .height = 1u,
+        .pixels = pixels,
+        .pixel_count = 2u,
+        .payload_source = GPU_VRAM_PAYLOAD_SOURCE_MDEC_DMA1,
+        .payload_format = 3u,
+        .payload_source_receipt = 301u,
+    };
+    GpuVramEvent scanout = {
+        .operation = GPU_VRAM_EVENT_SCANOUT,
+        .source_x = 320u,
+        .source_y = 32u,
+        .width = 2u,
+        .height = 2u,
+        .pixels = pixels,
+        .pixel_count = 4u,
+        .mutation_serial = 401u,
+        .payload_format = 3u,
+        .movie_frame_number = 1u,
+        .movie_frame_width = 2u,
+        .movie_frame_height = 2u,
+        .movie_frame_complete = true,
+        .movie_owner_kind = GPU_MOVIE_OWNER_STANDALONE,
+        .movie_owner_receipt = 501u,
+    };
+    XgRenderSurfacePublication before_publications[4];
+    XgRenderSurfacePublication after_publications[4];
+    XgSemanticSurfaceEdge edges[XG_RENDER_SURFACE_GRAPH_EDGE_CAPACITY];
+    XgRenderSurfaceGraphSnapshot graph_before;
+    XgRenderSurfaceGraphSnapshot graph_after;
+    XgRenderMovieDiagnostics movie_before;
+    XgRenderMovieDiagnostics movie_after;
+    XgRenderMovieFramePublication movie_publication;
+    XgRenderResourceDiagnostics resources_before;
+    XgRenderResourceDiagnostics resources_after;
+    XgRenderResourceDiagnostics churn_baseline;
+    XgRenderResourceView movie_view;
+    XgRenderResourceProvenance stale_provenance[4];
+    XgRenderResourceOwnerKind stale_owner_kind[4];
+    uint64_t stale_owner_generation[4];
+    uint8_t *checkpoint;
+    uint8_t *after_checkpoint;
+    size_t checkpoint_size;
+    size_t before_publication_count;
+    size_t after_publication_count;
+    size_t edge_count;
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    xg_render_surface_graph_reset();
+    xg_render_movie_publisher_reset();
+    CHECK(psx_xg_render_auth_note_vram_event(23u, 2200u, &upload));
+    upload.destination_y = 33u;
+    upload.pixels = pixels + 2u;
+    upload.payload_source_receipt++;
+    CHECK(psx_xg_render_auth_note_vram_event(23u, 2201u, &upload));
+    CHECK(xg_render_surface_graph_copy_publications(
+              before_publications, 4u, &before_publication_count) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(before_publication_count == 2u);
+    xg_render_surface_graph_snapshot(&graph_before);
+    xg_render_movie_publisher_diagnostics(&movie_before);
+    xg_render_resource_repository_diagnostics(&resources_before);
+    checkpoint_size = psx_xg_render_auth_checkpoint_size();
+    CHECK(checkpoint_size != 0u);
+    checkpoint = (uint8_t *)malloc(checkpoint_size);
+    after_checkpoint = (uint8_t *)malloc(checkpoint_size);
+    CHECK(checkpoint != NULL && after_checkpoint != NULL);
+    CHECK(psx_xg_render_auth_checkpoint_write(checkpoint, checkpoint_size));
+
+    for (uint32_t failure_after = 0u; failure_after < 5u; ++failure_after) {
+        psx_xg_render_auth_runtime_test_fail_movie_publication_after(
+            failure_after);
+        CHECK(!psx_xg_render_auth_note_vram_event(
+            23u, 2210u + failure_after, &scanout));
+        CHECK(psx_xg_render_auth_checkpoint_size() == checkpoint_size);
+        CHECK(psx_xg_render_auth_checkpoint_write(
+            after_checkpoint, checkpoint_size));
+        CHECK(memcmp(checkpoint, after_checkpoint, checkpoint_size) == 0);
+        xg_render_surface_graph_snapshot(&graph_after);
+        CHECK(graph_after.node_count == graph_before.node_count);
+        CHECK(graph_after.edge_count == graph_before.edge_count);
+        CHECK(graph_after.publications == graph_before.publications);
+        CHECK(graph_after.rejected_operations ==
+              graph_before.rejected_operations);
+        CHECK(xg_render_surface_graph_copy_publications(
+                  after_publications, 4u, &after_publication_count) ==
+              XG_RENDER_SURFACE_GRAPH_OK);
+        CHECK(after_publication_count == before_publication_count);
+        for (size_t index = 0u; index < before_publication_count; ++index) {
+            CHECK(after_publications[index].handle.resource_id ==
+                  before_publications[index].handle.resource_id);
+            CHECK(after_publications[index].handle.generation ==
+                  before_publications[index].handle.generation);
+        }
+        xg_render_movie_publisher_diagnostics(&movie_after);
+        CHECK(memcmp(&movie_after, &movie_before, sizeof(movie_after)) == 0);
+        xg_render_resource_repository_diagnostics(&resources_after);
+        CHECK(resources_after.live_resources == resources_before.live_resources);
+        CHECK(resources_after.retained_resources ==
+              resources_before.retained_resources);
+        CHECK(resources_after.live_capabilities ==
+              resources_before.live_capabilities);
+        CHECK(resources_after.capability_slots ==
+              resources_before.capability_slots);
+    }
+
+    CHECK(psx_xg_render_auth_note_vram_event(23u, 2220u, &scanout));
+    CHECK(xg_render_surface_graph_copy_edges(
+              edges, XG_RENDER_SURFACE_GRAPH_EDGE_CAPACITY, &edge_count) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(edge_count == 3u);
+    CHECK(edges[0].kind == XG_SEMANTIC_SURFACE_MOVIE);
+    CHECK(edges[1].kind == XG_SEMANTIC_SURFACE_MOVIE);
+    CHECK(edges[2].kind == XG_SEMANTIC_SURFACE_MOVIE);
+    CHECK(edges[0].target_surface_id == edges[1].target_surface_id);
+    CHECK(edges[2].source_surface_id == edges[0].target_surface_id);
+    CHECK(xg_render_movie_frame_hold(&movie_publication) == XG_RENDER_MOVIE_OK);
+    CHECK(xg_render_resource_view(movie_publication.surface, &movie_view) ==
+          XG_RENDER_RESOURCE_OK);
+    CHECK(movie_view.byte_count == sizeof(pixels));
+    CHECK(memcmp(movie_view.bytes, pixels, sizeof(pixels)) == 0);
+    CHECK(xg_render_surface_graph_copy_publications(
+              after_publications, 4u, &after_publication_count) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(after_publication_count == 4u);
+    for (size_t index = 0u; index < after_publication_count; ++index) {
+        stale_provenance[index] = after_publications[index].provenance;
+        stale_owner_kind[index] = after_publications[index].owner_kind;
+        stale_owner_generation[index] =
+            after_publications[index].owner_generation;
+    }
+    xg_render_resource_repository_diagnostics(&churn_baseline);
+    for (uint32_t iteration = 0u;
+         iteration < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY + 1u;
+         ++iteration) {
+        pixels[iteration % 4u] ^= UINT16_C(0x001f);
+        upload.destination_y = 32u;
+        upload.pixels = pixels;
+        upload.payload_source_receipt = UINT64_C(1000) + iteration * 2u;
+        CHECK(psx_xg_render_auth_note_vram_event(
+            23u, UINT64_C(3000) + iteration * 3u, &upload));
+        upload.destination_y = 33u;
+        upload.pixels = pixels + 2u;
+        upload.payload_source_receipt++;
+        CHECK(psx_xg_render_auth_note_vram_event(
+            23u, UINT64_C(3001) + iteration * 3u, &upload));
+        scanout.pixels = pixels;
+        scanout.mutation_serial = UINT64_C(10000) + iteration;
+        CHECK(psx_xg_render_auth_note_vram_event(
+            23u, UINT64_C(3002) + iteration * 3u, &scanout));
+        xg_render_resource_repository_diagnostics(&resources_after);
+        CHECK(resources_after.live_capabilities ==
+              churn_baseline.live_capabilities);
+        CHECK(resources_after.capability_slots ==
+              churn_baseline.capability_slots);
+    }
+    for (size_t index = 0u; index < after_publication_count; ++index)
+        CHECK(xg_render_resource_capability_validate(
+                  &stale_provenance[index], stale_owner_kind[index],
+                  stale_owner_generation[index], NULL) !=
+              XG_RENDER_RESOURCE_CAPABILITY_OK);
+    free(after_checkpoint);
+    free(checkpoint);
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    xg_render_surface_graph_reset();
+    xg_render_movie_publisher_reset();
+    upload.destination_y = 32u;
+    upload.pixels = pixels;
+    upload.payload_source_receipt = 601u;
+    CHECK(psx_xg_render_auth_note_vram_event(24u, 2300u, &upload));
+    upload.destination_y = 33u;
+    upload.pixels = pixels + 2u;
+    upload.payload_source_receipt++;
+    CHECK(psx_xg_render_auth_note_vram_event(24u, 2301u, &upload));
+    CHECK(xg_render_surface_graph_copy_publications(
+              before_publications, 4u, &before_publication_count) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(before_publication_count == 2u);
+    {
+        const XgSemanticSurfaceEdge capacity_edge = {
+            .source_surface_id = before_publications[0].handle.resource_id,
+            .source_generation = before_publications[0].handle.generation,
+            .target_surface_id = before_publications[1].handle.resource_id,
+            .target_generation = before_publications[1].handle.generation,
+            .kind = XG_SEMANTIC_SURFACE_SAMPLE,
+            .width = 1u,
+            .height = 1u,
+        };
+        for (uint32_t index = 0u;
+             index < XG_RENDER_SURFACE_GRAPH_EDGE_CAPACITY; ++index)
+            CHECK(xg_render_surface_graph_append_edge(&capacity_edge) ==
+                  XG_RENDER_SURFACE_GRAPH_OK);
+    }
+    xg_render_surface_graph_snapshot(&graph_before);
+    xg_render_movie_publisher_diagnostics(&movie_before);
+    xg_render_resource_repository_diagnostics(&resources_before);
+    checkpoint_size = psx_xg_render_auth_checkpoint_size();
+    CHECK(checkpoint_size != 0u);
+    checkpoint = (uint8_t *)malloc(checkpoint_size);
+    after_checkpoint = (uint8_t *)malloc(checkpoint_size);
+    CHECK(checkpoint != NULL && after_checkpoint != NULL);
+    CHECK(psx_xg_render_auth_checkpoint_write(checkpoint, checkpoint_size));
+    scanout.mutation_serial = 701u;
+    scanout.movie_owner_receipt = 801u;
+    CHECK(!psx_xg_render_auth_note_vram_event(24u, 2310u, &scanout));
+    CHECK(psx_xg_render_auth_checkpoint_size() == checkpoint_size);
+    CHECK(psx_xg_render_auth_checkpoint_write(
+        after_checkpoint, checkpoint_size));
+    CHECK(memcmp(checkpoint, after_checkpoint, checkpoint_size) == 0);
+    xg_render_surface_graph_snapshot(&graph_after);
+    CHECK(graph_after.node_count == graph_before.node_count);
+    CHECK(graph_after.edge_count == graph_before.edge_count);
+    CHECK(graph_after.publications == graph_before.publications);
+    CHECK(graph_after.rejected_operations == graph_before.rejected_operations);
+    xg_render_movie_publisher_diagnostics(&movie_after);
+    CHECK(memcmp(&movie_after, &movie_before, sizeof(movie_after)) == 0);
+    xg_render_resource_repository_diagnostics(&resources_after);
+    CHECK(resources_after.live_resources == resources_before.live_resources);
+    CHECK(resources_after.retained_resources == resources_before.retained_resources);
+    CHECK(resources_after.live_capabilities ==
+          resources_before.live_capabilities);
+    CHECK(resources_after.capability_slots == resources_before.capability_slots);
+    free(after_checkpoint);
+    free(checkpoint);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_renderer_checkpoint_restores_movie_and_surface_graph(void) {
+    const uint32_t field_rect = WORLD_MEMORY_BASE;
+    const uint32_t field_payload = WORLD_MEMORY_BASE + 0x100u;
+    const uint8_t atlas_bytes[4] = { 51u, 52u, 53u, 54u };
+    const XgRenderGlyphMetric glyph_metric = {
+        .glyph_id = 1u,
+        .width = 4u,
+        .height = 8u,
+        .advance_x = 5,
+    };
+    const uint32_t glyph_id = 1u;
+    const uint8_t generated_bytes[16] = {
+        1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u,
+        9u, 10u, 11u, 12u, 13u, 14u, 15u, 16u,
+    };
+    const uint8_t framebuffer_bytes[8] = {
+        21u, 22u, 23u, 24u, 25u, 26u, 27u, 28u,
+    };
+    const uint8_t movie_complete[8] = {
+        31u, 32u, 33u, 34u, 35u, 36u, 37u, 38u,
+    };
+    const uint8_t movie_partial[4] = { 41u, 42u, 43u, 44u };
+    XgRenderSurfacePublicationDescription generated_description = {
+        .kind = XG_RENDER_RESOURCE_GENERATED_SURFACE,
+        .format = XG_RENDER_SURFACE_RGBA8,
+        .provenance = {
+            .kind = XG_RENDER_RESOURCE_PROVENANCE_SOURCE,
+            .receipt = 701u,
+        },
+        .owner_generation = 77u,
+        .width = 2u,
+        .height = 2u,
+        .descriptor = {
+            .version = XG_RENDER_RESOURCE_DESCRIPTOR_VERSION,
+            .pixel_format = XG_RENDER_RESOURCE_PIXEL_FORMAT_RGBA8,
+            .width = 2u,
+            .height = 2u,
+            .row_pitch = 8u,
+        },
+        .bytes = generated_bytes,
+        .byte_count = sizeof(generated_bytes),
+    };
+    XgRenderSurfacePublicationDescription framebuffer_description = {
+        .kind = XG_RENDER_RESOURCE_FRAMEBUFFER,
+        .format = XG_RENDER_SURFACE_VRAM16,
+        .provenance = {
+            .kind = XG_RENDER_RESOURCE_PROVENANCE_SOURCE,
+            .receipt = 702u,
+        },
+        .owner_generation = 77u,
+        .width = 2u,
+        .height = 2u,
+        .descriptor = {
+            .version = XG_RENDER_RESOURCE_DESCRIPTOR_VERSION,
+            .pixel_format = XG_RENDER_RESOURCE_PIXEL_FORMAT_RGB555,
+            .width = 2u,
+            .height = 2u,
+            .row_pitch = 4u,
+        },
+        .bytes = framebuffer_bytes,
+        .byte_count = sizeof(framebuffer_bytes),
+    };
+    XgRenderMovieFrameDescription movie_description = {
+        .movie_id = UINT64_C(0x5a000001),
+        .owner_kind = XG_RENDER_MOVIE_OWNER_STANDALONE,
+        .owner_receipt = 703u,
+        .owner_generation = 77u,
+        .guest_cycle = 100u,
+        .width = 2u,
+        .height = 2u,
+        .expected_strips = 2u,
+        .byte_count = 8u,
+    };
+    XgRenderResourceImport atlas_import = {
+        .resource_id = 90u,
+        .kind = XG_RENDER_RESOURCE_GLYPH_ATLAS,
+        .owner_kind = XG_RENDER_RESOURCE_OWNER_MODULE,
+        .owner_generation = 9u,
+        .state = XG_RENDER_RESOURCE_NATIVE_OWNED,
+        .provenance = {
+            .kind = XG_RENDER_RESOURCE_PROVENANCE_ARTIFACT,
+            .receipt = 704u,
+        },
+        .bytes = atlas_bytes,
+        .byte_count = sizeof(atlas_bytes),
+    };
+    XgRenderFontImport font_import = {
+        .font_id = 91u,
+        .generation = 3u,
+        .owner_domain = XG_RENDER_UI_OWNER_RESIDENT,
+        .lifecycle = XG_RENDER_UI_LIFECYCLE_ARTIFACT_PERSISTENT,
+        .provenance_receipt = 704u,
+        .metrics = &glyph_metric,
+        .metric_count = 1u,
+        .line_height = 10,
+    };
+    XgRenderGlyphRunRequest run_request = {
+        .font_id = 91u,
+        .font_generation = 3u,
+        .owner_domain = XG_RENDER_UI_OWNER_RESIDENT,
+        .provenance_receipt = 704u,
+        .glyph_ids = &glyph_id,
+        .glyph_count = 1u,
+        .reveal_count = 1u,
+        .color = UINT32_MAX,
+    };
+    CPUState field_cpu = {
+        .read_half = world_read_half,
+        .read_byte = world_read_byte,
+    };
+    XgRenderVramResourceServices field_services = {
+        .authorize_guest_range = checkpoint_test_authorize_range,
+        .provenance = {
+            .kind = XG_RENDER_RESOURCE_PROVENANCE_SOURCE,
+            .receipt = 705u,
+        },
+    };
+    XgRenderSurfacePublication generated;
+    XgRenderSurfacePublication framebuffer;
+    XgRenderSurfacePublication restored_generated;
+    XgRenderSurfacePublication restored_framebuffer;
+    XgRenderSurfacePublication restored_movie;
+    XgRenderSurfacePublication current_generated;
+    XgRenderSurfacePublication current_movie;
+    XgRenderMovieFrameHandle movie_frame;
+    XgRenderMovieFramePublication movie_publication;
+    XgRenderMovieDiagnostics movie_diagnostics;
+    XgRenderVramResourceSnapshot field_snapshot;
+    XgSemanticSurfaceEdge edge;
+    XgSemanticSurfaceEdge movie_edge;
+    XgSemanticSurfaceEdge restored_edges[2];
+    XgRenderSurfaceAttachmentDescription movie_attachment;
+    XgRenderResourceView view;
+    XgRenderResourceHandle atlas;
+    XgRenderGlyphRun glyph_run;
+    XgSemanticResourceRef field_texture;
+    GpuVramEvent restore_event = {
+        .operation = GPU_VRAM_EVENT_RESTORE,
+        .width = 1024u,
+        .height = 512u,
+        .pixel_count = 1024u * 512u,
+    };
+    uint8_t *checkpoint;
+    uint8_t *failed_restore_checkpoint;
+    size_t checkpoint_size;
+    size_t edge_count;
+    XgRenderResourceDiagnostics resources_before_failure;
+    XgRenderResourceDiagnostics resources_after_failure;
+    XgRenderResourceDiagnostics resources_after_restore;
+
+    for (uint32_t index = 0u;
+         index < sizeof(generated_description.identity.bytes); ++index) {
+        generated_description.identity.bytes[index] = (uint8_t)(0x31u + index);
+        framebuffer_description.identity.bytes[index] = (uint8_t)(0x91u + index);
+    }
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    {
+        XgRenderResourceCapabilityMetadata metadata = {
+            .kind = XG_RENDER_RESOURCE_PROVENANCE_SOURCE,
+            .lifetime = XG_RENDER_RESOURCE_CAPABILITY_SCENE,
+            .owner_kind = XG_RENDER_RESOURCE_OWNER_SCENE,
+            .owner_generation = 77u,
+            .source = {
+                .source_class = XG_RENDER_RESOURCE_SOURCE_GPU_SCANOUT,
+                .range_size = 1u,
+            },
+        };
+        XgRenderResourceProvenance provenance;
+
+        metadata.receipt = 701u;
+        metadata.source.identity = generated_description.identity;
+        metadata.source.range_content_digest = 701u;
+        CHECK(xg_render_resource_capability_register(
+                  &metadata, &generated_description.provenance) ==
+              XG_RENDER_RESOURCE_CAPABILITY_OK);
+        metadata.receipt = 702u;
+        metadata.source.identity = framebuffer_description.identity;
+        metadata.source.range_content_digest = 702u;
+        CHECK(xg_render_resource_capability_register(
+                  &metadata, &framebuffer_description.provenance) ==
+              XG_RENDER_RESOURCE_CAPABILITY_OK);
+        metadata.receipt = 705u;
+        memset(&metadata.source.identity, 0,
+               sizeof(metadata.source.identity));
+        metadata.source.identity.bytes[0] = 5u;
+        metadata.source.range_content_digest = 705u;
+        CHECK(xg_render_resource_capability_register(
+                  &metadata, &field_services.provenance) ==
+              XG_RENDER_RESOURCE_CAPABILITY_OK);
+
+        metadata.receipt = 703u;
+        metadata.owner_kind = XG_RENDER_RESOURCE_OWNER_SOURCE;
+        metadata.source.source_class =
+            XG_RENDER_RESOURCE_SOURCE_MOVIE_OWNER;
+        memset(&metadata.source.identity, 0,
+               sizeof(metadata.source.identity));
+        memcpy(metadata.source.identity.bytes, &movie_description.movie_id,
+               sizeof(movie_description.movie_id));
+        metadata.source.range_size = movie_description.byte_count;
+        metadata.source.range_content_digest = 703u;
+        CHECK(xg_render_resource_capability_register(
+                  &metadata, &provenance) ==
+              XG_RENDER_RESOURCE_CAPABILITY_OK);
+        movie_description.owner_capability = provenance.capability;
+    }
+    {
+        const XgRenderUiOwnerCatalogEntry *resident = NULL;
+        XgRenderResourceCapabilityMetadata metadata = {
+            .kind = XG_RENDER_RESOURCE_PROVENANCE_ARTIFACT,
+            .receipt = 704u,
+            .lifetime = XG_RENDER_RESOURCE_CAPABILITY_MODULE,
+            .owner_kind = XG_RENDER_RESOURCE_OWNER_MODULE,
+            .owner_generation = 9u,
+        };
+
+        for (size_t index = 0u; index < xg_render_ui_owner_catalog_count;
+             ++index)
+            if (xg_render_ui_owner_catalog[index].owner_domain ==
+                    XG_RENDER_UI_OWNER_RESIDENT) {
+                resident = &xg_render_ui_owner_catalog[index];
+                break;
+            }
+        CHECK(resident != NULL);
+        metadata.artifact = resident->artifact;
+        CHECK(xg_render_resource_capability_register(
+                  &metadata, &atlas_import.provenance) ==
+              XG_RENDER_RESOURCE_CAPABILITY_OK);
+        font_import.owner_root = resident->root_address;
+        run_request.owner_root = resident->root_address;
+    }
+    world_store_half(field_rect, 48u);
+    world_store_half(field_rect + 2u, 32u);
+    world_store_half(field_rect + 4u, 2u);
+    world_store_half(field_rect + 6u, 2u);
+    for (uint32_t index = 0u; index < 8u; ++index)
+        world_memory[field_payload - WORLD_MEMORY_BASE + index] =
+            (uint8_t)(0xa0u + index);
+    field_cpu.gpr[4] = field_rect;
+    field_cpu.gpr[5] = field_payload;
+    CHECK(xg_render_vram_image_begin(
+              GUEST_RENDER_RENDER_NATIVE, 77u) ==
+          XG_RENDER_VRAM_RESOURCE_OK);
+    CHECK(xg_render_vram_resources_upload(
+              &field_cpu, XG_RENDER_RESOURCE_TEXTURE, 77u,
+              &field_services) == XG_RENDER_VRAM_RESOURCE_OK);
+    CHECK(xg_render_vram_resources_commit(77u) ==
+          XG_RENDER_VRAM_RESOURCE_OK);
+    CHECK(xg_render_vram_resources_lookup(
+              XG_RENDER_RESOURCE_TEXTURE, 48u, 32u, 2u, 2u,
+              &field_texture));
+    atlas_import.identity.bytes[0] = 90u;
+    atlas_import.content_digest = xg_render_resource_digest(
+        atlas_bytes, sizeof(atlas_bytes));
+    CHECK(xg_render_resource_import_native(&atlas_import, &atlas) ==
+          XG_RENDER_RESOURCE_OK);
+    font_import.atlas = atlas;
+    CHECK(xg_render_font_import(&font_import) == XG_RENDER_UI_OK);
+    CHECK(xg_render_glyph_run_build(&run_request, &glyph_run) ==
+          XG_RENDER_UI_OK);
+    xg_render_surface_graph_reset();
+    xg_render_movie_publisher_reset();
+    CHECK(xg_render_surface_graph_publish(
+              &generated_description, &generated) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(xg_render_surface_graph_publish(
+              &framebuffer_description, &framebuffer) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    edge = (XgSemanticSurfaceEdge){
+        .source_surface_id = generated.handle.resource_id,
+        .source_generation = generated.handle.generation,
+        .target_surface_id = framebuffer.handle.resource_id,
+        .target_generation = framebuffer.handle.generation,
+        .kind = XG_SEMANTIC_SURFACE_SAMPLE,
+        .width = 2u,
+        .height = 2u,
+    };
+    CHECK(xg_render_surface_graph_append_edge(&edge) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(xg_render_movie_frame_begin(&movie_description, &movie_frame) ==
+          XG_RENDER_MOVIE_OK);
+    CHECK(xg_render_movie_frame_write_strip(
+              movie_frame, 0u, 0u, movie_complete, 4u) ==
+          XG_RENDER_MOVIE_OK);
+    CHECK(xg_render_movie_frame_write_strip(
+              movie_frame, 1u, 4u, movie_complete + 4u, 4u) ==
+          XG_RENDER_MOVIE_OK);
+    CHECK(xg_render_movie_frame_publish(movie_frame, &movie_publication) ==
+          XG_RENDER_MOVIE_OK);
+    CHECK(xg_render_resource_view(movie_publication.surface, &view) ==
+          XG_RENDER_RESOURCE_OK);
+    movie_attachment = (XgRenderSurfaceAttachmentDescription){
+        .handle = movie_publication.surface,
+        .kind = XG_RENDER_RESOURCE_MOVIE_FRAME,
+        .owner_kind = XG_RENDER_RESOURCE_OWNER_SOURCE,
+        .format = XG_RENDER_SURFACE_VRAM16,
+        .provenance = view.provenance,
+        .owner_generation = view.owner_generation,
+        .content_digest = view.content_digest,
+        .width = movie_publication.width,
+        .height = movie_publication.height,
+        .byte_count = view.byte_count,
+    };
+    movie_edge = (XgSemanticSurfaceEdge){
+        .source_surface_id = framebuffer.handle.resource_id,
+        .source_generation = framebuffer.handle.generation,
+        .target_surface_id = movie_publication.surface.resource_id,
+        .target_generation = movie_publication.surface.generation,
+        .kind = XG_SEMANTIC_SURFACE_MOVIE,
+        .width = (uint16_t)movie_publication.width,
+        .height = (uint16_t)movie_publication.height,
+    };
+    CHECK(xg_render_surface_graph_attach_resource_with_edge(
+              &movie_attachment, &movie_edge, &restored_movie) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(restored_movie.handle.generation ==
+          movie_publication.surface.generation);
+    movie_description.guest_cycle = 200u;
+    CHECK(xg_render_movie_frame_begin(&movie_description, &movie_frame) ==
+          XG_RENDER_MOVIE_OK);
+    CHECK(xg_render_movie_frame_write_strip(
+              movie_frame, 0u, 0u, movie_partial, sizeof(movie_partial)) ==
+          XG_RENDER_MOVIE_OK);
+
+    checkpoint_size = psx_xg_render_auth_checkpoint_size();
+    CHECK(checkpoint_size != 0u);
+    checkpoint = (uint8_t *)malloc(checkpoint_size);
+    CHECK(checkpoint != NULL);
+    failed_restore_checkpoint = (uint8_t *)malloc(checkpoint_size);
+    CHECK(failed_restore_checkpoint != NULL);
+    CHECK(psx_xg_render_auth_checkpoint_write(checkpoint, checkpoint_size));
+    xg_render_resource_repository_diagnostics(&resources_before_failure);
+    for (uint32_t fault =
+             PSX_XG_RENDER_CHECKPOINT_RESTORE_FAULT_VRAM_RESOURCES;
+         fault <= PSX_XG_RENDER_CHECKPOINT_RESTORE_FAULT_REPOSITORY_CAPACITY;
+         ++fault) {
+        psx_xg_render_auth_runtime_test_fail_checkpoint_restore(fault);
+        CHECK(!psx_xg_render_auth_checkpoint_restore(
+            checkpoint, checkpoint_size));
+        CHECK(psx_xg_render_auth_checkpoint_size() == checkpoint_size);
+        CHECK(psx_xg_render_auth_checkpoint_write(
+            failed_restore_checkpoint, checkpoint_size));
+        CHECK(memcmp(checkpoint, failed_restore_checkpoint,
+                     checkpoint_size) == 0);
+        xg_render_resource_repository_diagnostics(&resources_after_failure);
+        CHECK(resources_after_failure.live_resources ==
+              resources_before_failure.live_resources);
+        CHECK(resources_after_failure.retained_resources ==
+              resources_before_failure.retained_resources);
+        CHECK(xg_render_surface_graph_lookup(
+                  generated.handle.resource_id, &current_generated) ==
+              XG_RENDER_SURFACE_GRAPH_OK);
+        CHECK(current_generated.handle.generation ==
+              generated.handle.generation);
+        CHECK(xg_render_surface_graph_lookup(
+                  movie_publication.surface.resource_id, &current_movie) ==
+              XG_RENDER_SURFACE_GRAPH_OK);
+        CHECK(current_movie.handle.generation ==
+              movie_publication.surface.generation);
+        {
+            XgSemanticResourceRef current_field_texture;
+            CHECK(xg_render_vram_resources_lookup(
+                      XG_RENDER_RESOURCE_TEXTURE, 48u, 32u, 2u, 2u,
+                      &current_field_texture));
+            CHECK(current_field_texture.generation ==
+                  field_texture.generation);
+        }
+        xg_render_movie_publisher_diagnostics(&movie_diagnostics);
+        CHECK(movie_diagnostics.frame_active);
+        CHECK(movie_diagnostics.completed_strip_mask == 1u);
+        CHECK(xg_render_glyph_run_build(&run_request, &glyph_run) ==
+              XG_RENDER_UI_OK);
+    }
+    checkpoint[checkpoint_size - 1u] ^= 1u;
+    CHECK(!psx_xg_render_auth_checkpoint_restore(checkpoint, checkpoint_size));
+    CHECK(xg_render_surface_graph_lookup(
+              generated.handle.resource_id, &current_generated) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(current_generated.handle.generation == generated.handle.generation);
+    xg_render_movie_publisher_diagnostics(&movie_diagnostics);
+    CHECK(movie_diagnostics.frame_active);
+    CHECK(movie_diagnostics.completed_strip_mask == 1u);
+    CHECK(xg_render_glyph_run_build(&run_request, &glyph_run) ==
+          XG_RENDER_UI_OK);
+    checkpoint[checkpoint_size - 1u] ^= 1u;
+    CHECK(psx_xg_render_auth_note_vram_event(30u, 3000u, &restore_event));
+    xg_render_movie_publisher_reset();
+    xg_render_surface_graph_reset();
+    xg_render_resource_repository_reset();
+    CHECK(psx_xg_render_auth_checkpoint_restore(checkpoint, checkpoint_size));
+    free(failed_restore_checkpoint);
+    free(checkpoint);
+    xg_render_movie_publisher_diagnostics(&movie_diagnostics);
+    CHECK(movie_diagnostics.complete_frames == 1u);
+    CHECK(movie_diagnostics.frame_generation == 1u);
+    CHECK(movie_diagnostics.partial_publish_attempts == 0u);
+    CHECK(movie_diagnostics.cancelled_frames == 0u);
+    CHECK(movie_diagnostics.held_frames == 0u);
+    CHECK(movie_diagnostics.discontinuities == 1u);
+    CHECK(movie_diagnostics.frame_active);
+    CHECK(movie_diagnostics.completed_strip_mask == 1u);
+    CHECK(movie_diagnostics.complete_frame_available);
+    CHECK(movie_diagnostics.discontinuity_pending);
+    CHECK(movie_diagnostics.discontinuity_reason ==
+          XG_RENDER_MOVIE_DISCONTINUITY_RESTORE);
+
+    CHECK(xg_render_resource_view(generated.handle, &view) !=
+          XG_RENDER_RESOURCE_OK);
+    CHECK(xg_render_resource_view(framebuffer.handle, &view) !=
+          XG_RENDER_RESOURCE_OK);
+    CHECK(xg_render_resource_view(atlas, &view) != XG_RENDER_RESOURCE_OK);
+    CHECK(xg_render_glyph_run_build(&run_request, &glyph_run) ==
+          XG_RENDER_UI_OK);
+    CHECK(glyph_run.glyph_count == 1u);
+    CHECK(xg_render_surface_graph_lookup(
+              generated.handle.resource_id, &restored_generated) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(xg_render_surface_graph_lookup(
+              framebuffer.handle.resource_id, &restored_framebuffer) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(xg_render_surface_graph_lookup(
+              movie_publication.surface.resource_id, &restored_movie) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(restored_generated.handle.generation != generated.handle.generation);
+    CHECK(restored_framebuffer.handle.generation !=
+          framebuffer.handle.generation);
+    CHECK(restored_generated.owner_generation ==
+          restored_framebuffer.owner_generation);
+    CHECK(restored_generated.owner_generation !=
+          generated_description.owner_generation);
+    xg_render_vram_resources_snapshot(&field_snapshot);
+    CHECK(field_snapshot.owner_generation ==
+          restored_generated.owner_generation);
+    CHECK(xg_render_surface_graph_copy_edges(
+              restored_edges, 2u, &edge_count) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(edge_count == 2u);
+    CHECK(restored_edges[0].source_generation ==
+          restored_generated.handle.generation);
+    CHECK(restored_edges[0].target_generation ==
+          restored_framebuffer.handle.generation);
+    CHECK(restored_edges[1].source_generation ==
+          restored_framebuffer.handle.generation);
+    CHECK(restored_edges[1].target_generation ==
+          restored_movie.handle.generation);
+    CHECK(restored_edges[1].kind == XG_SEMANTIC_SURFACE_MOVIE);
+    CHECK(xg_render_movie_frame_hold(&movie_publication) == XG_RENDER_MOVIE_OK);
+    CHECK(movie_publication.surface.resource_id == restored_movie.handle.resource_id);
+    CHECK(movie_publication.surface.generation == restored_movie.handle.generation);
+    CHECK(xg_render_resource_view(movie_publication.surface, &view) ==
+          XG_RENDER_RESOURCE_OK);
+    CHECK(view.current);
+    CHECK(view.content_digest == restored_movie.content_digest);
+    CHECK(view.content_digest == xg_render_resource_digest(
+              movie_complete, sizeof(movie_complete)));
+    CHECK(view.owner_generation == restored_generated.owner_generation);
+    CHECK(memcmp(view.bytes, movie_complete, sizeof(movie_complete)) == 0);
+    xg_render_resource_repository_diagnostics(&resources_after_restore);
+    CHECK(resources_after_restore.live_resources ==
+          resources_before_failure.live_resources);
+    CHECK(resources_after_restore.imports ==
+          resources_after_restore.live_resources);
+    CHECK(xg_render_movie_frame_write_strip(
+              (XgRenderMovieFrameHandle){movie_frame.generation + 1u},
+              1u, 4u, movie_complete + 4u, 4u) ==
+          XG_RENDER_MOVIE_STALE_FRAME);
     psx_xg_render_auth_scene_boundary();
     return 1;
 }
@@ -8422,6 +10615,107 @@ static int test_model_ft4_raw_shadow_reconstructs_farthest_source(void) {
         XG_MODEL_FT4_RAW_DISPATCH_FARTHEST);
 }
 
+static PsxXgRenderAuthCandidate gear_helper_mode1_candidate(void) {
+    PsxXgRenderAuthCandidate candidate = {
+        UINT32_C(0x801dcc3c), UINT32_C(0x801dcd14),
+        (uint32_t)sizeof(model_shadow_gear_helper_caller_instructions),
+        UINT32_C(0x801dcd40),
+    };
+
+    set_candidate_provenance(
+        &candidate, UINT32_C(0x801dc000), 51200u,
+        UINT32_C(0xec219bef));
+    return candidate;
+}
+
+static int test_gear_helper_mode1_uses_captured_color_and_average_depth(void) {
+    CPUState cpu;
+    PsxXgRenderAuthCandidate proof;
+    PsxXgRenderModelFt4ShadowSnapshot snapshot = {0};
+    XgRenderIrNativePrimitive primitive = {0};
+    uint32_t ot_bucket = 0u;
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    configure_model_ft4_shadow_cpu(&cpu);
+    model_shadow_store_word(
+        MODEL_SHADOW_PACKET + 4u, UINT32_C(0x2f112233));
+    model_shadow_store_word(
+        MODEL_SHADOW_PACKET + 12u, UINT32_C(0x00420000));
+    model_shadow_store_word(
+        MODEL_SHADOW_PACKET + 20u, UINT32_C(0x01232010));
+    model_shadow_store_word(
+        MODEL_SHADOW_PACKET + 28u, UINT32_C(0x00000020));
+    model_shadow_store_word(
+        MODEL_SHADOW_PACKET + 36u, UINT32_C(0x00004030));
+    cpu.gpr[7] = XG_MODEL_FT4_RAW_DISPATCH_RELIT;
+    cpu.gpr[31] = UINT32_C(0x801dcd48);
+    proof = gear_helper_mode1_candidate();
+    CHECK(psx_xg_render_auth_runtime_test_accept_gear_helper_mode1_proof(
+        &cpu, &proof));
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8002c700), UINT32_C(0x27bdffd0)));
+    psx_xg_render_auth_model_ft4_shadow_snapshot(&snapshot);
+    CHECK(snapshot.dispatch_begin_count == 1u);
+    CHECK(snapshot.dispatch_caller_reject_count == 0u);
+    CHECK(snapshot.dispatch_mode_reject_count == 0u);
+
+    memset(cpu.gte_ctrl, 0xa5, sizeof(cpu.gte_ctrl));
+    memset(cpu.gte_data, 0x5a, sizeof(cpu.gte_data));
+    cpu.gpr[4] = MODEL_SHADOW_TOPOLOGY + 4u;
+    cpu.gpr[5] = 1u;
+    cpu.gpr[31] = UINT32_C(0x8002c86c);
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8002e268), UINT32_C(0x34190008)));
+    psx_xg_render_auth_model_ft4_shadow_snapshot(&snapshot);
+    CHECK(snapshot.pending && !snapshot.blocked);
+    CHECK(snapshot.native_cutover_count == 1u);
+    CHECK(snapshot.native_primitive_count == 1u);
+    CHECK(psx_xg_render_auth_runtime_test_model_ft4_primitive(
+        &primitive, &ot_bucket));
+    CHECK(ot_bucket == 32u);
+    CHECK(primitive.triangles[0].vertices[0].r == 0x33u);
+    CHECK(primitive.triangles[0].vertices[0].g == 0x22u);
+    CHECK(primitive.triangles[0].vertices[0].b == 0x11u);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
+static int test_gear_helper_mode1_rejects_missing_or_wrong_proof(void) {
+    CPUState cpu;
+    PsxXgRenderAuthCandidate proof;
+    PsxXgRenderModelFt4ShadowSnapshot snapshot = {0};
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    configure_model_ft4_shadow_cpu(&cpu);
+    cpu.gpr[7] = XG_MODEL_FT4_RAW_DISPATCH_RELIT;
+    cpu.gpr[31] = UINT32_C(0x801dcd48);
+    proof = gear_helper_mode1_candidate();
+    proof.artifact_sha256[0] ^= 1u;
+    CHECK(!psx_xg_render_auth_runtime_test_accept_gear_helper_mode1_proof(
+        &cpu, &proof));
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8002c700), UINT32_C(0x27bdffd0)));
+    psx_xg_render_auth_model_ft4_shadow_snapshot(&snapshot);
+    CHECK(snapshot.dispatch_begin_count == 1u);
+    CHECK(snapshot.dispatch_caller_reject_count == 1u);
+    CHECK(snapshot.dispatch_mode_reject_count == 0u);
+
+    CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    set_matching_runtime_identity();
+    configure_model_ft4_shadow_cpu(&cpu);
+    cpu.gpr[7] = XG_MODEL_FT4_RAW_DISPATCH_RELIT;
+    CHECK(!psx_xg_render_auth_native_ft4_bypass(
+        &cpu, UINT32_C(0x8002c700), UINT32_C(0x27bdffd0)));
+    psx_xg_render_auth_model_ft4_shadow_snapshot(&snapshot);
+    CHECK(snapshot.dispatch_begin_count == 1u);
+    CHECK(snapshot.dispatch_caller_reject_count == 0u);
+    CHECK(snapshot.dispatch_mode_reject_count == 1u);
+    psx_xg_render_auth_scene_boundary();
+    return 1;
+}
+
 static int test_resident_model_uses_completed_proof_after_artifact_retirement(void) {
     CPUState cpu;
     PsxXgRenderModelFt4ShadowSnapshot snapshot = {0};
@@ -8799,7 +11093,7 @@ static int test_model_ft4_native_accepts_runtime_observed_group_size(void) {
         3u, 4u, RUNTIME_VARIANT_CAPTURE_SITE, 4u);
     psx_xg_render_auth_model_ft4_shadow_snapshot(&snapshot);
     CHECK(!snapshot.blocked);
-    replacement_artifact.artifact_crc32 ^= 1u;
+    replacement_artifact.artifact_sha256[0] ^= 1u;
     memcpy(replacement_artifact.runtime_variant_identity,
            xg_render_runtime_variant_descriptors[0].companion_manifest_identity,
            sizeof(replacement_artifact.runtime_variant_identity));
@@ -9624,6 +11918,9 @@ static int test_model_repository_records_complete_resolved_producer(void) {
         CHECK(xg_render_model_repository_store_ft3_source(
             &ft3_sources_to_store[index], NULL, &services));
 
+    CHECK(xg_render_backend_translate_primitive(
+              &ft4_sources_to_store[0].primitive, &resolved) ==
+          XG_RENDER_BACKEND_OK);
     resolved.interpolation_identity = (GpuRenderInterpolationIdentity){
         .scene_id = 1u,
         .producer_id = UINT32_C(0x120c40),
@@ -10540,10 +12837,19 @@ static int test_producer_family_native_stages_authenticated_source(void) {
     GuestRenderNativeStreamSnapshot stream_snapshot = {0};
     GuestRenderBridgeSnapshot bridge = {0};
     XgRenderAuthSnapshot auth_snapshot = {0};
+    XgRenderSourceFrameSnapshot frame_snapshot = {0};
+    XgRenderSurfaceGraphSnapshot surface_snapshot = {0};
+    XgRenderSurfacePublication target_publication;
+    XgRenderResourceView target_view;
+    XgRenderPresentationDiagnostics presentation = {0};
     XgRenderAuth *auth = NULL;
+    uint64_t closed_epoch = 0u;
 
     guest_render_transaction_test_reset();
     CHECK(reset_source_mode(GUEST_RENDER_RENDER_NATIVE));
+    CHECK(xg_render_presentation_lifecycle_claim_open(
+              STATIC_AUTH_PRESENTER_OWNER) ==
+          XG_RENDER_PRESENTATION_LIFECYCLE_OK);
     set_matching_runtime_identity();
     psx_xg_render_auth_source_reset();
     psx_xg_render_auth_scene_boundary();
@@ -10597,9 +12903,48 @@ static int test_producer_family_native_stages_authenticated_source(void) {
     CHECK(auth_snapshot.native_item_count == 2u);
     CHECK(auth_snapshot.native_use_permitted);
     CHECK(auth_snapshot.effective_render_mode == GUEST_RENDER_RENDER_NATIVE);
+    CHECK(auth_snapshot.logical_identity.disc_id == 1u);
+    CHECK(auth_snapshot.logical_identity.semantic_module ==
+          XG_SEMANTIC_MODULE_FIELD);
     CHECK(guest_render_bridge_snapshot(&bridge) == GUEST_RENDER_OK);
     CHECK(!bridge.state_open && !bridge.producer_open);
     CHECK(bridge.binding_count == 2u);
+    xg_render_source_frame_snapshot(&frame_snapshot);
+    CHECK(frame_snapshot.active);
+    CHECK(!frame_snapshot.complete);
+    CHECK(frame_snapshot.pass_count == 1u);
+    CHECK(frame_snapshot.draw_count == 2u);
+    CHECK(frame_snapshot.resource_count == 1u);
+    xg_render_surface_graph_snapshot(&surface_snapshot);
+    CHECK(surface_snapshot.node_count == 1u);
+    CHECK(xg_render_surface_graph_copy_publications(
+              &target_publication, 1u, &(size_t){0}) ==
+          XG_RENDER_SURFACE_GRAPH_OK);
+    CHECK(target_publication.kind == XG_RENDER_RESOURCE_GENERATED_SURFACE);
+    CHECK(target_publication.handle.resource_id != 0u);
+    CHECK(target_publication.handle.generation != 0u);
+    CHECK(xg_render_resource_view(target_publication.handle, &target_view) ==
+          XG_RENDER_RESOURCE_OK);
+    CHECK(target_view.descriptor.version ==
+          XG_RENDER_RESOURCE_DESCRIPTOR_VERSION);
+    CHECK((target_view.descriptor.flags &
+           XG_RENDER_RESOURCE_DESCRIPTOR_HAS_VRAM_REGION) != 0u);
+    CHECK(psx_xg_render_auth_source_boundary(1u, 100u));
+    psx_xg_render_auth_presentation_snapshot(&presentation);
+    CHECK(presentation.published_commits == 1u);
+    CHECK(presentation.presentation_holds == 0u);
+    CHECK(presentation.rejected_commits == 0u);
+    CHECK(presentation.source_pending);
+    xg_render_source_frame_snapshot(&frame_snapshot);
+    CHECK(!frame_snapshot.active);
+    CHECK(xg_render_presentation_lifecycle_close(
+              STATIC_AUTH_PRESENTER_OWNER, XG_RENDER_TIMELINE_RESET,
+              &closed_epoch) == XG_RENDER_PRESENTATION_LIFECYCLE_OK);
+    CHECK(closed_epoch != 0u);
+    CHECK(xg_render_presenter_drain_retirements(
+              &(XgRenderPresenterServices){
+                  .owner_token = STATIC_AUTH_PRESENTER_OWNER,
+              }));
     psx_xg_render_auth_scene_boundary();
     return 1;
 }
@@ -10958,6 +13303,76 @@ static int test_cutover_dispatch_route_relevance_is_complete(void) {
     return 1;
 }
 
+static int test_runtime_source_boundary_publishes_only_complete_frames(void) {
+    const XgRenderSourceFrameDescription description = {
+        .scene = {
+            .disc_id = 1u,
+            .executable_identity = UINT64_C(0x1001),
+            .primary_overlay_identity = UINT64_C(0x2001),
+            .authored_scene_id = 3u,
+            .module = XG_SEMANTIC_MODULE_FIELD,
+        },
+        .display = {
+            .width = 320u,
+            .height = 240u,
+            .aspect_num = 4u,
+            .aspect_den = 3u,
+        },
+        .scene_generation = 1u,
+        .source_interval_vblanks = 2u,
+        .temporally_eligible = true,
+    };
+    const XgSemanticPassRecord pass = {
+        .pass_id = 1u,
+        .load_operation = XG_SEMANTIC_PASS_LOAD,
+        .store = true,
+    };
+    XgRenderPresentationDiagnostics diagnostics = {0};
+    uint64_t closed_epoch = 0u;
+
+    xg_render_semantic_presentation_reset();
+    CHECK(xg_render_presentation_lifecycle_claim_open(
+              STATIC_AUTH_PRESENTER_OWNER) ==
+          XG_RENDER_PRESENTATION_LIFECYCLE_OK);
+    xg_render_source_frame_reset();
+    CHECK(xg_render_source_frame_begin(&description) ==
+          XG_RENDER_SOURCE_FRAME_OK);
+    CHECK(xg_render_source_frame_append_pass(&pass) ==
+          XG_RENDER_SOURCE_FRAME_OK);
+    CHECK(xg_render_source_frame_complete() == XG_RENDER_SOURCE_FRAME_OK);
+    CHECK(psx_xg_render_auth_source_boundary(1u, 100u));
+
+    psx_xg_render_auth_presentation_snapshot(&diagnostics);
+    CHECK(diagnostics.boundary_count == 1u);
+    CHECK(diagnostics.published_commits == 1u);
+    CHECK(diagnostics.presentation_holds == 0u);
+    CHECK(diagnostics.rejected_commits == 0u);
+    CHECK(diagnostics.source_pending);
+
+    CHECK(psx_xg_render_auth_source_boundary(2u, 200u));
+    CHECK(xg_render_source_frame_begin(&description) ==
+          XG_RENDER_SOURCE_FRAME_OK);
+    CHECK(!psx_xg_render_auth_source_boundary(3u, 300u));
+    CHECK(!psx_xg_render_auth_source_boundary(3u, 400u));
+
+    psx_xg_render_auth_presentation_snapshot(&diagnostics);
+    CHECK(diagnostics.boundary_count == 3u);
+    CHECK(diagnostics.duplicate_boundaries == 1u);
+    CHECK(diagnostics.published_commits == 1u);
+    CHECK(diagnostics.presentation_holds == 1u);
+    CHECK(diagnostics.rejected_commits == 1u);
+    CHECK(xg_render_presentation_lifecycle_close(
+              STATIC_AUTH_PRESENTER_OWNER, XG_RENDER_TIMELINE_RESET,
+              &closed_epoch) == XG_RENDER_PRESENTATION_LIFECYCLE_OK);
+    CHECK(closed_epoch != 0u);
+    CHECK(xg_render_presenter_drain_retirements(
+              &(XgRenderPresenterServices){
+                  .owner_token = STATIC_AUTH_PRESENTER_OWNER,
+              }));
+    xg_render_source_frame_reset();
+    return 1;
+}
+
 int main(void) {
     int ok = 1;
 
@@ -11023,6 +13438,9 @@ int main(void) {
     ok &= test_zoom_opcode_2e_template_contract_is_producer_scoped();
     ok &= test_overlay_same_instruction_requires_exact_artifact_candidate();
     ok &= test_overlay_artifact_authority_is_not_runtime_variant_specific();
+    ok &= test_movie_owner_routes_require_exact_artifact_and_callback();
+    ok &= test_movie_static_artifact_authority_fails_closed();
+    ok &= test_movie_frame_boundary_requires_exact_str_artifact();
     ok &= test_overlay_ft4_2c_projected_contract_uses_only_sources();
     ok &= test_overlay_ft4_2e_projected_contract_uses_only_producers();
     ok &= test_overlay_ft4_2e_field_builder_sidecar_is_producer_scoped();
@@ -11041,6 +13459,17 @@ int main(void) {
     ok &= test_native_projected_field_reject_queues_temporal_strips();
     ok &= test_projected_source_map_evicts_oldest_without_blocking();
     ok &= test_native_world_sky_cutover_is_packet_free();
+    ok &= test_world_ground_clut_publication_requires_artifact_authority();
+    ok &= test_world_shared_clut_publication_requires_artifact_authority();
+    ok &= test_world_animated_texture_updates_are_transactional();
+    ok &= test_resident_tim_publication_uses_stable_artifact_receipt();
+    ok &= test_variant_tim_publication_uses_stable_artifact_receipt();
+    ok &= test_gpu_upload_commit_publishes_vram_mutation();
+    ok &= test_mdec_upload_publishes_authenticated_generated_surface();
+    ok &= test_mdec_upload_retains_two_max_width_display_pages();
+    ok &= test_mdec_scanout_publishes_matching_framebuffer_edges();
+    ok &= test_movie_publication_transaction_rolls_back_every_failure();
+    ok &= test_renderer_checkpoint_restores_movie_and_surface_graph();
     ok &= test_native_world_sky_fails_closed_and_aborts_on_mutation();
     ok &= test_native_world_effects_cutover_is_atomic_and_value_only();
     ok &= test_native_world_effects_fails_before_staging_or_writes();
@@ -11069,6 +13498,8 @@ int main(void) {
     ok &= test_world_effects_shadow_rejects_invalid_cursor();
     ok &= test_model_ft4_raw_shadow_reconstructs_average_source();
     ok &= test_model_ft4_raw_shadow_reconstructs_farthest_source();
+    ok &= test_gear_helper_mode1_uses_captured_color_and_average_depth();
+    ok &= test_gear_helper_mode1_rejects_missing_or_wrong_proof();
     ok &= test_resident_model_uses_completed_proof_after_artifact_retirement();
     ok &= test_overlay_model_dispatch_uses_exact_descriptor_contract();
     ok &= test_overlay_model_dispatch_rejects_mutated_caller();
@@ -11109,5 +13540,6 @@ int main(void) {
     ok &= test_model_ft4_resource_writes_invalidate_colliding_templates();
     ok &= test_interpolation_scene_ignores_auth_frame_boundaries();
     ok &= test_interpolation_scene_ignores_mutable_render_data();
+    ok &= test_runtime_source_boundary_publishes_only_complete_frames();
     return ok ? 0 : 1;
 }

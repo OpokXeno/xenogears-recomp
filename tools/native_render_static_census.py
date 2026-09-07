@@ -380,7 +380,7 @@ def _parse_artifact(raw: Any, index: int) -> JsonObject:
 
 def _review_status(value: Any, label: str) -> str:
     if not isinstance(value, str) or value not in REVIEW_STATUSES:
-        raise CensusError(f"{label} is not a terminal P10 review status")
+        raise CensusError(f"{label} is not a terminal static census review status")
     return value
 
 
@@ -1301,7 +1301,7 @@ def build_document(
         "coverage": coverage,
         "facts": facts,
         "known_limitations": list(KNOWN_LIMITATIONS),
-        "p10_static_closure_claimed": require_complete and not blocked,
+        "static_closure_claimed": require_complete and not blocked,
         "review_sha256": hashlib.sha256(_canonical_json(normalized_review)).hexdigest(),
         "reviewed_classifications": review["classifications"],
         "reviewed_scope": {
@@ -1350,7 +1350,7 @@ def main() -> int:
         )
         _write_document(arguments.out, document)
         if complete:
-            print("ledger PASS: P10 Disc 1 static closure complete")
+            print("ledger PASS: Disc 1 static closure complete")
         else:
             print(
                 "inventory PASS: "

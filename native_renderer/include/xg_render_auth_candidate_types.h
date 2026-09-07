@@ -15,7 +15,7 @@ typedef struct PsxXgRenderAuthCandidate {
     uint64_t pair_id;
     uint32_t artifact_base;
     uint32_t artifact_size;
-    uint32_t artifact_crc32;
+    uint8_t artifact_sha256[PSX_GAME_IDENTITY_SHA256_BYTES];
     uint8_t runtime_variant_identity[PSX_GAME_IDENTITY_SHA256_BYTES];
     bool authority_provenance;
     bool pair_bound;

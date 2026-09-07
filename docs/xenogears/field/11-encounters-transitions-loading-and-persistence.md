@@ -18,7 +18,6 @@ followed by 16 one-byte weights. Its binary layout is documented in
 Random encounter state is separate from that static section:
 
 - Global enable/disable state.
-- Optional encounter-indicator state.
 - A configured timer interval.
 - An active timer count capped at 32.
 - Up to 32 current countdowns.
@@ -83,7 +82,7 @@ Consequences:
 - One scaled-random bucket is reserved for no encounter.
 - The selected formation remains an index into the same 16-record section.
 
-## 6. Encounter Control Instructions
+## 6. Encounter And Field UI Control Instructions
 
 | Opcode | Effect |
 |---:|---|
@@ -92,10 +91,10 @@ Consequences:
 | `15` | Enable random encounters |
 | `71` | Start an explicit battle after transition readiness |
 | `F7` | Configure interval and unique active timers |
-| `FE 4F` | Enable the encounter indicator |
-| `FE 50` | Disable the encounter indicator |
-| `FE 53` | Disable encounters and compass state together |
-| `FE 54` | Restore encounters and compass state together |
+| `FE 4F` | Allow the player to open the normal Field menu |
+| `FE 50` | Prevent the player from opening the normal Field menu |
+| `FE 53` | Enable encounters, the player-opened Field menu, and compass state together |
+| `FE 54` | Disable encounters, the player-opened Field menu, and compass state together |
 | `FE 84` | Start a battle with an optional post-battle Field destination |
 
 `0C` can advance encounter state indirectly when its player update sees held

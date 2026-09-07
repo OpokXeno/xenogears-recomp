@@ -7,10 +7,14 @@ import pytest
 from native_render_overlay_ranges import (
     OverlayRangeError,
     emit_cold_cutover_table,
+    emit_source_plan,
     merge_source_plans,
     load_overlay_range_variants,
     source_plan_for_overlay_ranges,
 )
+
+
+EXACT_ARTIFACT_BASE = 0x8006FAF0
 
 
 def contract_text(digest: str) -> str:
@@ -20,6 +24,32 @@ id = "fixture"
 base_address = "0x80001000"
 required_ranges = [{{ start = "0x80001004", size = 4, sha256 = "{digest}" }}]
 cutovers = [{{ pc = "0x80001004", instruction = "0x12345678", transfer = "return", continuation = "0x00000000" }}]
+'''
+
+
+def exact_artifact_contract(
+    data: bytes,
+    *,
+    required_start: int = EXACT_ARTIFACT_BASE,
+    required_size: int | None = None,
+    cutover_pc: int = EXACT_ARTIFACT_BASE,
+    transfer: str = "return",
+    continuation: int = 0,
+) -> str:
+    base = EXACT_ARTIFACT_BASE
+    size = len(data) if required_size is None else required_size
+    offset = required_start - base
+    range_digest = hashlib.sha256(data[offset:offset + size]).hexdigest()
+    artifact_digest = hashlib.sha256(data).hexdigest()
+    instruction = struct.unpack_from("<I", data)[0]
+    return f'''schema = "xg-render-overlay-ranges/v1"
+[[variants]]
+id = "exact-fixture"
+base_address = "0x{base:08x}"
+artifact_size = {len(data)}
+artifact_sha256 = "{artifact_digest}"
+required_ranges = [{{ start = "0x{required_start:08x}", size = {size}, sha256 = "{range_digest}" }}]
+cutovers = [{{ pc = "0x{cutover_pc:08x}", instruction = "0x{instruction:08x}", transfer = "{transfer}", continuation = "0x{continuation:08x}" }}]
 '''
 
 
@@ -39,6 +69,115 @@ def test_range_match_and_mutation(tmp_path: Path) -> None:
     assert source_plan_for_overlay_ranges(
         variants, bytes(data), 0x80001000
     ) is None
+
+
+@pytest.mark.parametrize("artifact_size", [29779, 260862])
+def test_terminal_partial_word_is_accepted_and_hashed_byte_exactly(
+    tmp_path: Path, artifact_size: int,
+) -> None:
+    data = struct.pack("<I", 0x12345678) + bytes(artifact_size - 4)
+    path = tmp_path / "ranges.toml"
+    path.write_text(exact_artifact_contract(data), encoding="utf-8")
+
+    variants = load_overlay_range_variants(path)
+    assert variants[0].artifact_size == artifact_size
+    assert variants[0].required_ranges[0].size == artifact_size
+    assert source_plan_for_overlay_ranges(
+        variants, data, EXACT_ARTIFACT_BASE
+    ) == (
+        "psxrecomp-source-observation-plan-v5\n"
+        "cutover 8006FAF0 12345678 return 00000000\n"
+    )
+
+    mutated = bytearray(data)
+    mutated[-1] ^= 1
+    assert source_plan_for_overlay_ranges(
+        variants, bytes(mutated), EXACT_ARTIFACT_BASE
+    ) is None
+
+
+def test_unaligned_required_range_start_is_rejected(tmp_path: Path) -> None:
+    data = struct.pack("<I", 0x12345678) + b"abc"
+    path = tmp_path / "ranges.toml"
+    path.write_text(
+        exact_artifact_contract(
+            data, required_start=EXACT_ARTIFACT_BASE + 1,
+            required_size=6),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(OverlayRangeError, match="required range is not aligned"):
+        load_overlay_range_variants(path)
+
+
+def test_nonterminal_partial_word_range_is_rejected(tmp_path: Path) -> None:
+    data = struct.pack("<I", 0x12345678) + b"abcd"
+    path = tmp_path / "ranges.toml"
+    path.write_text(
+        exact_artifact_contract(data, required_size=7), encoding="utf-8")
+
+    with pytest.raises(OverlayRangeError, match="required range is not aligned"):
+        load_overlay_range_variants(path)
+
+
+def test_unaligned_cutover_pc_is_rejected(tmp_path: Path) -> None:
+    data = struct.pack("<I", 0x12345678) + b"abcd"
+    path = tmp_path / "ranges.toml"
+    path.write_text(
+        exact_artifact_contract(
+            data, cutover_pc=EXACT_ARTIFACT_BASE + 1),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(OverlayRangeError, match="cutover address is not aligned"):
+        load_overlay_range_variants(path)
+
+
+def test_cutover_cannot_overrun_terminal_partial_word(tmp_path: Path) -> None:
+    data = struct.pack("<I", 0x12345678) + b"abc"
+    path = tmp_path / "ranges.toml"
+    path.write_text(
+        exact_artifact_contract(
+            data, cutover_pc=EXACT_ARTIFACT_BASE + 4),
+        encoding="utf-8",
+    )
+    variants = load_overlay_range_variants(path)
+
+    with pytest.raises(
+        OverlayRangeError,
+        match="authenticated range cutover overruns artifact",
+    ):
+        source_plan_for_overlay_ranges(variants, data, EXACT_ARTIFACT_BASE)
+
+
+def test_emit_source_plan_materializes_codegen_input(tmp_path: Path) -> None:
+    data = bytearray(16)
+    struct.pack_into("<I", data, 4, 0x12345678)
+    manifest = tmp_path / "ranges.toml"
+    manifest.write_text(
+        contract_text(hashlib.sha256(data[4:8]).hexdigest()),
+        encoding="utf-8",
+    )
+    artifact = tmp_path / "overlay.bin"
+    artifact.write_bytes(data)
+    output = tmp_path / "plans" / "overlay.plan"
+
+    emit_source_plan(
+        load_overlay_range_variants(manifest), artifact, 0x80001000, output)
+
+    assert output.read_text(encoding="ascii") == (
+        "psxrecomp-source-observation-plan-v5\n"
+        "cutover 80001004 12345678 return 00000000\n"
+    )
+
+
+def test_static_aot_codegen_consumes_authenticated_source_plan() -> None:
+    root = Path(__file__).resolve().parents[1]
+    cmake = (root / "CMakeLists.txt").read_text(encoding="utf-8")
+
+    assert "emit-source-plan" in cmake
+    assert "run_with_source_observation_plan.py" in cmake
+    assert '--plan "${XG_OVERLAY_SOURCE_PLAN}"' in cmake
 
 
 def test_full_artifact_identity_rejects_mutation_outside_required_range(
@@ -94,6 +233,25 @@ def test_cold_cutover_table_contains_non_control_overlay_seams(
     assert "0x001cf85c" not in table
 
 
+def test_retail_world_overlay_emits_authenticated_plan() -> None:
+    root = Path(__file__).resolve().parents[1]
+    variants = load_overlay_range_variants(
+        root / "native_renderer" / "xg_render_overlay_ranges.toml"
+    )
+    artifact = (root / "overlays" / "worldmap_module.bin").read_bytes()
+    assert hashlib.sha256(artifact).hexdigest() == (
+        "4c15fd32b3a03d7cd5ea4403dcaabc70abaf99b6aaca65d63d6866803edaac70"
+    )
+    plan = source_plan_for_overlay_ranges(variants, artifact, 0x8006FAF0)
+    assert plan is not None
+    for seam in (
+        "cutover 800979CC 3C04800A observe 00000000",
+        "cutover 80097AC8 0C011225 observe 00000000",
+        "cutover 80097ADC 87A50012 observe 00000000",
+    ):
+        assert seam in plan
+
+
 def test_world_contract_has_independent_family_authority() -> None:
     root = Path(__file__).resolve().parents[1]
     variants = load_overlay_range_variants(
@@ -105,7 +263,12 @@ def test_world_contract_has_independent_family_authority() -> None:
         "ft4-2e-projected-v1",
         "field-sprite-xy-override-v1",
         "field-target-polylines-v1",
+        "movie-field-owner-v1",
+        "movie-standalone-owner-v1",
+        "movie-str-frame-complete-v1",
         "world-full-sky-v1",
+        "world-full-animated-textures-v1",
+        "world-full-shared-textures-v1",
         "world-full-terrain-water-v1",
         "world-partial-terrain-water-v1",
         "world-full-models-v1",
@@ -231,6 +394,65 @@ def test_world_contract_has_independent_family_authority() -> None:
     assert [(cutover.pc, cutover.instruction, cutover.transfer)
             for cutover in partial_terrain.cutovers] == [
         (0x8009932C, 0x27BDFFC8, "return"),
+    ]
+    full_world = [variant for variant in variants
+                  if variant.identifier.startswith("world-full-")]
+    assert full_world
+    assert all(variant.base_address == 0x8006F000
+               for variant in full_world)
+    assert all(variant.load_address == 0x8006FAF0
+               for variant in full_world)
+    terrain = next(
+        variant for variant in variants
+        if variant.identifier == "world-full-terrain-water-v1"
+    )
+    assert (0x800979C8, 504,
+            "192f5c3be6870f95277ee0b5f8cd4e21b999ea9a0ce7897e8e1a821dac32d2fa") in {
+        (required.start, required.size, required.sha256.hex())
+        for required in terrain.required_ranges
+    }
+    assert {
+        (0x800979CC, 0x3C04800A, "observe"),
+        (0x80097AC8, 0x0C011225, "observe"),
+        (0x80097ADC, 0x87A50012, "observe"),
+    } <= {
+        (cutover.pc, cutover.instruction, cutover.transfer)
+        for cutover in terrain.cutovers
+    }
+    shared_textures = next(
+        variant for variant in variants
+        if variant.identifier == "world-full-shared-textures-v1"
+    )
+    assert {(required.start, required.size, required.sha256.hex())
+            for required in shared_textures.required_ranges} == {
+        (0x8008440C, 372,
+         "b906f63b893759181a6c6c6253f667f0d351cb79f1567f308405443e803e3202"),
+    }
+    assert [(cutover.pc, cutover.instruction, cutover.transfer)
+            for cutover in shared_textures.cutovers] == [
+        (0x80084410, 0xAFBF0038, "observe"),
+        (0x80084508, 0x0C011225, "observe"),
+        (0x8008451C, 0x87A50012, "observe"),
+    ]
+    animated_textures = next(
+        variant for variant in variants
+        if variant.identifier == "world-full-animated-textures-v1"
+    )
+    assert {(required.start, required.size, required.sha256.hex())
+            for required in animated_textures.required_ranges} == {
+        (0x80074F2C, 260,
+         "71f94afc28d28891b18ff24eae1bde26a33c128fa90e93d65550dade7e061150"),
+        (0x80075104, 292,
+         "ef57b7be41c85093c460590ef60b7bf8cde3bcf0b9724b27fd523d4a4e6e53dc"),
+    }
+    assert [(cutover.pc, cutover.instruction, cutover.transfer)
+            for cutover in animated_textures.cutovers] == [
+        (0x80074F30, 0x8C42CC9C, "observe"),
+        (0x80074FEC, 0x0C011225, "observe"),
+        (0x80075018, 0x8FB20020, "observe"),
+        (0x80075108, 0x8C42CD64, "observe"),
+        (0x800751E4, 0x0C011225, "observe"),
+        (0x80075210, 0x8FB20020, "observe"),
     ]
     actor_sprites = next(
         variant for variant in variants

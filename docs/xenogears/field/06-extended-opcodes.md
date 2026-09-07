@@ -85,12 +85,12 @@ Each instruction is encoded as `FE xx`; byte counts include the `FE` prefix. Onl
 | `FE 4C` | 3 | `0x8008A974` | `SetForcedAnimationAndReleaseOverride` | sets the complemented forced-animation identifier and clears actor flag 0x10000. |
 | `FE 4D` | 3 | `0x8008A93C` | `SetForcedAnimationComplement` | stores the bitwise complement of an immediate animation identifier as the current actor's forced animation. |
 | `FE 4E` | 2 | `0x8008AA60` | `FreeSpecialAnimation` | releases the current actor's special-animation allocation and resets its resource identifier. |
-| `FE 4F` | 2 | `0x80093BB0` | `EnableEncounterIndicator` | enables the encounter indicator. |
-| `FE 50` | 2 | `0x80093BD4` | `DisableEncounterIndicator` | disables the encounter indicator. |
+| `FE 4F` | 2 | `0x80093BB0` | `EnableFieldMenu` | allows the player to open the normal Field menu. |
+| `FE 50` | 2 | `0x80093BD4` | `DisableFieldMenu` | prevents the player from opening the normal Field menu. |
 | `FE 51` | 2 | `0x80093BFC` | `EnableCompass` | enables the Field compass. |
 | `FE 52` | 2 | `0x80093C20` | `DisableCompass` | disables the Field compass. |
-| `FE 53` | 2 | `0x80093AC8` | `DisableEncountersAndCompass` | disables encounter and compass state. |
-| `FE 54` | 2 | `0x80093B10` | `EnableEncountersAndCompass` | restores encounter and compass state. |
+| `FE 53` | 2 | `0x80093AC8` | `EnableEncountersFieldMenuAndCompass` | enables random encounters, the player-opened Field menu, and the Field compass. |
+| `FE 54` | 2 | `0x80093B10` | `DisableEncountersFieldMenuAndCompass` | disables random encounters, the player-opened Field menu, and the Field compass. |
 | `FE 55` | 2 | `0x80093740` | `OpenNormalMenu` | queues menu mode 0 with the configured menu argument, yields, increments the open-menu count, and advances one byte. |
 | `FE 56` | 4 | `0x80093930` | `OpenMenuMode1WithSelection` | copies the evaluated selection into script variable 1 and persistent menu state, queues menu mode 1, yields, and advances three bytes. |
 | `FE 57` | 2 | `0x800937E0` | `OpenLoadGameMenu` | queues menu mode 2, yields, increments the open-menu count, and advances one byte. |

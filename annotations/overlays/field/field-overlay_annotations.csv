@@ -579,10 +579,10 @@
 0x80093A04, function start — FieldScriptOpenGearShopMenu; queues the selected Gear shop inventory and yields the current script.
 0x80093A68, function start — FieldScriptClearSceneFlag8000; clears scene flag 0x8000.
 0x80093A98, function start — FieldScriptSetSceneFlag8000; sets scene flag 0x8000.
-0x80093AC8, function start — FieldScriptDisableEncountersAndCompass; disables encounter and compass state.
-0x80093B10, function start — FieldScriptEnableEncountersAndCompass; restores encounter and compass state.
-0x80093BB0, function start — FieldScriptEnableEncounterIndicator; enables the encounter indicator.
-0x80093BD4, function start — FieldScriptDisableEncounterIndicator; disables the encounter indicator.
+0x80093AC8, function start — FieldScriptEnableEncountersFieldMenuAndCompass; enables random encounters, the player-opened Field menu, and the Field compass.
+0x80093B10, function start — FieldScriptDisableEncountersFieldMenuAndCompass; disables random encounters, the player-opened Field menu, and the Field compass.
+0x80093BB0, function start — FieldScriptEnableFieldMenu; allows the player to open the normal Field menu.
+0x80093BD4, function start — FieldScriptDisableFieldMenu; prevents the player from opening the normal Field menu.
 0x80093BFC, function start — FieldScriptEnableCompass; enables the Field compass.
 0x80093C20, function start — FieldScriptDisableCompass; disables the Field compass.
 0x80093C48, function start — FieldScriptVMHandlerDisableRandomEncounters; disables encounters.

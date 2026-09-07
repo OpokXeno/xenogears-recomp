@@ -111,6 +111,39 @@ typedef struct PsxXgRenderZoomTemplateContractSnapshot {
     uint32_t last_rejection_blocker;
 } PsxXgRenderZoomTemplateContractSnapshot;
 
+typedef struct PsxXgRenderPreScenePrimitiveSnapshot {
+    uint64_t texture_resource_id;
+    uint32_t packet_address;
+    uint32_t interpolation_producer_id;
+    uint32_t interpolation_primitive_id;
+    uint16_t tpage;
+    uint16_t min_u;
+    uint16_t min_v;
+    uint16_t max_u;
+    uint16_t max_v;
+    int32_t min_x;
+    int32_t min_y;
+    int32_t max_x;
+    int32_t max_y;
+    uint16_t draw_area_left;
+    uint16_t draw_area_top;
+    uint16_t draw_area_right;
+    uint16_t draw_area_bottom;
+    int16_t draw_offset_x;
+    int16_t draw_offset_y;
+    uint8_t texture_page_x;
+    uint8_t texture_page_y;
+    uint8_t texture_depth;
+    uint8_t red;
+    uint8_t green;
+    uint8_t blue;
+    uint8_t blend_mode;
+    uint8_t triangle_count;
+    bool has_texture;
+    bool has_clut;
+    bool semi_transparent;
+} PsxXgRenderPreScenePrimitiveSnapshot;
+
 typedef struct PsxXgRenderOverlayFt4Snapshot {
     uint64_t producer_entry_count;
     uint64_t producer_return_count;
@@ -365,6 +398,7 @@ typedef struct PsxXgRenderSpriteFt4ShadowSnapshot {
     uint64_t field_builder_match_count;
     uint64_t field_builder_mismatch_count;
     uint64_t field_builder_active_scene_count;
+    uint64_t field_builder_resource_deferral_count;
     uint64_t caller_count;
     uint64_t empty_caller_count;
     uint64_t projection_count;
@@ -398,6 +432,7 @@ typedef struct PsxXgRenderSpriteFt4ShadowSnapshot {
     uint32_t last_data_address;
     uint32_t last_descriptor_address;
     uint32_t last_primitive_count;
+    uint32_t last_resident_miss_source;
     uint32_t first_mismatch_packet;
     uint32_t first_mismatch_descriptor;
     PsxXgRenderFt4PayloadMismatch first_payload_mismatch;
@@ -549,10 +584,79 @@ typedef struct PsxXgRenderModeSnapshot {
     uint64_t fallback_count;
 } PsxXgRenderModeSnapshot;
 
+enum { PSX_XG_RENDER_RESIDENT_TEXT_ROUTE_COUNT = 14u };
+
+typedef struct PsxXgRenderResidentTextSnapshot {
+    uint64_t observation_count;
+    uint64_t route_counts[PSX_XG_RENDER_RESIDENT_TEXT_ROUTE_COUNT];
+    uint64_t invalidation_count;
+    uint64_t font_content_digest;
+    uint32_t last_pc;
+    uint32_t last_owner_entry;
+    uint32_t context_address;
+    uint32_t active_advance_context;
+    uint32_t render_context_address;
+    uint32_t render_ot_address;
+    uint32_t font_address;
+    uint32_t last_destination_address;
+    uint32_t last_row_record_address;
+    uint16_t font_header[7];
+    int16_t base_x;
+    int16_t base_y;
+    uint16_t width_units;
+    uint16_t row_count;
+    uint16_t line_height;
+    uint16_t display_first_row;
+    uint16_t last_row_advance;
+    uint16_t last_glyph_id;
+    uint16_t last_glyph_x;
+    uint16_t last_glyph_row;
+    uint16_t last_glyph_width;
+    uint16_t last_lead;
+    uint16_t last_trail;
+    uint16_t last_stride;
+    uint8_t selected_row;
+    uint8_t red;
+    uint8_t green;
+    uint8_t blue;
+    uint8_t render_parity;
+    uint8_t last_plane;
+    bool context_valid;
+    bool font_valid;
+    bool render_active;
+    bool frame_frozen;
+} PsxXgRenderResidentTextSnapshot;
+
 typedef struct PsxXgRenderAuthRuntimeSnapshot {
     uint64_t interpolation_scene_generation;
     uint64_t authenticated_artifact_generation;
     bool authenticated_artifact_active;
+    bool active;
+    bool armed;
+    bool completed;
+    bool artifact_candidate_valid;
+    uint64_t artifact_scene_generation;
+    uint32_t pre_scene_count;
+    uint32_t pre_scene_blocker;
+    uint64_t ui_ot_completed_count;
+    uint64_t ui_ot_staged_count;
+    bool ui_ot_blocked;
+    uint64_t title_restage_attempts;
+    uint32_t title_restage_last_result;
+    uint32_t title_restage_last_detail;
+    uint32_t title_restage_fail_index;
+    uint32_t title_restage_tpage;
+    uint32_t title_restage_clut;
+    uint64_t retained_movie_resource_id;
+    uint64_t retained_movie_generation;
+    uint32_t retained_movie_kind;
+    uint32_t retained_movie_width;
+    uint32_t retained_movie_height;
+    uint32_t retained_movie_retain_count;
+    bool retained_movie_available;
+    bool retained_movie_current;
+    uint64_t invalidation_kind_counts[7];
+    uint64_t invalidation_mutation_counts[12];
 } PsxXgRenderAuthRuntimeSnapshot;
 
 typedef struct PsxXgRenderUiOtSnapshot {

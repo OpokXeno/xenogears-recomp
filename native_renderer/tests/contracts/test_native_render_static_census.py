@@ -307,7 +307,7 @@ def test_plan_fixtures_are_scanned_and_review_facts_remain_separate(tmp_path: Pa
     assert ledger["schema"] == "xg-native-3d-static-ledger/v3"
     assert ledger["static_classification_gate"] == "pass"
     assert ledger["p10_static_closure_claimed"] is True
-    assert "P10 Disc 1 static closure complete" in result.stdout
+    assert "Disc 1 static closure complete" in result.stdout
     assert not any(
         "linear-scan" in limitation for limitation in ledger["known_limitations"]
     )
@@ -724,7 +724,7 @@ def test_nonterminal_review_status_is_rejected(tmp_path: Path, status: str) -> N
     _write_review(review_path, review)
     result = run_tool("ledger", review_path, paths, tmp_path / "status.json")
     assert result.returncode == 1
-    assert "terminal P10 review status" in result.stderr
+    assert "terminal static census review status" in result.stderr
 
 
 @pytest.mark.parametrize(

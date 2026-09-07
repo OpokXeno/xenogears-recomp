@@ -8,6 +8,7 @@
 #include "xg_render_auth_runtime_diagnostics.h"
 #include "xg_render_invalidation_dispatch.h"
 #include "xg_render_model_repository.h"
+#include "xg_render_model_sprite_pipeline.h"
 #include "xg_render_mutation_classifier.h"
 #include "xg_render_resource_watch.h"
 #include "xg_render_runtime_composition.h"
@@ -141,6 +142,30 @@ bool psx_xg_render_auth_runtime_test_model_ft4_descriptor_template_present(
         uint32_t descriptor_address) {
     return xg_render_model_repository_descriptor_template_present(
         descriptor_address);
+}
+
+bool psx_xg_render_auth_runtime_test_accept_gear_helper_mode1_proof(
+        CPUState *cpu, const PsxXgRenderAuthCandidate *proof) {
+    return xg_render_model_sprite_pipeline_accept_gear_helper_mode1_proof(
+        cpu, proof);
+}
+
+bool psx_xg_render_auth_runtime_test_model_ft4_primitive(
+        XgRenderIrNativePrimitive *out_primitive, uint32_t *out_ot_bucket) {
+    if (out_primitive == NULL || out_ot_bucket == NULL) return false;
+    for (uint32_t index = 0u;
+         index < xg_render_submission_pre_scene_count(); ++index) {
+        XgRenderPreScenePrimitive record;
+
+        if (!xg_render_submission_pre_scene_item_copy(index, &record) ||
+            (record.source_primitive_index & UINT32_C(0xf0000000)) !=
+                UINT32_C(0x50000000))
+            continue;
+        *out_primitive = record.primitive;
+        *out_ot_bucket = record.ot_bucket;
+        return true;
+    }
+    return false;
 }
 
 void psx_xg_render_auth_runtime_test_watch_resource(

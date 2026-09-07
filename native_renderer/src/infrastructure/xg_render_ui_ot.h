@@ -5,6 +5,7 @@
 
 #include "gpu_render.h"
 #include "xg_render_snapshot_types.h"
+#include "xg_render_source_frame.h"
 
 #include <stdint.h>
 
@@ -12,11 +13,16 @@ typedef uint32_t (*XgRenderUiOtReadWord)(uint32_t address);
 
 void xg_render_ui_ot_note_draw_observation(
     uint32_t frame, uint32_t start_address,
-    GpuRenderTransactionId visual_id);
+    GpuRenderTransactionId visual_id,
+    const XgRenderSourceFrameDescription *description);
 void xg_render_ui_ot_clear_pending(void);
+bool xg_render_ui_ot_pending_matches(
+    uint32_t start_address, const XgRenderSourceFrameDescription *description);
 bool xg_render_ui_ot_prepare(
     uint32_t start_address, GuestRenderRenderMode requested_mode,
     uint32_t current_frame, XgRenderUiOtReadWord read_word);
+bool xg_render_ui_ot_complete(
+    uint32_t start_address, uint32_t transferred_words, bool *out_published);
 void xg_render_ui_ot_snapshot(PsxXgRenderUiOtSnapshot *out_snapshot);
 void xg_render_ui_ot_reset(void);
 void xg_render_ui_ot_handle_invalidation(

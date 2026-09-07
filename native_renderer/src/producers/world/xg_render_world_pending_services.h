@@ -66,6 +66,8 @@ void xg_render_world_clouds_prepare(
     CPUState *cpu, const XgRenderWorldPendingServices *services);
 void xg_render_world_clouds_commit(
     CPUState *cpu, const XgRenderWorldPendingServices *services);
+bool xg_render_world_clouds_pending_return_matches(
+    uint32_t pc, uint32_t instruction_word);
 void xg_render_world_clouds_clear_pending(void);
 void xg_render_world_clouds_reset(void);
 void xg_render_world_clouds_handle_invalidation(

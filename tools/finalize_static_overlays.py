@@ -21,6 +21,7 @@ import compile_overlays  # noqa: E402
 
 
 UNIT_SCHEMA = "xenogears-native-overlay-unit/v1"
+STATIC_AUTHORITY_PROVENANCE = "authenticated-static-image-v1"
 BODY_SHARD_LINE_BUDGET = 40_000
 
 
@@ -51,6 +52,18 @@ def _identity(game: str, manifest: str):
 
 def _shard_path(prefix: Path, index: int) -> Path:
     return prefix.parent / f"{prefix.name}_{index:02d}.c"
+
+
+def _range_sha256(data: bytes, load_address: int,
+                  ranges: list[tuple[int, int]]) -> str:
+    base = load_address & 0x1FFFFFFF
+    digest = hashlib.sha256()
+    for address, size in ranges:
+        offset = (address & 0x1FFFFFFF) - base
+        if offset < 0 or size <= 0 or offset + size > len(data):
+            raise ValueError("static overlay code range escapes its artifact")
+        digest.update(data[offset:offset + size])
+    return digest.hexdigest()
 
 
 def _write_shards(prefix: Path, sources: list[str], shard_count: int) -> None:
@@ -124,25 +137,81 @@ def _normalized_variants(variants: list[dict]) -> list[dict]:
             (int(lo) & 0x1FFFFFFF, int(length))
             for lo, length in variant["ranges"]
         )
+        artifact_base = int(variant["artifact_base"]) & 0x1FFFFFFF
+        artifact_size = int(variant["artifact_size"])
+        code_sha256 = str(variant["code_sha256"]).lower()
+        artifact_sha256 = str(variant["artifact_sha256"]).lower()
+        capability_id = int(variant["capability_id"])
+        producer_entry = int(variant["producer_entry"]) & 0xFFFFFFFF
+        if (
+            not ranges
+            or artifact_size < 4
+            or artifact_base >= 0x800000
+            or artifact_size > 0x800000 - artifact_base
+            or capability_id <= 0
+            or capability_id > 0xFFFFFFFFFFFFFFFF
+            or re.fullmatch(r"[0-9a-f]{64}", code_sha256) is None
+            or re.fullmatch(r"[0-9a-f]{64}", artifact_sha256) is None
+            or variant.get("authority_provenance")
+            != STATIC_AUTHORITY_PROVENANCE
+        ):
+            raise ValueError("static overlay variant has invalid artifact authority")
+        artifact_end = artifact_base + artifact_size
+        producer_phys = producer_entry & 0x1FFFFFFF
+        address_phys = int(variant["addr"]) & 0x1FFFFFFF
+        if (
+            producer_phys < artifact_base
+            or producer_phys + 4 > artifact_end
+            or address_phys < artifact_base
+            or address_phys + 4 > artifact_end
+            or any(
+                length <= 0
+                or lo < artifact_base
+                or lo + length > artifact_end
+                for lo, length in ranges
+            )
+        ):
+            raise ValueError("static overlay variant escapes its exact artifact")
         resume = int(variant.get("resume", 0)) & 0xFFFFFFFF
-        key = (int(variant["addr"]), int(variant["crc"]), ranges, resume)
+        key = (
+            int(variant["addr"]),
+            code_sha256,
+            ranges,
+            resume,
+            variant["symbol"],
+            producer_entry,
+            artifact_base,
+            artifact_size,
+            artifact_sha256,
+            capability_id,
+        )
         if key in seen:
             continue
         seen.add(key)
         unique.append({
             **variant,
             "addr": int(variant["addr"]),
-            "crc": int(variant["crc"]),
+            "code_sha256": code_sha256,
             "ranges": ranges,
             "resume": resume,
+            "producer_entry": producer_entry,
+            "artifact_base": artifact_base,
+            "artifact_size": artifact_size,
+            "artifact_sha256": artifact_sha256,
+            "capability_id": capability_id,
         })
     unique.sort(
         key=lambda variant: (
             variant["addr"],
-            variant["crc"],
+            variant["code_sha256"],
             variant["ranges"],
             variant["resume"],
             variant["symbol"],
+            variant["producer_entry"],
+            variant["artifact_base"],
+            variant["artifact_size"],
+            variant["artifact_sha256"],
+            variant["capability_id"],
         )
     )
     return unique
@@ -157,13 +226,35 @@ def _dispatch_shard_source(index: int, variants: list[dict]) -> str:
         ranges: f"psx_ov_dispatch_{index:02d}_ranges_{range_index:04d}"
         for range_index, ranges in enumerate(range_sets)
     }
+    code_identities = sorted({
+        (variant["ranges"], variant["code_sha256"])
+        for variant in variants
+    })
+    code_identity_symbols = {
+        identity: f"psx_ov_dispatch_{index:02d}_code_sha256_{identity_index:04d}"
+        for identity_index, identity in enumerate(code_identities)
+    }
+    artifact_ranges = sorted({
+        (variant["artifact_base"], variant["artifact_size"])
+        for variant in variants
+    })
+    artifact_range_symbols = {
+        artifact: f"psx_ov_dispatch_{index:02d}_artifact_{artifact_index:04d}"
+        for artifact_index, artifact in enumerate(artifact_ranges)
+    }
+    artifact_identities = sorted({variant["artifact_sha256"] for variant in variants})
+    artifact_identity_symbols = {
+        identity: f"psx_ov_dispatch_{index:02d}_artifact_sha256_{identity_index:04d}"
+        for identity_index, identity in enumerate(artifact_identities)
+    }
     lines = [
         f"/* Generated native overlay dispatch shard {index}. DO NOT EDIT. */",
         '#include "psx_runtime.h"',
+        '#include "overlay_loader.h"',
         "",
         "extern int psx_overlay_static_code_matches(const uint32_t *lo_len_pairs,",
         "                                           uint32_t count,",
-        "                                           uint32_t expected_crc);",
+        "                                           const uint8_t expected_sha256[32]);",
         "extern uint64_t psx_ov_static_checks;",
         "extern uint64_t psx_ov_static_hits;",
         "extern uint64_t psx_ov_static_variant_misses;",
@@ -183,19 +274,69 @@ def _dispatch_shard_source(index: int, variants: list[dict]) -> str:
             f"static const uint32_t {range_symbols[ranges]}[] = "
             "{ " + ", ".join(flat) + " };"
         )
+    for identity in code_identities:
+        digest = identity[1]
+        initializer = ", ".join(f"0x{value:02x}u" for value in bytes.fromhex(digest))
+        lines.append(
+            f"static const uint8_t {code_identity_symbols[identity]}[32] = "
+            "{ " + initializer + " };"
+        )
+    for artifact in artifact_ranges:
+        lines.append(
+            f"static const uint32_t {artifact_range_symbols[artifact]}[] = "
+            f"{{ 0x{artifact[0]:08X}u, 0x{artifact[1]:X}u }};"
+        )
+    for identity in artifact_identities:
+        initializer = ", ".join(f"0x{value:02x}u" for value in bytes.fromhex(identity))
+        lines.append(
+            f"static const uint8_t {artifact_identity_symbols[identity]}[32] = "
+            "{ " + initializer + " };"
+        )
     lines += [
         "",
-        f"int psx_overlay_dispatch_shard_{index:02d}(CPUState *cpu, uint32_t key) {{",
+        f"int psx_overlay_dispatch_shard_{index:02d}(CPUState *cpu, uint32_t key,",
+        "                                         uint32_t dispatch_pc,",
+        "                                         const PsxGameIdentity *identity) {",
         "    switch (key) {",
     ]
     for address, address_variants in sorted(by_address.items()):
-        lines.append(f"        case 0x{address:08X}u:")
-        for variant in address_variants:
+        lines += [
+            f"        case 0x{address:08X}u: {{",
+            "            uint32_t selected = 0u;",
+        ]
+        for selection, variant in enumerate(address_variants, 1):
+            code_identity = (variant["ranges"], variant["code_sha256"])
             lines += [
                 "            psx_ov_static_checks++;",
                 "            if (psx_overlay_static_code_matches("
                 f"{range_symbols[variant['ranges']]}, "
-                f"{len(variant['ranges'])}u, 0x{variant['crc']:08X}u)) {{",
+                f"{len(variant['ranges'])}u, "
+                f"{code_identity_symbols[code_identity]})) {{",
+                "                if (selected != 0u) {",
+                "                    psx_ov_static_variant_misses++;",
+                "                    return 0;",
+                "                }",
+                f"                selected = {selection}u;",
+                "            } else {",
+                "                psx_ov_static_variant_misses++;",
+                "            }",
+            ]
+        lines.append("            switch (selected) {")
+        for selection, variant in enumerate(address_variants, 1):
+            artifact = (variant["artifact_base"], variant["artifact_size"])
+            code_identity = (variant["ranges"], variant["code_sha256"])
+            lines += [
+                f"            case {selection}u:",
+                "                if (!psx_overlay_static_note_candidate_dispatch(",
+                f"                        {range_symbols[variant['ranges']]}, "
+                f"{len(variant['ranges'])}u, {code_identity_symbols[code_identity]},",
+                f"                        {artifact_range_symbols[artifact]}, 1u, "
+                f"{artifact_identity_symbols[variant['artifact_sha256']]},",
+                "                        identity, "
+                f"UINT64_C(0x{variant['capability_id']:016X}),",
+                f"                        0x{variant['producer_entry']:08X}u, "
+                "dispatch_pc))",
+                "                    return 0;",
                 "                psx_ov_static_hits++;",
             ]
             if variant["resume"]:
@@ -205,10 +346,13 @@ def _dispatch_shard_source(index: int, variants: list[dict]) -> str:
             lines += [
                 f"                {variant['symbol']}(cpu);",
                 "                return 1;",
-                "            }",
-                "            psx_ov_static_variant_misses++;",
             ]
-        lines.append("            return 0;")
+        lines += [
+            "            default:",
+            "                return 0;",
+            "            }",
+            "        }",
+        ]
     lines += [
         "        default:",
         "            psx_ov_static_address_misses++;",
@@ -252,12 +396,31 @@ def generate_dispatch_shards(
             (int(lo) & 0x1FFFFFFF, int(length))
             for lo, length in image["ranges"]
         )
+        exact_artifact_ranges = tuple(
+            (int(lo) & 0x1FFFFFFF, int(length))
+            for lo, length in image.get("artifact_ranges", ())
+        )
         key = (
             int(image["load_addr"]) & 0x1FFFFFFF,
             int(image["size"]),
-            int(image["crc"]),
+            str(image["code_sha256"]).lower(),
+            str(image["artifact_sha256"]).lower(),
+            int(image["capability_id"]),
             ranges,
         )
+        if (
+            key[1] < 4
+            or key[0] >= 0x800000
+            or key[1] > 0x800000 - key[0]
+            or re.fullmatch(r"[0-9a-f]{64}", key[2]) is None
+            or re.fullmatch(r"[0-9a-f]{64}", key[3]) is None
+            or key[4] <= 0
+            or key[4] > 0xFFFFFFFFFFFFFFFF
+            or image.get("authority_provenance")
+            != STATIC_AUTHORITY_PROVENANCE
+            or exact_artifact_ranges != ((key[0], key[1]),)
+        ):
+            raise ValueError("static overlay image has invalid artifact authority")
         if key in seen_images:
             continue
         seen_images.add(key)
@@ -265,13 +428,23 @@ def generate_dispatch_shards(
             **image,
             "load_addr": key[0],
             "size": key[1],
-            "crc": key[2],
+            "code_sha256": key[2],
+            "artifact_sha256": key[3],
+            "capability_id": key[4],
             "ranges": ranges,
         })
     unique_images.sort(
         key=lambda image: (
-            image["load_addr"], image["size"], image["crc"], image["ranges"]
+            image["load_addr"], image["size"], image["artifact_sha256"],
+            image["capability_id"], image["code_sha256"], image["ranges"]
         )
+    )
+    known_code_identities = sorted({
+        (variant["ranges"], variant["code_sha256"])
+        for variant in unique
+    })
+    known_code_union = compile_overlays.merge_code_ranges(
+        ranges for ranges, _digest in known_code_identities
     )
 
     game_identity = ", ".join(f"0x{value:02X}u" for value in identity.game_sha256)
@@ -290,7 +463,7 @@ def generate_dispatch_shards(
         "};",
         "extern int psx_overlay_static_code_matches(const uint32_t *lo_len_pairs,",
         "                                           uint32_t count,",
-        "                                           uint32_t expected_crc);",
+        "                                           const uint8_t expected_sha256[32]);",
         "uint64_t psx_ov_static_checks = 0;",
         "uint64_t psx_ov_static_hits = 0;",
         "uint64_t psx_ov_static_variant_misses = 0;",
@@ -303,20 +476,36 @@ def generate_dispatch_shards(
     for index in range(len(shard_sources)):
         lines.append(
             f"extern int psx_overlay_dispatch_shard_{index:02d}("
-            "CPUState *cpu, uint32_t key);"
+            "CPUState *cpu, uint32_t key, uint32_t dispatch_pc, "
+            "const PsxGameIdentity *identity);"
         )
     lines.append("")
-    for index, image in enumerate(unique_images):
+    for index, (ranges, digest) in enumerate(known_code_identities):
         flat = [
             value
-            for lo, length in image["ranges"]
+            for lo, length in ranges
             for value in (f"0x{lo:08X}u", f"0x{length:X}u")
         ]
-        image["range_symbol"] = f"psx_ov_static_image_ranges_{index:03d}"
         lines.append(
-            f"static const uint32_t {image['range_symbol']}[] = "
+            f"static const uint32_t psx_ov_static_code_ranges_{index:03d}[] = "
             "{ " + ", ".join(flat) + " };"
         )
+        initializer = ", ".join(
+            f"0x{value:02x}u" for value in bytes.fromhex(digest)
+        )
+        lines.append(
+            f"static const uint8_t psx_ov_static_code_sha256_{index:03d}[32] = "
+            "{ " + initializer + " };"
+        )
+    flat_union = [
+        value
+        for lo, length in known_code_union
+        for value in (f"0x{lo:08X}u", f"0x{length:X}u")
+    ]
+    lines.append(
+        "static const uint32_t psx_ov_static_code_union[] = { "
+        + ", ".join(flat_union) + " };"
+    )
     lines += [
         "",
         "static int psx_ov_static_ranges_contain(const uint32_t *ranges,",
@@ -351,14 +540,17 @@ def generate_dispatch_shards(
         "    if (!psx_game_identity_bind_static(&k_psx_overlay_static_identity) ||",
         "        !psx_game_identity_gate(&k_psx_overlay_static_identity)) return 0;",
         "    const uint32_t key = addr & 0x1FFFFFFFu;",
+        "    if (!psx_ov_static_ranges_contain(psx_ov_static_code_union, "
+        f"{len(known_code_union)}u, key)) return 0;",
     ]
-    for image in unique_images:
+    for index, (ranges, _digest) in enumerate(known_code_identities):
         lines += [
-            f"    if (psx_ov_static_ranges_contain({image['range_symbol']}, "
-            f"{len(image['ranges'])}u, key)) {{",
+            f"    if (psx_ov_static_ranges_contain(psx_ov_static_code_ranges_{index:03d}, "
+            f"{len(ranges)}u, key)) {{",
             "        psx_ov_static_image_checks++;",
-            f"        if (psx_overlay_static_code_matches({image['range_symbol']}, "
-            f"{len(image['ranges'])}u, 0x{image['crc']:08X}u)) {{",
+            f"        if (psx_overlay_static_code_matches("
+            f"psx_ov_static_code_ranges_{index:03d}, {len(ranges)}u, "
+            f"psx_ov_static_code_sha256_{index:03d})) {{",
             "            psx_ov_static_image_hits++;",
             "            return 1;",
             "        }",
@@ -377,7 +569,8 @@ def generate_dispatch_shards(
     for index, group in enumerate(address_groups):
         lines.append(
             f"    if (key <= 0x{group[-1]:08X}u) "
-            f"return psx_overlay_dispatch_shard_{index:02d}(cpu, key);"
+            f"return psx_overlay_dispatch_shard_{index:02d}("
+            f"cpu, key, addr, &k_psx_overlay_static_identity);"
         )
     lines += [
         "    psx_ov_static_address_misses++;",
@@ -422,6 +615,7 @@ def finalize_unit(args: argparse.Namespace) -> None:
     continuation_owners = compile_overlays.parse_cps_continuation_owners(source)
     game_document = tomllib.loads(args.game_toml.read_text(encoding="utf-8-sig"))
     whole_crc = binascii.crc32(data) & 0xFFFFFFFF
+    whole_sha256 = hashlib.sha256(data).hexdigest()
     audit = compile_overlays.audit_generated_c(
         source, load_address, size, whole_crc, game_document
     )
@@ -450,15 +644,24 @@ def finalize_unit(args: argparse.Namespace) -> None:
     source, symbols = compile_overlays.namespace_generated_static(
         source, namespace, function_addresses
     )
+    capability_id = compile_overlays.overlay_pair_id(
+        source,
+        function_identities,
+        identity=identity,
+        artifact=(load_address, size, whole_sha256),
+    )
+    if capability_id == 0:
+        raise ValueError(f"{image_id}: static artifact capability id is zero")
     variants = []
     for entry in sorted(function_addresses):
         for crc, ranges in identities_by_address[entry]:
             variants.append({
                 "addr": entry,
                 "symbol": symbols[entry],
-                "crc": crc,
+                "code_sha256": _range_sha256(data, load_address, ranges),
                 "ranges": ranges,
                 "resume": 0,
+                "producer_entry": entry,
             })
 
     # A continuation re-enters its owning function after the dispatcher sets
@@ -470,9 +673,10 @@ def finalize_unit(args: argparse.Namespace) -> None:
             variants.append({
                 "addr": entry,
                 "symbol": symbols[host],
-                "crc": crc,
+                "code_sha256": _range_sha256(data, load_address, ranges),
                 "ranges": ranges,
                 "resume": entry,
+                "producer_entry": host,
             })
 
     available = {variant["addr"] for variant in variants}
@@ -490,6 +694,12 @@ def finalize_unit(args: argparse.Namespace) -> None:
     image = compile_overlays.static_image_identity(
         function_identities, data, load_address, size, image_id
     )
+    image.update({
+        "artifact_sha256": whole_sha256,
+        "artifact_ranges": [(load_address & 0x1FFFFFFF, size)],
+        "capability_id": capability_id,
+        "authority_provenance": STATIC_AUTHORITY_PROVENANCE,
+    })
     metadata = {
         "schema": UNIT_SCHEMA,
         "image_id": image_id,
@@ -503,7 +713,11 @@ def finalize_unit(args: argparse.Namespace) -> None:
             "image_id": image_id,
             "load_addr": image["load_addr"],
             "size": image["size"],
-            "crc": image["crc"],
+            "code_sha256": image["code_sha256"],
+            "artifact_sha256": image["artifact_sha256"],
+            "artifact_ranges": image["artifact_ranges"],
+            "capability_id": image["capability_id"],
+            "authority_provenance": image["authority_provenance"],
             "ranges": image["ranges"],
             "chunks": image["chunks"],
         },
@@ -542,12 +756,36 @@ def aggregate(args: argparse.Namespace) -> None:
             or not isinstance(unit.get("image"), dict)
         ):
             raise ValueError(f"{path}: invalid or duplicate native overlay unit")
+        image = unit["image"]
+        if (
+            image.get("image_id") != image_id
+            or image.get("authority_provenance")
+            != STATIC_AUTHORITY_PROVENANCE
+            or not isinstance(image.get("capability_id"), int)
+            or image["capability_id"] <= 0
+            or image["capability_id"] > 0xFFFFFFFFFFFFFFFF
+            or not isinstance(image.get("artifact_sha256"), str)
+            or re.fullmatch(r"[0-9a-f]{64}", image["artifact_sha256"]) is None
+            or not isinstance(image.get("artifact_ranges"), list)
+        ):
+            raise ValueError(f"{path}: invalid static artifact authority metadata")
         seen_images.add(image_id)
         units.append(unit)
     if not units:
         raise ValueError("no native overlay units were supplied")
 
-    variants = [variant for unit in units for variant in unit["variants"]]
+    variants = []
+    for unit in units:
+        image = unit["image"]
+        for variant in unit["variants"]:
+            variants.append({
+                **variant,
+                "artifact_base": image["load_addr"],
+                "artifact_size": image["size"],
+                "artifact_sha256": image["artifact_sha256"],
+                "capability_id": image["capability_id"],
+                "authority_provenance": image["authority_provenance"],
+            })
     images = [unit["image"] for unit in units]
     dispatch, dispatch_shards = generate_dispatch_shards(
         variants, identity, images, args.dispatch_shard_count

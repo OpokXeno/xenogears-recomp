@@ -1,6 +1,7 @@
 #include "xg_render_temporal_submission.h"
 
 #include "xg_render_ir.h"
+#include "xg_render_semantic_presentation.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -27,10 +28,32 @@ typedef struct XgRenderTemporalSubmission {
     uint32_t candidate_count;
     uint32_t current_identity_count;
     uint32_t coverage_hash_touched_count;
+    uint64_t presentation_epoch;
     bool blocked;
 } XgRenderTemporalSubmission;
 
 static XgRenderTemporalSubmission submission;
+
+static void reset_submission(void) {
+    for (uint32_t index = 0u;
+         index < submission.coverage_hash_touched_count; ++index)
+        submission.coverage_hash[submission.coverage_hash_touched[index]] = 0;
+    submission.candidate_count = 0u;
+    submission.current_identity_count = 0u;
+    submission.coverage_hash_touched_count = 0u;
+    submission.presentation_epoch = 0u;
+    submission.blocked = false;
+}
+
+static void reconcile_timeline(void) {
+    XgRenderPresentationDiagnostics diagnostics;
+
+    xg_render_semantic_presentation_diagnostics(&diagnostics);
+    if (submission.presentation_epoch != 0u &&
+        submission.presentation_epoch != diagnostics.presentation_epoch)
+        reset_submission();
+    submission.presentation_epoch = diagnostics.presentation_epoch;
+}
 
 static size_t identity_hash(const GpuRenderInterpolationIdentity *identity) {
     uint64_t value = identity->scene_id;
@@ -69,13 +92,7 @@ static bool current_contains(const GpuRenderInterpolationIdentity *identity) {
 }
 
 void xg_render_temporal_submission_reset(void) {
-    for (uint32_t index = 0u;
-         index < submission.coverage_hash_touched_count; ++index)
-        submission.coverage_hash[submission.coverage_hash_touched[index]] = 0;
-    submission.candidate_count = 0u;
-    submission.current_identity_count = 0u;
-    submission.coverage_hash_touched_count = 0u;
-    submission.blocked = false;
+    reset_submission();
 }
 
 bool xg_render_temporal_submission_cover_current(
@@ -83,6 +100,7 @@ bool xg_render_temporal_submission_cover_current(
     const GpuRenderInterpolationIdentity *identity;
     size_t slot;
 
+    reconcile_timeline();
     if (semantic == NULL) {
         submission.blocked = true;
         return false;
@@ -122,6 +140,7 @@ bool xg_render_temporal_submission_stage(
         const GpuRenderTemporalCullPolicy *policy) {
     uint32_t index;
 
+    reconcile_timeline();
     if (semantic == NULL || policy == NULL || submission.blocked) return false;
     if (submission.candidate_count == CANDIDATE_CAPACITY) {
         submission.blocked = true;
@@ -135,6 +154,7 @@ bool xg_render_temporal_submission_stage(
 }
 
 bool xg_render_temporal_submission_flush(void) {
+    reconcile_timeline();
     if (submission.blocked) return false;
     for (uint32_t index = 0u; index < submission.candidate_count; ++index) {
         const XgRenderTemporalCandidate *candidate =

@@ -30,12 +30,12 @@ from native_render_replay import (
     assert_auth_proof_matrix,
     assert_baseline_evidence,
     assert_duplicate_runs,
-    assert_p0_mode_matrix_evidence,
+    assert_mode_matrix_evidence,
     assert_run_evidence,
     assert_task15_matrix_evidence,
-    build_p0_mode_matrix_evidence,
+    build_mode_matrix_evidence,
     bounded_diagnostic,
-    p0_baseline_projection,
+    mode_matrix_baseline_projection,
     parse_trace,
     runtime_command,
     runtime_record_command,
@@ -307,7 +307,7 @@ def run_task15_matrix(
     return payload
 
 
-def run_p0_mode_matrix(
+def run_mode_matrix(
     build: Path,
     trace: Path,
     runtime_state_root: Path,
@@ -339,7 +339,7 @@ def run_p0_mode_matrix(
                     "status": runtime.get("status"),
                     "backend": runtime.get("backend"),
                     "native_render": native_render,
-                    "baseline": p0_baseline_projection(runtime),
+                    "baseline": mode_matrix_baseline_projection(runtime),
                     "cleanup": {
                         "runtime_state_removed": False,
                         "process_reaped": True,
@@ -353,8 +353,8 @@ def run_p0_mode_matrix(
         rows.append({"render_mode": render_mode, "runs": runs})
     if snapshot_root_cards(memcard_dir) != before_cards:
         raise RuntimeError("memory card changed")
-    payload = build_p0_mode_matrix_evidence(rows)
-    assert_p0_mode_matrix_evidence(payload)
+    payload = build_mode_matrix_evidence(rows)
+    assert_mode_matrix_evidence(payload)
     return payload
 
 
@@ -414,21 +414,21 @@ def main() -> None:
         "--overlay-mode", "--overlay-modes", dest="overlay_mode",
         choices=("cold", "warm"), required=True)
     matrix_parser.add_argument("--watchdog-seconds", type=int, default=1200)
-    p0_matrix_parser = subparsers.add_parser("p0-matrix")
-    p0_matrix_parser.add_argument("--build", type=Path, required=True)
-    p0_matrix_parser.add_argument("--trace", type=Path, required=True)
-    p0_matrix_parser.add_argument("--runtime-state-root", type=Path)
-    p0_matrix_parser.add_argument("--memcard-dir", type=Path, default=root)
-    p0_matrix_parser.add_argument("--evidence", type=Path, required=True)
-    p0_matrix_parser.add_argument(
+    mode_matrix_parser = subparsers.add_parser("mode-matrix")
+    mode_matrix_parser.add_argument("--build", type=Path, required=True)
+    mode_matrix_parser.add_argument("--trace", type=Path, required=True)
+    mode_matrix_parser.add_argument("--runtime-state-root", type=Path)
+    mode_matrix_parser.add_argument("--memcard-dir", type=Path, default=root)
+    mode_matrix_parser.add_argument("--evidence", type=Path, required=True)
+    mode_matrix_parser.add_argument(
         "--disc", type=Path, default=root / "game" / "disc1.cue")
-    p0_matrix_parser.add_argument("--bios", type=Path, default=root / "game" / "SCPH1001.BIN")
-    p0_matrix_parser.add_argument("--renderer", choices=("opengl",), required=True)
-    p0_matrix_parser.add_argument(
+    mode_matrix_parser.add_argument("--bios", type=Path, default=root / "game" / "SCPH1001.BIN")
+    mode_matrix_parser.add_argument("--renderer", choices=("opengl",), required=True)
+    mode_matrix_parser.add_argument(
         "--render-modes", choices=("original,shadow,native",), required=True)
-    p0_matrix_parser.add_argument(
+    mode_matrix_parser.add_argument(
         "--overlay-mode", choices=("cold", "warm"), required=True)
-    p0_matrix_parser.add_argument("--watchdog-seconds", type=int, default=1200)
+    mode_matrix_parser.add_argument("--watchdog-seconds", type=int, default=1200)
     producer_parser = subparsers.add_parser("producer-family")
     producer_parser.add_argument("--family-metadata", type=Path, required=True)
     producer_parser.add_argument("--render-mode", choices=("shadow",), required=True)
@@ -506,7 +506,7 @@ def main() -> None:
         )
         write_evidence(arguments.evidence, payload)
         return
-    if arguments.command == "p0-matrix":
+    if arguments.command == "mode-matrix":
         if arguments.build.is_symlink() or not arguments.build.is_file():
             raise RecordArgumentError("build must be a regular executable")
         parse_trace(arguments.trace)
@@ -516,7 +516,7 @@ def main() -> None:
                 arguments.evidence.parent / "runtime-state" /
                 f".{arguments.evidence.stem}"
             )
-        payload = run_p0_mode_matrix(
+        payload = run_mode_matrix(
             arguments.build,
             arguments.trace,
             runtime_state_root,
@@ -527,7 +527,7 @@ def main() -> None:
         )
         write_evidence(arguments.evidence, payload)
         if payload["status"] != "PASS":
-            raise RecordArgumentError("p0-matrix BLOCKED")
+            raise RecordArgumentError("mode-matrix BLOCKED")
         return
     if arguments.command in ("baseline", "auth-proof"):
         build_paths = tuple(Path(value) for value in arguments.builds.split(",") if value)

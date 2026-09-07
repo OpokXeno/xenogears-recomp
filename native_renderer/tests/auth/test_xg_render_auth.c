@@ -9,8 +9,6 @@
 #define CHECK(expression) do { if (!(expression)) return 0; } while (0)
 
 typedef enum FixtureMutation {
-    FIXTURE_MUTATE_BASE_CRC,
-    FIXTURE_MUTATE_RANGE_CRC,
     FIXTURE_MUTATE_PAGE_GENERATION,
     FIXTURE_MUTATE_WINDOW_DIGEST,
     FIXTURE_MUTATE_WINDOW_START,
@@ -51,8 +49,6 @@ static XgRenderAuthIdentity make_identity(uint32_t namespace_id, uint8_t domain)
 static XgRenderAuthValidation make_validation(void) {
     XgRenderAuthValidation validation = { 0 };
 
-    validation.base_crc32 = UINT32_C(0x10203040);
-    validation.range_crc32 = UINT32_C(0x50607080);
     validation.code_page_generation = 9u;
     validation.instruction_window_digest = make_digest(0x21u);
     validation.instruction_window_start = UINT32_C(0x00001000);
@@ -82,6 +78,8 @@ static XgRenderAuthProfile make_profile(void) {
 
     profile.producer_record_id = XG_RENDER_AUTH_PRODUCER_RECORD_ID;
     profile.site_record_id = XG_RENDER_AUTH_SITE_RECORD_ID;
+    profile.disc_id = 1u;
+    profile.semantic_module = 1u;
     profile.producer_entry = UINT32_C(0x00007634);
     profile.static_game_identity = make_identity(UINT32_C(0x10203040), 0x11u);
     profile.field_image_identity = make_identity(UINT32_C(0x50607080), 0x12u);
@@ -258,6 +256,8 @@ static int run_valid_tier(XgRenderAuth *auth,
     CHECK(snapshot.hook_sequence[0] == XG_RENDER_AUTH_HOOK_ENTRY);
     CHECK(snapshot.hook_sequence[1] == XG_RENDER_AUTH_HOOK_CAPTURE_SITE);
     CHECK(snapshot.hook_sequence[2] == XG_RENDER_AUTH_HOOK_RETURN);
+    CHECK(snapshot.logical_identity.disc_id == profile->disc_id);
+    CHECK(snapshot.logical_identity.semantic_module == profile->semantic_module);
     CHECK(guest_render_bridge_id_equal(snapshot.logical_identity.state_id, state_id));
     *out_snapshot = snapshot;
     return 1;
@@ -356,12 +356,6 @@ static int test_static_cold_warm_share_identity_and_real_lifecycle(void) {
 static void mutate_execution(XgRenderAuthExecution *execution,
                              FixtureMutation mutation) {
     switch (mutation) {
-    case FIXTURE_MUTATE_BASE_CRC:
-        execution->validation.base_crc32++;
-        break;
-    case FIXTURE_MUTATE_RANGE_CRC:
-        execution->validation.range_crc32++;
-        break;
     case FIXTURE_MUTATE_PAGE_GENERATION:
         execution->validation.code_page_generation++;
         break;
@@ -435,7 +429,7 @@ static int test_validation_rejects_after_entry_producer_begin(void) {
     FixtureMutation mutation;
 
     CHECK(xg_render_auth_process_owner(&auth) == XG_RENDER_AUTH_OK);
-    for (mutation = FIXTURE_MUTATE_BASE_CRC;
+    for (mutation = FIXTURE_MUTATE_PAGE_GENERATION;
          mutation <= FIXTURE_MUTATE_CODEGEN_DIGEST;
          mutation++) {
         XgRenderAuthExecution execution =
@@ -542,6 +536,22 @@ static int test_zero_profile_validation_fields_reject(void) {
     CHECK(xg_render_auth_scene_reset(auth) == XG_RENDER_AUTH_OK);
     CHECK(begin_bridge_state(&state_id));
     profile.validation.required_delay_slot_instructions = 0u;
+    CHECK(xg_render_auth_scene_begin(auth, state_id, &profile) ==
+          XG_RENDER_AUTH_REJECTED);
+    CHECK(assert_scene_abort(auth, XG_RENDER_AUTH_REJECT_VALIDATION_MISMATCH, 0u));
+
+    profile = make_profile();
+    CHECK(xg_render_auth_scene_reset(auth) == XG_RENDER_AUTH_OK);
+    CHECK(begin_bridge_state(&state_id));
+    profile.disc_id = 0u;
+    CHECK(xg_render_auth_scene_begin(auth, state_id, &profile) ==
+          XG_RENDER_AUTH_REJECTED);
+    CHECK(assert_scene_abort(auth, XG_RENDER_AUTH_REJECT_VALIDATION_MISMATCH, 0u));
+
+    profile = make_profile();
+    CHECK(xg_render_auth_scene_reset(auth) == XG_RENDER_AUTH_OK);
+    CHECK(begin_bridge_state(&state_id));
+    profile.semantic_module = UINT32_MAX;
     CHECK(xg_render_auth_scene_begin(auth, state_id, &profile) ==
           XG_RENDER_AUTH_REJECTED);
     CHECK(assert_scene_abort(auth, XG_RENDER_AUTH_REJECT_VALIDATION_MISMATCH, 0u));

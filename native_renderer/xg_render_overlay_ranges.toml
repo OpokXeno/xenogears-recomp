@@ -1,6 +1,78 @@
 schema = "xg-render-overlay-ranges/v1"
 
 [[variants]]
+id = "gear-consumed-pose-v1"
+base_address = "0x801dc000"
+load_address = "0x801dc000"
+artifact_size = 51200
+artifact_sha256 = "14395a9f54c124fed016f07906cc882b2a9256d5ade2d10eef99e10fe9366523"
+# Rebuild/render/free code only: helper globals at 0x801e8640+ are mutable.
+required_ranges = [
+  { start = "0x801dc5c0", size = 5688, sha256 = "6884bca1402cd91d4d89ace7284fa29f88903a0a48a12e39052c3d0b31a792d6" },
+]
+cutovers = [
+  { pc = "0x801dc5c0", instruction = "0x27bdffc8", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801dc840", instruction = "0x03e00008", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801dc848", instruction = "0x27bdffc8", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801dcc2c", instruction = "0x03e00008", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801dcc3c", instruction = "0x27bdffc8", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801dcd84", instruction = "0x03e00008", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801dcd8c", instruction = "0x27bdffd8", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801dcec8", instruction = "0x27bdff20", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x801ddbf0", instruction = "0x03e00008", transfer = "observe", continuation = "0x00000000" },
+]
+
+[[variants]]
+id = "movie-standalone-owner-v1"
+base_address = "0x8006faf0"
+load_address = "0x8006faf0"
+artifact_size = 29779
+artifact_sha256 = "50e1a9d9e08b90eed0c2da1c289507e71cbf51749893a92f457ce79a59701f9a"
+required_ranges = [
+  { start = "0x8006faf0", size = 29779, sha256 = "50e1a9d9e08b90eed0c2da1c289507e71cbf51749893a92f457ce79a59701f9a" },
+]
+cutovers = [
+  { pc = "0x80076698", instruction = "0x0c074df3", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x80076834", instruction = "0x0c0750c6", transfer = "observe", continuation = "0x00000000" },
+]
+
+[[variants]]
+id = "movie-field-owner-v1"
+base_address = "0x8006faf0"
+load_address = "0x8006faf0"
+artifact_size = 260862
+artifact_sha256 = "38a1ce829a6f094c505f67143d6ace2d328418c65425a7383991179467e1fdfc"
+required_ranges = [
+  { start = "0x8006faf0", size = 260862, sha256 = "38a1ce829a6f094c505f67143d6ace2d328418c65425a7383991179467e1fdfc" },
+]
+cutovers = [
+  { pc = "0x80070f4c", instruction = "0x001398c0", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x80070f80", instruction = "0x0c008a9c", transfer = "observe-after", continuation = "0x00000000" },
+  { pc = "0x80070fa0", instruction = "0x0c00c83a", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800a72fc", instruction = "0x0c074df3", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800a80c4", instruction = "0x0c0750ec", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800a5600", instruction = "0x00003021", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800a5694", instruction = "0x28c20005", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800a6408", instruction = "0x27bdff78", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800a6490", instruction = "0xafa2004c", transfer = "local", continuation = "0x800a6608" },
+  { pc = "0x800a663c", instruction = "0x27bdff98", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800a6884", instruction = "0xae430004", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800a68f0", instruction = "0x8fbf0064", transfer = "observe", continuation = "0x00000000" },
+]
+
+[[variants]]
+id = "movie-str-frame-complete-v1"
+base_address = "0x801d3000"
+artifact_size = 90112
+artifact_sha256 = "2a8469095fd33daef61dbbf09d4f106ba1d72904a502763cb89057cbb615a440"
+required_ranges = [
+  { start = "0x801d3000", size = 90112, sha256 = "2a8469095fd33daef61dbbf09d4f106ba1d72904a502763cb89057cbb615a440" },
+]
+cutovers = [
+  { pc = "0x801d3480", instruction = "0x00e0f809", transfer = "observe", continuation = "0x00000000" },
+]
+
+[[variants]]
 id = "ft4-2c-callers-v1"
 base_address = "0x801b2000"
 artifact_size = 270340
@@ -145,6 +217,7 @@ cutovers = [
 [[variants]]
 id = "world-full-sky-v1"
 base_address = "0x8006f000"
+load_address = "0x8006faf0"
 required_ranges = [
   { start = "0x80071b50", size = 24, sha256 = "6c0dfd49800901d2d2ff6d328156c56d1fd96110a308f95a7f6f8e7776f17c39" },
   { start = "0x800736dc", size = 272, sha256 = "6577666f984028af4833106049538d689edc911bb9e7fb2c45490915d5d97cd7" },
@@ -156,11 +229,43 @@ cutovers = [
 ]
 
 [[variants]]
+id = "world-full-animated-textures-v1"
+base_address = "0x8006f000"
+load_address = "0x8006faf0"
+required_ranges = [
+  { start = "0x80074f2c", size = 260, sha256 = "71f94afc28d28891b18ff24eae1bde26a33c128fa90e93d65550dade7e061150" },
+  { start = "0x80075104", size = 292, sha256 = "ef57b7be41c85093c460590ef60b7bf8cde3bcf0b9724b27fd523d4a4e6e53dc" },
+]
+cutovers = [
+  { pc = "0x80074f30", instruction = "0x8c42cc9c", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x80074fec", instruction = "0x0c011225", transfer = "observe-after", continuation = "0x00000000" },
+  { pc = "0x80075018", instruction = "0x8fb20020", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x80075108", instruction = "0x8c42cd64", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800751e4", instruction = "0x0c011225", transfer = "observe-after", continuation = "0x00000000" },
+  { pc = "0x80075210", instruction = "0x8fb20020", transfer = "observe", continuation = "0x00000000" },
+]
+
+[[variants]]
+id = "world-full-shared-textures-v1"
+base_address = "0x8006f000"
+load_address = "0x8006faf0"
+required_ranges = [
+  { start = "0x8008440c", size = 372, sha256 = "b906f63b893759181a6c6c6253f667f0d351cb79f1567f308405443e803e3202" },
+]
+cutovers = [
+  { pc = "0x80084410", instruction = "0xafbf0038", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x80084508", instruction = "0x0c011225", transfer = "observe-after", continuation = "0x00000000" },
+  { pc = "0x8008451c", instruction = "0x87a50012", transfer = "observe", continuation = "0x00000000" },
+]
+
+[[variants]]
 id = "world-full-terrain-water-v1"
 base_address = "0x8006f000"
+load_address = "0x8006faf0"
 required_ranges = [
   { start = "0x80071a58", size = 16, sha256 = "cfdf1152cdb582b10285c62a34715ab1931def5d8db96fb8963da50e4ca059dc" },
   { start = "0x80071b1c", size = 28, sha256 = "0e877932e9000c17c6b9f4f6aec401ecf522f47844ac440a22978e02e41e6ccc" },
+  { start = "0x800979c8", size = 504, sha256 = "192f5c3be6870f95277ee0b5f8cd4e21b999ea9a0ce7897e8e1a821dac32d2fa" },
   { start = "0x800983a0", size = 1036, sha256 = "8c012fd4c47caf2141eddc8ce4e35e047cc224218be8f968579966489ca3eb40" },
   { start = "0x800987ac", size = 1300, sha256 = "48ba09864960e762a9ba98d99282c73f3a548652d99be7f82de5ba2c89422084" },
   { start = "0x8009932c", size = 988, sha256 = "f48d22e707597c0d8898df5b0332da1264e18f3c164782198d95b741e16d67bd" },
@@ -169,6 +274,9 @@ required_ranges = [
 ]
 cutovers = [
   { pc = "0x80071a58", instruction = "0x3c02800a", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x800979cc", instruction = "0x3c04800a", transfer = "observe", continuation = "0x00000000" },
+  { pc = "0x80097ac8", instruction = "0x0c011225", transfer = "observe-after", continuation = "0x00000000" },
+  { pc = "0x80097adc", instruction = "0x87a50012", transfer = "observe", continuation = "0x00000000" },
   { pc = "0x800983a0", instruction = "0x27bdff90", transfer = "observe", continuation = "0x00000000" },
   { pc = "0x8009932c", instruction = "0x27bdffc8", transfer = "return", continuation = "0x00000000" },
   { pc = "0x800996d4", instruction = "0x8fbf0034", transfer = "observe", continuation = "0x00000000" },
@@ -189,6 +297,7 @@ cutovers = [
 [[variants]]
 id = "world-full-models-v1"
 base_address = "0x8006f000"
+load_address = "0x8006faf0"
 required_ranges = [
   { start = "0x80071a58", size = 16, sha256 = "cfdf1152cdb582b10285c62a34715ab1931def5d8db96fb8963da50e4ca059dc" },
   { start = "0x80071ac0", size = 8, sha256 = "c04adae74c99b4c43d499cc5913cd2aeeeadf63cce6278ea397475b4a0289979" },
@@ -205,6 +314,7 @@ cutovers = [
 [[variants]]
 id = "world-full-actor-sprites-v1"
 base_address = "0x8006f000"
+load_address = "0x8006faf0"
 required_ranges = [
   { start = "0x80071a58", size = 16, sha256 = "cfdf1152cdb582b10285c62a34715ab1931def5d8db96fb8963da50e4ca059dc" },
   { start = "0x80071aa8", size = 16, sha256 = "27e17497c2238a3a4aaa75d0bb4f62ea92f759b61847d45cd3d2ccf9d184ee0e" },
@@ -218,6 +328,7 @@ cutovers = [
 [[variants]]
 id = "world-full-entity-shadows-v1"
 base_address = "0x8006f000"
+load_address = "0x8006faf0"
 required_ranges = [
   { start = "0x80071a58", size = 16, sha256 = "cfdf1152cdb582b10285c62a34715ab1931def5d8db96fb8963da50e4ca059dc" },
   { start = "0x80071ab8", size = 12, sha256 = "f065434cb83b7da3b04f69e69d3aa463faa210754f119af23d779948cdb023c8" },
@@ -233,6 +344,7 @@ cutovers = [
 [[variants]]
 id = "world-full-clouds-v1"
 base_address = "0x8006f000"
+load_address = "0x8006faf0"
 required_ranges = [
   { start = "0x80071a58", size = 16, sha256 = "cfdf1152cdb582b10285c62a34715ab1931def5d8db96fb8963da50e4ca059dc" },
   { start = "0x80071b50", size = 24, sha256 = "6c0dfd49800901d2d2ff6d328156c56d1fd96110a308f95a7f6f8e7776f17c39" },
@@ -248,6 +360,7 @@ cutovers = [
 [[variants]]
 id = "world-full-effects-v1"
 base_address = "0x8006f000"
+load_address = "0x8006faf0"
 required_ranges = [
   { start = "0x80071a58", size = 16, sha256 = "cfdf1152cdb582b10285c62a34715ab1931def5d8db96fb8963da50e4ca059dc" },
   { start = "0x80071a90", size = 32, sha256 = "eba716d171938ac0f8e4b92ccf169ddee7df9b64908542bdad5e7ad676634775" },
@@ -265,6 +378,7 @@ cutovers = [
 [[variants]]
 id = "world-full-decorations-v1"
 base_address = "0x8006f000"
+load_address = "0x8006faf0"
 required_ranges = [
   { start = "0x80071a58", size = 16, sha256 = "cfdf1152cdb582b10285c62a34715ab1931def5d8db96fb8963da50e4ca059dc" },
   { start = "0x80071aa8", size = 16, sha256 = "27e17497c2238a3a4aaa75d0bb4f62ea92f759b61847d45cd3d2ccf9d184ee0e" },
@@ -281,6 +395,7 @@ cutovers = [
 [[variants]]
 id = "world-full-horizon-v1"
 base_address = "0x8006f000"
+load_address = "0x8006faf0"
 required_ranges = [
   { start = "0x80071a58", size = 16, sha256 = "cfdf1152cdb582b10285c62a34715ab1931def5d8db96fb8963da50e4ca059dc" },
   { start = "0x80071b50", size = 24, sha256 = "6c0dfd49800901d2d2ff6d328156c56d1fd96110a308f95a7f6f8e7776f17c39" },
@@ -296,6 +411,7 @@ cutovers = [
 [[variants]]
 id = "world-full-minimap-v1"
 base_address = "0x8006f000"
+load_address = "0x8006faf0"
 required_ranges = [
   { start = "0x80071a58", size = 16, sha256 = "cfdf1152cdb582b10285c62a34715ab1931def5d8db96fb8963da50e4ca059dc" },
   { start = "0x80071b68", size = 32, sha256 = "804bb7557fdf59175d862f39f4c00aac3e9f7f8e475ff7e9164c6372b0586c23" },

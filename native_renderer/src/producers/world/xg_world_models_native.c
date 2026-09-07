@@ -282,9 +282,12 @@ static XgWorldModelsNativeResult read_model_header(
         result = read_u32(access, address + (offset), (output));                \
         if (result != XG_WORLD_MODELS_NATIVE_OK) return result;                 \
     } while (0)
-    result = read_u16(access, address + 4u, &half);
+    result = read_u16(access, address + 2u, &half);
     if (result != XG_WORLD_MODELS_NATIVE_OK) return result;
     model->vertex_count = half;
+    result = read_u16(access, address + 4u, &half);
+    if (result != XG_WORLD_MODELS_NATIVE_OK) return result;
+    model->primitive_count = half;
     result = read_u16(access, address + 6u, &half);
     if (result != XG_WORLD_MODELS_NATIVE_OK) return result;
     model->group_count = half;
@@ -487,8 +490,7 @@ static XgWorldModelsNativeResult capture_dispatch_primitives(
                           &group_primitive_count);
         if (result != XG_WORLD_MODELS_NATIVE_OK) return result;
         if (family >= XG_WORLD_MODELS_PRIMITIVE_FAMILY_COUNT ||
-            group_primitive_count == 0u ||
-            group_primitive_count > (UINT32_MAX - 4u) / 8u)
+            group_primitive_count == 0u)
             return XG_WORLD_MODELS_NATIVE_SOURCE_MISMATCH;
         topology_size = 4u + (uint32_t)group_primitive_count * 8u;
         if (!authorize_range(access, XG_WORLD_MODELS_NATIVE_RANGE_TOPOLOGY,
@@ -833,6 +835,8 @@ XgWorldModelsNativeResult xg_world_models_native_prepare(
     }
 
     source.ordering_table_address = 0u;
+    if (workspace->captured_source != NULL) *workspace->captured_source = source;
+    if (workspace->captured_record_base != NULL) *workspace->captured_record_base = record_base;
     world_result = xg_world_models_build(
         &source, records, record_capacity, node_side_effects,
         node_side_effect_capacity, &preparation.world);
@@ -1839,7 +1843,7 @@ XgWorldModelsNativeResult xg_world_models_native_finalize(
             output->group_cursor_after != dispatch->group_cursor_after ||
             (dispatch->guest_bounds_accepted &&
              commit.resident_vertex_total > UINT32_MAX -
-                 dispatch->model.vertex_count) ||
+                 dispatch->model.primitive_count) ||
             commit.resident_emitted_count > UINT32_MAX -
                 output->emitted_count_delta ||
             commit.processed_primitive_count > UINT32_MAX -
@@ -1849,7 +1853,7 @@ XgWorldModelsNativeResult xg_world_models_native_finalize(
             return XG_WORLD_MODELS_NATIVE_INCOMPLETE_OUTPUT;
 
         if (dispatch->guest_bounds_accepted)
-            commit.resident_vertex_total += dispatch->model.vertex_count;
+            commit.resident_vertex_total += dispatch->model.primitive_count;
         commit.resident_emitted_count += output->emitted_count_delta;
         commit.processed_primitive_count += output->processed_primitive_count;
         commit.accepted_primitive_count += output->accepted_primitive_count;
