@@ -59,27 +59,27 @@ ordering-table buckets. The common frame contract is:
 3. Rebuild current-parity packet fields.
 4. Link packets at their selected depth.
 5. Synchronize drawing and vertical blank where required.
-6. Install `DRAWENV` and `DISPENV`.
+6. Install `GpuRasterEnvironment` and `GpuDisplayEnvironment`.
 7. Submit the ordering table.
 
 This is a logical lifecycle, not a universal order for the two environment
-calls. Battle installs `DISPENV` then `DRAWENV`, while Menu installs `DRAWENV`
-then `DISPENV`; both submit their OT afterward.
+calls. Battle installs `GpuDisplayEnvironment` then `GpuRasterEnvironment`, while Menu installs `GpuRasterEnvironment`
+then `GpuDisplayEnvironment`; both submit their OT afterward.
 
 The fixed packet sizes used in the closed layouts are:
 
 | Primitive | Size |
 |---|---:|
-| `POLY_FT4` | `0x28` |
-| `POLY_GT4` | `0x34` |
-| `POLY_G4` | `0x24` |
-| `POLY_F4` | `0x18` |
-| `LINE_F3` | `0x18` |
-| `LINE_F2` | `0x10` |
-| `DR_MODE` | `0x0C` |
-| `RECT` | `0x08` |
+| `FlatTexturedQuadrilateralPrimitive` | `0x28` |
+| `GouraudTexturedQuadrilateralPrimitive` | `0x34` |
+| `GouraudQuadrilateralPrimitive` | `0x24` |
+| `FlatQuadrilateralPrimitive` | `0x18` |
+| `FlatLine3Primitive` | `0x18` |
+| `FlatLine2Primitive` | `0x10` |
+| `GpuDrawModePacket` | `0x0C` |
+| `VramRectangle` | `0x08` |
 
-A double-buffered `POLY_FT4` pair is therefore `0x50` bytes.
+A double-buffered `FlatTexturedQuadrilateralPrimitive` pair is therefore `0x50` bytes.
 
 ## 4. Central Battle
 
@@ -96,8 +96,8 @@ Each context is exact:
 
 | Offset | Size | Field |
 |---:|---:|---|
-| `+0x0000` | `0x5C` | `DRAWENV` |
-| `+0x005C` | `0x14` | `DISPENV` |
+| `+0x0000` | `0x5C` | `GpuRasterEnvironment` |
+| `+0x005C` | `0x14` | `GpuDisplayEnvironment` |
 | `+0x0070` | `0x4000` | Ordering table, `uint32_t[4096]` |
 
 `0x800CCB00` points to the active context, `0x800CCB04` is the active OT base,
@@ -135,7 +135,7 @@ struct DeferredVramTransferNode {    /* 0x10 */
 
 `QueueHeapFreeOnArenaReuse` at `0x80025180` keeps an allocation alive until
 the same parity is selected again. `QueueDeferredVramTransfer` at `0x800251C8`
-queues `LoadImage` when `pixels` is non-null and `ClearImage` when it is null.
+queues `UploadVramImage` when `pixels` is non-null and `EraseVramRectangle` when it is null.
 `GfxFlushImageTransferQueue` at `0x80025044` executes and clears the selected
 parity list. Queue nodes need no independent free because they live in the
 linear packet arena.
@@ -164,7 +164,7 @@ These allocations do not contain the frame contexts or packet arenas.
 | `+0x05A0` | `0x01A0` | 8 GT4 status-gauge packets |
 | `+0x0740` | `0x00D8` | 6 G4 party-gauge packets |
 | `+0x0818` | `0x00F0` | 3 FT4 party-label pairs |
-| `+0x0908` | `0x00C0` | 12 LINE_F2 action lines |
+| `+0x0908` | `0x00C0` | 12 FlatLine2Primitive action lines |
 | `+0x09C8` | `0x01E0` | 6 shared UI FT4 pairs |
 | `+0x0BA8` | `0x12C0` | 60 auxiliary text FT4 pairs |
 | `+0x1E68` | `0x0960` | 30 auxiliary text FT4 pairs |
@@ -294,7 +294,7 @@ this order:
 
 Full-scale and half-scale text packet builders are at `0x80076A10` and
 `0x80076A6C`. `BattleUploadTextureRectAndSync` at `0x800769E8` performs the
-explicit `LoadImage` and draw synchronization. Dirty party text is rebuilt by
+explicit `UploadVramImage` and draw synchronization. Dirty party text is rebuilt by
 `0x800742A0` and then marked clean.
 
 ## 5. Battling Arena
@@ -389,7 +389,7 @@ Other fixed capacities are:
 | World quads and ribbons | 60 | Internal records with double-buffered templates |
 | Dot particles | 255 | `0x9F6` state plus two `0xBF4` packet banks |
 | Tile particles | 540 | `0x1950` state plus two `0x21C0` packet banks |
-| Queued lines | 100 | `0x20`-byte LINE_F2 records |
+| Queued lines | 100 | `0x20`-byte FlatLine2Primitive records |
 | Attack projectiles | 8 | Fixed projectile slots |
 | Scanline spans | 128 | Min/max pairs |
 
@@ -515,8 +515,8 @@ Effect catalogs:
 ## 8. General Menu
 
 `MenuDraw` at `0x801C7BF4` selects the draw/OT context, flips parity at main
-state `+0x308`, updates menu composition, synchronizes, installs `DRAWENV` and
-then `DISPENV`, performs the parity-selected `MoveImage`, and finally submits
+state `+0x308`, updates menu composition, synchronizes, installs `GpuRasterEnvironment` and
+then `GpuDisplayEnvironment`, performs the parity-selected `RelocateVramRectangle`, and finally submits
 the OT.
 
 ### 8.1 Owned allocations
@@ -527,7 +527,7 @@ The General Menu image owns these cleared heap blocks through its main state:
 |---:|---:|---|
 | `+0x32C` | `0x5034` | Memory-card workspace |
 | `+0x33C` | `0x006C` | Shared presentation state |
-| `+0x350` | `0x1194` | Main-menu and `MoveImage` state |
+| `+0x350` | `0x1194` | Main-menu and `RelocateVramRectangle` state |
 | `+0x354` | `0x140C` | Text-batch state |
 | `+0x330` | `0x00CC` | Resource state |
 | `+0x340` | `0x0328` | Cursor state |
@@ -570,7 +570,7 @@ disables rendering, stabilizes parity, and destroys the seven records.
 |---:|---:|---|
 | `+0x32C` | `0x5034` | Resource state |
 | `+0x33C` | `0x006C` | Manager flags |
-| `+0x350` | `0x1194` | MoveImage state |
+| `+0x350` | `0x1194` | RelocateVramRectangle state |
 | `+0x354` | `0x140C` | Unused large allocation |
 | `+0x330` | `0x00CC` | Unused small allocation |
 | `+0x348` | `0x015C` | Overlay GPU state |
@@ -621,12 +621,12 @@ remainder is an input-format image retained until teardown, not a packet pool.
 | `+0x47` | `1` | Display enable |
 | `+0x48..+0x6B` | `0x24` | Reserved |
 
-### 9.4 MoveImage and unused allocations
+### 9.4 RelocateVramRectangle and unused allocations
 
-The `0x1194` MoveImage allocation is reserved bytes through `+0x117F`, one
-`RECT` at `+0x1180`, and 12 reserved tail bytes. The rectangle is initialized
+The `0x1194` RelocateVramRectangle allocation is reserved bytes through `+0x117F`, one
+`VramRectangle` at `+0x1180`, and 12 reserved tail bytes. The rectangle is initialized
 to `(0x2C0,0x100,0x140,0x0E0)` and is the only field passed to the resident
-MoveImage wrapper each frame.
+RelocateVramRectangle wrapper each frame.
 
 The `0x140C` and `0x00CC` allocations are cleared, retained, and freed. Their
 owner pointers have no reader outside their managers, do not escape to a
@@ -641,7 +641,7 @@ owner.
 | `+0x000..+0x04F` | `0x50` | Cleared reserved prefix |
 | `+0x050` | `0x48` | 2 G4 packets, initialized but dormant |
 | `+0x098` | `0x30` | 2 F4 packets, selected by parity and submitted |
-| `+0x0C8` | `0x60` | 4 LINE_F3 packets, initialized but dormant |
+| `+0x0C8` | `0x60` | 4 FlatLine3Primitive packets, initialized but dormant |
 | `+0x128` | `0x30` | 4 draw modes; first two dormant, last two submitted by parity |
 | `+0x158` | `3` | Cleared reserved tail |
 | `+0x15B` | `1` | Write-only value `0x40` |
@@ -655,9 +655,9 @@ owner.
 | `+0x140` | `0x050` | 2 projected-header FT4 packets |
 | `+0x190` | `0xB40` | 72 keyboard FT4 packets, 36 glyphs by two parities |
 | `+0xCD0` | `0x050` | 2 selection FT4 packets |
-| `+0xD20` | `0x030` | 2 top LINE_F3 packets |
-| `+0xD50` | `0x030` | 2 bottom LINE_F3 packets |
-| `+0xD80` | `0x020` | 2 caret LINE_F2 packets |
+| `+0xD20` | `0x030` | 2 top FlatLine3Primitive packets |
+| `+0xD50` | `0x030` | 2 bottom FlatLine3Primitive packets |
+| `+0xD80` | `0x020` | 2 caret FlatLine2Primitive packets |
 | `+0xDA0` | `0x020` | Projected-header source quad |
 | `+0xDC0` | `0x020` | Selection source quad |
 | `+0xDE0..+0xDE4` | `5` | UI, header, keyboard, selection, and line parities |
@@ -681,8 +681,8 @@ the seven records.
 | Owner | Allocation | Layout |
 |---|---:|---|
 | `main+0x428` | `0x14C` pointer cursor | 8 FT4 packets at `+0x000`, enabled[4] at `+0x140`, projection flags[4] at `+0x144`, parity at `+0x148`, padding[3] |
-| `main+0x1DE0[4]` | Four `0x80` prompt records | FT4 pair `+0x00`, source quad `+0x50`, upload RECT `+0x70`, transient raster pointer `+0x78`, four control bytes `+0x7C..+0x7F` |
-| `main+0x364[7]` | `0x720` per window | Exact MenuWindow layout from Section 8 |
+| `main+0x1DE0[4]` | Four `0x80` prompt records | FT4 pair `+0x00`, source quad `+0x50`, upload VramRectangle `+0x70`, transient raster pointer `+0x78`, four control bytes `+0x7C..+0x7F` |
+| `main+0x364[7]` | `0x720` per window | Exact UiWindowState layout from Section 8 |
 | `main+0x380[7]` | `0x18` per animated window | Exact animation layout from Section 8 |
 
 Even prompt records allocate a `0x5CA` raster surface; the following odd record
@@ -698,7 +698,7 @@ names are copied into three global 20-byte character-name slots. Display bytes
 
 ## 10. Resident Font Contract
 
-`SystemInitializeFont` at `0x80033558` consumes a `0x0E`-byte header:
+`BootSystemFont` at `0x80033558` consumes a `0x0E`-byte header:
 
 | Offset | Size | Field |
 |---:|---:|---|
@@ -837,7 +837,7 @@ CD-ROM sector
     -> DMA channel 0 into MDEC
     -> MDEC inverse quantization, IDCT, and YUV conversion
     -> DMA channel 1 into alternating output buffers
-    -> LoadImage strips
+    -> UploadVramImage strips
     -> VRAM display page
 ```
 

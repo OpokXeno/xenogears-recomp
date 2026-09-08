@@ -290,7 +290,7 @@
 0x80088A40, function start — BattlingOptionsSave; When the session selector is nonzero, packs both vibration flags, match target, and COM difficulty into the persistent low halfword while preserving the upper halfword.
 0x80088AF8, function start — BattlingOptionsLoad; decodes persisted settings or restores defaults.
 0x80088BD4, function start — BattlingRecordDefeatedOpponentAndCheckCompletion; Marks one defeated opponent in the persistent checklist and reevaluates the Argento completion reward.
-0x80088C00, function start — BattlingVsyncCallback; samples VSync into frame timing.
+0x80088C00, function start — BattlingVsyncCallback; samples WaitForVerticalRetrace into frame timing.
 0x80088C28, function start — BattlingHeapDebugPageUpdate; changes and prints the heap-debug page.
 0x80088CBC, function start — BattlingDisplayBufferPacketInitialize; initializes a display-buffer sprite.
 0x80088D1C, function start — BattlingSystemInitialize; initializes callbacks, geometry, font, heap, and rendering.

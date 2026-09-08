@@ -307,7 +307,7 @@ multi-roll selector:
   it falls through to a deathblow attempt).
 - The deathblow attempt reads a per-character tier byte to select one of
   several learned-move bitmasks and slot counts, then draws a uniform index
-  in that range (`rand() % count`) and checks whether the drawn slot is
+  in that range (`NextPseudoRandomValue() % count`) and checks whether the drawn slot is
   actually learned. An unlearned draw, or roughly a 25% roll failing
   separately, falls back to a plain basic attack instead.
 - The basic attack case itself rolls two more `random_mod_100` checks (`< 80`,

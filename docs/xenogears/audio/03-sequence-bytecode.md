@@ -297,7 +297,7 @@ the step and the terminal value. This differs from simply snapping to
 | `F5` | 2 | 0 | Driver no-op | Retail handler skips one operand |
 | `F6` | 2 | 89 | Full | Reinitialize and enable selected slot |
 | `F7` | 2 | 2 | Full | Disable selected slot |
-| `F8` | 4 | 220 | Full | Configure per-note volume sweep `[start, duration, target]` |
+| `F8` | 4 | 220 | Full | Configure per-note volume sweep `[ResidentEntryPoint, duration, target]` |
 | `F9` | 3 | 6 | Bookkeeping | Update manager bar/beat counters |
 | `FA` | 1 | 0 | Reserved | Reserved |
 | `FB` | 1 | 0 | Reserved | Reserved |

@@ -112,8 +112,8 @@ Explicit interaction additionally requires:
 - A new logical `0x0020` input event.
 - A target inside the interaction reach and facing cone.
 
-The dispatcher reads `ActorData+0x74` while filtering connected actors, stores
-the relative contact direction in the selected target's `ActorData+0x12C` bits
+The dispatcher reads `SceneActorRecord+0x74` while filtering connected actors, stores
+the relative contact direction in the selected target's `SceneActorRecord+0x12C` bits
 9..11, and starts routine 2 on that actor.
 
 ### Automatic contact
@@ -131,11 +131,11 @@ bytes, empty-section encoding, and payload placement are documented in
 
 An opcode's dialogue ID is zero-based. Creation resolves that ID through the
 section-relative offset table. Resource width and height remain local creation
-inputs; `ActorData+0x82/+0x83` are optional script-configured overrides.
+inputs; `SceneActorRecord+0x82/+0x83` are optional script-configured overrides.
 
 ## 7. Actor Dialogue State
 
-The owning actor keeps dialogue configuration in `ActorData`:
+The owning actor keeps dialogue configuration in `SceneActorRecord`:
 
 | Offset | Meaning |
 |---:|---|
@@ -227,7 +227,7 @@ Multichoice interaction is split across update and confirmation:
 1. `FieldDialogueChoiceUpdate` at `0x8007DCF8` reads directional repeat input,
    moves the current line, and wraps within the choice range.
 2. `FieldTextBoxRender` at `0x8008004C` handles a new logical `0x0020` input and
-   stores the confirmed absolute line index in `ActorData+0x81`.
+   stores the confirmed absolute line index in `SceneActorRecord+0x81`.
 
 The confirmed value remains actor-owned script state after the window closes.
 Dialogue scripts can therefore branch on it after a blocking dialogue opcode
@@ -236,7 +236,7 @@ has completed.
 ## 13. Portrait Cache Ownership
 
 Portrait-bearing dialogue acquires a small global cache slot. The owner stores
-the cache index in `ActorData+0x12C` bits 2..4. Releasing a dialogue window does
+the cache index in `SceneActorRecord+0x12C` bits 2..4. Releasing a dialogue window does
 not erase that packed index or the cached face.
 
 Cache exhaustion uses the same cooperative retry model as window-slot

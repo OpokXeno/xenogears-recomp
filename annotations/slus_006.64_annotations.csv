@@ -1,6 +1,6 @@
 # Xenogears (SLUS-00664, slus_006.64) — function annotations for PSXRecomp code generator
 # annotated_functions/total_functions: 1219/1219
-# Total basis: data-cleaned 1,219-function main-executable set from the ladysilverberg/xenogears-decomp objdiff report; excludes four D_* data records. Nine supplementary resident roots are documented but excluded from the denominator.
+# Total basis: data-cleaned 1,219-function main-executable.
 #
 # Format: address, note
 #   address: hex with 0x prefix (e.g. 0x8001dfd4)
@@ -12,7 +12,7 @@
 #
 # Initial sources (2026-07-22 mass-annotation pass):
 #   - Ghidra project XenogearsDisc1/slus_006.64 symbol DB (755 custom names incl. PsyQ SDK library map)
-#   - ladysilverberg/xenogears-decomp config/symbol_addrs.slus_006.64.txt + src/slus_006.64 module tree
+#   - src/slus_006.64 module tree
 #     (binary SHA1 560bbdbeb9264c935294ecad5a3d4ab230a006a9 == local game/slus_006.64, addresses exact)
 #   - seeds/slus_00664_bios_thunks.txt (37 BIOS syscall stubs; vector:fn verified against binary bytes)
 #
@@ -22,18 +22,18 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # --- journal/Ghidra-confirmed core entries ---
-0x80019524, start — PS-X EXE entry-point stub (0x24 bytes, jumps into main init; Ghidra: `start`).
-0x8001996C, ChangeGameState(unsigned state) — requests the next main game state and releases a pending state resource when changing states; state 0 selects the native Kernel Menu, 1=Field, 2=Battle, 3=Worldmap, 4=Battling, 5=Menu, 6=Movie (Ghidra static analysis + runtime developer-menu path).
+0x80019524, ResidentEntryPoint — PS-X EXE entry-point stub (0x24 bytes, jumps into main init; Ghidra: `ResidentEntryPoint`).
+0x8001996C, CommitGameStateTransition(unsigned state) — requests the next main game state and releases a pending state resource when changing states; state 0 selects the native Kernel Menu, 1=Field, 2=Battle, 3=Worldmap, 4=Battling, 5=Menu, 6=Movie (Ghidra static analysis + runtime developer-menu path).
 0x8001A344, Kernel MENU — developer debug menu screen (Field/Battle/Worldmap/Battling/Menu/Movie selector; Ghidra decompile: prints " XENOGEARS Kernel MENU\n  %s %s MODE\n"). Cursor DAT_8004f2d8, pad DAT_800594a4/DAT_8005948c; selection calls FUN_8001996c(module_id+1).
-0x8004B54C, VSync(int mode) — PsyQ library vertical-retrace wait (Ghidra: `VSync`, body 0x8004B54C-0x8004B5CF). 
+0x8004B54C, WaitForVerticalRetrace(int mode) — PsyQ library vertical-retrace wait (Ghidra: `WaitForVerticalRetrace`, body 0x8004B54C-0x8004B5CF).
 
 # --- verified seed promotions 2026-07-22 (indirect-only entry points absent from generated C) ---
-0x8001C8DC, WorkListsFreeAllEntries — walks work list invoking each entry's free callback (decomp: system/work_list.c). Bytes partially absorbed into func_8001C84C tail; NO dispatch entry — indirect call FAIL-FASTs. Seed-promoted 2026-07-22.
-0x8001C9F8, WorkListUpdate — work-list per-frame dispatcher: walks g_WorkList calling onTriggerCallback (decomp: system/work_list.c). Reached only via function pointer; bytes absent from generated C. Seed-promoted 2026-07-22.
-0x80024FB8, GfxFreeWorkBuffers — frees the graphics work buffers via HeapFree(g_GfxWorkBuffers) + func_8001D2A4 (decomp: system/temp1.c; callees verified in disasm). Overlay/indirect-only caller; bytes absent from generated C. Seed-promoted 2026-07-22.
-0x8003218C, HeapFreeBlocksWithFlag(u_char targetFlag) — heap sweep freeing blocks matching a content flag (decomp: system/memory.c). Called from module transitions/overlays; bytes absent from generated C. Seed-promoted 2026-07-22.
-0x80032B64, HeapCalloc(u_int num, u_int size) — zeroing heap allocator (decomp: system/memory.c). Public engine API used by game modules (overlays call main-EXE APIs); bytes absent from generated C. Seed-promoted 2026-07-22.
-0x8003BFA0, SoundSpuIRQHandler — SPU IRQ handler: sets SOUND_CTL_FLAG_IRQ_HANDLER, bumps g_SoundSpuIRQCount, invokes g_SoundSpuIrqCallbackFn (decomp: system/sound.c). Installed via SpuSetIRQCallback — interrupt-context entry, invisible to JAL walker. Seed-promoted 2026-07-22.
+0x8001C8DC, DestroyAllScheduledTasks — walks work list invoking each entry's free callback (decomp: system/work_list.c). Bytes partially absorbed into func_8001C84C tail; NO dispatch entry — indirect call FAIL-FASTs. Seed-promoted 2026-07-22.
+0x8001C9F8, DispatchFrameTasks — work-list per-frame dispatcher: walks g_WorkList calling onTriggerCallback (decomp: system/work_list.c). Reached only via function pointer; bytes absent from generated C. Seed-promoted 2026-07-22.
+0x80024FB8, ReleaseGraphicsWorkspaces — frees the graphics work buffers via ReleaseHeapBlock(g_GfxWorkBuffers) + func_8001D2A4 (decomp: system/temp1.c; callees verified in disasm). Overlay/indirect-only caller; bytes absent from generated C. Seed-promoted 2026-07-22.
+0x8003218C, ReleaseFlaggedHeapBlocks(u_char targetFlag) — heap sweep freeing blocks matching a content flag (decomp: system/memory.c). Called from module transitions/overlays; bytes absent from generated C. Seed-promoted 2026-07-22.
+0x80032B64, AllocateZeroedHeapBlock(u_int num, u_int size) — zeroing heap allocator (decomp: system/memory.c). Public engine API used by game modules (overlays call main-EXE APIs); bytes absent from generated C. Seed-promoted 2026-07-22.
+0x8003BFA0, HandleAudioDmaInterrupt — SPU IRQ handler: sets SOUND_CTL_FLAG_IRQ_HANDLER, bumps g_SoundSpuIRQCount, invokes g_SoundSpuIrqCallbackFn (decomp: system/sound.c). Installed via SetSpuInterruptCallback — interrupt-context entry, invisible to JAL walker. Seed-promoted 2026-07-22.
 
 # --- Ghidra-confirmed 2026-08-24 ---
 0x8001AADC, InitKernelVariables — initializes resident Field, party-loading, music, compass, and rendering state globals.
@@ -47,27 +47,27 @@
 0x800223B0, SpriteSetFacingAngle — updates sprite facing and direction-dependent animation state.
 0x80022660, SpriteExecuteBytecodeUntil — executes the sprite animation VM until the requested bytecode checkpoint or a stopping opcode is reached.
 0x800233A4, AnimTaskCreate — allocates an animation task with trailing data, registers timer and normal work-list tasks, and installs trigger/free callbacks.
-0x80026338, ResourceHelperGetTexCoords — resolves a resource texture entry and returns its count, texture page, CLUT, and adjusted coordinates.
-0x800263E4, SetupMenuResourcePolyFT4 — builds double-buffered scaled POLY_FT4 primitives for menu-resource textures.
+0x80026338, GetResourceTextureCoordinates — resolves a resource texture entry and returns its count, texture page, CLUT, and adjusted coordinates.
+0x800263E4, SetupMenuResourcePolyFT4 — builds double-buffered scaled FlatTexturedQuadrilateralPrimitive primitives for menu-resource textures.
 0x8002A498, ArchiveResetStreamChannel — records the active channel and reset flag; with debug streaming active, clears its bookkeeping and closes the host stream.
-0x8002C3D8, ArchiveGetDebugTable — returns the current archive debug-table pointer (resident archive/model boundary verified).
-0x8002C3E8, ModelResolvePointers — relocates relative pointers in a loaded model and marks the model resolved.
+0x8002C3D8, InspectArchiveDebugTable — returns the current archive debug-table pointer (resident archive/model boundary verified).
+0x8002C3E8, LinkModelReferences — relocates relative pointers in a loaded model and marks the model resolved.
 0x8002C6E0, ModelSetNearColor — updates the model renderer's near/depth-cue color state.
-0x8002C700, ModelRenderPacket — dispatches a model packet to its renderer for transformation, clipping, and ordering-table submission (shared resident renderer used by multiple game modes).
-0x8002C8CC, ModelInitializePacket — initializes model primitive codes, lengths, lighting, UVs, texture pages, and CLUT state.
+0x8002C700, SubmitModelPacket — dispatches a model packet to its renderer for transformation, clipping, and ordering-table submission (shared resident renderer used by multiple game modes).
+0x8002C8CC, PrepareModelPacket — initializes model primitive codes, lengths, lighting, UVs, texture pages, and CLUT state.
 0x8002CB54, ModelAllocatePacketBuffers — allocates the two model-packet buffers required for double buffering.
-0x8002CBBC, ModelPartFreeLightData — frees owned model-part lighting data and clears its ownership flag.
-0x8002CC10, ModelPacketSetBaseTexPage — derives and enables a base texture-page override from VRAM coordinates.
+0x8002CBBC, ReleaseModelPartLighting — frees owned model-part lighting data and clears its ownership flag.
+0x8002CC10, SetModelBaseTexturePage — derives and enables a base texture-page override from VRAM coordinates.
 0x8002CC54, ModelPacketSetTexPageOverride — installs a direct texture-page override and selects forced-page mode.
-0x8002CC74, ModelPacketSetBaseClut — derives and enables a base CLUT override from VRAM coordinates.
+0x8002CC74, SetModelBasePalette — derives and enables a base CLUT override from VRAM coordinates.
 0x8002CCAC, ModelPacketClearTextureOverrides — restores normal texture-page and CLUT handling.
-0x8002CCC8, ModelPacketSetTexPage — computes the active packet texture page with coordinate or forced-page overrides.
-0x8002CD24, ModelPacketSetClut — computes the active packet CLUT with the configured base override.
-0x8002CD64, ModelPacketSetTextureData — consumes model pseudo-primitives 0xC4/0xC8 to update texture-page or CLUT state.
-0x8002D354, ModelPacketInitPolyG4Variant — builds a lit POLY_G4 packet from four model normals and the primitive base color.
-0x8002D420, ModelPacketInitPolyGT4Variant — builds a lit textured POLY_GT4 packet with active CLUT and texture-page state.
-0x8002DB84, MathTriangleNormal — computes and normalizes a triangle face normal from two edge vectors.
-0x8002DC9C, MathGetLargestVectorComponent — returns the signed vector component with the largest absolute magnitude.
+0x8002CCC8, SetModelTexturePage — computes the active packet texture page with coordinate or forced-page overrides.
+0x8002CD24, SetModelPalette — computes the active packet CLUT with the configured base override.
+0x8002CD64, AssignModelTexturePayload — consumes model pseudo-primitives 0xC4/0xC8 to update texture-page or CLUT state.
+0x8002D354, ModelPacketInitPolyG4Variant — builds a lit GouraudQuadrilateralPrimitive packet from four model normals and the primitive base color.
+0x8002D420, ModelPacketInitPolyGT4Variant — builds a lit textured GouraudTexturedQuadrilateralPrimitive packet with active CLUT and texture-page state.
+0x8002DB84, ComputeTriangleSurfaceNormal — computes and normalizes a triangle face normal from two edge vectors.
+0x8002DC9C, FindDominantVectorAxis — returns the signed vector component with the largest absolute magnitude.
 0x80030988, PatchTextureUvStepCode — patches twelve halfword immediate fields with four repeated texture UV-step values.
 0x80031804, FontAddBackgroundTile — links one font/debug-text background tile primitive into an ordering table.
 0x80033B34, SystemDecodeStringCodes — maps input codes through system-data table 0x1B, emits one or two bytes per code, and NUL-terminates the destination.
@@ -78,34 +78,34 @@
 0x8003E290, SoundComputeLfoStep — conditionally scales a signed LFO step from duration and mode parameters.
 0x8003E3E0, SoundLfoRestart — restores configured LFO phase/step state, clears its accumulator, and marks it active.
 
-# --- game code (some are decomp-confirmed thanks to ladysilverberg/xenogears-decomp) ---
+# --- game code ---
 0x80019548, RestoreResidentExecutionRegisters — restores SP and S8 to 0x80200000 and GP to 0x80059170.
-0x80019560, ClearMemory — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
+0x80019560, ZeroMemoryRange
 0x80019578, GameBootstrap — Initializes graphics input storage archives audio and core resources before entering the initial game state.
-0x80019964, printf — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
-0x800199CC, LoadGameStateOverlay — game core (decomp: ladysilverberg/xenogears-decomp, main/main_loop.c)
-0x80019ACC, MainLoop — game core (decomp: ladysilverberg/xenogears-decomp, main/main_loop.c)
+0x80019964, PrintConsoleFormat
+0x800199CC, MountGameStateModule — game core
+0x80019ACC, RunResidentGameLoop — game core
 0x80019C2C, DumpMainRamToPc — Creates `c:\core` through the development PC interface and writes the first 2 MiB of RAM into it.
-0x80019C7C, HeapResetUser — game core (decomp: ladysilverberg/xenogears-decomp, main/main_loop.c)
-0x80019CA0, GameCheckAndHandleSoftReset — game core (decomp: ladysilverberg/xenogears-decomp, main/main_loop.c)
-0x80019CD0, GameSoftReset — game core (decomp: ladysilverberg/xenogears-decomp, main/main_loop.c)
-0x80019D48, GameShowSplashScreen — game core (decomp: ladysilverberg/xenogears-decomp, main/main_loop.c)
-0x80019EF8, GameHandleError — game core (decomp: ladysilverberg/xenogears-decomp, main/main_loop.c)
-0x8001A1E4, KernelMenuInitializeCursor — kernel debug menu (decomp: ladysilverberg/xenogears-decomp, system/kernel_menu.c)
-0x8001A250, KernelMenuInitialize — kernel debug menu (decomp: ladysilverberg/xenogears-decomp, system/kernel_menu.c)
-0x8001A4B4, KernelMenuMain — kernel debug menu (decomp: ladysilverberg/xenogears-decomp, system/kernel_menu.c)
+0x80019C7C, ResetHeapOwner — game core
+0x80019CA0, ProcessSoftResetRequest — game core
+0x80019CD0, RebootGameRuntime — game core
+0x80019D48, PresentBootSplash — game core
+0x80019EF8, AbortOnGameFault — game core
+0x8001A1E4, BuildKernelMenuCursor — kernel debug menu
+0x8001A250, LaunchKernelMenu — kernel debug menu
+0x8001A4B4, RunKernelMenu — kernel debug menu
 0x8001A5CC, AllocateGridEffectBuffers — Allocates two 13440-byte primitive buffers and two 1120-byte occupancy maps then clears both maps.
 0x8001A684, IncrementWrappedGridCell — Wraps signed row and column coordinates across the grid boundaries and increments the selected occupancy byte.
 0x8001A6E8, UpdateAndDrawGridEffect — Emits tiles for occupied cells then clears the current map and advances twenty random walkers while marking each surrounding 3-by-3 neighborhood.
-0x8001AC94, GamePartySignalReinitialize — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp3.c)
+0x8001AC94, RequestPartyRebuild — misc engine code (unsorted)
 0x8001ACA4, BeginPartyResourceReload — Resets cached resource identifiers then selects field archive storage and queues current party skins plus the two shared field resources.
-0x8001ACF0, GameCharacterGetGearID — indexes the eleven-record character array directly by character ID and returns its Gear ID without a range check.
-0x8001AD1C, GameWaitForCdData — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp3.c)
-0x8001AD4C, GamePartyCharactersInitializeSkins — points the runtime game-state pointer at resident state, compacts the three persistent party IDs by removing only 0xFF, records each retained character ID as its compact skin resource ID, allocates and pins aligned temporary buffers for archive member resource_id + 5, queues the asynchronous reads, and marks character resources selected; IDs are not validated against 0..10.
-0x8001AEB8, GamePartyGearsInitializeSkins — points the runtime game-state pointer at resident state, compacts the three persistent party IDs by removing only 0xFF, obtains each Gear ID through the unchecked direct character-record lookup, maps Gear ID 0xFF to 0 before adding 0x10, records the derived compact skin resource ID, allocates and pins aligned temporary buffers for archive member resource_id + 5, queues the asynchronous reads, and marks Gear resources selected.
-0x8001B044, GamePartySyncSkinData — waits for archive work and coordinates party resource synchronization: it finalizes pending streamed data, reloads retained compact resource IDs when resident skin state is reusable, or uses the map body-mode bits and current character-versus-Gear resource selection to begin rebuilding compact resource IDs from the active party identities.
-0x8001B158, GamePartyStreamLoadSkinData — finalizes any pending party batch, then allocates and pins compressed-input buffers and begins asynchronous reads for archive member resource_id + 5 using the retained compact skin resource IDs; when requested it also queues shared Field members 0xA7 and 0xA8, and it does not derive new resource IDs from the current party identity bytes.
-0x8001B3A8, GamePartySyncStreamedData — when party streaming is pending, waits for completion, unpins each fixed party output buffer, decompresses each active party slot's temporary input into its corresponding fixed 0x14000-byte output buffer, unpins and frees the temporary inputs, and clears the pending state; resident LZSS receives neither an input extent nor a destination capacity.
+0x8001ACF0, LookupCharacterGearId — indexes the eleven-record character array directly by character ID and returns its Gear ID without a range check.
+0x8001AD1C, BlockUntilDiscData — misc engine code (unsorted)
+0x8001AD4C, InitializeCharacterSkinSet — points the runtime game-state pointer at resident state, compacts the three persistent party IDs by removing only 0xFF, records each retained character ID as its compact skin resource ID, allocates and pins aligned temporary buffers for archive member resource_id + 5, queues the asynchronous reads, and marks character resources selected; IDs are not validated against 0..10.
+0x8001AEB8, InitializeGearSkinSet — points the runtime game-state pointer at resident state, compacts the three persistent party IDs by removing only 0xFF, obtains each Gear ID through the unchecked direct character-record lookup, maps Gear ID 0xFF to 0 before adding 0x10, records the derived compact skin resource ID, allocates and pins aligned temporary buffers for archive member resource_id + 5, queues the asynchronous reads, and marks Gear resources selected.
+0x8001B044, CommitPartySkinBuffers — waits for archive work and coordinates party resource synchronization: it finalizes pending streamed data, reloads retained compact resource IDs when resident skin state is reusable, or uses the map body-mode bits and current character-versus-Gear resource selection to begin rebuilding compact resource IDs from the active party identities.
+0x8001B158, LoadStreamedPartySkins — finalizes any pending party batch, then allocates and pins compressed-input buffers and begins asynchronous reads for archive member resource_id + 5 using the retained compact skin resource IDs; when requested it also queues shared Field members 0xA7 and 0xA8, and it does not derive new resource IDs from the current party identity bytes.
+0x8001B3A8, CommitStreamedPartyData — when party streaming is pending, waits for completion, unpins each fixed party output buffer, decompresses each active party slot's temporary input into its corresponding fixed 0x14000-byte output buffer, unpins and frees the temporary inputs, and clears the pending state; resident LZSS receives neither an input extent nor a destination capacity.
 0x8001B6BC, IdleGameState — Returns immediately without changing any state.
 0x8001B6C4, RunBattleAndDispatchOutcome — initializes Battle graphics, runs BattleMain through Result teardown, dispatches successful outcomes to Movie, resident continuation, Field, or World Map, and resets resident state to title Field 0x1EA on defeat.
 0x8001B844, BattleInitializeGraphicsEnvironments — resets graphics state, initializes geometry projection, and creates two 320x224 Battle display and drawing environments.
@@ -115,36 +115,36 @@
 0x8001BB50, StartNewGame — Sets new-game defaults then initializes persistent game data and waits for all required archive transfers.
 0x8001BBAC, LoadCoreSoundResources — Allocates and streams the core sound files then registers the SEDS bank and initializes character-associated sound entries.
 0x8001BD40, RandomU8RangeInclusive — Returns an inclusive random byte between two bounds with explicit handling for fixed zero and `0xFF` sentinel bounds.
-0x8001BDDC, MenuInitializeGfxEnvironment — menu system (decomp: ladysilverberg/xenogears-decomp, system/menu.c)
-0x8001BE14, MenuInitializeGfxEnvironments — menu system (decomp: ladysilverberg/xenogears-decomp, system/menu.c)
+0x8001BDDC, InitializeMenuGraphicsEnvironment — menu system
+0x8001BE14, InitializeMenuDisplayBuffers — menu system
 0x8001BEEC, MenuInitializeViewState — resets menu rotations, translations, camera state, and transition state while setting both Z distances to 0x800.
-0x8001BF38, MenuProcessControllerInput — menu system (decomp: ladysilverberg/xenogears-decomp, system/menu.c)
+0x8001BF38, ProcessMenuButtons — menu system
 0x8001C074, MenuDebugPresentFrame — polls menu input, swaps render environments, clears the active ordering table, runs enabled diagnostics, synchronizes drawing, and submits the frame.
-0x8001C1A8, MenuExecute — menu system (decomp: ladysilverberg/xenogears-decomp, system/menu.c)
-0x8001C634, MenuMain — menu system (decomp: ladysilverberg/xenogears-decomp, system/menu.c)
+0x8001C1A8, DispatchMenuMode — menu system
+0x8001C634, RunResidentMenu — menu system
 0x8001C76C, MenuExecutionConstants — Maps menu operations to command identifiers transition parameters vectors and packed coefficients used during menu execution.
-0x8001C944, WorkListsReset — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
-0x8001C964, TimerWorkListUpdate — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
-0x8001CA58, WorkListAddTask — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
-0x8001CAF0, WorkListAllocateTask — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
-0x8001CB48, WorkListRemoveTask — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
-0x8001CBE8, WorkListDeleteTask — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
-0x8001CC18, TimerWorkListAddTask — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
-0x8001CD08, TimerWorkListAllocateTask — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
-0x8001CD64, WorkListSetTaskCallback — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
-0x8001CD6C, TimerWorkListSetTaskCallback — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
-0x8001CD74, WorkListTaskSetOnFreeCallback — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
-0x8001CD7C, WorkListTaskGetTaskCallback — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
-0x8001CD88, WorkListTaskGetOnFreeCallback — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
-0x8001CD94, TimerWorkListRemoveTask — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
-0x8001CE44, TimerWorkListDeleteTask — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
+0x8001C944, ResetTaskSchedulers — work-list task scheduler
+0x8001C964, DispatchTimedTasks — work-list task scheduler
+0x8001CA58, ScheduleFrameTask — work-list task scheduler
+0x8001CAF0, AllocateFrameTask — work-list task scheduler
+0x8001CB48, UnscheduleFrameTask — work-list task scheduler
+0x8001CBE8, DestroyFrameTask — work-list task scheduler
+0x8001CC18, ScheduleTimedTask — work-list task scheduler
+0x8001CD08, AllocateTimedTask — work-list task scheduler
+0x8001CD64, SetFrameTaskCallback — work-list task scheduler
+0x8001CD6C, SetTimedTaskCallback — work-list task scheduler
+0x8001CD74, SetTaskReleaseCallback — work-list task scheduler
+0x8001CD7C, GetTaskTriggerCallback — work-list task scheduler
+0x8001CD88, GetTaskReleaseCallback — work-list task scheduler
+0x8001CD94, UnscheduleTimedTask — work-list task scheduler
+0x8001CE44, DestroyTimedTask — work-list task scheduler
 0x8001CE74, WorkListsRemoveOwnedTasks — removes matching-generation unprotected tasks owned by a target from both work lists and invokes each removed task’s free callback.
 0x8001D034, TimerWorkListClearFlaggedDependentLinks — finds matching-generation flagged timer tasks owned by a target and clears each associated sprite’s dependent link.
 0x8001D0A4, FindWorkTaskByOwnerGenerationAndCallback — Searches the regular work chain for an entry whose owner generation and trigger callback all match.
 0x8001D10C, FindWorkTaskByOwnerAndGeneration — Searches the regular work chain for an entry whose owner and masked generation match.
 0x8001D164, FindWorkTaskByCallback — Searches the regular work chain for the first entry using the requested trigger callback.
-0x8001D19C, WorkListsDeleteTasks — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
-0x8001D1D8, WorkListsAddTasks — work-list task scheduler (decomp: ladysilverberg/xenogears-decomp, system/work_list.c)
+0x8001D19C, DestroyTaskPair — work-list task scheduler
+0x8001D1D8, ScheduleTaskPair — work-list task scheduler
 0x8001D298, ClearSpriteRenderChain — Clears the head of the pending sprite-render chain.
 0x8001D2A4, SpriteFrameTransferQueueClear — clears the pending sprite-frame transfer queue.
 0x8001D3F4, SpriteFrameTransferQueueRemove — unlinks every occurrence of a sprite from the pending frame-transfer queue.
@@ -167,7 +167,7 @@
 0x8001F6B0, SpriteApplyFramePrimitiveAttributes — copies the sprite color, primitive code, and selected blend mode into every current frame-tile descriptor.
 0x8001F750, SpriteDecodeShortFrameDirectionTransforms — parses short-format frame records and applies embedded direction offsets and rotations to the sprite’s direction transforms.
 0x8001F8E8, SpriteUpdateFrameDirectionTransforms — validates a frame index and decodes that frame’s embedded direction-transform updates using the appropriate record format.
-0x8001FAB4, GraphicsDrawPauseLetters — rendering (decomp: ladysilverberg/xenogears-decomp, system/rendering.c)
+0x8001FAB4, DrawPauseOverlayText — rendering
 0x8001FB30, SpriteLoadEmbeddedVramImages — loads an embedded multi-image blob into VRAM at stored texture coordinates using a temporary 8 KiB stack.
 0x8001FBA4, AnimScriptResolveVariableAddress — resolves an encoded operand to either a stack-relative byte or an external-data byte selected by its high bit.
 0x8001FBE4, AnimScriptExecuteGenericOpcode — Executes generic sprite-animation operations for movement, transforms, attachments, resources, audio, arithmetic, colors, and models; opcode CC stores the current instruction address plus a signed 16-bit byte offset as the secondary bytecode pointer.
@@ -177,31 +177,31 @@
 0x80021B24, CopyShortVector3 — Copies three consecutive 16-bit vector components.
 0x80021B48, CopyLongVector3 — Copies three consecutive 32-bit vector components.
 0x80021B6C, EnableSpriteRawTexture — Enables unmodulated texture rendering and refreshes the sprite packet colors.
-0x80021B98, SpriteSetColor — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
-0x80021BF0, SpriteSetSpecialAnimFile — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
+0x80021B98, SetSpriteTint — animation scripts
+0x80021BF0, AttachSpriteAnimationFile — animation scripts
 0x80021BF8, SetSpriteAnimationCallback — Stores the callback invoked by animation control opcodes.
 0x80021C00, SetSpriteCoordinateShift — Replaces the five-bit coordinate-shift value used when positioning sprite frames.
-0x80021C20, AnimScriptStackPopU8 — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
-0x80021C3C, AnimScriptStackPopU16 — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
-0x80021C6C, AnimScriptStackPopU24 — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
-0x80021CA0, AnimScriptStackPushU8 — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
-0x80021CC4, AnimScriptStackPushU16 — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
-0x80021CF8, AnimScriptStackPushU24 — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
+0x80021C20, ReadAnimationOperandByte — animation scripts
+0x80021C3C, ReadAnimationOperandWord — animation scripts
+0x80021C6C, ReadAnimationOperandTriple — animation scripts
+0x80021CA0, WriteAnimationOperandByte — animation scripts
+0x80021CC4, WriteAnimationOperandWord — animation scripts
+0x80021CF8, WriteAnimationOperandTriple — animation scripts
 0x80021D3C, SetSpriteXZPosition — Converts integer X and Z coordinates to 16.16 fixed point and stores them in the sprite position.
 0x80021D50, RestoreSpriteMotionState — Restores position animation identifiers scale motion values and linked auxiliary values then advances animation until the saved cycle is reached.
 0x80021EBC, CaptureSpriteMotionState — Saves position animation progress orientation scale motion values and linked auxiliary values into a compact snapshot.
 0x80021FB8, SetSpriteLowBehaviorFlags — Replaces the low byte of the sprite behavior flags.
 0x80021FC0, SetSpriteMoveSpeed — Stores a new movement speed and recomputes horizontal velocity from the current direction and speed scale.
 0x80021FE0, SpriteSetMotionAngle — stores the sprite’s movement angle and immediately recomputes its horizontal velocity.
-0x80022000, SpriteSetScale — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
+0x80022000, ApplySpriteScale — animation scripts
 0x80022038, SpriteRefreshTransformMatrix — recomputes the sprite transform matrix only when dirty and then clears the dirty state.
-0x80022090, SpriteComputeTransformMatrix — animation scripts (decomp: ladysilverberg/xenogears-decomp, system/animation_scripts.c)
+0x80022090, RebuildSpriteTransform — animation scripts
 0x80022224, SpriteResolveAnimationPackageFile — preserves texture and palette coordinates, resolves frame, palette, and animation references, and resets package animation bookkeeping.
 0x800222BC, SpriteSelectAnimationPackageFile — resolves a newly selected animation package, records it, marks frame data dirty, and applies battle-specific VRAM coordinates.
 0x80022974, SpriteRecomputeHorizontalVelocity — derives horizontal X and Z velocity from movement speed, time scale, and direction angle.
 0x80022A00, ReadFirstWord — Returns the 32-bit value stored at the supplied address.
-0x80022A0C, GfxLoadImageAccelerated — graphics (decomp: ladysilverberg/xenogears-decomp, system/graphics.c)
-0x80022A70, GfxLoadClutsAccelerated — graphics (decomp: ladysilverberg/xenogears-decomp, system/graphics.c)
+0x80022A0C, UploadImageFast — graphics
+0x80022A70, UploadPalettesFast — graphics
 0x80022B2C, SpriteIntegrateVerticalMotion — integrates scaled vertical velocity and gravity, clamps at ground height, applies bounce restitution, and stops small rebounds.
 0x80022CAC, SpriteScaleMotionDelta — scales a motion delta by the sprite’s optional 10-bit fixed-point motion factor or returns it unchanged when no factor is active.
 0x80022CDC, SpriteIntegrateMotion — Advances fixed-point X and Z by scaled velocity then applies vertical velocity and gravity.
@@ -216,7 +216,7 @@
 0x80023170, RestartSpriteAnimationFrame — Clears the script wait timer and cycle state then applies flip controls and selects the requested animation frame.
 0x800231E0, ReadRelativeSpriteWord — Returns the first 32-bit value at the sprite-relative offset stored in its motion field.
 0x800231F8, ReadIncrementedRelativeSpriteWord — Returns one plus the second 32-bit value at the sprite-relative offset stored in its motion field.
-0x80023210, AnimScriptTick — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp1.c)
+0x80023210, AdvanceSpriteAnimation — misc engine code (unsorted)
 0x80023290, SpriteSetSemiTransparencyMode — Sets the sprite blend mode and primitive semitransparency state then updates existing render packets when required.
 0x80023340, ResizeSpriteFramePackets — Frees current frame-packet storage and allocates zero-flag replacement storage sized to `count × 24` bytes.
 0x80023440, SpriteDecodeRenderType — Decodes a four-bit sprite render type from the animation descriptor flags.
@@ -240,8 +240,8 @@
 0x80024730, SpriteConfigureRenderCallback — Performs render-type-specific setup and installs the corresponding indexed rendering callback.
 0x800248D4, SpriteRunAnimationBytecode — Runs compact frame and wait commands plus extended sprite-animation operations until a wait, blocking condition, or end while handling frame selection, branches, calls, and current-PC-relative secondary pointers.
 0x80024F20, ResetSpriteRenderState — Clears the double-buffered sprite contexts and resets primitive cursors ordering buckets and transfer queues.
-0x80024F64, GfxAllocateWorkBuffers — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp1.c)
-0x80024FE4, GfxSetCurrentOT — misc engine code (unsorted) (decomp: ladysilverberg/xenogears-decomp, system/temp1.c)
+0x80024F64, AllocateGraphicsWorkspaces — misc engine code (unsorted)
+0x80024FE4, SelectGraphicsOrderingTable — misc engine code (unsorted)
 0x80024FF4, GfxSetSpriteTransformMatrix — Copies a complete transformation matrix into the global matrix used for sprite projection.
 0x80025044, GfxFlushImageTransferQueue — Executes all queued image uploads or black clears for the current render context then empties its queue.
 0x800250E0, SelectSpriteRenderBuffer — Selects the active sprite buffer and resets its primitive cursor ordering buckets and transfer-record count.
@@ -249,7 +249,7 @@
 0x800251C8, QueueSpriteTransferRecord — Appends a 16-byte transfer record when space remains and prepends it to the bucket selected by the current render index.
 0x80025224, SpriteSetRenderHandlerByType — Selects an indexed sprite rendering handler and assigns it as the work-list callback.
 0x80025258, RenderFieldActorSprite — resident field actor sprite projection and OT submission dispatcher (Ghidra decompile confirmed 2026-08-23).
-0x8002541C, RenderSpriteTile — Projects one sprite vertex then emits a TILE primitive with the configured color dimensions and depth.
+0x8002541C, RenderSpriteTile — Projects one sprite vertex then emits a FillTilePrimitive primitive with the configured color dimensions and depth.
 0x80025544, RenderSpriteTriangle — Projects three sprite vertices then emits a backface-tested F3 triangle into the depth ordering table.
 0x80025710, SkipSpriteRendering — Returns without producing any rendering work.
 0x80025718, RenderSpriteModel — Builds a rotation matrix from sprite angles and renders the associated model when its visibility state permits.
@@ -258,8 +258,8 @@
 0x80025C04, ScaleSpritePacketRgb555 — Scales each packed RGB555 channel by a fixed-point factor while preserving transparency and nonzero source channels.
 0x80025D4C, ModulateSpritePacketRgb555 — Applies mode-dependent RGB555 channel offsets and scaling then clamps each result while preserving transparency.
 0x80025FA8, BuildTintedSpriteFt4Packets — Decodes a selected sprite frame into scaled and flipped FT4 packets with texture coordinates CLUT pages and optional color modulation.
-0x8002675C, BuildFieldSpriteFt4Packets — Builds double-buffered POLY_FT4 packets from expanded 0x1C-byte Field sprite descriptors by scaling screen geometry independently from low-byte UV deltas and applying axis reversal with origin decrement and zero-boundary compensation.
-0x80026A0C, BuildSpritePackets — Emits SPRT primitives for every fragment in a selected frame and appends the required texture-page draw-mode packet.
+0x8002675C, BuildFieldSpriteFt4Packets — Builds double-buffered FlatTexturedQuadrilateralPrimitive packets from expanded 0x1C-byte Field sprite descriptors by scaling screen geometry independently from low-byte UV deltas and applying axis reversal with origin decrement and zero-boundary compensation.
+0x80026A0C, BuildSpritePackets — Emits SpritePrimitive primitives for every fragment in a selected frame and appends the required texture-page draw-mode packet.
 0x80026B9C, SkipSpritePacketBuild — Returns without emitting any sprite packets.
 0x80026BA4, SubmitSpriteFt4Packets — Builds FT4 packets for a sprite frame then links each packet and its draw-mode command into the selected ordering bucket.
 0x80026DCC, BuildSpriteTextureDescriptors — Decodes a selected frame into compact geometry and texture descriptors with scaling and axis-flip adjustments.
@@ -269,47 +269,47 @@
 0x800273C4, RenderFieldPanoramaSpan — Projects a panorama span between two world points and emits wrapped texture strips and optional clipping polygons into an ordering table.
 0x800278F8, RenderFieldPanoramaTextureStrips — Splits a horizontally wrapping panorama texture into at most eight textured quad strips and links them into the selected ordering table.
 0x80027D40, __builtin_delete — PsyQ libcard/libapi (Ghidra symbol DB, prior RE sessions)
-0x80027D64, GfxLineScrollInitialize — decomp module graphics/line_scroll.c (decomp: ladysilverberg/xenogears-decomp, graphics/line_scroll.c)
-0x80027EAC, GfxLineScrollUpdate — decomp module graphics/line_scroll.c (decomp: ladysilverberg/xenogears-decomp, graphics/line_scroll.c)
-0x8002800C, GfxLineScrollFree — decomp module graphics/line_scroll.c (decomp: ladysilverberg/xenogears-decomp, graphics/line_scroll.c)
+0x80027D64, InitializeLineScrollState — decomp module graphics/line_scroll.c
+0x80027EAC, AdvanceLineScrollEffect — decomp module graphics/line_scroll.c
+0x8002800C, ReleaseLineScrollState — decomp module graphics/line_scroll.c
 0x8002804C, ArchiveVisualizeHostIoRetry — Paints a color-coded retry stripe and after the fourth failure resets graphics and permanently displays the failing archive entry and path.
-0x80028230, ArchiveInit — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
-0x800283D4, ArchiveReset — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
-0x80028470, ArchiveSetIndex — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
-0x800284B4, ArchiveGetArchiveOffsetIndices — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
-0x80028530, ArchiveGetDiscNumber — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
+0x80028230, InitializeArchiveFilesystem — CD archive filesystem
+0x800283D4, ClearArchiveRuntime — CD archive filesystem
+0x80028470, SelectArchiveDirectoryEntry — CD archive filesystem
+0x800284B4, SplitArchiveOffset — CD archive filesystem
+0x80028530, QueryArchiveDiscNumber — CD archive filesystem
 0x80028548, ArchiveGetRelativeEntryOffset — Returns an indexed archive sector offset relative to the current archive base.
-0x80028570, ArchiveReadHddFile — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
-0x800286BC, ArchiveGetCurFileSize — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
-0x800286CC, ArchiveDataSync — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
-0x80028738, ArchiveDecodeSize — decodes a logical archive member size through the active FAT route without validating the member against the current directory's logical range.
+0x80028570, ReadHostArchiveMember — CD archive filesystem
+0x800286BC, QueryArchiveMemberSize — CD archive filesystem
+0x800286CC, PollArchiveTransfer — CD archive filesystem
+0x80028738, MeasureArchivePayload — decodes a logical archive member size through the active FAT route without validating the member against the current directory's logical range.
 0x80028808, ArchiveDecodeAlignedSizeAtSavedOffset — obtains a positive debug-host file size through the current host route when available or otherwise decodes the signed size from FAT entry saved_archive_offset + logical_id - 1, then rounds the result to a four-byte multiple; it does not validate the logical ID against a routed-directory range.
-0x800288EC, ArchiveDecodeAlignedSize — rounds ArchiveDecodeSize to four-byte alignment without adding a logical member bound.
+0x800288EC, RoundArchiveMemberSize — rounds MeasureArchivePayload to four-byte alignment without adding a logical member bound.
 0x80028928, ArchiveDecodeFollowingEntryCount — decodes the signed size from FAT entry active_archive_offset + logical_id - 1, returns zero for an ordinary nonnegative entry, and returns the signed-16-bit magnitude for a negative directory-marker entry that declares the number of following records; it performs no logical-ID or routed-range validation.
-0x80028998, ArchiveGetFilePath — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
-0x800289D0, ArchiveDecodeSector — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
+0x80028998, BuildArchiveMemberPath — CD archive filesystem
+0x800289D0, ResolveArchiveSector — CD archive filesystem
 0x80028A18, ArchiveDecodeSectorAtSavedOffset — Decodes a 24-bit sector number from the archive table using the saved archive offset.
-0x80028A60, ArchiveCdDataSync — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
-0x80028A94, ArchiveChangeStreamingFile — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
-0x80028AAC, ArchiveClearStreamFileSections — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
+0x80028A60, WaitArchiveCdData — CD archive filesystem
+0x80028A94, SwitchArchiveStream — CD archive filesystem
+0x80028AAC, ResetArchiveStreamSections — CD archive filesystem
 0x80028B14, ReadCurrentArchiveFileFromHost — Reads the current host-backed archive file with retries then closes it and clears the active transfer state.
 0x80028E60, AreArchiveStreamSectionsInState — Tests a bounded run of stream sections and returns whether every section has the requested state.
-0x80028ECC, ArchiveConsolidateStreamFileEntry — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
+0x80028ECC, MergeArchiveStreamSection — CD archive filesystem
 0x80028F30, AcquireArchiveStreamChunk — Advances host or CD stream filling then exposes the next contiguous payload and reports whether all required sections are ready.
 0x8002945C, ReleaseArchiveStreamSection — Locates a stream section from its payload address then clears it and returns its previous state.
 0x800294B4, ReleaseArchiveStreamChunk — Clears every section belonging to a consumed stream chunk then normalizes the ring and returns the first section's previous state.
-0x8002954C, ArchiveReadFileFromCdSector — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/libarchive.c)
-0x800295D8, ArchiveReadFileToBuffer — rejects nonpositive logical IDs, sizes, and null destinations but does not impose an upper member bound.
-0x80029690, ArchiveReadFile — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/archive.c)
+0x8002954C, CopyArchiveSectorToMember — CD archive filesystem
+0x800295D8, ReadArchiveMemberIntoBuffer — rejects nonpositive logical IDs, sizes, and null destinations but does not impose an upper member bound.
+0x80029690, StartArchiveRead — CD archive filesystem
 0x80029AFC, ArchiveStartQueuedReads — Sorts a terminated read queue by archive index then starts asynchronous CD reads or performs synchronous host-file reads.
 0x80029EB0, BeginArchiveTextureStream — Validates and initializes a multi-section texture stream then starts CD callbacks or drains the equivalent host stream synchronously.
-0x8002A260, ArchiveAllocStreamFile — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/archive.c)
-0x8002A2D0, ArchiveCdSeekOrPause — Waits for archive activity to settle then seeks to a requested entry or pauses the CD drive when no entry is requested.
-0x8002A394, ArchiveCdSeekToFile — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/archive.c)
-0x8002A428, ArchiveCdSetMode — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/archive.c)
-0x8002A524, ArchiveStreamFreeQueueData — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/archive.c)
-0x8002A57C, ArchiveStreamAllocQueueData — Allocates a terminated queue of archive entries and aligned payload buffers while releasing all partial allocations on failure.
-0x8002A68C, ArchiveCdDriveCommandHandler — CD archive filesystem (decomp: ladysilverberg/xenogears-decomp, system/archive.c)
+0x8002A260, AllocateArchiveStream — CD archive filesystem
+0x8002A2D0, PositionArchiveOrHalt — Waits for archive activity to settle then seeks to a requested entry or pauses the CD drive when no entry is requested.
+0x8002A394, PositionArchiveEntry — CD archive filesystem
+0x8002A428, ConfigureArchiveCdMode — CD archive filesystem
+0x8002A524, ReleaseArchiveStreamQueue — CD archive filesystem
+0x8002A57C, AllocateArchiveStreamQueue — Allocates a terminated queue of archive entries and aligned payload buffers while releasing all partial allocations on failure.
+0x8002A68C, ProcessArchiveDriveStatus — CD archive filesystem
 0x8002AC24, ArchiveQueuedReadReadyCallback — Consumes ready CD sectors across queued destinations while validating locations and seeking gaps or retrying failures before completion.
 0x8002B084, ArchiveCurrentFileReadyCallback — Copies each ready sector into the current archive destination, advances its destination and remaining-byte state, and retries or finalizes the read.
 0x8002B2F0, ArchiveStreamReadyCallback — Receives standard CD sectors into sequenced ring sections then advances counters and pauses or retries as required.
@@ -330,16 +330,16 @@
 0x8002CF34, BuildRawFlatTrianglePacketTemplate — builds an unlit flat-triangle GPU packet template.
 0x8002CF58, BuildFlatQuadPacketTemplate — builds a flat-quad GPU packet template with optional lighting.
 0x8002D0C0, BuildRawFlatQuadPacketTemplate — builds an unlit flat-quad GPU packet template.
-0x8002D0E4, BuildRawFT4PacketTemplate — builds an unlit POLY_FT4 packet template.
+0x8002D0E4, BuildRawFT4PacketTemplate — builds an unlit FlatTexturedQuadrilateralPrimitive packet template.
 0x8002D180, BuildGouraudQuadPacketTemplate — builds a lit Gouraud quad GPU packet template.
 0x8002D244, BuildGouraudTexturedQuadPacketTemplate — builds a lit Gouraud-textured quad GPU packet template.
 0x8002D530, BuildFlatTexturedQuadPacketTemplate — builds a flat-textured quad GPU packet template with optional lighting.
 0x8002D6AC, BuildGouraudTrianglePacketTemplate — builds a lit Gouraud triangle GPU packet template.
-0x8002D77C, BuildGouraudTrianglePacketTemplateNoLightCodeCache — builds a lit POLY_G3 packet without caching its primitive code in light data.
+0x8002D77C, BuildGouraudTrianglePacketTemplateNoLightCodeCache — builds a lit GouraudTrianglePrimitive packet without caching its primitive code in light data.
 0x8002D814, BuildFlatTexturedTrianglePacketTemplate — builds a flat-textured triangle GPU packet template with optional lighting.
 0x8002D984, BuildRawFlatTexturedTrianglePacketTemplate — builds a raw flat-textured triangle GPU packet template.
 0x8002DA14, BuildGouraudTexturedTrianglePacketTemplate — builds a lit Gouraud-textured triangle GPU packet template.
-0x8002DAFC, BuildEnvironmentMappedTrianglePacketTemplate — builds an environment-mapped POLY_FT3 packet template.
+0x8002DAFC, BuildEnvironmentMappedTrianglePacketTemplate — builds an environment-mapped FlatTexturedTrianglePrimitive packet template.
 0x8002DD20, ModelLoadTimTextures — Walks embedded TIM images in reverse and uploads each pixel block and optional CLUT with draw synchronization.
 0x8002DDE4, GfxLoadPackedImageSet — Parses packed image records then computes mode-dependent VRAM coordinates and uploads their 16-bit pixels.
 0x8002DFE0, GetModelScratchBuffer — Returns the fixed model rendering workspace at 0x8006FAF0.
@@ -348,7 +348,7 @@
 0x8002E038, RenderFlatTriangleAverage — transforms and submits flat triangles using average depth.
 0x8002E054, RenderFlatQuadAverage — transforms and submits flat quads using average depth.
 0x8002E1F4, ModelPacketRenderHandlerEpilogue — Advances the model packet cursor by the current primitive stride and commits the rendered-packet count and packet cursor.
-0x8002E268, FieldModelFT4RawHandler — transforms, clips, and submits raw field-model POLY_FT4 packets.
+0x8002E268, FieldModelFT4RawHandler — transforms, clips, and submits raw field-model FlatTexturedQuadrilateralPrimitive packets.
 0x8002E448, ModelRenderPolyGT3ByNearestDepth — Projects and clips GT3 triangles then writes packet coordinates and orders visible primitives by their nearest vertex depth.
 0x8002E470, RenderFlatTriangleNearestMode — transforms and submits flat triangles using nearest-depth mode.
 0x8002E64C, RenderGouraudTexturedQuadFarthest — Projects indexed Gouraud-textured quads and rejects invalid or back-facing geometry before linking visible packets at their farthest vertex depth.
@@ -375,9 +375,9 @@
 0x800305D8, ApplyModelDeformationFrame — Advances every deformation channel and applies its scaled vertex deltas plus optional renormalized normal deltas.
 0x800306D0, DestroyModelDeformationWorkspace — Frees deformation vertex buffers and control storage after restoring the model’s original vertex and normal pointers.
 0x80030750, RenderEnvironmentMappedTriangle — transforms and submits environment-mapped triangles.
-0x80030A30, GsSetFlatLight — Normalizes and negates a selected directional light vector then installs its direction and color coefficients.
-0x80030B14, GsSetLightMatrix — Rotates the supplied light basis through the current rotation matrix and loads the resulting GTE light matrix.
-0x80030C40, GsSetAmbient — Converts three 12-bit ambient components to GTE precision and installs them as the background color.
+0x80030A30, SetFlatDirectionalLight — Normalizes and negates a selected directional light vector then installs its direction and color coefficients.
+0x80030B14, InstallSceneLightMatrix — Rotates the supplied light basis through the current rotation matrix and loads the resulting GTE light matrix.
+0x80030C40, SetSceneAmbientLight — Converts three 12-bit ambient components to GTE precision and installs them as the background color.
 0x80030C78, SetAmbientColorRaw — Loads three unscaled components directly into the GTE background-color registers.
 0x80030C98, RenderLitQuadBatch — Projects packed four-index quads and emits normal-lit flat quad packets only when their geometry is valid visible and front-facing.
 0x80030EE8, AnyProjectedTriangleVertexVisible — Projects three vertices and returns true when at least one has valid depth and lies within the configured screen limits.
@@ -403,66 +403,66 @@
 0x8003184C, LinkTile8GpuPrimitive — Splices an eight-pixel tile packet into a GPU DMA chain with a two-word payload.
 0x80031870, LinkTile16GpuPrimitive — Splices a sixteen-pixel tile packet into a GPU DMA chain with a two-word payload.
 
-0x80031894, HeapGetNextBlockHeader — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x800318A8, HeapGetBlockUser — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x800318BC, HeapGetBlockSourceAddress — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x800318DC, HeapIsBlockPinned — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
+0x80031894, GetFollowingHeapHeader — heap allocator
+0x800318A8, GetHeapBlockOwner — heap allocator
+0x800318BC, TraceAllocationOrigin — heap allocator
+0x800318DC, CheckPinnedAllocation — heap allocator
 0x800318F0, HeapDebugHookNoOp — Returns immediately without reading or changing runtime state.
-0x800318F8, HeapLoadSymbols — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80031A30, HeapReset — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80031A68, HeapInit — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80031B10, HeapRelocate — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80031B9C, HeapGetCurrentUser — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80031BA8, HeapSetCurrentUser — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80031BB4, HeapToggleErrorHandler — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80031BC4, HeapGetAllocInformation — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80031BDC, HeapAlloc — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80031F70, HeapInsertAlloc — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80031FF8, HeapConsolidate — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x800320A4, HeapPinBlock — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x800320B8, HeapUnpinBlock — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x800320D0, HeapUnpinBlockCopy — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x800320E8, HeapFree — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x8003223C, HeapFreeAllBlocks — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x800322B4, HeapForceFreeAllBlocks — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80032340, HeapGetTotalFreeSize — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x800323B4, HeapWalkUntilEnd — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80032404, HeapGetLargestFreeBlockSize — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80032498, HeapChangeCurrentUser — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x800324B8, HeapSetCurrentContentType — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x800324C4, HeapGetSymbolNameFromAddress — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80032584, HeapDebugDumpBlock — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x8003278C, HeapDebugDump — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80032B0C, HeapAllocSound — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80032BAC, HeapForceFree — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80032BDC, HeapPrintf — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80032C18, HeapDelayedFree — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80032CB8, HeapTickDelayedFree — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80032D60, HeapFreeAllDelayedBlocks — heap allocator (decomp: ladysilverberg/xenogears-decomp, system/memory.c)
-0x80032DCC, HeapWriteToDebugFile — heap debug (decomp: ladysilverberg/xenogears-decomp, system/heap_debug.c)
-0x80032E04, HeapDumpToFile — heap debug (decomp: ladysilverberg/xenogears-decomp, system/heap_debug.c)
-0x80032E7C, HeapDerefPtr — heap debug (decomp: ladysilverberg/xenogears-decomp, system/heap_debug.c)
-0x80032E88, LZSSHeapDecompress — Allocates the declared expanded size with the supplied heap flags and decodes the size-prefixed LZSS stream; input reads have no logical member-end bound and can consume cross-member lookahead and prefetch the next control byte.
-0x80032EB4, LZSSDecompress — reads a little-endian expanded-size header and processes LSB-first eight-token groups using already-produced output as back-reference history; it checks output equality only before each group, accepts neither a compressed-input extent nor a destination capacity, validates neither per-token output nor back-reference history, and prefetches the next control byte after completion.
+0x800318F8, LoadHeapSymbolTable — heap allocator
+0x80031A30, ClearHeapRuntime — heap allocator
+0x80031A68, InitializeGameHeap — heap allocator
+0x80031B10, MoveHeapAllocation — heap allocator
+0x80031B9C, GetHeapOwner — heap allocator
+0x80031BA8, SetHeapOwner — heap allocator
+0x80031BB4, ToggleHeapErrorReporting — heap allocator
+0x80031BC4, QueryHeapAllocation — heap allocator
+0x80031BDC, AllocateHeapBlock — heap allocator
+0x80031F70, RegisterHeapAllocation — heap allocator
+0x80031FF8, CoalesceHeapFreeBlocks — heap allocator
+0x800320A4, LockHeapAllocation — heap allocator
+0x800320B8, UnlockHeapAllocation — heap allocator
+0x800320D0, CloneAndUnlockAllocation — heap allocator
+0x800320E8, ReleaseHeapBlock — heap allocator
+0x8003223C, ReleaseAllHeapBlocks — heap allocator
+0x800322B4, ReleaseEveryHeapBlock — heap allocator
+0x80032340, GetHeapFreeBytes — heap allocator
+0x800323B4, WalkHeapToSentinel — heap allocator
+0x80032404, FindLargestHeapGap — heap allocator
+0x80032498, SwitchHeapOwner — heap allocator
+0x800324B8, SetHeapContentCategory — heap allocator
+0x800324C4, LookupHeapSymbol — heap allocator
+0x80032584, DumpHeapBlockDiagnostics — heap allocator
+0x8003278C, DumpHeapDiagnostics — heap allocator
+0x80032B0C, AllocateAudioHeapBlock — heap allocator
+0x80032BAC, ForceReleaseHeapBlock — heap allocator
+0x80032BDC, PrintHeapDiagnostics — heap allocator
+0x80032C18, QueueHeapRelease — heap allocator
+0x80032CB8, DrainDelayedHeapReleases — heap allocator
+0x80032D60, ReleaseQueuedHeapBlocks — heap allocator
+0x80032DCC, WriteHeapDebugReport — heap debug
+0x80032E04, WriteHeapSnapshot — heap debug
+0x80032E7C, ResolveHeapUserPointer — heap debug
+0x80032E88, UnpackCompressedHeapBlock — Allocates the declared expanded size with the supplied heap flags and decodes the size-prefixed LZSS stream; input reads have no logical member-end bound and can consume cross-member lookahead and prefetch the next control byte.
+0x80032EB4, UnpackCompressedBuffer — reads a little-endian expanded-size header and processes LSB-first eight-token groups using already-produced output as back-reference history; it checks output equality only before each group, accepts neither a compressed-input extent nor a destination capacity, validates neither per-token output nor back-reference history, and prefetches the next control byte after completion.
 0x80032F54, InitializeDialogTextRenderer — Initializes dialog state and geometry then allocates line primitives and glyph-image buffers and configures two texture pages.
-0x8003342C, ResolveArchiveEntryPointers — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
-0x80033474, ResolveFileEntryPointers — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
-0x800334B8, GetSystemFontFile — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
-0x800334C8, GetSystemDataFile — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
-0x800334D8, SystemFreeFont — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
-0x80033518, SystemFreeData — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
-0x80033558, SystemInitializeFont — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
-0x800335F4, SystemInitializeData — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
-0x80033668, SystemInitialize — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
-0x80033698, SystemTransferPaletteToVRAM — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
-0x80033728, GetStringEntry — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
-0x8003373C, DialogGetWidth — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
-0x80033760, DialogGetHeight — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
+0x8003342C, LinkArchiveDirectoryEntries — system core
+0x80033474, LinkArchiveFilePointers — system core
+0x800334B8, FindSystemFontResource — system core
+0x800334C8, FindSystemDataResource — system core
+0x800334D8, ReleaseSystemFont — system core
+0x80033518, ReleaseSystemData — system core
+0x80033558, BootSystemFont — system core
+0x800335F4, BootSystemData — system core
+0x80033668, BootSystemServices — system core
+0x80033698, UploadSystemPalette — system core
+0x80033728, LookupSystemString — system core
+0x8003373C, MeasureDialogWidth — system core
+0x80033760, MeasureDialogHeight — system core
 0x80033784, GetSystemTableString — Returns a selected string from a system text table chosen by the supplied table index.
 0x800337B8, GetSystemTable16String — Returns the selected string from system text table 16.
-0x800337E8, GetAccessoryName — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
-0x80033818, GetItemName — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
-0x80033848, GetWeaponName — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
+0x800337E8, LookupAccessoryDisplayName — system core
+0x80033818, LookupItemDisplayName — system core
+0x80033848, LookupWeaponDisplayName — system core
 0x80033878, GetSystemTable24String — Returns the selected string from system text table 24.
 0x800338A8, GetSystemTable25String — Returns the selected string from system text table 25.
 0x800338D8, GetSystemTable18String — Returns the selected string from system text table 18.
@@ -494,20 +494,20 @@
 0x80034874, TextStreamSetOpaqueRow — Selects the row whose rendering primitives remain opaque while other rows become semitransparent.
 0x8003487C, TextStreamClearOpaqueRow — Selects row 255 so every rendered text row becomes semitransparent.
 0x80034888, SystemStringEntryRender — renders and advances a system string entry, including glyph primitives and VRAM uploads (Ghidra static analysis + field text-box runtime census, 2026-08-23).
-0x80034EAC, SystemRenderStringEntry — system core (decomp: ladysilverberg/xenogears-decomp, system/system.c)
+0x80034EAC, RenderSystemString — system core
 0x80034F98, GetEncodedGlyphTileWidth — Returns a two- or three-tile width according to the encoded glyph’s lead and trail bytes.
 0x80034FFC, RasterizeEncodedGlyph — Reads an 11-row encoded glyph and merges its pixels into the selected nibble phase of a 4-bpp image buffer.
-0x8003569C, ControllerGetButtonState — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)
-0x80035734, ControllerGetType — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)
-0x800357C0, ControllerRemapButtonState — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)
-0x8003582C, ControllerRemapAnalogJoystickState — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)
-0x80035884, ControllerStickToAnalogX — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)
-0x800358A0, ControllerStickToAnalogY — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)
-0x800358BC, ControllerPoll — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)
-0x80035C0C, ControllerPushState — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)
-0x80035CDC, ControllerPopState — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)
-0x80035DA0, ControllerGetNumStates — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)
-0x80035DB0, ControllerResetState — controller input (decomp: ladysilverberg/xenogears-decomp, system/controller.c)
+0x8003569C, ReadControllerButtons — controller input
+0x80035734, IdentifyControllerDevice — controller input
+0x800357C0, ApplyButtonMapping — controller input
+0x8003582C, NormalizeAnalogButtonLayout — controller input
+0x80035884, DecodeStickAxisX — controller input
+0x800358A0, DecodeStickAxisY — controller input
+0x800358BC, SampleInputDevices — controller input
+0x80035C0C, SaveControllerSnapshot — controller input
+0x80035CDC, RestoreControllerSnapshot — controller input
+0x80035DA0, CountSavedControllerStates — controller input
+0x80035DB0, ClearControllerSnapshots — controller input
 0x80035E44, IncrementCappedPlayTimeClock — Advances a 60-frame clock through seconds and minutes into hours then stops permanently at 100 hours.
 0x80035F1C, SaveVramRectAsTim — Captures a VRAM rectangle and writes a 16-bit TIM header followed by its pixel data to a host file.
 0x80035FF8, SaveVramRectAsPpm — Captures a VRAM rectangle and writes a P6 image after expanding each 15-bit pixel into 8-bit RGB channels.
@@ -516,7 +516,7 @@
 0x80036220, AdvancePadOutputPackets — Advances both pad output packets by one state-machine step.
 0x80036258, SetPadOutputPulseCount — Stores a 16-bit pulse count in the indexed pad output packet.
 0x80036270, SetPadOutputPacketPaused — Sets the indexed pad output packet's pause byte.
-0x80036288, ControllerInit — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
+0x80036288, InitializeControllerState
 0x8003633C, SetControllerPollingFlag — Stores the low byte of the supplied value in the controller polling flag.
 0x8003634C, ControllerTick — Polls both pads and queues their state then advances play time and pad output while invoking the optional tick callback and guarded software break.
 0x800363E0, SetControllerDebugBreakGuard — Stores the supplied value as the controller tick software-break guard.
@@ -525,38 +525,38 @@
 0x80036410, IsControllerStateQueueFull — Returns whether the controller input-state queue has overflowed.
 0x80036420, ControllerMergeQueuedStates — Drains queued controller snapshots and ORs all held and edge states together or resets everything after queue overflow.
 0x80036528, ControllerPrintRawPacket — Prints every byte in a raw pad packet and additionally prints the decoded active-low button mask for a valid digital packet.
-0x800365FC, ControllerDebugPrint — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
+0x800365FC, PrintControllerDiagnostics
 0x800366E0, SetFormattedCharacterOutputCallback — Installs the callback used to emit each character produced by formatted output.
 0x800366F0, EmitFontCharacter — Emits one character into the current font rendering buffer.
 0x80036718, FontVPrintf — Formats a variable argument list using printf-style flags width precision and conversions and emits the resulting characters.
-0x80036CD8, FontSetFlag — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80036CF8, FontRemoveFlag — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80036D18, FontGetFlags — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80036D30, FontSetLetterFlag — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80036D50, FontRemoveLetterFlag — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80036D70, FontGetLetterFlags — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80036D88, FontSetLetterWidth — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80036D98, FontSetRowHeight — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80036DA8, FontSetCurLetterX — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80036DB8, FontSetCurLetterY — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80036DC8, FontSetColor — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80036E4C, FontLoadClut — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80036F44, FontGetDefaultLetterWidth — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80036F5C, FontGetDefaultLetterHeight — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80036F74, FontGetCurLetterX — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80036F8C, FontGetCurLetterY — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80036FA4, FontGetCurLetterCount — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80036FBC, FontStoreCurrentPositions — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80036FE4, FontRestoreCurrentPositions — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x8003700C, FontPrintf — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80037058, FontSetPositionsByOffset — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
+0x80036CD8, ApplyFontStateFlag — font rendering
+0x80036CF8, ClearFontFlag — font rendering
+0x80036D18, ReadFontStateFlags — font rendering
+0x80036D30, SetGlyphFlag — font rendering
+0x80036D50, ClearGlyphFlag — font rendering
+0x80036D70, GetGlyphFlags — font rendering
+0x80036D88, SetFontGlyphWidth — font rendering
+0x80036D98, SetFontLineHeight — font rendering
+0x80036DA8, SetGlyphCursorX — font rendering
+0x80036DB8, SetGlyphCursorY — font rendering
+0x80036DC8, SetFontTint — font rendering
+0x80036E4C, UploadFontPalette — font rendering
+0x80036F44, GetFontGlyphWidth — font rendering
+0x80036F5C, GetFontLineHeight — font rendering
+0x80036F74, GetGlyphCursorX — font rendering
+0x80036F8C, GetGlyphCursorY — font rendering
+0x80036FA4, GetRenderedGlyphCount — font rendering
+0x80036FBC, SaveGlyphCursor — font rendering
+0x80036FE4, RestoreGlyphCursor — font rendering
+0x8003700C, PrintFontString — font rendering
+0x80037058, OffsetGlyphCursor — font rendering
 0x8003708C, FontSetCursorAndRowOriginByOffset — Clamps offsets to zero and positions the cursor and next-row origin relative to the active font area.
-0x800370DC, FontAddLetterPrimitive — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x800372CC, FontResetLetterRendering — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x80037324, FontDrawLetters — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
+0x800370DC, AppendGlyphPrimitive — font rendering
+0x800372CC, ResetGlyphBatch — font rendering
+0x80037324, SubmitGlyphPrimitives — font rendering
 0x8003747C, SetFontExternalStorage — Selects or clears external font storage whose presence prevents the font allocation from being heap-freed.
-0x8003748C, FontFree — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
-0x800374E8, FontLoadFont — font rendering (decomp: ladysilverberg/xenogears-decomp, system/font.c)
+0x8003748C, ReleaseFontRenderer — font rendering
+0x800374E8, BuildBitmapFont — font rendering
 0x80037878, SelectionSort — Sorts fixed-size records in place with a comparator using an allocated temporary record for each selection swap.
 0x800379B4, SetAuxiliaryRuntimeCallback — Stores the supplied callback pointer in the auxiliary runtime callback slot.
 0x800379C8, ScreenPrintf — Forwards a format string and variadic arguments to the active on-screen font renderer.
@@ -826,207 +826,207 @@
 0x8003F67C, SoundDriverReturnZero — Returns zero unconditionally without reading arguments or changing sound state.
 0x8003F684, ComputeSedsResourceChecksum — Sums little-endian 32-bit words across the SEDS resource's declared size for registration-time validation.
 0x8003F6B0, ReportSoundDriverError — Records or dispatches a sound-driver error code produced by resource transfer allocation or playback validation.
-0x8003F738, RotMatrix — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
-0x8003F8B0, rcos — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
-0x8003F8CC, rsin — decomp-confirmed function (decomp: ladysilverberg/xenogears-decomp)
+0x8003F738, BuildRotationMatrix
+0x8003F8B0, ComputeFixedCosine
+0x8003F8CC, ComputeFixedSine
 
 # --- PsyQ SDK libraries + BIOS thunks (Ghidra symbol DB / decomp psyq tree / thunk inventory; again, thanks to ladysilverberg/xenogears-decomp) ---
-0x8003F8E8, bzero — PsyQ libc (decomp: ladysilverberg/xenogears-decomp, psyq/libc.c)
-0x8003F918, memchr — PsyQ libc (decomp: ladysilverberg/xenogears-decomp, psyq/libc.c)
-0x8003F968, memcpy — PsyQ libc (decomp: ladysilverberg/xenogears-decomp, psyq/libc.c)
-0x8003F99C, memmove — PsyQ libc (decomp: ladysilverberg/xenogears-decomp, psyq/libc.c)
-0x8003FA08, memset — PsyQ libc (decomp: ladysilverberg/xenogears-decomp, psyq/libc.c)
-0x8003FA38, rand — PsyQ libc (decomp: ladysilverberg/xenogears-decomp, psyq/libc.c)
-0x8003FA68, srand — PsyQ libc (decomp: ladysilverberg/xenogears-decomp, psyq/libc.c)
-0x8003FA78, strcat — PsyQ libc (decomp: ladysilverberg/xenogears-decomp, psyq/libc.c)
-0x8003FB20, strcmp — PsyQ libc (decomp: ladysilverberg/xenogears-decomp, psyq/libc.c)
-0x8003FB84, strcpy — PsyQ libc (decomp: ladysilverberg/xenogears-decomp, psyq/libc.c)
-0x8003FBC8, strlen — PsyQ libc (decomp: ladysilverberg/xenogears-decomp, psyq/libc.c)
-0x8003FBF8, Sprintf — PsyQ libc (decomp: ladysilverberg/xenogears-decomp, psyq/libc.c); Ghidra: `sprintf`
-0x80040454, FlushCache — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk A0:0x44
-0x80040464, _bu_init — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk A0:0x70
-0x80040474, OpenEvent — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk B0:0x08
-0x80040484, CloseEvent — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk B0:0x09
-0x80040494, TestEvent — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk B0:0x0B
-0x800404A4, EnableEvent — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk B0:0x0C
-0x800404B4, DisableEvent — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk B0:0x0D
-0x800404C4, UnDeliverEvent — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk B0:0x20
-0x800404D4, EnterCriticalSection — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp)
-0x800404E4, ExitCriticalSection — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp)
-0x800404F4, SwEnterCriticalSection — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp)
-0x80040514, SwExitCriticalSection — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp)
-0x80040534, open — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk B0:0x32
-0x80040544, read — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk B0:0x34
-0x80040554, write — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk B0:0x35
-0x80040564, close — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk B0:0x36
-0x80040574, format — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk B0:0x41
-0x80040584, firstfile — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk B0:0x42 (thunk inventory column 'printf' is a mislabel; binary FN=0x42 = firstfile)
-0x80040594, nextfile — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk B0:0x43
-0x800405A4, rename — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk B0:0x44
-0x800405B4, erase — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk B0:0x45 (thunk inventory column 'SetConf' is a mislabel; binary FN=0x45 = erase)
-0x800405C4, Krom2RawAdd — PsyQ libapi/libetc (events, counters) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk B0:0x51
-0x800405D4, ChangeClearPAD — PsyQ libapi (decomp: ladysilverberg/xenogears-decomp, psyq/libapi.c); BIOS thunk B0:0x5B
-0x800405F4, SetRCnt — PsyQ libapi (decomp: ladysilverberg/xenogears-decomp, psyq/libapi.c)
-0x80040690, GetRCnt — PsyQ libapi (decomp: ladysilverberg/xenogears-decomp, psyq/libapi.c)
-0x800406C8, StartRCnt — PsyQ libapi (decomp: ladysilverberg/xenogears-decomp, psyq/libapi.c)
-0x800406FC, StopRCnt — PsyQ libapi (decomp: ladysilverberg/xenogears-decomp, psyq/libapi.c)
-0x80040734, ResetRCnt — PsyQ libapi (decomp: ladysilverberg/xenogears-decomp, psyq/libapi.c)
+0x8003F8E8, ClearByteRegion — PsyQ libc
+0x8003F918, FindByteInBuffer — PsyQ libc
+0x8003F968, CopyMemoryForward — PsyQ libc
+0x8003F99C, MoveMemoryOverlapSafe — PsyQ libc
+0x8003FA08, FillMemoryBytes — PsyQ libc
+0x8003FA38, NextPseudoRandomValue — PsyQ libc
+0x8003FA68, SeedPseudoRandomGenerator — PsyQ libc
+0x8003FA78, AppendCString — PsyQ libc
+0x8003FB20, CompareCStrings — PsyQ libc
+0x8003FB84, CopyCString — PsyQ libc
+0x8003FBC8, CountCStringBytes — PsyQ libc
+0x8003FBF8, FormatRuntimeString — PsyQ libc; Ghidra: `sprintf`
+0x80040454, CommitCpuCache — PsyQ libapi/libetc (events, counters); BIOS thunk A0:0x44
+0x80040464, InitializeBiosUtility — PsyQ libapi/libetc (events, counters); BIOS thunk A0:0x70
+0x80040474, CreateKernelEvent — PsyQ libapi/libetc (events, counters); BIOS thunk B0:0x08
+0x80040484, ReleaseKernelEvent — PsyQ libapi/libetc (events, counters); BIOS thunk B0:0x09
+0x80040494, ProbeKernelEvent — PsyQ libapi/libetc (events, counters); BIOS thunk B0:0x0B
+0x800404A4, ActivateKernelEvent — PsyQ libapi/libetc (events, counters); BIOS thunk B0:0x0C
+0x800404B4, TurnOffKernelEvent — PsyQ libapi/libetc (events, counters); BIOS thunk B0:0x0D
+0x800404C4, WithdrawKernelEvent — PsyQ libapi/libetc (events, counters); BIOS thunk B0:0x20
+0x800404D4, MaskInterruptEntry — PsyQ libapi/libetc (events, counters)
+0x800404E4, LeaveInterruptMask — PsyQ libapi/libetc (events, counters)
+0x800404F4, EnterSoftwareCriticalSection — PsyQ libapi/libetc (events, counters)
+0x80040514, ExitSoftwareCriticalSection — PsyQ libapi/libetc (events, counters)
+0x80040534, AcquireBiosFileHandle — PsyQ libapi/libetc (events, counters); BIOS thunk B0:0x32
+0x80040544, FetchBiosFileBytes — PsyQ libapi/libetc (events, counters); BIOS thunk B0:0x34
+0x80040554, StoreBiosFileBytes — PsyQ libapi/libetc (events, counters); BIOS thunk B0:0x35
+0x80040564, ReleaseBiosFileHandle — PsyQ libapi/libetc (events, counters); BIOS thunk B0:0x36
+0x80040574, FormatMemoryCard — PsyQ libapi/libetc (events, counters); BIOS thunk B0:0x41
+0x80040584, FindFirstMemoryCardFile — PsyQ libapi/libetc (events, counters); BIOS thunk B0:0x42 (thunk inventory column 'printf' is a mislabel; binary FN=0x42 = firstfile)
+0x80040594, FindNextMemoryCardFile — PsyQ libapi/libetc (events, counters); BIOS thunk B0:0x43
+0x800405A4, ChangeCardFileName — PsyQ libapi/libetc (events, counters); BIOS thunk B0:0x44
+0x800405B4, DeleteMemoryCardFile — PsyQ libapi/libetc (events, counters); BIOS thunk B0:0x45 (thunk inventory column 'ApplySystemConfiguration' is a mislabel; binary FN=0x45 = erase)
+0x800405C4, AppendKanjiGlyphPixels — PsyQ libapi/libetc (events, counters); BIOS thunk B0:0x51
+0x800405D4, SwapPadClearHandler — PsyQ libapi; BIOS thunk B0:0x5B
+0x800405F4, ConfigureHardwareCounter — PsyQ libapi
+0x80040690, ReadHardwareCounter — PsyQ libapi
+0x800406C8, EnableHardwareCounter — PsyQ libapi
+0x800406FC, HaltHardwareCounter — PsyQ libapi
+0x80040734, ClearHardwareCounter — PsyQ libapi
 0x8004076C, SetInitPadFlag — PsyQ libetc PAD (controller) (Ghidra symbol DB, prior RE sessions)
 0x8004077C, ReadInitPadFlag — PsyQ libetc PAD (controller) (Ghidra symbol DB, prior RE sessions)
 0x8004078C, PAD_init — PsyQ libetc PAD (controller) (Ghidra symbol DB, prior RE sessions)
-0x80040828, InitPAD — PsyQ libapi (decomp: ladysilverberg/xenogears-decomp, psyq/libapi.c)
-0x800408C4, StartPAD — PsyQ libapi (decomp: ladysilverberg/xenogears-decomp, psyq/libapi.c)
-0x800408F4, StopPAD — PsyQ libetc PAD (controller) (Ghidra symbol DB, prior RE sessions)
+0x80040828, InitializePadInterface — PsyQ libapi
+0x800408C4, ActivatePadInterface — PsyQ libapi
+0x800408F4, DeactivatePadInterface — PsyQ libetc PAD (controller) (Ghidra symbol DB, prior RE sessions)
 0x8004092C, SetPatchPad — PsyQ libetc PAD (controller) (Ghidra symbol DB, prior RE sessions)
 0x800409AC, RemovePatchPad — PsyQ libetc PAD (controller) (Ghidra symbol DB, prior RE sessions)
 0x800409E4, _Pad1 — PsyQ libetc PAD (controller) (Ghidra symbol DB, prior RE sessions)
 0x80040A4C, _IsVSync — PsyQ libetc PAD (controller) (Ghidra symbol DB, prior RE sessions)
-0x80040A8C, InitPAD2 — PsyQ libapi (decomp: ladysilverberg/xenogears-decomp, psyq/libapi.c); BIOS thunk B0:0x12
-0x80040A9C, StartPAD2 — PsyQ libapi (decomp: ladysilverberg/xenogears-decomp, psyq/libapi.c); BIOS thunk B0:0x13
-0x80040AAC, StopPAD2 — PsyQ libapi (decomp: ladysilverberg/xenogears-decomp, psyq/libapi.c); BIOS thunk B0:0x14
+0x80040A8C, InitializeSecondPadInterface — PsyQ libapi; BIOS thunk B0:0x12
+0x80040A9C, ActivateSecondPadInterface — PsyQ libapi; BIOS thunk B0:0x13
+0x80040AAC, DeactivateSecondPadInterface — PsyQ libapi; BIOS thunk B0:0x14
 0x80040ABC, PAD_init2 — PsyQ libetc PAD (controller) (Ghidra symbol DB, prior RE sessions); BIOS thunk B0:0x15
-0x80040ACC, SysEnqIntRP — PsyQ libapi (decomp: ladysilverberg/xenogears-decomp, psyq/libapi.c); BIOS thunk C0:0x02
-0x80040ADC, SysDeqIntRP — PsyQ libapi (decomp: ladysilverberg/xenogears-decomp, psyq/libapi.c); BIOS thunk C0:0x03
-0x80040AEC, EnablePAD — PsyQ libapi (decomp: ladysilverberg/xenogears-decomp, psyq/libapi.c)
-0x80040B00, DisablePAD — PsyQ libetc PAD (controller) (Ghidra symbol DB, prior RE sessions)
-0x80040B14, _patch_pad — PsyQ libapi (decomp: ladysilverberg/xenogears-decomp, psyq/libapi.c)
+0x80040ACC, InstallInterruptHandler — PsyQ libapi; BIOS thunk C0:0x02
+0x80040ADC, RemoveInterruptHandler — PsyQ libapi; BIOS thunk C0:0x03
+0x80040AEC, ActivatePadPort — PsyQ libapi
+0x80040B00, DeactivatePadPort — PsyQ libetc PAD (controller) (Ghidra symbol DB, prior RE sessions)
+0x80040B14, InstallControllerPatch — PsyQ libapi
 0x80040B7C, _SendPAD — PsyQ libetc PAD (controller) (Ghidra symbol DB, prior RE sessions)
 0x80040BA4, _send_pad — PsyQ libetc PAD (controller) (Ghidra symbol DB, prior RE sessions)
 0x80040C20, SendPadResultMaskPatch — Masks the controller-transfer result with the active send-pad mask before the installed kernel path continues.
 0x80040C3C, SendPAD — Executes the installed low-level controller transfer routine.
 0x80040C5C, _remove_ChgclrPAD — PsyQ libetc PAD (controller) (Ghidra symbol DB, prior RE sessions)
-0x80040CBC, DsSyncCallback — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
-0x80040CD0, DsReadyCallback — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
-0x80040CE4, DsDataCallback — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
-0x80040D08, CdInit — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/event.c)
-0x80040DA0, def_cbsync — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/event.c)
-0x80040DC8, def_cbready — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/event.c)
-0x80040DF0, def_cbread — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/event.c)
-0x80040E18, DeliverEvent — PsyQ libcd (CD-ROM) (decomp: ladysilverberg/xenogears-decomp); BIOS thunk B0:0x07
-0x80040E28, CdStatus — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x80040E38, CdMode — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x80040E48, CdLastCom — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x80040E58, CdLastPos — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x80040E68, CdReset — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x80040ED4, CdFlush — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x80040EF4, CdSetDebug — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x80040F0C, CdComstr — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x80040F40, CdIntstr — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x80040F74, CdSync — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x80040F94, CdReady — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x80040FB4, CdSyncCallback — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x80040FCC, CdReadyCallback — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x80040FE4, CdControl — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x8004111C, CdControlF — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x80041248, CdControlB — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x8004138C, CdMix — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x800413AC, CdGetSector — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x800413CC, CdGetSector2 — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x800413EC, CdDataCallback — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x80041410, CdDataSync — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x80041430, CdIntToPos — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x80041534, CdPosToInt — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/sys.c)
-0x800415B4, getintr — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/bios.c)
-0x80041B3C, CD_sync — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
-0x80041DBC, CD_ready — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
-0x80042088, CD_cw — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
-0x800424A4, CD_vol — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
-0x8004252C, CD_flush — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
-0x8004260C, CD_initvol — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
-0x80042700, CD_initintr — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
-0x80042750, CD_init — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
-0x8004293C, CD_datasync — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
-0x80042AA8, CD_getsector — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
-0x80042BA8, CD_getsector2 — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
-0x80042C98, CD_set_test_parmnum — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
-0x80042CA8, callback — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/bios.c)
-0x80042D8C, puts — PsyQ libc2 (decomp: ladysilverberg/xenogears-decomp, psyq/libc2/puts.c)
-0x80042DDC, putchar — PsyQ libc2 (decomp: ladysilverberg/xenogears-decomp, psyq/libc2/puts.c)
-0x80042E90, toupper — PsyQ libc2 (decomp: ladysilverberg/xenogears-decomp, psyq/libc2/puts.c)
-0x80042EC0, tolower — PsyQ libc2 (decomp: ladysilverberg/xenogears-decomp, psyq/libc2/puts.c)
-0x80042EF0, cb_read — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/cdread.c)
-0x800431C0, cb_data — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/cdread.c)
-0x800432BC, cd_read_retry — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/cdread.c)
-0x800434D0, CdReadBreak — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/cdread.c)
-0x8004356C, CdRead — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/cdread.c)
-0x80043670, CdReadSync — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/cdread.c)
-0x8004373C, CdReadCallback — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/cdread.c)
-0x80043754, CdReadMode — PsyQ libcd (decomp: ladysilverberg/xenogears-decomp, psyq/libcd/cdread.c)
-0x8004376C, LoadTPage — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
-0x80043858, LoadClut — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
-0x800438C0, LoadClut2 — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
-0x80043928, SetDefDrawEnv — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x800439E0, SetDefDispEnv — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043A1C, GetTPage — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043A58, GetClut — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043A70, DumpTPage — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043AD0, DumpClut — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043B10, NextPrim — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043B2C, IsEndPrim — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043B48, AddPrim — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043B84, AddPrims — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043BC0, CatPrim — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043BE4, TermPrim — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043BFC, SetSemiTrans — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043C24, SetShadeTex — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043C4C, SetPolyF3 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043C60, SetPolyFT3 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043C74, SetPolyG3 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043C88, SetPolyGT3 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043C9C, SetPolyF4 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043CB0, SetPolyFT4 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043CC4, SetPolyG4 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043CD8, SetPolyGT4 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043CEC, SetSprt8 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043D00, SetSprt16 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043D14, SetSprt — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043D28, SetTile1 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043D3C, SetTile8 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043D50, SetTile16 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043D64, SetTile — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043D78, SetLineF2 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043D8C, SetLineG2 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043DA0, SetLineF3 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043DC0, SetLineG3 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043DE0, SetLineF4 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043E00, SetLineG4 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043E20, SetDrawTPage — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043E4C, SetDrawMove — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80043EAC, SetDrawLoad — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
-0x80043F18, MargePrim — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
-0x80043F50, DumpDrawEnv — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80044064, DumpDispEnv — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80044110, ResetGraph — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80044294, SetGraphReverse — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x800443A8, SetGraphDebug — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
+0x80040CBC, SetDriveSyncCallback — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
+0x80040CD0, SetDriveReadyCallback — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
+0x80040CE4, SetDriveStreamCallback — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
+0x80040D08, InitializeCdDrive — PsyQ libcd
+0x80040DA0, InstallDefaultCdSyncCallback — PsyQ libcd
+0x80040DC8, InstallDefaultCdReadyCallback — PsyQ libcd
+0x80040DF0, InstallDefaultCdReadCallback — PsyQ libcd
+0x80040E18, DispatchKernelEvent — PsyQ libcd (CD-ROM); BIOS thunk B0:0x07
+0x80040E28, QueryDiscStatus — PsyQ libcd
+0x80040E38, QueryDiscReadMode — PsyQ libcd
+0x80040E48, GetLastCdCommand — PsyQ libcd
+0x80040E58, GetLastCdLocation — PsyQ libcd
+0x80040E68, ReinitializeDiscDrive — PsyQ libcd
+0x80040ED4, DrainDiscReadQueue — PsyQ libcd
+0x80040EF4, ConfigureDiscDiagnostics — PsyQ libcd
+0x80040F0C, SendCdCommandString — PsyQ libcd
+0x80040F40, ConvertCdSectorPosition — PsyQ libcd
+0x80040F74, SynchronizeCdCommand — PsyQ libcd
+0x80040F94, CheckDiscReadyState — PsyQ libcd
+0x80040FB4, HandleCdSyncCompletion — PsyQ libcd
+0x80040FCC, HandleCdReadyCompletion — PsyQ libcd
+0x80040FE4, IssueDiscCommand — PsyQ libcd
+0x8004111C, IssueDiscCommandImmediate — PsyQ libcd
+0x80041248, IssueDiscCommandBlocking — PsyQ libcd
+0x8004138C, BalanceDiscAudioChannels — PsyQ libcd
+0x800413AC, FetchCdSector — PsyQ libcd
+0x800413CC, FetchCdSectorAlternate — PsyQ libcd
+0x800413EC, SetCdSectorCallback — PsyQ libcd
+0x80041410, WaitForCdData — PsyQ libcd
+0x80041430, ConvertDiscSectorToLocation — PsyQ libcd
+0x80041534, ConvertDiscLocationToSector — PsyQ libcd
+0x800415B4, ReadCdInterruptState — PsyQ libcd
+0x80041B3C, LegacyCdCommandSync — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
+0x80041DBC, CheckLegacyDiscReady — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
+0x80042088, AwaitDiscCommand — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
+0x800424A4, QueryLegacyDiscVolume — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
+0x8004252C, LegacyCdQueueFlush — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
+0x8004260C, InitializeCdVolume — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
+0x80042700, InstallCdInterrupts — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
+0x80042750, LegacyCdDriveInit — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
+0x8004293C, LegacyCdDataWait — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
+0x80042AA8, LegacyCdSectorFetch — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
+0x80042BA8, LegacyCdSectorFetchAlternate — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
+0x80042C98, ConfigureDiscTestParameterCount — PsyQ libcd (CD-ROM) (Ghidra symbol DB, prior RE sessions)
+0x80042CA8, ServiceCdInterruptCallbacks — PsyQ libcd
+0x80042D8C, WriteConsoleLine — PsyQ libc2
+0x80042DDC, WriteConsoleCharacter — PsyQ libc2
+0x80042E90, UppercaseAsciiByte — PsyQ libc2
+0x80042EC0, LowercaseAsciiByte — PsyQ libc2
+0x80042EF0, HandleCdReadCallback — PsyQ libcd
+0x800431C0, HandleCdDataCallback — PsyQ libcd
+0x800432BC, RetryDiscReadOperation — PsyQ libcd
+0x800434D0, AbortCdRead — PsyQ libcd
+0x8004356C, BeginDiscTransfer — PsyQ libcd
+0x80043670, WaitForCdRead — PsyQ libcd
+0x8004373C, HandleCdReadCompletion — PsyQ libcd
+0x80043754, QueryDiscTransferMode — PsyQ libcd
+0x8004376C, UploadTexturePage — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
+0x80043858, UploadPaletteTable — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
+0x800438C0, UploadClutPaletteAlternate — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
+0x80043928, BuildDefaultDrawingEnvironment — PsyQ libgpu
+0x800439E0, BuildDefaultDisplayEnvironment — PsyQ libgpu
+0x80043A1C, DecodeTexturePage — PsyQ libgpu
+0x80043A58, DecodePaletteLocation — PsyQ libgpu
+0x80043A70, PrintTexturePage — PsyQ libgpu
+0x80043AD0, PrintClutDescriptor — PsyQ libgpu
+0x80043B10, GetFollowingGpuPrimitive — PsyQ libgpu
+0x80043B2C, CheckPrimitiveTerminator — PsyQ libgpu
+0x80043B48, LinkGpuPrimitive — PsyQ libgpu
+0x80043B84, LinkGpuPrimitivePair — PsyQ libgpu
+0x80043BC0, ChainGpuPrimitives — PsyQ libgpu
+0x80043BE4, TerminateGpuPrimitive — PsyQ libgpu
+0x80043BFC, ConfigurePrimitiveAlpha — PsyQ libgpu
+0x80043C24, ConfigureTextureShading — PsyQ libgpu
+0x80043C4C, InitializeFlatTriangle3 — PsyQ libgpu
+0x80043C60, InitializeFlatTexturedTriangle3 — PsyQ libgpu
+0x80043C74, InitializeGouraudTriangle3 — PsyQ libgpu
+0x80043C88, InitializeGouraudTexturedTriangle3 — PsyQ libgpu
+0x80043C9C, InitializeFlatQuadrilateral4 — PsyQ libgpu
+0x80043CB0, InitializeFlatTexturedQuadrilateral4 — PsyQ libgpu
+0x80043CC4, InitializeGouraudQuadrilateral4 — PsyQ libgpu
+0x80043CD8, InitializeGouraudTexturedQuadrilateral4 — PsyQ libgpu
+0x80043CEC, InitializeEightPixelSprite — PsyQ libgpu
+0x80043D00, InitializeSixteenPixelSprite — PsyQ libgpu
+0x80043D14, InitializeFreeSizeSprite — PsyQ libgpu
+0x80043D28, InitializeOnePixelTile — PsyQ libgpu
+0x80043D3C, InitializeEightPixelTile — PsyQ libgpu
+0x80043D50, InitializeSixteenPixelTile — PsyQ libgpu
+0x80043D64, InitializeFreeSizeTile — PsyQ libgpu
+0x80043D78, InitializeFlatLine2 — PsyQ libgpu
+0x80043D8C, InitializeGouraudLine2 — PsyQ libgpu
+0x80043DA0, InitializeFlatLine3 — PsyQ libgpu
+0x80043DC0, InitializeGouraudLine3 — PsyQ libgpu
+0x80043DE0, InitializeFlatLine4 — PsyQ libgpu
+0x80043E00, InitializeGouraudLine4 — PsyQ libgpu
+0x80043E20, ConfigureTexturePagePacket — PsyQ libgpu
+0x80043E4C, PrepareVramMovePacket — PsyQ libgpu
+0x80043EAC, PrepareVramLoadPacket — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
+0x80043F18, MergeGpuPrimitiveChains — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
+0x80043F50, PrintDrawingEnvironment — PsyQ libgpu
+0x80044064, PrintDisplayEnvironment — PsyQ libgpu
+0x80044110, ReinitializeGpu — PsyQ libgpu
+0x80044294, ConfigureGraphicsOrder — PsyQ libgpu
+0x800443A8, ConfigureGraphicsDiagnostics — PsyQ libgpu
 0x8004440C, SetGraphQueue — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
 0x800444B8, GetGraphType — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
-0x800444C8, GetGraphDebug — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x800444D8, DrawSyncCallback — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80044534, SetDispMask — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x800445D0, DrawSync — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
+0x800444C8, ReadGraphicsDebugLevel — PsyQ libgpu
+0x800444D8, SetDrawCompletionCallback — PsyQ libgpu
+0x80044534, ApplyDisplayMask — PsyQ libgpu
+0x800445D0, WaitForGpuDrawing — PsyQ libgpu
 0x8004463C, checkRECT — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
-0x80044764, ClearImage — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x800447F8, ClearImage2 — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80044894, LoadImage — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x800448F8, StoreImage — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x8004495C, MoveImage — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80044A20, ClearOTag — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80044AD8, ClearOTagR — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80044B70, DrawPrim — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80044BD0, DrawOTag — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80044C44, PutDrawEnv — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80044D48, DrawOTagEnv — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80044E64, GetDrawEnv — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80044E9C, PutDispEnv — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x80045344, GetDispEnv — PsyQ libgpu (decomp: ladysilverberg/xenogears-decomp, psyq/libgpu.c)
-0x8004537C, GetODE — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
-0x800453AC, SetTexWindow — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
-0x800453E8, SetDrawArea — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
-0x8004546C, SetDrawOffset — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
+0x80044764, EraseVramRectangle — PsyQ libgpu
+0x800447F8, EraseVramRectangleAlternate — PsyQ libgpu
+0x80044894, UploadVramImage — PsyQ libgpu
+0x800448F8, CommitVramImage — PsyQ libgpu
+0x8004495C, RelocateVramRectangle — PsyQ libgpu
+0x80044A20, TerminateOrderingTable — PsyQ libgpu
+0x80044AD8, TerminateOrderingTableReverse — PsyQ libgpu
+0x80044B70, SubmitGpuPrimitive — PsyQ libgpu
+0x80044BD0, SubmitOrderingTable — PsyQ libgpu
+0x80044C44, InstallDrawingEnvironment — PsyQ libgpu
+0x80044D48, SubmitOrderingTableWithEnvironment — PsyQ libgpu
+0x80044E64, ReadDrawingEnvironment — PsyQ libgpu
+0x80044E9C, InstallDisplayEnvironment — PsyQ libgpu
+0x80045344, ReadDisplayEnvironment — PsyQ libgpu
+0x8004537C, ReadOrderingDrawEndpoint — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
+0x800453AC, ConfigureTextureWindow — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
+0x800453E8, ConfigureDrawingArea — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
+0x8004546C, ConfigureDrawingOffset — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
 0x800454B0, SetPriority — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
-0x800454DC, SetDrawMode — PsyQ libgpu/libgs (primitives, TIM/TMD) (decomp: ladysilverberg/xenogears-decomp)
-0x80045534, SetDrawEnv — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
+0x800454DC, ConfigureDrawMode — PsyQ libgpu/libgs (primitives, TIM/TMD)
+0x80045534, ConfigureDrawingEnvironment — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
 0x8004574C, SetDrawEnv2 — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
 0x800459DC, get_mode — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
 0x80045A34, get_cs — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
@@ -1052,209 +1052,209 @@
 0x80046EFC, set_alarm — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
 0x80046F30, get_alarm — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
 0x8004709C, _version — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
-0x80047178, memset — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
+0x80047178, FillGpuPacketMemory — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
 0x800471A4, GPU_cw — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions); BIOS thunk A0:0x49
-0x800471B4, OpenTIM — PsyQ libgpu/libgs (primitives, TIM/TMD) (decomp: ladysilverberg/xenogears-decomp)
-0x800471C4, ReadTIM — PsyQ libgpu/libgs (primitives, TIM/TMD) (decomp: ladysilverberg/xenogears-decomp)
-0x8004722C, OpenTMD — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
-0x8004726C, ReadTMD — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
+0x800471B4, DecodeTimImage — PsyQ libgpu/libgs (primitives, TIM/TMD)
+0x800471C4, DecodeTimStream — PsyQ libgpu/libgs (primitives, TIM/TMD)
+0x8004722C, DecodeTmdModel — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
+0x8004726C, DecodeTmdStream — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
 0x80047518, get_tim_addr — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
 0x80047638, get_tmd_addr — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
 0x800477D0, unpack_packet — PsyQ libgpu/libgs (primitives, TIM/TMD) (Ghidra symbol DB, prior RE sessions)
-0x80048AB0, SetFogNearFar — PsyQ libgte C wrappers / libmath (Ghidra symbol DB, prior RE sessions)
-0x80048BC4, InitGeom — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80048C4C, SquareRoot0 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80048CDC, InvSquareRoot — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80048D68, VectorNormalS — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80048D7C, VectorNormal — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80048DA8, VectorNormalSS — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
+0x80048AB0, ConfigureFogInterval — PsyQ libgte C wrappers / libmath (Ghidra symbol DB, prior RE sessions)
+0x80048BC4, InitializeGteGeometry — PsyQ libgte
+0x80048C4C, ComputeSquareRoot — PsyQ libgte
+0x80048CDC, ComputeInverseRoot — PsyQ libgte
+0x80048D68, NormalizeShortVector — PsyQ libgte
+0x80048D7C, NormalizeLongVector — PsyQ libgte
+0x80048DA8, NormalizePackedShortVector — PsyQ libgte
 0x80048DD8, NormalizeLoadedGteVector — Computes a reciprocal square root from the loaded vector's squared magnitude and scales all three components to Q12 unit length.
-0x80048E94, MatrixNormal — PsyQ libgte C wrappers / libmath (Ghidra symbol DB, prior RE sessions)
-0x80048F7C, LoadAverage12 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80048FCC, LoadAverage0 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
+0x80048E94, NormalizeMatrixBasis — PsyQ libgte C wrappers / libmath (Ghidra symbol DB, prior RE sessions)
+0x80048F7C, InterpolateVectorAverage12 — PsyQ libgte
+0x80048FCC, InterpolateVectorAverage0 — PsyQ libgte
 0x8004901C, LoadAverageShort12 — PsyQ libgte C wrappers / libmath (Ghidra symbol DB, prior RE sessions)
 0x800490A4, LoadAverageShort0 — PsyQ libgte C wrappers / libmath (Ghidra symbol DB, prior RE sessions)
-0x8004912C, LoadAverageByte — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004918C, LoadAverageCol — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004920C, MulMatrix0 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004931C, CompMatrix — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004947C, ApplyMatrixLV — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x800495DC, ApplyRotMatrix — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004960C, PushMatrix — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x800496AC, PopMatrix — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004974C, ScaleMatrixL — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004987C, SetMulMatrix — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004998C, ApplyRotMatrixLV — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80049ACC, MulMatrix — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80049BDC, MulMatrix2 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80049CEC, ApplyMatrix — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80049D3C, ApplyMatrixSV — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80049D9C, TransMatrix — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80049DCC, ScaleMatrix — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80049EFC, SetRotMatrix — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80049F2C, SetLightMatrix — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80049F5C, SetColorMatrix — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80049F8C, SetTransMatrix — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80049FAC, SetVertex0 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80049FBC, SetVertex1 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80049FCC, SetVertex2 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80049FDC, SetVertexTri — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x80049FFC, SetRGBfifo — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A010, SetIR123 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A024, SetIR0 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A030, SetSZfifo3 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A044, SetSZfifo4 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A05C, SetSXSYfifo — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A070, SetRii — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A084, SetMAC123 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A098, SetData32 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A0A4, SetDQA — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A0B0, SetDQB — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A0BC, ReadGeomOffset — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A0DC, ReadGeomScreen — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A0EC, SetBackColor — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A10C, SetFarColor — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A12C, SetGeomOffset — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A14C, SetGeomScreen — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A15C, LocalLight — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A180, DpqColor — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A19C, NormalColor — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A1B8, NormalColor3 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A1F4, NormalColorDpq — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A218, NormalColorDpq3 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A260, NormalLightCol — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c); Ghidra: `NormalColorCol`
-0x8004A280, NormalColorCol3 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A2C4, ColorDpq — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A2EC, ColorCol — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A310, AverageSZ3 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A320, AverageSZ4 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A33C, LightColor — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A364, DpqColorLight — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A38C, DpqColor3 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A3C8, Intpl — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A3EC, Square12 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A414, Square0 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A43C, AverageZ3 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A45C, AverageZ4 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A480, OuterProduct12 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A4D8, OuterProduct0 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A530, Lzc — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A54C, RotTransSV — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A57C, SquareSS12 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A5B4, SquareSS0 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A5EC, SquareSL12 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A61C, SquareSL0 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A64C, RotTransPers — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A67C, RotTransPers3 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A6DC, RotTrans — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A70C, NormalClip — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A73C, RotTransPers4 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A7BC, RotAverage4 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A83C, RotAverageNclip4 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A8EC, TransposeMatrix — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004A92C, RotMatrixYXZ — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004ABBC, RotMatrixZYX — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004AE4C, RotMatrixX — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004AFEC, RotMatrixY — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004B18C, RotMatrixZ — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
-0x8004B32C, ratan2 — PsyQ libgte (decomp: ladysilverberg/xenogears-decomp, psyq/libgte.c)
+0x8004912C, InterpolateByteAverage — PsyQ libgte
+0x8004918C, InterpolateColorAverage — PsyQ libgte
+0x8004920C, MultiplyMatricesUncached — PsyQ libgte
+0x8004931C, ComposeTransformMatrix — PsyQ libgte
+0x8004947C, GteTransformLongVector — PsyQ libgte
+0x800495DC, GteRotateVector — PsyQ libgte
+0x8004960C, SaveTransformStack — PsyQ libgte
+0x800496AC, RestoreTransformStack — PsyQ libgte
+0x8004974C, ApplyLongMatrixScale — PsyQ libgte
+0x8004987C, InstallProductMatrix — PsyQ libgte
+0x8004998C, GteRotateLongVector — PsyQ libgte
+0x80049ACC, MultiplyTransformMatrices — PsyQ libgte
+0x80049BDC, MultiplyMatricesAlternate — PsyQ libgte
+0x80049CEC, GteTransformVectorMatrix — PsyQ libgte
+0x80049D3C, GteTransformShortVector — PsyQ libgte
+0x80049D9C, ApplyTranslationMatrix — PsyQ libgte
+0x80049DCC, ApplyBasisScaling — PsyQ libgte
+0x80049EFC, InstallGteRotationMatrix — PsyQ libgte
+0x80049F2C, InstallGteLightMatrix — PsyQ libgte
+0x80049F5C, InstallGteColorMatrix — PsyQ libgte
+0x80049F8C, InstallGteTranslationMatrix — PsyQ libgte
+0x80049FAC, WriteGteVertex0 — PsyQ libgte
+0x80049FBC, WriteGteVertex1 — PsyQ libgte
+0x80049FCC, WriteGteVertex2 — PsyQ libgte
+0x80049FDC, WriteGteTriangleVertices — PsyQ libgte
+0x80049FFC, WriteGteColorFifo — PsyQ libgte
+0x8004A010, WriteGteIr123 — PsyQ libgte
+0x8004A024, WriteGteIr0 — PsyQ libgte
+0x8004A030, WriteGteDepthFifo3 — PsyQ libgte
+0x8004A044, WriteGteDepthFifo4 — PsyQ libgte
+0x8004A05C, WriteGteScreenFifo — PsyQ libgte
+0x8004A070, WriteGteFlagRegister — PsyQ libgte
+0x8004A084, WriteGteMac123 — PsyQ libgte
+0x8004A098, WriteDmaDataWord — PsyQ libgte
+0x8004A0A4, WriteDepthCueSlope — PsyQ libgte
+0x8004A0B0, WriteDepthCueIntercept — PsyQ libgte
+0x8004A0BC, QueryGeometryOffset — PsyQ libgte
+0x8004A0DC, QueryProjectionDistance — PsyQ libgte
+0x8004A0EC, WriteGteBackgroundColor — PsyQ libgte
+0x8004A10C, WriteGteFarColor — PsyQ libgte
+0x8004A12C, WriteGteOffset — PsyQ libgte
+0x8004A14C, WriteProjectionDistance — PsyQ libgte
+0x8004A15C, TransformPointLight — PsyQ libgte
+0x8004A180, ApplyDepthCueColor — PsyQ libgte
+0x8004A19C, ShadeVertexNormal — PsyQ libgte
+0x8004A1B8, ShadeThreeVertices — PsyQ libgte
+0x8004A1F4, ShadeVertexWithDepthCue — PsyQ libgte
+0x8004A218, ShadeThreeVerticesWithDepthCue — PsyQ libgte
+0x8004A260, ApplyLitColumnColor — PsyQ libgte; Ghidra: `ShadeVertexWithColumn`
+0x8004A280, ShadeThreeVerticesWithColumns — PsyQ libgte
+0x8004A2C4, InterpolateDepthCueColor — PsyQ libgte
+0x8004A2EC, BlendNormalColumnColor — PsyQ libgte
+0x8004A310, ComputeDepthMeanTriangle — PsyQ libgte
+0x8004A320, ComputeDepthMeanQuadrilateral — PsyQ libgte
+0x8004A33C, ApplyLightingTint — PsyQ libgte
+0x8004A364, ApplyDepthCueLighting — PsyQ libgte
+0x8004A38C, ApplyDepthCueColorTriple — PsyQ libgte
+0x8004A3C8, InterpolateLightingValue — PsyQ libgte
+0x8004A3EC, ComputeVectorMagnitudeSquaredFixed — PsyQ libgte
+0x8004A414, ComputeVectorMagnitudeSquared — PsyQ libgte
+0x8004A43C, ComputeProjectedDepthMeanTriangle — PsyQ libgte
+0x8004A45C, ComputeProjectedDepthMeanQuadrilateral — PsyQ libgte
+0x8004A480, ComputeCrossProductFixed — PsyQ libgte
+0x8004A4D8, ComputeCrossProductUnscaled — PsyQ libgte
+0x8004A530, CountLeadingZeroBits — PsyQ libgte
+0x8004A54C, TransformShortVectorWithRotation — PsyQ libgte
+0x8004A57C, ComputeShortProductFixed — PsyQ libgte
+0x8004A5B4, ComputeShortProductBase — PsyQ libgte
+0x8004A5EC, ComputeLongShortProductFixed — PsyQ libgte
+0x8004A61C, ComputeLongShortProductBase — PsyQ libgte
+0x8004A64C, ProjectRotatedVertex — PsyQ libgte
+0x8004A67C, ProjectRotatedTriangle — PsyQ libgte
+0x8004A6DC, TransformVectorWithRotation — PsyQ libgte
+0x8004A70C, EvaluateTriangleClip — PsyQ libgte
+0x8004A73C, ProjectRotatedQuadrilateral — PsyQ libgte
+0x8004A7BC, TransformAverageQuadrilateral — PsyQ libgte
+0x8004A83C, TransformClipAverageQuadrilateral — PsyQ libgte
+0x8004A8EC, BuildTransposedMatrix — PsyQ libgte
+0x8004A92C, BuildRotationMatrixYXZ — PsyQ libgte
+0x8004ABBC, BuildRotationMatrixZYX — PsyQ libgte
+0x8004AE4C, BuildRotationMatrixX — PsyQ libgte
+0x8004AFEC, BuildRotationMatrixY — PsyQ libgte
+0x8004B18C, BuildRotationMatrixZ — PsyQ libgte
+0x8004B32C, ComputeFixedAtan2 — PsyQ libgte
 0x8004B4AC, _patch_gte — PsyQ libetc (vsync/intr) + libc (Ghidra symbol DB, prior RE sessions)
 0x8004B51C, GteExceptionContextSavePatch — Locates the active exception frame and saves AT V0 V1 and RA before reading the processor cause register.
-0x8004B694, v_wait — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/vsync.c)
-0x8004B730, ChangeClearRCnt — PsyQ libapi_3 (decomp: ladysilverberg/xenogears-decomp, psyq/libapi_3.c); BIOS thunk C0:0x0A
-0x8004B740, ResetCallback — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr.c)
-0x8004B770, InterruptCallback — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr.c)
-0x8004B7A0, DMACallback — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr.c)
-0x8004B7D0, VSyncCallback — PsyQ libetc (vsync/intr) + libc (Ghidra symbol DB, prior RE sessions)
+0x8004B694, WaitForVblankCount — PsyQ libetc
+0x8004B730, SwapCounterClearHandler — PsyQ libapi_3; BIOS thunk C0:0x0A
+0x8004B740, ClearCallbackChain — PsyQ libetc
+0x8004B770, RouteHardwareInterrupt — PsyQ libetc
+0x8004B7A0, HandleDmaCompletion — PsyQ libetc
+0x8004B7D0, RecordVerticalRetrace — PsyQ libetc (vsync/intr) + libc (Ghidra symbol DB, prior RE sessions)
 0x8004B804, VSyncCallbacks — PsyQ libetc (vsync/intr) + libc (Ghidra symbol DB, prior RE sessions)
-0x8004B834, StopCallback — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr.c)
-0x8004B864, RestartCallback — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr.c)
-0x8004B894, CheckCallback — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr.c)
-0x8004B8A4, GetIntrMask — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr.c)
-0x8004B8BC, SetIntrMask — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr.c)
-0x8004B8D8, startIntr — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr.c)
-0x8004B9B4, trapIntr — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr.c)
-0x8004BB9C, setIntr — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr.c)
-0x8004BCF0, stopIntr — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr.c)
-0x8004BD9C, restartIntr — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr.c)
-0x8004BE24, memclrIntr — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr.c); Ghidra: `memclr`
-0x8004BE50, setjmp — PsyQ libapi_2 (decomp: ladysilverberg/xenogears-decomp, psyq/libapi_2.c)
-0x8004BE8C, longjmp — PsyQ libapi_2 (decomp: ladysilverberg/xenogears-decomp, psyq/libapi_2.c)
+0x8004B834, CancelCallbackChain — PsyQ libetc
+0x8004B864, RearmCallbackDispatcher — PsyQ libetc
+0x8004B894, InspectPendingCallback — PsyQ libetc
+0x8004B8A4, ReadInterruptMask — PsyQ libetc
+0x8004B8BC, ApplyInterruptMask — PsyQ libetc
+0x8004B8D8, EnableInterruptController — PsyQ libetc
+0x8004B9B4, RaiseInterruptTrap — PsyQ libetc
+0x8004BB9C, ConfigureInterruptDispatch — PsyQ libetc
+0x8004BCF0, DisableInterruptController — PsyQ libetc
+0x8004BD9C, RearmInterruptController — PsyQ libetc
+0x8004BE24, ClearMemoryDuringInterrupt — PsyQ libetc; Ghidra: `memclr`
+0x8004BE50, SaveExecutionContext — PsyQ libapi_2
+0x8004BE8C, RestoreSavedExecutionContext — PsyQ libapi_2
 0x8004BEC0, LongjmpReturn — Returns to the restored execution context with the supplied nonlocal return value.
 0x8004BED0, ReservedInstructionTrapStub — Executes a conditional branch with a reserved opcode in its delay slot and therefore raises a reserved-instruction exception before completion.
 0x8004BED8, A0:0x72 — PsyQ BIOS thunk (jr A0 syscall stub; name unknown); psx-spx: remove() — delete file; name unverified in binary
-0x8004BEF0, ReturnFromException — PsyQ libapi_2 (decomp: ladysilverberg/xenogears-decomp, psyq/libapi_2.c); BIOS thunk B0:0x17
-0x8004BF00, ResetEntryInt — PsyQ libapi_2 (decomp: ladysilverberg/xenogears-decomp, psyq/libapi_2.c); BIOS thunk B0:0x18
-0x8004BF10, HookEntryInt — PsyQ libapi_2 (decomp: ladysilverberg/xenogears-decomp, psyq/libapi_2.c); BIOS thunk B0:0x19
-0x8004BF20, startIntrVSync — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr_vsync.c)
-0x8004BF78, trapIntrVSync — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr_vsync.c)
-0x8004BFF0, setIntrVSync — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr_vsync.c)
-0x8004C01C, memclrIntrVSync — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr_vsync.c); Ghidra: `memclr`
-0x8004C048, startIntrDMA — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr_dma.c)
-0x8004C098, trapIntrDMA — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr_dma.c)
-0x8004C21C, setIntrDMA — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr_dma.c)
-0x8004C2C4, memclrIntrDMA — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/intr_dma.c); Ghidra: `memclr`
-0x8004C2F0, SetVideoMode — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/video_mode.c)
-0x8004C308, GetVideoMode — PsyQ libetc (decomp: ladysilverberg/xenogears-decomp, psyq/libetc/video_mode.c)
-0x8004C318, PCopen — PsyQ libsn (decomp: ladysilverberg/xenogears-decomp, psyq/libsn.c)
-0x8004C338, PCclose — PsyQ libsn (decomp: ladysilverberg/xenogears-decomp, psyq/libsn.c)
-0x8004C348, PClseek — PsyQ libsn (decomp: ladysilverberg/xenogears-decomp, psyq/libsn.c)
-0x8004C36C, PCcreate — PsyQ libsn (decomp: ladysilverberg/xenogears-decomp, psyq/libsn.c); Ghidra: `PCcreat`
-0x8004C38C, PCinit — PsyQ libsn (decomp: ladysilverberg/xenogears-decomp, psyq/libsn.c)
-0x8004C398, PCread — PsyQ libsn (decomp: ladysilverberg/xenogears-decomp, psyq/libsn.c)
+0x8004BEF0, ResumeAfterCpuException — PsyQ libapi_2; BIOS thunk B0:0x17
+0x8004BF00, ClearExceptionEntry — PsyQ libapi_2; BIOS thunk B0:0x18
+0x8004BF10, InstallExceptionHook — PsyQ libapi_2; BIOS thunk B0:0x19
+0x8004BF20, EnableVblankController — PsyQ libetc
+0x8004BF78, RaiseVblankInterruptTrap — PsyQ libetc
+0x8004BFF0, ConfigureVsyncInterruptDispatch — PsyQ libetc
+0x8004C01C, ClearMemoryDuringVsyncInterrupt — PsyQ libetc; Ghidra: `memclr`
+0x8004C048, EnableDmaController — PsyQ libetc
+0x8004C098, RaiseDmaInterruptTrap — PsyQ libetc
+0x8004C21C, ConfigureDmaInterruptDispatch — PsyQ libetc
+0x8004C2C4, ClearMemoryDuringDmaInterrupt — PsyQ libetc; Ghidra: `memclr`
+0x8004C2F0, ConfigureVideoMode — PsyQ libetc
+0x8004C308, ReadVideoMode — PsyQ libetc
+0x8004C318, OpenHostFile — PsyQ libsn
+0x8004C338, CloseHostFile — PsyQ libsn
+0x8004C348, SeekHostFile — PsyQ libsn
+0x8004C36C, CreateHostFile — PsyQ libsn; Ghidra: `CreateHostFileLegacy`
+0x8004C38C, InitializeHostFileIo — PsyQ libsn
+0x8004C398, ReadHostFile — PsyQ libsn
 0x8004C458, _SN_read — PsyQ libetc (vsync/intr) + libc (Ghidra symbol DB, prior RE sessions)
-0x8004C470, PCwrite — PsyQ libsn (decomp: ladysilverberg/xenogears-decomp, psyq/libsn.c)
+0x8004C470, WriteHostFile — PsyQ libsn
 0x8004C530, _SN_write — PsyQ libetc (vsync/intr) + libc (Ghidra symbol DB, prior RE sessions)
-0x8004C548, SpuInit — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuInit.c)
-0x8004C568, _SpuInit — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/_SpuInit.c)
-0x8004C660, SpuStart — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/_SpuInit.c)
-0x8004C6DC, _spu_init — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
-0x8004C970, _spu_FwriteByIO — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
-0x8004CB3C, _spu_FiDMA — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
-0x8004CBFC, _spu_Fr_ — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
-0x8004CCA8, _spu_t — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
-0x8004CF38, _spu_Fw — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
-0x8004CFC0, _spu_Fr — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
-0x8004D028, _spu_FsetRXX — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
-0x8004D070, _spu_FsetRXXa — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
-0x8004D114, _spu_FgetRXXa — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
-0x8004D150, _spu_FsetPCR — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
-0x8004D1B0, _spu_FsetDelayW — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
-0x8004D1DC, _spu_FsetDelayR — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
-0x8004D208, _spu_Fw1ts — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
-0x8004D270, _SpuDataCallback — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuDataCallback.c)
-0x8004D294, SpuQuit — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuQuit.c)
-0x8004D310, SpuInitMalloc — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuInitMalloc.c)
-0x8004D364, SpuSetNoiseClock — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuSetNoiseClock.c)
-0x8004D3B4, SpuSetReverb — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp)
-0x8004D484, _SpuIsInAllocateArea — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/_SpuIsInAllocateArea.c)
-0x8004D504, _SpuIsInAllocateArea_ — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/_SpuIsInAllocateArea.c)
-0x8004D590, SpuReadDecodedData — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuReadDecodedData.c)
-0x8004D600, SpuSetIRQ — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuSetIRQ.c)
-0x8004D740, SpuSetIRQCallback — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuSetIRQCallback.c)
-0x8004D784, _SpuCallback — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/_SpuCallback.c)
-0x8004D7A8, SpuGetVoiceEnvelopeAttr — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuGetVoiceEnvelopeAttr.c)
-0x8004D818, SpuRead — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuRead.c)
-0x8004D878, SpuWrite — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuWrite.c)
-0x8004D8D8, SpuSetTransferStartAddr — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuSetTransferStartAddr.c)
-0x8004D930, SpuSetTransferMode — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuSetTransferMode.c)
-0x8004D964, SpuSetTransferCallback — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuSetTransferCallback.c)
-0x8004D988, SpuSetCommonAttr — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuSetCommonAttr.c)
-0x8004DD1C, SpuSetReverbModeType — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuSetReverbModeType.c)
-0x8004DEF8, _spu_setReverbAttr — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
-0x8004E3C8, SpuClearReverbWorkArea — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp)
-0x8004E564, WaitEvent — PsyQ libapi (decomp: ladysilverberg/xenogears-decomp, psyq/libapi/WaitEvent.c); BIOS thunk B0:0x0A
-0x8004E574, SpuSetReverbModeDepth — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuSetReverbModeDepth.c)
-0x8004E5A0, SpuSetReverbModeDelayTime — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuSetReverbModeDelayTime.c)
-0x8004E6B8, SpuSetReverbModeFeedback — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuSetReverbModeFeedback.c)
-0x8004E774, SpuGetReverbModeType — PsyQ libspu (decomp: ladysilverberg/xenogears-decomp, psyq/libspu/SpuGetReverbModeType.c)
-0x8004E784, _card_info — PsyQ libcard (decomp: ladysilverberg/xenogears-decomp, psyq/libcard.c); BIOS thunk A0:0xAB
-0x8004E794, InitCARD — PsyQ libcard (decomp: ladysilverberg/xenogears-decomp, psyq/libcard.c)
-0x8004E7E8, StartCARD — PsyQ libcard (decomp: ladysilverberg/xenogears-decomp, psyq/libcard.c)
-0x8004E820, StopCARD — PsyQ libcard (decomp: ladysilverberg/xenogears-decomp, psyq/libcard.c)
-0x8004E850, InitCARD2 — PsyQ libcard (decomp: ladysilverberg/xenogears-decomp, psyq/libcard.c); BIOS thunk B0:0x4A
-0x8004E860, StartCARD2 — PsyQ libcard (decomp: ladysilverberg/xenogears-decomp, psyq/libcard.c); BIOS thunk B0:0x4B
-0x8004E870, StopCARD2 — PsyQ libcard (decomp: ladysilverberg/xenogears-decomp, psyq/libcard.c); BIOS thunk B0:0x4C
+0x8004C548, InitializeSpu — PsyQ libspu
+0x8004C568, InitializeSpuRuntime — PsyQ libspu
+0x8004C660, LaunchSpuVoices — PsyQ libspu
+0x8004C6DC, InitializeSpuLowLevel — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
+0x8004C970, WriteSpuRegisterIo — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
+0x8004CB3C, FinalizeSpuDmaTransfer — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
+0x8004CBFC, StartSpuDmaRead — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
+0x8004CCA8, ExecuteSpuDmaCommand — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
+0x8004CF38, WriteSpuDmaMemory — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
+0x8004CFC0, ReadSpuDmaMemory — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
+0x8004D028, WriteSpuRegister — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
+0x8004D070, TranslateSpuRegisterAddress — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
+0x8004D114, ReadSpuRegisterAddress — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
+0x8004D150, SetSpuDmaPriority — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
+0x8004D1B0, SetSpuDmaWriteTiming — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
+0x8004D1DC, SetSpuDmaReadTiming — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
+0x8004D208, WaitSpuDmaTiming — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
+0x8004D270, RouteAudioDataCompletion — PsyQ libspu
+0x8004D294, ShutdownSpu — PsyQ libspu
+0x8004D310, InitializeSpuAllocator — PsyQ libspu
+0x8004D364, ConfigureNoiseClock — PsyQ libspu
+0x8004D3B4, ConfigureSpuReverb — PsyQ libspu
+0x8004D484, CheckSpuAllocationRange — PsyQ libspu
+0x8004D504, CheckSpuAllocationRangeRaw — PsyQ libspu
+0x8004D590, ExtractDecodedSpuSamples — PsyQ libspu
+0x8004D600, EnableSpuInterrupt — PsyQ libspu
+0x8004D740, SetSpuInterruptCallback — PsyQ libspu
+0x8004D784, RouteAudioCompletion — PsyQ libspu
+0x8004D7A8, ReadVoiceEnvelope — PsyQ libspu
+0x8004D818, FetchSpuMemory — PsyQ libspu
+0x8004D878, StoreSpuMemory — PsyQ libspu
+0x8004D8D8, SetSpuTransferAddress — PsyQ libspu
+0x8004D930, SelectTransferDirection — PsyQ libspu
+0x8004D964, RegisterTransferCompletion — PsyQ libspu
+0x8004D988, SetSpuCommonAttributes — PsyQ libspu
+0x8004DD1C, SetReverbAlgorithm — PsyQ libspu
+0x8004DEF8, ApplySpuReverbAttributes — PsyQ libspu (Ghidra symbol DB, prior RE sessions)
+0x8004E3C8, ClearSpuReverbWorkspace — PsyQ libspu
+0x8004E564, BlockOnKernelEvent — PsyQ libapi; BIOS thunk B0:0x0A
+0x8004E574, SetReverbDepth — PsyQ libspu
+0x8004E5A0, SetReverbDelayTime — PsyQ libspu
+0x8004E6B8, SetReverbFeedback — PsyQ libspu
+0x8004E774, ResolveReverbAlgorithm — PsyQ libspu
+0x8004E784, ReadCardDirectoryStatus — PsyQ libcard; BIOS thunk A0:0xAB
+0x8004E794, InitializeCardSubsystem — PsyQ libcard
+0x8004E7E8, ActivateCardSubsystem — PsyQ libcard
+0x8004E820, DeactivateCardInterface — PsyQ libcard
+0x8004E850, InitializeCardInterface — PsyQ libcard; BIOS thunk B0:0x4A
+0x8004E860, ActivateCardInterface — PsyQ libcard; BIOS thunk B0:0x4B
+0x8004E870, DeactivateSecondCardInterface — PsyQ libcard; BIOS thunk B0:0x4C
 0x8004E880, CardFastTrackWaitPatch — Waits for the card busy bit to clear when required then resumes the saved fast-track continuation; otherwise it returns immediately.
 0x8004E8D8, _patch_card — Installs the card fast-track wait path into kernel memory under a critical section and flushes the instruction cache.
 0x8004E960, CardHandlerDelayTrampoline — Executes the displaced card-handler instructions then waits 200 decrement iterations before returning.

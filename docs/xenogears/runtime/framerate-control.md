@@ -54,18 +54,18 @@ last completely decoded image until another image is published.
 ### 2.1 Interrupt path
 
 The resident interrupt path maintains a software VBlank count. Between counter
-initialization and eventual integer wrap, `trapIntrVSync` at `0x8004BF78`
+initialization and eventual integer wrap, `RaiseVblankInterruptTrap` at `0x8004BF78`
 increments that count once per VBlank and invokes each installed callback in an
-eight-entry callback array. `VSyncCallback` at `0x8004B7D0` changes the
+eight-entry callback array. `RecordVerticalRetrace` at `0x8004B7D0` changes the
 registered callback.
 
 This callback path is independent of a module's chosen simulation cadence. A
 30 FPS Field iteration spans two callback opportunities; a 15 FPS Field
 iteration spans four.
 
-### 2.2 `VSync` modes
+### 2.2 `WaitForVerticalRetrace` modes
 
-Resident `VSync` at `0x8004B54C` combines VBlank counting, horizontal-retrace
+Resident `WaitForVerticalRetrace` at `0x8004B54C` combines VBlank counting, horizontal-retrace
 timing, and waits:
 
 | Argument | Behavior |
@@ -82,7 +82,7 @@ If execution is already late, the first stage can finish immediately. The
 second stage normally crosses a fresh boundary unless the bounded wait itself
 times out.
 
-`v_wait` at `0x8004B694` bounds each wait with a software timeout. Its timeout
+`WaitForVblankCount` at `0x8004B694` bounds each wait with a software timeout. Its timeout
 path reports the failure and restores controller and root-counter interrupt
 state before returning. The modes that wait are consequently synchronization
 and recovery boundaries, not merely delays. Query modes `1` and `< 0` bypass
@@ -90,13 +90,13 @@ this path.
 
 Two common interpretations are therefore incorrect:
 
-- `VSync(1)` is a timing sample, not a 60 FPS limiter.
-- `VSync(-1)` is a counter query, not a wait or presentation request.
+- `WaitForVerticalRetrace(1)` is a timing sample, not a 60 FPS limiter.
+- `WaitForVerticalRetrace(-1)` is a counter query, not a wait or presentation request.
 
 ### 2.3 GPU completion is separate
 
-`DrawSync(0)` waits for queued GPU drawing to finish. `PutDispEnv` selects the
-display page, `PutDrawEnv` configures subsequent drawing, and `DrawOTag` submits
+`WaitForGpuDrawing(0)` waits for queued GPU drawing to finish. `InstallDisplayEnvironment` selects the
+display page, `InstallDrawingEnvironment` configures subsequent drawing, and `SubmitOrderingTable` submits
 an ordering table. None of those operations alone advances the VBlank clock.
 
 The modules place these operations in different orders. Framerate is determined
@@ -146,8 +146,8 @@ the resulting clock.
 ### 3.3 Work lists and audio
 
 Resident work-list dispatch is another clock domain. Central Battle explicitly
-runs `WorkListUpdate` at `0x8001C9F8` once in its frame path and can repeat
-`TimerWorkListUpdate` at `0x8001C964` during missed-frame compensation.
+runs `DispatchFrameTasks` at `0x8001C9F8` once in its frame path and can repeat
+`DispatchTimedTasks` at `0x8001C964` during missed-frame compensation.
 
 Audio is not driven by render FPS. Its root-counter callback runs at 240 Hz,
 with selected auxiliary work at 120 Hz and musical sequence ticks accumulated
@@ -158,23 +158,23 @@ service.
 
 ### 4.1 Ordinary frame boundary
 
-`FieldMain` at `0x80077E88` performs one ordinary iteration by calling
+`RunFieldCoordinator` at `0x80077E88` performs one ordinary iteration by calling
 `FieldPerFrameReset` at `0x80077DAC` and `FieldPresentationPassA` at
 `0x8007554C`.
 
 The relevant timing sequence is:
 
-1. Sample horizontal-retrace timing with `VSync(1)`.
+1. Sample horizontal-retrace timing with `WaitForVerticalRetrace(1)`.
 2. Swap and clear the Field ordering-table context.
 3. Poll queued input and synchronize persistent Field state.
-4. Record the starting VBlank count with `VSync(-1)`.
+4. Record the starting VBlank count with `WaitForVerticalRetrace(-1)`.
 5. Run actor scripts, movement, collision, camera, effects, and scene producers.
 6. Wait for GPU completion.
 7. Update dialogue windows and render text.
-8. Call `VSync(0)` and install the display and draw environments.
+8. Call `WaitForVerticalRetrace(0)` and install the display and draw environments.
 9. Flush deferred image transfers, complete late presentation work, and submit
    the ordering table.
-10. Poll `VSync(-1)` until the configured minimum interval has elapsed.
+10. Poll `WaitForVerticalRetrace(-1)` until the configured minimum interval has elapsed.
 
 The final condition is:
 
@@ -183,7 +183,7 @@ current_vblank >= frame_start_vblank + field_timing_mode + 2
 ```
 
 The default timing mode is zero. An ordinary Field iteration therefore occupies
-at least two VBlanks and runs at 30 FPS. The mid-frame `VSync(0)` supplies one
+at least two VBlanks and runs at 30 FPS. The mid-frame `WaitForVerticalRetrace(0)` supplies one
 boundary; the final counter poll enforces the complete interval.
 
 Field advances simulation once per admitted iteration. If scene construction
@@ -207,7 +207,7 @@ opening length. Other values leave the prior dialogue opening length unchanged.
 For a nonnegative value that does not overflow the boundary arithmetic, the
 final poll targets `value + 2` VBlanks. A negative variable value can make that
 poll immediately satisfied, but cannot bypass the earlier unconditional
-`VSync(0)` boundary.
+`WaitForVerticalRetrace(0)` boundary.
 
 The paired dialogue counts keep window opening near the same broad wall-clock
 duration while allowing scenes to select a lower overall update rate. The
@@ -283,7 +283,7 @@ camera view can instead be the overrun case described below.
 ### 4.4 Position- and camera-dependent slowdowns
 
 Field rendering is view-dependent even though the frame-rate selector is not.
-`FieldRenderModels` at `0x800748E8` scans the complete Field object collection
+`RenderFieldModelSet` at `0x800748E8` scans the complete Field object collection
 each iteration. It does not select spatial render chunks. For each enabled
 object it prepares transforms and then applies two important rejection stages:
 
@@ -317,10 +317,10 @@ effect crossing a visibility/activation boundary than a terrain chunk being
 loaded for drawing.
 
 Field submits the ordering table near the end of iteration `N`. During iteration
-`N + 1`, after constructing the current scene, `DrawSync(0)` waits for that
-preceding command stream to finish before the mandatory fresh `VSync(0)`.
+`N + 1`, after constructing the current scene, `WaitForGpuDrawing(0)` waits for that
+preceding command stream to finish before the mandatory fresh `WaitForVerticalRetrace(0)`.
 Expensive CPU/GTE packet construction can cross a VBlank before this point, and
-expensive drawing from the preceding submission can extend the `DrawSync` wait.
+expensive drawing from the preceding submission can extend the `WaitForGpuDrawing` wait.
 Either case can make a mode-0 field take three or four VBlanks instead of its
 two-VBlank minimum, producing approximately 20 or 15 new frames per second while
 VBlank callbacks continue at 60 Hz.
@@ -335,9 +335,9 @@ distinction. The behaviors differ after activation:
   replaces it.
 
 The current timing mode at `0x800B217C` distinguishes the two cases directly.
-`FieldRenderModels` also resets and accumulates separate total and accepted
+`RenderFieldModelSet` also resets and accumulates separate total and accepted
 resident-model primitive counts each iteration. A mode remaining at zero while
-those counts or the time around `DrawSync` changes identifies an actual frame
+those counts or the time around `WaitForGpuDrawing` changes identifies an actual frame
 missing its VBlank deadline rather than an authored 20 or 15 FPS selection.
 
 ### 4.5 Systems affected by the selected rate
@@ -361,13 +361,13 @@ not separately compensated. The game only adjusts the dialogue opening count
 as part of the opcode itself; it does not globally rescale script waits,
 movement, cameras, effects, or encounter progression.
 
-`FieldUpdateDeltaTime` at `0x8007781C` only records the `VSync(1)` horizontal
+`UpdateFieldFrameDelta` at `0x8007781C` only records the `WaitForVerticalRetrace(1)` horizontal
 timing sample. Ordinary Field simulation does not multiply movement or script
 time by that value.
 
 ### 4.6 Pause and controller-disconnect loops
 
-Field's pause and disconnected-controller paths call `VSync(2)` while polling
+Field's pause and disconnected-controller paths call `WaitForVerticalRetrace(2)` while polling
 input and servicing resident maintenance. They retain a 30 Hz polling boundary
 without executing the ordinary actor frame. This is a suspension of Field
 simulation, not a switch to a second active simulation rate.
@@ -378,7 +378,7 @@ Field can present an STR stream in three ways:
 
 | Mode | Presentation path | Decoder-service calls per pass |
 |---:|---|---:|
-| `0` | Direct movie pages synchronized with `VSync(0)` | 3 at each of two direct service points |
+| `0` | Direct movie pages synchronized with `WaitForVerticalRetrace(0)` | 3 at each of two direct service points |
 | `1` | Reduced `FieldPresentationPassB` | 6 |
 | `2` | Full `FieldPerFrameReset` and `FieldPresentationPassA` | 9 |
 
@@ -397,7 +397,7 @@ Map loop. One iteration:
 4. Clears the 1024-entry ordering table.
 5. Dispatches the 64 World task slots.
 6. Waits for GPU completion.
-7. Calls `VSync(2)`.
+7. Calls `WaitForVerticalRetrace(2)`.
 8. Installs display and draw environments.
 9. Updates animated texture streams and submits the ordering table.
 
@@ -409,7 +409,7 @@ World does not perform Battle-style repeated simulation after an overrun. A
 late iteration extends its wall-clock duration. Task delay values remain counts
 of task-dispatch opportunities, not raw VBlanks.
 
-Some World streaming waits call `VSync(0)` while the ordinary task set is
+Some World streaming waits call `WaitForVerticalRetrace(0)` while the ordinary task set is
 blocked. Those calls keep interrupts, input, and display-time services alive;
 they do not create additional World simulation updates.
 
@@ -418,7 +418,7 @@ they do not create additional World simulation updates.
 ### 6.1 Maximum-rate presentation
 
 `BattleRender` at `0x800BE790` is designed around a one-VBlank presentation
-boundary. With the normal timing offset set to zero, it ends with `VSync(0)` and
+boundary. With the normal timing offset set to zero, it ends with `WaitForVerticalRetrace(0)` and
 can present at 60 FPS when all frame work completes before the next retrace.
 
 One call builds and submits only one visible frame:
@@ -532,7 +532,7 @@ from measured missed frames.
 
 A frame becomes late when aggregate model construction, GTE work, other scene
 work, or completion of the preceding GPU command stream crosses one or more
-VBlank boundaries before `DrawSync(0)` returns. The following `VSync(0)` still
+VBlank boundaries before `WaitForGpuDrawing(0)` returns. The following `WaitForVerticalRetrace(0)` still
 waits through a fresh boundary, so a one-boundary overrun turns a nominal
 one-VBlank frame into a multi-VBlank frame. The hardware VBlank interrupt
 continues at 60 Hz throughout; the game simply submits fewer new frames.
@@ -550,7 +550,7 @@ reconstruct the missed visible frames.
 ### 6.4 Thirty-frame transition paths
 
 Battle startup effects that capture and transform the preceding framebuffer use
-`VSync(2)` in their tile-rise and triangular-fragment loops. Those transitions
+`WaitForVerticalRetrace(2)` in their tile-rise and triangular-fragment loops. Those transitions
 advance at 30 effect iterations per nominal second even though ordinary central
 Battle targets 60 FPS.
 
@@ -566,8 +566,8 @@ eligible catch-up calls, rather than directly to VBlank count.
 ## 7. Battling Cadence
 
 Battling is an independent competitive Gear runtime with its own main loop and
-frame-rate option. `BattlingMain` at `0x80088E90` calls `VSync` with the current
-signed synchronization interval before `DrawSync`, environment installation,
+frame-rate option. `BattlingMain` at `0x80088E90` calls `WaitForVerticalRetrace` with the current
+signed synchronization interval before `WaitForGpuDrawing`, environment installation,
 and ordering-table submission. Live bout setup selects an interval of two
 VBlanks, so presentation runs at 30 FPS.
 
@@ -599,7 +599,7 @@ It consequently runs slower than wall time at nonzero frame-rate indices.
 Replay history likewise records one sample per admitted live update, up to 256
 samples.
 
-`BattlingVsyncCallback` at `0x80088C00` calls `VSync(1)` and stores the
+`BattlingVsyncCallback` at `0x80088C00` calls `WaitForVerticalRetrace(1)` and stores the
 horizontal timing result for the performance display. It does not pace the bout.
 The presentation limiter is the synchronization interval used by
 `BattlingMain`; the practice setting is the separate live-update hold counter.
@@ -618,7 +618,7 @@ Battling module.
 1. Translate at most one queued input command.
 2. Select context and parity and clear the 16-entry ordering table.
 3. Advance windows, cursors, page transitions, and active composition.
-4. Call `VSync(0)`.
+4. Call `WaitForVerticalRetrace(0)`.
 5. Install draw and display environments, move the framebuffer region, and
    submit the ordering table.
 
@@ -636,15 +636,15 @@ animation stop while VBlank-side input service remains available.
 
 ### 8.2 Resident screens and module handoffs
 
-The resident dispatcher uses `VSync(2)` while stabilizing graphics before a
+The resident dispatcher uses `WaitForVerticalRetrace(2)` while stabilizing graphics before a
 module change, then uses one-VBlank waits around overlay installation and cache
-synchronization. Logo fades and resident error display loops use `VSync(0)` and
+synchronization. Logo fades and resident error display loops use `WaitForVerticalRetrace(0)` and
 advance their counters once per retrace.
 
 These waits belong to startup, loading, or handoff state. They do not establish
 the cadence of the module entered afterward.
 
-CD retry and timeout code frequently queries `VSync(-1)` and some blocking
+CD retry and timeout code frequently queries `WaitForVerticalRetrace(-1)` and some blocking
 archive paths wait several VBlanks between polls. Such calls use VBlank as a
 timeout clock while gameplay is blocked; they are not alternate gameplay FPS
 modes.
@@ -715,7 +715,7 @@ principal runtime paths described here. Field changes rates through script state
 Battling through its explicit option or phase policy, and the other principal
 modules use their fixed boundaries.
 
-The GPU can still be the reason a frame is late because `DrawSync(0)` precedes
+The GPU can still be the reason a frame is late because `WaitForGpuDrawing(0)` precedes
 the final VBlank boundary in the major renderers. Double buffering prevents the
 game from drawing into the currently displayed page; it does not remove the
 CPU/GPU deadline.

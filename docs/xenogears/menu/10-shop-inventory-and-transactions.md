@@ -17,7 +17,7 @@ yields to the Field/menu coordinator.
 The argument selects one `0x5C`-byte stock definition:
 
 ```text
-shop_index = u8(FieldScriptVMGetArgument(1))
+shop_index = u8(ReadScriptVmArgument(1))
 record     = shop_definition_base + shop_index * 0x5C
 ```
 
@@ -116,14 +116,14 @@ party IDs are retained separately, while Shop portraits represent every visible
 character.
 
 Weapon and Accessory equip flags are tested against each character bit.
-`ShopMenuGetCharacterEquippedItemFlags` scans equipment and builds the portrait
+`GetEquippedShopFlags` scans equipment and builds the portrait
 mask used for `E` markers. Weapons below and above ID 50 use separate five-slot
 banks; Accessories use three slots. Items have no equip comparison.
 
 ## 9. Character Stat Sheet
 
 `ShopMenuComputeCharacterStats` writes nine `u16` fields in
-`MenuDressingRoom+0xB8..+0xC8`:
+`GearPreviewState+0xB8..+0xC8`:
 
 | View offset | Display field | Formula | Clamp |
 |---:|---|---|---:|
@@ -209,7 +209,7 @@ no item is inserted and the already-assigned staged gold remains committed.
 
 ## 13. Confirmation Text Contract
 
-`ShopMenuConfirmationWindowInitialize(stringIndex)` renders three consecutive
+`CreatePurchaseConfirmation(stringIndex)` renders three consecutive
 text rows beginning at `stringIndex`. Manual confirmation defaults to No. Left
 selects Yes, Right selects No, Circle accepts, and Cross returns No.
 
@@ -226,7 +226,7 @@ Ordinary Buy and Sell use manual mode and no second prompt.
 ## 14. Buy Commit And Cancellation
 
 Circle with total zero plays the invalid-action sound. Circle with a nonzero
-total displays group `0x8F`. Yes calls `ShopMenuHandleBoughtItems` at
+total displays group `0x8F`. Yes calls `CommitBoughtItems` at
 `0x801CF2A0`:
 
 1. Play the transaction sound.
@@ -270,7 +270,7 @@ Persistent arrays stay unchanged until confirmation.
 ## 17. Sell Commit And Cancellation
 
 Circle with total zero is rejected. A nonzero total uses group `0x95`. Yes calls
-`ShopMenuHandleSoldItems` at `0x801D0C18`:
+`CommitSoldItems` at `0x801D0C18`:
 
 1. Store staged gold, capped at 9,999,999.
 2. Subtract each selected count from every matching persistent inventory slot,
@@ -288,8 +288,8 @@ No resumes and Yes discards. Cross with zero total exits immediately.
 
 | Operation | Persistent write point |
 |---|---|
-| Buy | `ShopMenuHandleBoughtItems`, `0x801CF2A0` |
-| Sell | `ShopMenuHandleSoldItems`, `0x801D0C18` |
+| Buy | `CommitBoughtItems`, `0x801CF2A0` |
+| Sell | `CommitSoldItems`, `0x801D0C18` |
 
 Browsing, scrolling, quantity edits, detail refresh, compatibility checks,
 portrait markers, and stat comparisons are nonpersistent. No and Cross never
@@ -324,120 +324,120 @@ renderer interpretation belong to the `graphics` chapters.
 | Address | Function |
 |---:|---|
 | `0x801C5040` | `ShopMenuSetFt4Rect` |
-| `0x801C50B0` | `ShopMenuIsCharacterFlagSet` |
-| `0x801C50CC` | `ShopMenuGetCharacterBitMask` |
-| `0x801C50E8` | `ShopMenuParseNumberToString` |
+| `0x801C50B0` | `TestShopCharacterFlag` |
+| `0x801C50CC` | `GetShopCharacterMask` |
+| `0x801C50E8` | `FormatShopNumber` |
 | `0x801C5194` | `ShopMenuManageResourceState` |
-| `0x801C51F8` | `ShopMenuSetManager` |
-| `0x801C525C` | `ShopMenuSelectionMenuManager` |
+| `0x801C51F8` | `BindShopMenuManager` |
+| `0x801C525C` | `UpdateShopSelection` |
 | `0x801C52C0` | `ShopMenuManageTextBatchState` |
-| `0x801C5324` | `ShopMenuDressingRoomManager` |
+| `0x801C5324` | `UpdatePurchasePreview` |
 | `0x801C5388` | `ShopMenuManageOverlayPacketState` |
 | `0x801C53EC` | `ShopMenuManageExtendedDisplayState` |
-| `0x801C5450` | `ShopMenuShopManager` |
-| `0x801C54B4` | `ShopMenuLoadResources` |
-| `0x801C58F4` | `ShopMenuInitialize` |
-| `0x801C5A6C` | `ShopMenuResetRenderContext` |
+| `0x801C5450` | `UpdateShopInventoryManager` |
+| `0x801C54B4` | `LoadShopResources` |
+| `0x801C58F4` | `CreateShopInterface` |
+| `0x801C5A6C` | `ResetShopRenderState` |
 | `0x801C5A7C` | `ShopMenuInitializeStringFt4Pair` |
 | `0x801C5CBC` | `ShopMenuInitializeMenuStringGroup` |
 | `0x801C5E6C` | `ShopMenuUploadSmallVramImage` |
 | `0x801C5EE8` | `ShopMenuInitializeTextResources` |
-| `0x801C5F44` | `ShopMenuInitializeWindowBorders` |
-| `0x801C604C` | `ShopMenuMovePointerCursor` |
+| `0x801C5F44` | `BuildShopBorderPackets` |
+| `0x801C604C` | `MoveShopPointer` |
 | `0x801C6430` | `ShopMenuClearSelectionFlags` |
 | `0x801C6460` | `ShopMenuInitializeShadedQuad` |
-| `0x801C64DC` | `ShopMenuInitializeBackgrounds` |
-| `0x801C6828` | `ShopMenuLoadShopItemsData` |
-| `0x801C6A6C` | `ShopMenuInitializeShopData` |
-| `0x801C6E90` | `ShopMenuSetVertices` |
-| `0x801C6EE8` | `ShopMenuSetWindowBorderPrimitive` |
-| `0x801C6F30` | `ShopMenuUpdateScrollBarHandle` |
-| `0x801C70B8` | `ShopMenuFreeScrollBarHandle` |
-| `0x801C70FC` | `ShopMenuInitializeArrowCursor` |
-| `0x801C7178` | `ShopMenuUpdateArrowCursor` |
-| `0x801C7314` | `ShopMenuFreeArrowCursor` |
-| `0x801C7370` | `ShopMenuInitializeWindowGraphics` |
-| `0x801C768C` | `ShopMenuInitializeScrollBar` |
-| `0x801C77F0` | `ShopMenuInitializeWindowBorderCorners` |
-| `0x801C7A38` | `ShopMenuSetWindowBorderTop` |
-| `0x801C7D7C` | `ShopMenuSetWindowBorderBottom` |
-| `0x801C80C8` | `ShopMenuSetWindowBorderLeft` |
-| `0x801C8410` | `ShopMenuSetWindowBorderRight` |
-| `0x801C875C` | `ShopMenuSetWindow` |
-| `0x801C88E0` | `ShopMenuFreeWindow` |
-| `0x801C896C` | `ShopMenuInitializeWindow` |
-| `0x801C8AF0` | `ShopMenuUpdateWindows` |
-| `0x801C8C3C` | `ShopMenuRenderPolygons` |
-| `0x801C8D58` | `ShopMenuRenderString` |
-| `0x801C8DDC` | `ShopMenuRenderScrollBarHandle` |
+| `0x801C64DC` | `LoadShopBackgrounds` |
+| `0x801C6828` | `LoadShopItemTable` |
+| `0x801C6A6C` | `LoadShopInventory` |
+| `0x801C6E90` | `SetShopVertices` |
+| `0x801C6EE8` | `SetShopBorderPrimitive` |
+| `0x801C6F30` | `UpdateShopScrollHandle` |
+| `0x801C70B8` | `ReleaseShopScrollHandle` |
+| `0x801C70FC` | `CreateShopArrow` |
+| `0x801C7178` | `UpdateShopArrow` |
+| `0x801C7314` | `ReleaseShopArrow` |
+| `0x801C7370` | `BuildShopWindowGraphics` |
+| `0x801C768C` | `CreateShopScrollBar` |
+| `0x801C77F0` | `BuildShopCornerPackets` |
+| `0x801C7A38` | `SetShopTopBorder` |
+| `0x801C7D7C` | `SetShopBottomBorder` |
+| `0x801C80C8` | `SetShopLeftBorder` |
+| `0x801C8410` | `SetShopRightBorder` |
+| `0x801C875C` | `SetShopWindow` |
+| `0x801C88E0` | `ReleaseShopWindow` |
+| `0x801C896C` | `CreateShopWindow` |
+| `0x801C8AF0` | `UpdateShopWindows` |
+| `0x801C8C3C` | `RenderShopPolygons` |
+| `0x801C8D58` | `RenderShopText` |
+| `0x801C8DDC` | `RenderShopScrollHandle` |
 | `0x801C8E28` | `ShopMenuRenderSelectionPointer` |
-| `0x801C8EB8` | `ShopMenuRenderTopWindowBorder` |
-| `0x801C908C` | `ShopMenuRenderBottomWindowBorder` |
-| `0x801C9260` | `ShopMenuRenderLeftWindowBorder` |
-| `0x801C9434` | `ShopMenuRenderRightWindowBorder` |
-| `0x801C9608` | `ShopMenuRenderWindowBackground` |
-| `0x801C9744` | `ShopMenuRenderWindowBorderCorners` |
-| `0x801C9890` | `ShopMenuRenderScrollBar` |
-| `0x801C9AB4` | `ShopMenuRenderWindows` |
-| `0x801C9C2C` | `ShopMenuRenderPointerCursors` |
+| `0x801C8EB8` | `RenderShopTopBorder` |
+| `0x801C908C` | `RenderShopBottomBorder` |
+| `0x801C9260` | `RenderShopLeftBorder` |
+| `0x801C9434` | `RenderShopRightBorder` |
+| `0x801C9608` | `RenderShopWindowFill` |
+| `0x801C9744` | `RenderShopCorners` |
+| `0x801C9890` | `DrawShopScrollbar` |
+| `0x801C9AB4` | `RenderShopWindows` |
+| `0x801C9C2C` | `RenderShopPointers` |
 | `0x801C9F7C` | `ShopMenuRenderAuxGroup4` |
 | `0x801CA00C` | `ShopMenuRenderAuxGroup8` |
 | `0x801CA09C` | `ShopMenuRenderAuxQuads` |
 | `0x801CA214` | `ShopMenuNoOpCountdown` |
 | `0x801CA22C` | `ShopMenuRenderConfirmationText` |
-| `0x801CA388` | `ShopMenuRenderBackgroundDim` |
+| `0x801CA388` | `RenderShopDimmer` |
 | `0x801CA404` | `ShopMenuRenderAuxiliaryGroups` |
-| `0x801CA444` | `ShopMenuRenderSelectionMenu` |
+| `0x801CA444` | `RenderShopSelection` |
 | `0x801CAB0C` | `ShopMenuRenderAuxTextGroups` |
-| `0x801CAB80` | `ShopMenuRenderArrowCursors` |
-| `0x801CABF4` | `ShopMenuRender` |
-| `0x801CAC7C` | `ShopMenuPlaySoundEffect` |
-| `0x801CACC8` | `ShopMenuPollInput` |
-| `0x801CAED4` | `ShopMenuUpdateTransitionEffect` |
-| `0x801CB014` | `ShopMenuUpdateAndRender` |
-| `0x801CB13C` | `ShopMenuInitializePointerCursors` |
-| `0x801CB2FC` | `ShopMenuFreePointerCursors` |
-| `0x801CB340` | `ShopMenuStartOpenMenuTransition` |
-| `0x801CB370` | `ShopMenuStartCloseMenuTransition` |
-| `0x801CB384` | `ShopMenuConfirmationWindowInitialize` |
-| `0x801CB7F4` | `ShopMenuConfirmationWindowFree` |
-| `0x801CB894` | `ShopMenuConfirmationWindowGetChoice` |
-| `0x801CBA50` | `ShopMenuConfirmationWindow` |
-| `0x801CBB08` | `ShopMenuFree` |
+| `0x801CAB80` | `RenderShopArrows` |
+| `0x801CABF4` | `DrawShopInterface` |
+| `0x801CAC7C` | `PlayShopSound` |
+| `0x801CACC8` | `ReadShopInput` |
+| `0x801CAED4` | `UpdateShopTransition` |
+| `0x801CB014` | `AdvanceAndDrawShop` |
+| `0x801CB13C` | `CreateShopPointers` |
+| `0x801CB2FC` | `ReleaseShopPointers` |
+| `0x801CB340` | `BeginShopOpenTransition` |
+| `0x801CB370` | `BeginShopCloseTransition` |
+| `0x801CB384` | `CreatePurchaseConfirmation` |
+| `0x801CB7F4` | `ReleasePurchaseConfirmation` |
+| `0x801CB894` | `ReadPurchaseConfirmationChoice` |
+| `0x801CBA50` | `OpenPurchaseConfirmation` |
+| `0x801CBB08` | `ReleaseShopMenu` |
 | `0x801CBC88` | `ShopMenuConfigureAuxTextGroup` |
 | `0x801CBCF0` | `ShopMenuPositionSelectionString` |
-| `0x801CC024` | `ShopMenuInitializeShopModeSelectionMenu` |
+| `0x801CC024` | `CreateShopModeMenu` |
 | `0x801CC278` | `ShopMenuInitializeSubmenu` |
-| `0x801CC54C` | `ShopMenuUpdateShopModeSelectionMenu` |
+| `0x801CC54C` | `AdvanceShopModeSelector` |
 | `0x801CC720` | `ShopMenuUpdateSubmenuTextures` |
-| `0x801CC97C` | `ShopMenuShopModeMenuHandleSelectedOption` |
-| `0x801CCAD8` | `ShopMenuShopModeMenuMain` |
-| `0x801CCD28` | `ShopMenuMain` |
+| `0x801CC97C` | `HandleShopModeChoice` |
+| `0x801CCAD8` | `RunShopModeMenu` |
+| `0x801CCD28` | `RunShopMenu` |
 | `0x801CCE1C` | `ShopMenuComputeCharacterStats` |
 | `0x801CCFF4` | `ShopMenuRenderShopGraphics` |
-| `0x801CD404` | `ShopMenuSetStatChangeColor` |
-| `0x801CD5D0` | `ShopMenuUpdateCharacterPortraits` |
-| `0x801CD6F8` | `ShopMenuUpdateBuyMenuExplanationGraphics` |
-| `0x801CD7E4` | `ShopMenuUpdateSellMenuExplanationGraphics` |
-| `0x801CD8D0` | `ShopMenuUpdateGoldGraphics` |
-| `0x801CDBA0` | `ShopMenuGetCharacterEquippedItemFlags` |
+| `0x801CD404` | `SetStatDeltaColor` |
+| `0x801CD5D0` | `UpdateShopPortraits` |
+| `0x801CD6F8` | `UpdatePurchaseExplanation` |
+| `0x801CD7E4` | `UpdateSaleExplanation` |
+| `0x801CD8D0` | `UpdateGoldDisplay` |
+| `0x801CDBA0` | `GetEquippedShopFlags` |
 | `0x801CDD14` | `ShopMenuUpdateBuyItemListGraphics` |
 | `0x801CE480` | `ShopMenuComputeEquipmentStatChanges` |
 | `0x801CE8D8` | `ShopMenuLookupByteByKey` |
 | `0x801CE91C` | `ShopMenuUpdateOwnedItemQuantityGraphics` |
 | `0x801CEB3C` | `ShopMenuUpdateBuyItemDetails` |
-| `0x801CF2A0` | `ShopMenuHandleBoughtItems` |
-| `0x801CF678` | `ShopMenuSetFinalPriceGraphics` |
-| `0x801CF780` | `ShopMenuBuyMenu` |
+| `0x801CF2A0` | `CommitBoughtItems` |
+| `0x801CF678` | `SetFinalPriceDisplay` |
+| `0x801CF780` | `RunPurchaseMenu` |
 | `0x801CFF58` | `ShopMenuUpdateSellItemDetails` |
 | `0x801D05BC` | `ShopMenuUpdateSellItemListGraphics` |
-| `0x801D0C18` | `ShopMenuHandleSoldItems` |
-| `0x801D0E68` | `ShopMenuSellMenu` |
-| `0x801D1658` | `ShopMenuSellEquipmentMenu` |
-| `0x801D18A8` | `ShopMenuSellAccessoriesMenu` |
-| `0x801D18E8` | `ShopMenuSellWeaponsMenu` |
-| `0x801D1928` | `ShopMenuSellItemsMenu` |
+| `0x801D0C18` | `CommitSoldItems` |
+| `0x801D0E68` | `ProcessShopSales` |
+| `0x801D1658` | `RunEquipmentSale` |
+| `0x801D18A8` | `RunAccessorySale` |
+| `0x801D18E8` | `RunWeaponSale` |
+| `0x801D1928` | `RunItemSale` |
 | `0x801D1968` | `ShopMenuClearSellScreenState` |
-| `0x801D1B18` | `ShopMenuSellModeMenuHandleSelectedOption` |
-| `0x801D1CA4` | `ShopMenuSellModeMenu` |
+| `0x801D1B18` | `HandleSellModeChoice` |
+| `0x801D1CA4` | `RunSellModeMenu` |
 | `0x801D1F10` | `ShopMenuFreeTransactionScreen` |

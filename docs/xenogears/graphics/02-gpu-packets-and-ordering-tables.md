@@ -39,7 +39,7 @@ its tag. The count excludes the tag itself. One node may contain more than one
 GP0 command, so the payload word count is neither a primitive count nor a
 packet-size count that includes the tag.
 
-The resident drawing path uses GPU DMA channel 2. `DrawOTag` at `0x80044BD0`
+The resident drawing path uses GPU DMA channel 2. `SubmitOrderingTable` at `0x80044BD0`
 queues a linked-list transfer through `_addque2` at `0x8004668C`; the transfer
 uses the DMA2 register block with MADR at `0x1F8010A0`, BCR at `0x1F8010A4`,
 and CHCR at `0x1F8010A8`. The linked-list CHCR control value is `0x01000401`;
@@ -49,7 +49,7 @@ the addresses above are MMIO locations, not values written to those registers.
 
 ### 2.1 Reverse clear
 
-`ClearOTagR` at `0x80044AD8` invokes `_otc` at `0x80045D5C`. `_otc` starts DMA
+`TerminateOrderingTableReverse` at `0x80044AD8` invokes `_otc` at `0x80045D5C`. `_otc` starts DMA
 channel 6 at the last entry of the requested range with `CHCR=0x11000002` and
 the entry count in `BCR`. The resulting memory is equivalent to:
 
@@ -61,7 +61,7 @@ void clear_ot_reverse(uint32_t *ot, size_t count) {
 }
 ```
 
-`ClearOTagR` overwrites the first DMA6-produced terminator with the low 24-bit
+`TerminateOrderingTableReverse` overwrites the first DMA6-produced terminator with the low 24-bit
 address of the resident packet at `0x8005698C`. That packet has tag
 `0x04FFFFFF` followed by four GP0 `00` NOP words, so traversal reaches the
 static trailer before terminating.
@@ -69,11 +69,11 @@ static trailer before terminating.
 An untouched reverse-cleared table is traversed from its highest entry down to
 entry zero. A larger bucket index is therefore submitted first, but the visual
 meaning of that index is selected by the producer rather than by
-`ClearOTagR`.
+`TerminateOrderingTableReverse`.
 
 ### 2.2 Head insertion
 
-Resident `AddPrim` at `0x80043B48` preserves the packet count and replaces only
+Resident `LinkGpuPrimitive` at `0x80043B48` preserves the packet count and replaces only
 the low 24-bit link:
 
 ```c
@@ -90,7 +90,7 @@ and semitransparent primitives.
 
 ### 2.3 Chain splicing
 
-Resident `AddPrims` at `0x80043B84` inserts a chain whose links already connect
+Resident `LinkGpuPrimitivePair` at `0x80043B84` inserts a chain whose links already connect
 `first` through `last`:
 
 ```c
@@ -100,7 +100,7 @@ void add_prims(uint32_t *bucket, uint32_t *first, uint32_t *last) {
 }
 ```
 
-An OT is itself a chain of zero-payload nodes. Xenogears uses `AddPrims` to
+An OT is itself a chain of zero-payload nodes. Xenogears uses `LinkGpuPrimitivePair` to
 splice complete OT ranges into other tables; DMA2 needs no separate nesting
 command.
 
@@ -109,9 +109,9 @@ command.
 A freshly reverse-cleared table is normally submitted from its final entry:
 
 ```c
-ClearOTagR(ot, bucket_count);
-AddPrim(&ot[bucket], packet);
-DrawOTag(&ot[bucket_count - 1]);
+TerminateOrderingTableReverse(ot, bucket_count);
+LinkGpuPrimitive(&ot[bucket], packet);
+SubmitOrderingTable(&ot[bucket_count - 1]);
 ```
 
 Passing `ot` instead of `&ot[bucket_count - 1]` visits only entry zero and the
@@ -125,14 +125,14 @@ Packet size includes the four-byte DMA tag. The GP0 word count does not.
 
 | Packet | GP0 base | Size | GP0 words | Payload word order |
 |---|---:|---:|---:|---|
-| `POLY_F3` | `0x20` | `0x14` | 4 | `RGB0+cmd, XY0, XY1, XY2` |
-| `POLY_FT3` | `0x24` | `0x20` | 7 | `RGB0+cmd, XY0, UV0+CLUT, XY1, UV1+TPAGE, XY2, UV2` |
-| `POLY_G3` | `0x30` | `0x1C` | 6 | `RGB0+cmd, XY0, RGB1, XY1, RGB2, XY2` |
-| `POLY_GT3` | `0x34` | `0x28` | 9 | `RGB0+cmd, XY0, UV0+CLUT, RGB1, XY1, UV1+TPAGE, RGB2, XY2, UV2` |
-| `POLY_F4` | `0x28` | `0x18` | 5 | `RGB0+cmd, XY0, XY1, XY2, XY3` |
-| `POLY_FT4` | `0x2C` | `0x28` | 9 | `RGB0+cmd, XY0, UV0+CLUT, XY1, UV1+TPAGE, XY2, UV2, XY3, UV3` |
-| `POLY_G4` | `0x38` | `0x24` | 8 | `RGB0+cmd, XY0, RGB1, XY1, RGB2, XY2, RGB3, XY3` |
-| `POLY_GT4` | `0x3C` | `0x34` | 12 | `RGB0+cmd, XY0, UV0+CLUT, RGB1, XY1, UV1+TPAGE, RGB2, XY2, UV2, RGB3, XY3, UV3` |
+| `FlatTrianglePrimitive` | `0x20` | `0x14` | 4 | `RGB0+cmd, XY0, XY1, XY2` |
+| `FlatTexturedTrianglePrimitive` | `0x24` | `0x20` | 7 | `RGB0+cmd, XY0, UV0+CLUT, XY1, UV1+TPAGE, XY2, UV2` |
+| `GouraudTrianglePrimitive` | `0x30` | `0x1C` | 6 | `RGB0+cmd, XY0, RGB1, XY1, RGB2, XY2` |
+| `GouraudTexturedTrianglePrimitive` | `0x34` | `0x28` | 9 | `RGB0+cmd, XY0, UV0+CLUT, RGB1, XY1, UV1+TPAGE, RGB2, XY2, UV2` |
+| `FlatQuadrilateralPrimitive` | `0x28` | `0x18` | 5 | `RGB0+cmd, XY0, XY1, XY2, XY3` |
+| `FlatTexturedQuadrilateralPrimitive` | `0x2C` | `0x28` | 9 | `RGB0+cmd, XY0, UV0+CLUT, XY1, UV1+TPAGE, XY2, UV2, XY3, UV3` |
+| `GouraudQuadrilateralPrimitive` | `0x38` | `0x24` | 8 | `RGB0+cmd, XY0, RGB1, XY1, RGB2, XY2, RGB3, XY3` |
+| `GouraudTexturedQuadrilateralPrimitive` | `0x3C` | `0x34` | 12 | `RGB0+cmd, XY0, UV0+CLUT, RGB1, XY1, UV1+TPAGE, RGB2, XY2, UV2, RGB3, XY3, UV3` |
 
 `RGBn+cmd` stores RGB in bits 0 through 23 and the command byte in bits 24
 through 31. Each `XYn` contains signed 16-bit X and Y. Textured polygons store
@@ -143,25 +143,25 @@ second.
 
 | Packet | GP0 base | Size | GP0 words | Payload word order |
 |---|---:|---:|---:|---|
-| `LINE_F2` | `0x40` | `0x10` | 3 | `RGB0+cmd, XY0, XY1` |
-| `LINE_G2` | `0x50` | `0x14` | 4 | `RGB0+cmd, XY0, RGB1, XY1` |
-| `LINE_F3` | `0x48` | `0x18` | 5 | `RGB0+cmd, XY0, XY1, XY2, terminator` |
-| `LINE_G3` | `0x58` | `0x20` | 7 | `RGB0+cmd, XY0, RGB1, XY1, RGB2, XY2, terminator` |
-| `LINE_F4` | `0x4C` | `0x1C` | 6 | `RGB0+cmd, XY0, XY1, XY2, XY3, terminator` |
-| `LINE_G4` | `0x5C` | `0x28` | 9 | `RGB0+cmd, XY0, RGB1, XY1, RGB2, XY2, RGB3, XY3, terminator` |
-| `TILE` | `0x60` | `0x10` | 3 | `RGB0+cmd, XY0, WH` |
-| `SPRT` | `0x64` | `0x14` | 4 | `RGB0+cmd, XY0, UV0+CLUT, WH` |
-| `TILE_1` | `0x68` | `0x0C` | 2 | `RGB0+cmd, XY0` |
-| `TILE_8` | `0x70` | `0x0C` | 2 | `RGB0+cmd, XY0` |
-| `SPRT_8` | `0x74` | `0x10` | 3 | `RGB0+cmd, XY0, UV0+CLUT` |
-| `TILE_16` | `0x78` | `0x0C` | 2 | `RGB0+cmd, XY0` |
-| `SPRT_16` | `0x7C` | `0x10` | 3 | `RGB0+cmd, XY0, UV0+CLUT` |
+| `FlatLine2Primitive` | `0x40` | `0x10` | 3 | `RGB0+cmd, XY0, XY1` |
+| `GouraudLine2Primitive` | `0x50` | `0x14` | 4 | `RGB0+cmd, XY0, RGB1, XY1` |
+| `FlatLine3Primitive` | `0x48` | `0x18` | 5 | `RGB0+cmd, XY0, XY1, XY2, terminator` |
+| `GouraudLine3Primitive` | `0x58` | `0x20` | 7 | `RGB0+cmd, XY0, RGB1, XY1, RGB2, XY2, terminator` |
+| `FlatLine4Primitive` | `0x4C` | `0x1C` | 6 | `RGB0+cmd, XY0, XY1, XY2, XY3, terminator` |
+| `GouraudLine4Primitive` | `0x5C` | `0x28` | 9 | `RGB0+cmd, XY0, RGB1, XY1, RGB2, XY2, RGB3, XY3, terminator` |
+| `FillTilePrimitive` | `0x60` | `0x10` | 3 | `RGB0+cmd, XY0, WH` |
+| `SpritePrimitive` | `0x64` | `0x14` | 4 | `RGB0+cmd, XY0, UV0+CLUT, WH` |
+| `OnePixelTilePrimitive` | `0x68` | `0x0C` | 2 | `RGB0+cmd, XY0` |
+| `EightPixelTilePrimitive` | `0x70` | `0x0C` | 2 | `RGB0+cmd, XY0` |
+| `Sprite8Primitive` | `0x74` | `0x10` | 3 | `RGB0+cmd, XY0, UV0+CLUT` |
+| `SixteenPixelTilePrimitive` | `0x78` | `0x0C` | 2 | `RGB0+cmd, XY0` |
+| `Sprite16Primitive` | `0x7C` | `0x10` | 3 | `RGB0+cmd, XY0, UV0+CLUT` |
 
-Resident `RenderSpriteTile` at `0x8002541C` emits `TILE` primitives. Resident
-`BuildSpritePackets` at `0x80026A0C` emits `SPRT` primitives and appends the
+Resident `RenderSpriteTile` at `0x8002541C` emits `FillTilePrimitive` primitives. Resident
+`BuildSpritePackets` at `0x80026A0C` emits `SpritePrimitive` primitives and appends the
 draw-mode packet needed to establish the texture page. World minimap markers
-also use `TILE`. Battle action lines and Battling's queued line system use line
-packets; the Field diagnostics overlay contains a `LINE_G2` producer at
+also use `FillTilePrimitive`. Battle action lines and Battling's queued line system use line
+packets; the Field diagnostics overlay contains a `GouraudLine2Primitive` producer at
 `0x802814D4`.
 
 The resident packet-link helpers at `0x800316C0..0x80031870` cover two-, three-,
@@ -177,15 +177,15 @@ the sprite.
 
 | Packet | Size | Sent GP0 words | Purpose |
 |---|---:|---:|---|
-| `DR_TPAGE` | `0x08` | 1 | Draw mode and TPAGE (`E1`) |
-| `DR_MODE` | `0x0C` | 2 | Draw mode and texture-window state |
-| `DR_TWIN` | `0x0C` | 2 | Texture-window state followed by GP0 `00` NOP |
+| `GpuTexturePagePacket` | `0x08` | 1 | Draw mode and TPAGE (`E1`) |
+| `GpuDrawModePacket` | `0x0C` | 2 | Draw mode and texture-window state |
+| `GpuTextureWindowPacket` | `0x0C` | 2 | Texture-window state followed by GP0 `00` NOP |
 
-`SetDrawMode` at `0x800454DC` and `SetTexWindow` at `0x800453AC` both set tag
+`ConfigureDrawMode` at `0x800454DC` and `ConfigureTextureWindow` at `0x800453AC` both set tag
 count 2. A later manual tag mutation could reduce the count, but that is not the
 output of either resident constructor.
 
-`SetTexWindow` at `0x800453AC` uses resident `get_tw` at `0x80045C10`:
+`ConfigureTextureWindow` at `0x800453AC` uses resident `get_tw` at `0x80045C10`:
 
 ```c
 uint32_t get_tw(int x, int y, int w, int h) {
@@ -202,7 +202,7 @@ The E2 fields are five-bit X/Y masks and X/Y offsets in eight-texel units.
 ## 4. The 17 Resident Model Families
 
 `ModelInitializePackets` at `0x8002C8CC` builds model packet templates.
-`ModelRenderPacket` at `0x8002C700` projects and links them. The table at
+`SubmitModelPacket` at `0x8002C700` projects and links them. The table at
 `0x8004FE50` has 17 rows of `0x28` bytes. Each row supplies six render handlers,
 one template builder, and topology, attribute, and packet strides.
 
@@ -266,7 +266,7 @@ struct ModelMetadataCommand {
 };
 ```
 
-`ModelPacketSetTextureData` at `0x8002CD64` treats command `0xC4` as a TPAGE
+`AssignModelTexturePayload` at `0x8002CD64` treats command `0xC4` as a TPAGE
 update and `0xC8` as a CLUT update. Metadata consumes no topology record and
 creates no GPU packet. The builders for those eight families keep reading
 four-byte metadata records until the command byte is neither `0xC4` nor `0xC8`.
@@ -315,10 +315,10 @@ Callers select modes as follows:
 
 ### 5.1 TPAGE and CLUT
 
-Resident `GetTPage` at `0x80043A1C` constructs:
+Resident `DecodeTexturePage` at `0x80043A1C` constructs:
 
 ```c
-uint16_t GetTPage(int tp, int abr, int x, int y) {
+uint16_t DecodeTexturePage(int tp, int abr, int x, int y) {
     return ((tp  & 3) << 7)
          | ((abr & 3) << 5)
          | ((y & 0x100) >> 4)
@@ -339,17 +339,17 @@ The four `abr` values select these PS1 blend operations:
 | 2 | `background - foreground` |
 | 3 | `background + 0.25 * foreground` |
 
-Resident `GetClut` at `0x80043A58` constructs:
+Resident `DecodePaletteLocation` at `0x80043A58` constructs:
 
 ```c
-uint16_t GetClut(int x, int y) {
+uint16_t DecodePaletteLocation(int x, int y) {
     return (y << 6) | ((x >> 4) & 0x3F);
 }
 ```
 
 ### 5.2 Primitive command flags
 
-`SetSemiTrans` at `0x80043BFC` controls command bit 1. `SetShadeTex` at
+`ConfigurePrimitiveAlpha` at `0x80043BFC` controls command bit 1. `ConfigureTextureShading` at
 `0x80043C24` controls bit 0:
 
 ```text
@@ -358,7 +358,7 @@ bit 1: semitransparency enabled for the primitive
 ```
 
 The geometry shading model comes from the F/G opcode family, not from
-`SetShadeTex`. For textured semitransparency, the command bit enables blending
+`ConfigureTextureShading`. For textured semitransparency, the command bit enables blending
 and TPAGE supplies the `abr` operation.
 
 ### 5.3 Persistent GP0 state
@@ -384,8 +384,8 @@ for primitive families without changing packet length.
 
 | Command | Meaning | GP0 words | Retail producer evidence |
 |---|---|---:|---|
-| `00` | NOP | 1 | Second slot of resident `DR_TWIN`; four-word `ClearOTagR` trailer |
-| `02` | Fill rectangle in VRAM | 3 | `ClearImage` `0x80044764` and `ClearImage2` `0x800447F8` |
+| `00` | NOP | 1 | Second slot of resident `GpuTextureWindowPacket`; four-word `TerminateOrderingTableReverse` trailer |
+| `02` | Fill rectangle in VRAM | 3 | `EraseVramRectangle` `0x80044764` and `EraseVramRectangleAlternate` `0x800447F8` |
 | `20..23` | Flat triangle | 4 | Model families `00/04`; UI and effect builders |
 | `24..27` | Flat textured triangle | 7 | Model families `01/05/10`; scripted World FT3 builders |
 | `28..2B` | Flat quad | 5 | Model families `08/0C` |
@@ -405,11 +405,11 @@ for primitive families without changing packet length.
 | `74..77` | Fixed 8x8 textured sprite | 3 | Resident fixed-sprite linker `0x800317BC` |
 | `78..7B` | Fixed 16x16 untextured rectangle | 2 | `LinkTile16GpuPrimitive` `0x80031870` |
 | `7C..7F` | Fixed 16x16 textured sprite | 3 | Resident fixed-sprite linker `0x800317BC` |
-| `80..9F` | VRAM-to-VRAM rectangle copy | 4 | `MoveImage` `0x8004495C`; World scanline-warp `DR_MOVE` |
-| `A0..BF` | CPU-to-VRAM upload | data dependent | `LoadImage` `0x80044894` and `GfxLoadImageAccelerated` `0x80022A0C` |
-| `C0..DF` | VRAM-to-CPU read request | 3 header words | `StoreImage` `0x800448F8` |
-| `E1` | Draw mode / TPAGE | 1 | Draw environments, `SetDrawTPage`, and sprite builders |
-| `E2` | Texture window | 1 | Draw environments and `SetTexWindow` |
+| `80..9F` | VRAM-to-VRAM rectangle copy | 4 | `RelocateVramRectangle` `0x8004495C`; World scanline-warp `GpuImageMovePacket` |
+| `A0..BF` | CPU-to-VRAM upload | data dependent | `UploadVramImage` `0x80044894` and `UploadImageFast` `0x80022A0C` |
+| `C0..DF` | VRAM-to-CPU read request | 3 header words | `CommitVramImage` `0x800448F8` |
+| `E1` | Draw mode / TPAGE | 1 | Draw environments, `ConfigureTexturePagePacket`, and sprite builders |
+| `E2` | Texture window | 1 | Draw environments and `ConfigureTextureWindow` |
 | `E3` | Drawing area top-left | 1 | Draw-environment setup |
 | `E4` | Drawing area bottom-right | 1 | Draw-environment setup |
 | `E5` | Drawing offset | 1 | Draw-environment setup |
@@ -429,15 +429,15 @@ Zero width represents `0x400` pixels and zero height represents `0x200` pixels.
 Large image transfers use the GPU driver's transfer modes rather than an
 ordinary primitive node's eight-bit linked-list count.
 
-GP1 commands use the GPU control port and are not OT payload. `PutDispEnv` at
-`0x80044E9C` changes display/scanout control through GP1, while `PutDrawEnv` at
+GP1 commands use the GPU control port and are not OT payload. `InstallDisplayEnvironment` at
+`0x80044E9C` changes display/scanout control through GP1, while `InstallDrawingEnvironment` at
 `0x80044C44` establishes drawing state primarily through GP0 `E1..E6`.
 
 ## 7. Ordering Tables by Subsystem
 
 ### 7.1 Field
 
-`FieldClearAndSwapOTagInternal` at Field `0x80073F50` alternates two contexts of
+`SwapFieldOrderingTableInternal` at Field `0x80073F50` alternates two contexts of
 `0x80F4` bytes. For the selected context:
 
 ```text
@@ -447,13 +447,13 @@ compact OT    context + 0x80D4   8 entries
 submit root   context + 0x80F0   compact entry 7
 ```
 
-`FieldClearAndSwapOTag` at `0x80073FE0` clears the main table and clears the
+`SwapFieldOrderingTable` at `0x80073FE0` clears the main table and clears the
 secondary table when ground/panorama policy enables it. Object flags choose the
 main or secondary scene table. Fade, compass, fullscreen, and HUD-like packets
 use the compact table.
 
-`FieldAddPrimitives` at `0x80075458` splices the selected secondary range and
-main range below the compact root with `AddPrims`. `FieldPresentationPassA` at
+`AppendFieldFramePrimitives` at `0x80075458` splices the selected secondary range and
+main range below the compact root with `LinkGpuPrimitivePair`. `FieldPresentationPassA` at
 `0x8007554C` submits that root at `0x800758C8`. The reduced
 `FieldPresentationPassB` at `0x80075910` submits the same root at `0x800759CC`
 after its framebuffer-copy and environment setup.
@@ -462,7 +462,7 @@ after its framebuffer-copy and environment setup.
 
 The ordinary World frame alternates two `0x78`-byte contexts. Context offset
 `+0x70` points to the active OT. The frame path clears `0x400` entries and
-`DrawOTag` at World `0x800719B4` submits `ot_base + 0x0FFC`, entry 1023.
+`SubmitOrderingTable` at World `0x800719B4` submits `ot_base + 0x0FFC`, entry 1023.
 
 Producer-local ranges are narrower where their depth gates require it:
 
@@ -484,7 +484,7 @@ interchangeable.
 
 `WorldMapFadeTransition` at `0x80072DB4` is a separate blocking path. It clears
 the selected ordinary `0x400`-entry table, links three FT4 packets, one G4 fade
-packet, and a `DR_TPAGE` packet, then submits entry 1023 at `0x80073280`.
+packet, and a `GpuTexturePagePacket` packet, then submits entry 1023 at `0x80073280`.
 
 ### 7.3 Battle
 
@@ -492,15 +492,15 @@ packet, and a `DR_TPAGE` packet, then submits entry 1023 at `0x80073280`.
 `0x800C4A20` and `0x800C8A90`. Each context contains:
 
 ```text
-DRAWENV       context + 0x0000
-DISPENV       context + 0x005C
+GpuRasterEnvironment       context + 0x0000
+GpuDisplayEnvironment       context + 0x005C
 OT base       context + 0x0070
 OT entries    0x1000
 submit root   context + 0x406C   entry 4095
 ```
 
 The frame clears all `0x1000` entries, renders the scene and mode-selected UI,
-installs the display and draw environments, and calls resident `DrawOTag` with
+installs the display and draw environments, and calls resident `SubmitOrderingTable` with
 the root at `context + 0x406C`. Battle's packet pools and UI groups all link
 into this selected table; loading and effect paths may continue to present
 frames while resources are pending.
@@ -526,7 +526,7 @@ Battle's `0x1000`-entry context.
 `MenuDraw` at Menu `0x801C7BF4` alternates two draw-environment/OT contexts.
 The OT begins at selected context offset `+0x70`, contains 16 entries, and is
 reverse-cleared at `0x801C7C74`. The submit root is offset `+0xAC`, entry 15,
-and reaches resident `DrawOTag` at `0x801C7D4C` after draw/display environment
+and reaches resident `SubmitOrderingTable` at `0x801C7D4C` after draw/display environment
 installation and the menu's framebuffer move.
 
 Menu glyphs, cursors, gradients, save icons, borders, backgrounds, and draw-mode
@@ -551,7 +551,7 @@ Xenogears producers use GTE projection results to select acceptance and depth:
   bucket from Z.
 
 Equal bucket number does not imply equal final order. Head insertion reverses
-call order, `AddPrims` preserves internal chain order, Field composes multiple
+call order, `LinkGpuPrimitivePair` preserves internal chain order, Field composes multiple
 tables, and state packets affect every later primitive reached by DMA.
 
 ## 9. Retail Invariants
@@ -560,13 +560,13 @@ tables, and state packets affect every later primitive reached by DMA.
 - The DMA count excludes the tag and counts payload words, not primitives.
 - Links use only the low 24 address bits; count updates must preserve those
   bits, and link updates must preserve the count.
-- `AddPrim` prepends rather than appends.
+- `LinkGpuPrimitive` prepends rather than appends.
 - The selected submission root determines which buckets are reachable.
 - Primitive command bits 0 and 1 change material behavior without changing the
   geometric layout.
 - Indexed textures require both TPAGE and CLUT; sprites also require the
   preceding persistent draw state.
-- `SetShadeTex` controls texture modulation, not flat versus Gouraud geometry.
+- `ConfigureTextureShading` controls texture modulation, not flat versus Gouraud geometry.
 - GP0 `E1` and `E2` state persists across primitive packets.
 - GP1 display control is separate from the GP0 ordering-table stream.
 - Field, World, Battle, Battling, and Menu do not share one depth formula or OT

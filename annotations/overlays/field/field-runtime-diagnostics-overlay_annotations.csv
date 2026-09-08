@@ -13,14 +13,14 @@
 0x802812A4, function start — InitializeActorCollisionDebugLines; initializes the transforms and double-buffered line packets used to draw actor collision boxes.
 0x80281400, function start — UpdateAndFlushFieldDiagnostics; runs the active diagnostics page, submits its text, and clears per-frame collision and profiling state.
 0x80281450, function start — DrawActorCollisionDebugBox; projects and queues the twelve edges of the configured actor collision box when collision diagnostics are active.
-0x802814D4, function start — ProjectAndQueueCollisionDebugLine; transforms one 3D line segment into the current LINE_G2 packet and inserts it into the ordering table.
+0x802814D4, function start — ProjectAndQueueCollisionDebugLine; transforms one 3D line segment into the current GouraudLine2Primitive packet and inserts it into the ordering table.
 0x802815B0, function start — UpdateCollisionDebugLineMatrices; composes all collision-line local transforms with the current Field camera matrix.
 0x80281678, function start — ConfigureActorCollisionDebugBoxLines; derives twelve collision-box edges from an actor position and its X Y and Z extents.
 0x80281994, function start — PrintDebugRect; prints a four-component rectangle with the embedded REC diagnostic format.
 0x802819DC, function start — PrintDebugMatrix; prints a matrix as three signed rotation rows with their translation components.
-0x80281A78, function start — PrintDebugVector; prints the three 32-bit components of a VECTOR.
-0x80281ABC, function start — PrintDebugShortVector; prints the three signed 16-bit components of an SVECTOR.
-0x80281B00, function start — RecordFieldProfileCheckpoint; records a named VSync timing checkpoint and advances the frame timing baseline.
+0x80281A78, function start — PrintDebugVector; prints the three 32-bit components of a LongCoordinateTriple.
+0x80281ABC, function start — PrintDebugShortVector; prints the three signed 16-bit components of an PackedShortVector.
+0x80281B00, function start — RecordFieldProfileCheckpoint; records a named WaitForVerticalRetrace timing checkpoint and advances the frame timing baseline.
 0x80281B90, function start — UpdateAndDrawFieldDiagnosticsMenu; navigates and renders fourteen live Field diagnostics and tuning pages including player scene event CPU memory particle encounter lighting and fade state.
 0x802835E0, function start — UpdateAndDrawParticleBankEditor; renders thirty particle-bank parameters and applies row and vector-component edits from controller input.
 0x80284354, function start — DrawParticleEditorComponentCursor; prints the component cursor only for the selected vector component on the active editor row.

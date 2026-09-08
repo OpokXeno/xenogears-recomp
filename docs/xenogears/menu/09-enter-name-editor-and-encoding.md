@@ -83,7 +83,7 @@ operation. The linked mappings synchronize names across related forms:
 `EnterNameMenuMain` at `0x801CBDBC` performs:
 
 1. Allocate and clear seven top-level owners.
-2. Configure `MoveImage` as `(0x2C0,0x100,0x140,0x0E0)`.
+2. Configure `RelocateVramRectangle` as `(0x2C0,0x100,0x140,0x0E0)`.
 3. Build character availability and a filtered three-slot party copy used for
    portrait resources.
 4. Load menu graphics, strings, selector data, portrait data, and sound.
@@ -99,20 +99,20 @@ operation. The linked mappings synchronize names across related forms:
 11. Disable cursors and editor graphics, close windows 2 and 3, and complete the
     projection transition.
 12. Drain packet parity and release all retained ownership, ending with
-    `SystemMenu`.
+    `ResidentMenuState`.
 
-The resident controller allocates `SystemMenu`; the overlay frees it after all
+The resident controller allocates `ResidentMenuState`; the overlay frees it after all
 children.
 
 ## 4. Managers And Ownership
 
 ### 4.1 Functional managers
 
-| `SystemMenu` owner | Size | Role |
+| `ResidentMenuState` owner | Size | Role |
 |---:|---:|---|
 | `+0x32C` | `0x5034` | Loaded texture, selector, and portrait-resource state |
 | `+0x33C` | `0x006C` | Render enables and three portrait/resource IDs |
-| `+0x350` | `0x1194` | `MoveImage` rectangle |
+| `+0x350` | `0x1194` | `RelocateVramRectangle` rectangle |
 | `+0x348` | `0x015C` | Overlay GPU packets and dim layer |
 | `+0x1E20` | `0x0DEC` | Complete keyboard, name, selection, and caret display state |
 
@@ -129,9 +129,9 @@ rendering behavior.
 | `+0x140` | `0x050` | Two projected-header FT4 packets |
 | `+0x190` | `0x0B40` | 72 keyboard FT4 packets, two parities for 36 strips |
 | `+0xCD0` | `0x050` | Two selection FT4 packets |
-| `+0xD20` | `0x030` | Two top LINE_F3 packets |
-| `+0xD50` | `0x030` | Two bottom LINE_F3 packets |
-| `+0xD80` | `0x020` | Two blinking-caret LINE_F2 packets |
+| `+0xD20` | `0x030` | Two top FlatLine3Primitive packets |
+| `+0xD50` | `0x030` | Two bottom FlatLine3Primitive packets |
+| `+0xD80` | `0x020` | Two blinking-caret FlatLine2Primitive packets |
 | `+0xDA0` | `0x020` | Projected-header source quad |
 | `+0xDC0` | `0x020` | Selection source quad |
 | `+0xDE0..+0xDE4` | 5 | UI, header, keyboard, selection, and line parity bytes |
@@ -357,12 +357,12 @@ After acceptance, the loop:
 Each frame polls input, checks soft reset, flips environment and packet parity,
 clears a 16-entry reverse ordering table, updates projection state, composes the
 menu, synchronizes GPU/VBlank work, installs drawing/display environments,
-performs `MoveImage`, and submits the ordering table.
+performs `RelocateVramRectangle`, and submits the ordering table.
 
 `EnterNameMenuFree` renders twice, disables top-level composition, renders until
 parity is zero, frees the functional and lifecycle-reservation managers, frees
 retained resource products and the shared text raster, releases debug-owned
-sound data when enabled, frees the display state, and frees `SystemMenu` last.
+sound data when enabled, frees the display state, and frees `ResidentMenuState` last.
 Keyboard, prompt, and current-name raster allocations were already released
 after their uploads.
 

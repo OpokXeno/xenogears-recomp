@@ -39,7 +39,7 @@ The three start forms are:
 | `09` | Start synchronously and wait until the remote invocation has completely finished. |
 
 Blocking forms protect the remote slot with bit 22. The caller stores the remote
-slot index in its own `ActorData+0xCF` and advances through blocking states 0, 1,
+slot index in its own `SceneActorRecord+0xCF` and advances through blocking states 0, 1,
 and 2. Completion clears the protection and advances the caller.
 
 ## 3. Contact And Interaction Routines
@@ -62,7 +62,7 @@ Actor flag `0x00800000` suppresses only automatic routine 3. Opcodes `CD` and
 ```text
 for each script row / actor:
     reject actors not eligible for script updates
-    current ActorData = actor.ActorData
+    current SceneActorRecord = actor.SceneActorRecord
 
     selected_priority = 0xF
     for slot 0..7:
@@ -89,7 +89,7 @@ A special director-only mode limits traversal to actor 0. Actor primary flag bit
 
 Map entry paths run actor 0 synchronously:
 
-1. Copy its complete `0x138`-byte `ActorData`.
+1. Copy its complete `0x138`-byte `SceneActorRecord`.
 2. Reset the eight slots.
 3. Resolve the selected entry routine.
 4. Run with budget `0xFFFF`.
@@ -140,7 +140,7 @@ opcode. `FE E3..FE FF` have no table entries and are invalid script input.
 
 ## 8. Dispatch Limits
 
-`FieldScriptVMRun` applies:
+`DispatchPrimaryFieldVm` applies:
 
 | Limit | Effect |
 |---|---|
@@ -263,8 +263,8 @@ This timer is separate from each script slot's one-byte timed-wait counter.
 
 ## 14. Object Swivel
 
-Opcodes `D7`, `D8`, and `D9` select X, Y, or Z in `ActorData+0x12C` bits 0..1
-and store an angle in `ActorData+0x70`. The selected swivel is applied when
+Opcodes `D7`, `D8`, and `D9` select X, Y, or Z in `SceneActorRecord+0x12C` bits 0..1
+and store an angle in `SceneActorRecord+0x70`. The selected swivel is applied when
 building object collision transforms.
 
 ## 15. Reserved Entries

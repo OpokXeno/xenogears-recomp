@@ -24,7 +24,7 @@
 0x801C5EAC, function start — EnterNameMenuInitializeTextResources; initializes text entries and a small VRAM image.
 0x801C5F08, function start — EnterNameMenuInitializeWindowBorders; resolves border texture metadata.
 0x801C6010, function start — EnterNameMenuClearManagerFlags; clears manager selection and render flags.
-0x801C6040, function start — EnterNameMenuInitializeShadedQuad; initializes a shaded POLY_G4.
+0x801C6040, function start — EnterNameMenuInitializeShadedQuad; initializes a shaded GouraudQuadrilateralPrimitive.
 0x801C60BC, function start — EnterNameMenuInitializeBackgrounds; initializes selection and dimming primitives.
 0x801C6408, function start — EnterNameMenuSetVertices; builds screen-centered quad vertices.
 0x801C6460, function start — EnterNameMenuSetWindowBorderPrimitive; configures a translucent border primitive.

@@ -7,7 +7,7 @@ Gear-fighting minigame, from the generator's side: what each roll consumes,
 and where its formula is already documented in full. All rolls in this
 chapter draw from the shared gameplay generator described in
 [`01-generators-and-determinism.md`](01-generators-and-determinism.md),
-through Battling's own overlay-local `rand` wrapper calls. None of them touch
+through Battling's own overlay-local `NextPseudoRandomValue` wrapper calls. None of them touch
 the Movie or sound-modulator generators.
 
 Every formula in this chapter is quoted from, not re-derived from, the cited
@@ -56,8 +56,8 @@ outcome and are covered by the blanket mention in
 
 `BattlingStartRandomArenaReentryMotion` (`0x80070FD8`) — despite its name and
 despite `battling/08`'s opcode table previously calling its result a
-"randomized inward heading" — contains no call to `rand` or any wrapper. It
-picks between two geometrically computed headings (`ratan2` toward the arena
+"randomized inward heading" — contains no call to `NextPseudoRandomValue` or any wrapper. It
+picks between two geometrically computed headings (`ComputeFixedAtan2` toward the arena
 center, or a shared side-to-side heading global) based on a fixed threshold.
 See [`battling/08` §4](../battling/08-tutorial-and-attract-scripts.md#4-wait-and-movement-operations)
 for the corrected description.

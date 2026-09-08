@@ -24,35 +24,35 @@ degrees, and `0x100` is 22.5 degrees.
 
 ## 3. Actor Movement State
 
-The physical state used by this subsystem lives primarily in `ActorData`.
-`FieldActor` holds the installed object and current/cached transforms:
+The physical state used by this subsystem lives primarily in `SceneActorRecord`.
+`ActorRuntimeSlot` holds the installed object and current/cached transforms:
 
 | Location | Meaning |
 |---|---|
-| `FieldActor+0x0C` | Current model transform |
-| `FieldActor+0x2C` | Previous or cached model transform |
-| `FieldActor+0x4C` | Pointer to physical `ActorData` |
-| `ActorData+0x00` | Primary actor/script flags |
-| `ActorData+0x04` | Physical, collision, and attachment flags |
-| `ActorData+0x08` | Current triangle on each of four layers |
-| `ActorData+0x10` | Active walkmesh layer |
-| `ActorData+0x12` | Walkmesh traversal scratch |
-| `ActorData+0x14` | Current triangle material flags |
-| `ActorData+0x18` | Collision half-width X |
-| `ActorData+0x1A` | Collision/interaction height |
-| `ActorData+0x1C` | Collision half-width Z |
-| `ActorData+0x1E` | Solid/contact range |
-| `ActorData+0x20` | Committed physical position in 16.16 |
-| `ActorData+0x30` | Physical delta for the current update |
-| `ActorData+0x40` | Accumulated or pending movement vector |
-| `ActorData+0x50` | Active surface normal |
-| `ActorData+0x60` | Local movement or transition offset |
-| `ActorData+0x68` | Previous integer X, Y, Z snapshot |
-| `ActorData+0x72` | Actor elevation anchor |
-| `ActorData+0x74` | Actor currently touched or connected |
-| `ActorData+0x76` | Movement speed |
-| `ActorData+0x104` | Player or scripted target heading |
-| `ActorData+0x106` | Current physical heading |
+| `ActorRuntimeSlot+0x0C` | Current model transform |
+| `ActorRuntimeSlot+0x2C` | Previous or cached model transform |
+| `ActorRuntimeSlot+0x4C` | Pointer to physical `SceneActorRecord` |
+| `SceneActorRecord+0x00` | Primary actor/script flags |
+| `SceneActorRecord+0x04` | Physical, collision, and attachment flags |
+| `SceneActorRecord+0x08` | Current triangle on each of four layers |
+| `SceneActorRecord+0x10` | Active walkmesh layer |
+| `SceneActorRecord+0x12` | Walkmesh traversal scratch |
+| `SceneActorRecord+0x14` | Current triangle material flags |
+| `SceneActorRecord+0x18` | Collision half-width X |
+| `SceneActorRecord+0x1A` | Collision/interaction height |
+| `SceneActorRecord+0x1C` | Collision half-width Z |
+| `SceneActorRecord+0x1E` | Solid/contact range |
+| `SceneActorRecord+0x20` | Committed physical position in 16.16 |
+| `SceneActorRecord+0x30` | Physical delta for the current update |
+| `SceneActorRecord+0x40` | Accumulated or pending movement vector |
+| `SceneActorRecord+0x50` | Active surface normal |
+| `SceneActorRecord+0x60` | Local movement or transition offset |
+| `SceneActorRecord+0x68` | Previous integer X, Y, Z snapshot |
+| `SceneActorRecord+0x72` | Actor elevation anchor |
+| `SceneActorRecord+0x74` | Actor currently touched or connected |
+| `SceneActorRecord+0x76` | Movement speed |
+| `SceneActorRecord+0x104` | Player or scripted target heading |
+| `SceneActorRecord+0x106` | Current physical heading |
 
 The exact structure foundations are in
 [`03-runtime-objects.md`](03-runtime-objects.md).
@@ -183,20 +183,20 @@ direction.
 ### Continuous movement
 
 Opcode `21`, implemented at `0x8009E094`, writes movement speed at
-`ActorData+0x76`. Movement routines combine that speed with current or target
+`SceneActorRecord+0x76`. Movement routines combine that speed with current or target
 heading until another instruction changes or clears movement state.
 
 ### Player movement
 
 The player-control opcode converts the directional-pad nibble through a heading
 table, subtracts camera yaw, and stores the resulting target heading at
-`ActorData+0x104`. The movement pass turns current heading toward that target
+`SceneActorRecord+0x104`. The movement pass turns current heading toward that target
 with a bounded angular step before XZ velocity is generated.
 
 ### Knockback and scripted accumulation
 
 Knockback, pushes, and script-driven offsets contribute through the pending
-movement vector at `ActorData+0x40` and the local offset at `+0x60`. The common
+movement vector at `SceneActorRecord+0x40` and the local offset at `+0x60`. The common
 resolver merges them before testing the final segment.
 
 ## 9. Terrain Alignment And Sliding

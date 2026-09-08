@@ -2,34 +2,34 @@
 
 ## 1. Object Graph
 
-Loading a map creates one compact `FieldActor` record per entity. Scriptable
-actors also own an `ActorData` state object:
+Loading a map creates one compact `ActorRuntimeSlot` record per entity. Scriptable
+actors also own a `SceneActorRecord` state object:
 
 ```text
-FieldActor[entity_id]
+ActorRuntimeSlot[entity_id]
     +0x00 -> model descriptor, when modeled
     +0x04 -> sprite object, when sprite-based
     +0x08 -> shadow quad
     +0x0C    current transform
     +0x2C    previous/cached transform
-    +0x4C -> ActorData
+    +0x4C -> SceneActorRecord
 ```
 
-`FieldActor` is used to locate render resources and transforms quickly.
-`ActorData` contains the state changed by scripts and simulation.
+`ActorRuntimeSlot` is used to locate render resources and transforms quickly.
+`SceneActorRecord` contains the state changed by scripts and simulation.
 
-## 2. FieldActor
+## 2. ActorRuntimeSlot
 
-Each `FieldActor` is `0x5C` bytes:
+Each `ActorRuntimeSlot` is `0x5C` bytes:
 
 | Offset | Type | Meaning |
 |---:|---|---|
 | `0x00` | pointer | Model descriptor for a modeled entity |
 | `0x04` | pointer | Sprite object |
 | `0x08` | pointer | Actor-owned shadow quad and its two GPU packets |
-| `0x0C` | `MATRIX` | Current model transform |
-| `0x2C` | `MATRIX` | Previous or cached model transform |
-| `0x4C` | `ActorData *` | Physical, graphical, dialogue, and VM state |
+| `0x0C` | `TransformBasis` | Current model transform |
+| `0x2C` | `TransformBasis` | Previous or cached model transform |
+| `0x4C` | `SceneActorRecord *` | Physical, graphical, dialogue, and VM state |
 | `0x50` | `s16` | Model rotation X |
 | `0x52` | `s16` | Model rotation Y |
 | `0x54` | `s16` | Model rotation Z |
@@ -49,9 +49,9 @@ Important `+0x58` masks are:
 | `0x0F00` | Runtime class bits required by the script scheduler |
 | `0x2000` | Actor has dynamic model deformation storage |
 
-## 3. ActorData
+## 3. SceneActorRecord
 
-Each `ActorData` is `0x138` bytes. It combines several subsystems because Field
+Each `SceneActorRecord` is `0x138` bytes. It combines several subsystems because Field
 updates movement, collision, graphics, dialogue, and scripts through the same
 actor identity.
 
@@ -69,11 +69,11 @@ actor identity.
 | `0x01A` | `u16` | Interaction/collision height |
 | `0x01C` | `u16` | Interaction/collision half-width Z |
 | `0x01E` | `u16` | Solid/contact range |
-| `0x020` | `VECTOR` | Fixed-point physical position |
-| `0x030` | `VECTOR` | Physical delta for the current update |
-| `0x040` | `VECTOR` | Accumulated or pending movement |
-| `0x050` | `VECTOR` | Active surface normal |
-| `0x060` | `SVECTOR` | Local movement or transition offset |
+| `0x020` | `LongCoordinateTriple` | Fixed-point physical position |
+| `0x030` | `LongCoordinateTriple` | Physical delta for the current update |
+| `0x040` | `LongCoordinateTriple` | Accumulated or pending movement |
+| `0x050` | `LongCoordinateTriple` | Active surface normal |
+| `0x060` | `PackedShortVector` | Local movement or transition offset |
 | `0x068` | `s16[3]` | Previous integer position |
 | `0x06E` | `u16` | No-progress/contact response counter |
 | `0x070` | `s16` | Object swivel angle |
@@ -104,7 +104,7 @@ operation latches.
 | `0x0CF` | `u8` | Slot index in a remote actor awaited by a blocking start |
 
 The return stack is shared by the actor's currently dispatched invocation. The
-active depth is stored in `ActorData+0x12C` bits 6 through 8.
+active depth is stored in `SceneActorRecord+0x12C` bits 6 through 8.
 
 ### Animation, visual, and effect state
 
@@ -175,7 +175,7 @@ owned by specific movement and graphics handlers.
 
 ## 4. ScriptSlot
 
-The eight slots occupy `ActorData+0x8C..0xCB`. Each slot is exactly eight bytes:
+The eight slots occupy `SceneActorRecord+0x8C..0xCB`. Each slot is exactly eight bytes:
 
 | Offset | Type | Meaning |
 |---:|---|---|
@@ -197,12 +197,12 @@ select the later slot.
 
 | Address | Meaning |
 |---:|---|
-| `0x800ADBF8` | Current decompressed `ScriptsFile` |
+| `0x800ADBF8` | Current decompressed `FieldScriptResource` |
 | `0x800ADBFC` | Routine-row count |
 | `0x800ADC00` | Shared bytecode base |
 | `0x800AFB0C` | Runtime entity count read from the map header |
-| `0x800AFB10` | `FieldActor[]` base |
-| `0x800B0078` | Current `ActorData` context |
+| `0x800AFB10` | `ActorRuntimeSlot[]` base |
+| `0x800B0078` | Current `SceneActorRecord` context |
 | `0x800C3A68` | Active 1024-value VM memory |
 | `0x8006EF64` | Persistent 512-value Field state inside game state |
 
@@ -213,15 +213,15 @@ script-row traversal; the latter controls initial actor-array allocation.
 
 | Resource | Owner | Release path |
 |---|---|---|
-| `FieldActor[]` | Loaded map | Field teardown |
+| `ActorRuntimeSlot[]` | Loaded map | Field teardown |
 | Model descriptor | Modeled actor | Actor/map teardown |
 | Sprite object | Actor when ownership bit is set | Actor resource release |
 | Shadow quad | Actor | Actor resource release |
-| `ActorData` | Actor | Actor resource release |
-| Attachment snapshot | ActorData ownership bit | Actor resource release |
-| Movement boundary | ActorData ownership bit | Boundary-free opcode or actor release |
+| `SceneActorRecord` | Actor | Actor resource release |
+| Attachment snapshot | SceneActorRecord ownership bit | Actor resource release |
+| Movement boundary | SceneActorRecord ownership bit | Boundary-free opcode or actor release |
 | Deformation storage | Deformable actor | Actor resource release |
-| Special animation | ActorData while file ID is valid | Special-animation free or actor release |
+| Special animation | SceneActorRecord while file ID is valid | Special-animation free or actor release |
 
 ## 7. Persistence Boundary
 

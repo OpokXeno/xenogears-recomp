@@ -346,7 +346,7 @@ The checksum and marker fields expose two SMDS header families:
 
 These five files still play because `CreateSmdsManager` calls the stub at
 `0x8003F67C`, which unconditionally reports success, instead of
-`SoundValidateFile`. A strict archival parser may report these anomalies but
+`ValidateSoundResource`. A strict archival parser may report these anomalies but
 must not reject otherwise valid retail SMDS solely for them. The independent
 `0x0102` marker at `0x12` remains constant in all 63 resources.
 
@@ -498,7 +498,7 @@ The Field music request path is:
    `FUN_800ACDEC`. The value is script/table state; it is not read from the SMDs
    header.
 2. `FieldMusicRequest` (`0x80085B20`) selects the Field music archive context
-   with `ArchiveSetIndex(0x1C, 0)`.
+   with `SelectArchiveDirectoryEntry(0x1C, 0)`.
 3. The wave-bank selector table at `DAT_800ADFCC` supplies the WDS selector.
    When a WDS is needed, the request is `0x13 + selector * 2`.
 4. `FieldMusicLoadStateAdvance` (`0x80085C90`) reads the score with the request
@@ -518,7 +518,7 @@ SMDS logical entry = 0x14 + (0x16 * 2) = 0x40
 archive route      = directory 0x1C, file 0x40
 ```
 
-`ArchiveSetIndex` (`0x80028470`) and `ArchiveReadFileToBuffer` (`0x800295D8`)
+`SelectArchiveDirectoryEntry` (`0x80028470`) and `ReadArchiveMemberIntoBuffer` (`0x800295D8`)
 perform the catalog-to-FAT lookup. The latter obtains the resource sector and
 size from the archive tables before reading it; `0x40` above is therefore not a
 physical sector number.
@@ -532,7 +532,7 @@ reads it, validates the `seds` resource, and calls `RegisterSedsBank`
 - `FieldSoundEffectBankLoad` (`0x80085788`), which selects the Field context and
   uses the selected bank slot's entry at `0x115 + slot`.
 - `FieldCommonSoundBankLoad` (`0x80085890`), which uses a separate common-bank
-  context (`ArchiveSetIndex(4, 0)`) and reads entry `0xA8`.
+  context (`SelectArchiveDirectoryEntry(4, 0)`) and reads entry `0xA8`.
 
 The 16-bit value at SEDS header offset `0x14` is the bank's registry ID. It does
 not identify the archive occurrence by itself. Once a bank is registered,

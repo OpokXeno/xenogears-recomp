@@ -18,7 +18,7 @@ to Field, World, or the resident state dispatcher.
    specifies LZSS, PAK-LZ, offset tables, string bundles, the bitmap font, and
    the PlayStation save header.
 4. [`04-runtime-objects-allocations-and-ownership.md`](04-runtime-objects-allocations-and-ownership.md)
-   defines `SystemMenu`, runtime records, allocation ownership, and teardown
+   defines `ResidentMenuState`, runtime records, allocation ownership, and teardown
    order.
 5. [`05-frame-input-navigation-and-shared-ui.md`](05-frame-input-navigation-and-shared-ui.md)
    follows one frame through input translation, navigation, transitions,

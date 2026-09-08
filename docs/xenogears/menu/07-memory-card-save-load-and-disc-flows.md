@@ -47,9 +47,9 @@ Validation uses the allocation size, not the last listed field, as the hard boun
 
 ## 3. Services, Events, And Exact Results
 
-`RestartMemoryCardInterface` at `menu-overlay:0x801D9B08` renders and closes old handles, waits for VSync, calls `InitCARD(1)` (Resident `0x8004E794`), `StartCARD` (Resident `0x8004E7E8`), and `_bu_init` (Resident `0x80040464`), then opens and enables four events inside a critical section.
+`RestartMemoryCardInterface` at `menu-overlay:0x801D9B08` renders and closes old handles, waits for WaitForVerticalRetrace, calls `InitializeCardSubsystem(1)` (Resident `0x8004E794`), `ActivateCardSubsystem` (Resident `0x8004E7E8`), and `InitializeBiosUtility` (Resident `0x80040464`), then opens and enables four events inside a critical section.
 
-Every `OpenEvent` uses descriptor `0xF4000001`, mode `0x2000`, and a null callback:
+Every `CreateKernelEvent` uses descriptor `0xF4000001`, mode `0x2000`, and a null callback:
 
 | Handle offset | Spec | Event | Poll result |
 |---:|---:|---|---:|
@@ -58,9 +58,9 @@ Every `OpenEvent` uses descriptor `0xF4000001`, mode `0x2000`, and a null callba
 | `+0x4FF4` | `0x0100` | Timeout | `2` |
 | `+0x4FF8` | `0x2000` | New device/change | `3` |
 
-`WaitAndConsumeMemoryCardEvent` at `menu-overlay:0x801C881C` tests new-device, error, completion, then timeout. It calls `UnDeliverEvent` for all four specs after the first delivery. There is no software loop limit; timeout is itself an event.
+`WaitAndConsumeMemoryCardEvent` at `menu-overlay:0x801C881C` tests new-device, error, completion, then timeout. It calls `WithdrawKernelEvent` for all four specs after the first delivery. There is no software loop limit; timeout is itself an event.
 
-`RequestMemoryCardInfoStatus` at `menu-overlay:0x801C891C` starts `_card_info` (Resident `0x8004E784`). Start failure returns `-1`; delivered events map exactly as follows:
+`RequestMemoryCardInfoStatus` at `menu-overlay:0x801C891C` starts `ReadCardDirectoryStatus` (Resident `0x8004E784`). Start failure returns `-1`; delivered events map exactly as follows:
 
 | Event result | Card-info result |
 |---:|---:|
@@ -70,7 +70,7 @@ Every `OpenEvent` uses descriptor `0xF4000001`, mode `0x2000`, and a null callba
 | New-device `3` | `-2` |
 
 `ConsumeMemoryCardEventDeliveries` at `menu-overlay:0x801C87C4` calls
-`UnDeliverEvent` for all four deliveries; it does not close their handles.
+`WithdrawKernelEvent` for all four deliveries; it does not close their handles.
 `FinalizeMemoryCardEventHandles` at `menu-overlay:0x801C8960` renders once and
 closes all handles in a critical section.
 
@@ -93,7 +93,7 @@ Save and copy treat `-2` as requiring format. A physically responsive port can t
 
 ## 5. Directory Enumeration And Header Scan
 
-`EnumerateMemoryCardDirectory` at `menu-overlay:0x801C8D78` resets 16 owner and occupancy bytes, then uses `firstfile` (Resident `0x80040584`) and `nextfile` (Resident `0x80040594`). Each BIOS record occupies one `0x5C` cache entry.
+`EnumerateMemoryCardDirectory` at `menu-overlay:0x801C8D78` resets 16 owner and occupancy bytes, then uses `FindFirstMemoryCardFile` (Resident `0x80040584`) and `FindNextMemoryCardFile` (Resident `0x80040594`). Each BIOS record occupies one `0x5C` cache entry.
 
 There are 16 directory cache records per port but only 15 allocatable PS1 blocks. Directory enumeration has no independent pre-copy bound check. More than 16 returned records exceed the cache; valid card block use remains at most 15.
 
@@ -410,14 +410,14 @@ Overwrite is not rollback-safe: the old final filename is erased before temp cre
 5. Read source `0x200` header and retain declared block count.
 6. Create destination `__tmp_file` with that count.
 7. Copy `block_count << 13` bytes in `0x200` chunks, up to three attempts per chunk.
-8. Close both files and call `rename` at `menu-overlay:0x801CD090` to give the temp entry the original filename. The rename return is ignored; the test at `menu-overlay:0x801CD098` still uses the prior `s7`/handle state.
+8. Close both files and call `ChangeCardFileName` at `menu-overlay:0x801CD090` to give the temp entry the original filename. The rename return is ignored; the test at `menu-overlay:0x801CD098` still uses the prior `s7`/handle state.
 9. When that prior state indicates completion, show success `0x5C`, clear all 32 caches, invalidate both scans/counts, and rescan.
 
 Duplicate prevention is filename-based, not checksum-based. BIOS creation is final authority on sufficient free blocks. Copy transfers every declared block verbatim, including foreign files, and does not recompute Xenogears checksum. Detected create/read/write failures can leave the temp entry and do not alter the source. The final rename is not an observed commit boundary: rename failure can still present success `0x5C` and trigger invalidation/rescan, leaving only `__tmp_file`, which the scan may erase. The source remains unchanged.
 
 ## 14. Delete
 
-`RunMemoryCardDeleteOperation` at `menu-overlay:0x801CD2AC` accepts any occupied file, not only Xenogears saves. After prompts `0x56` and `0x59`, it shows `0x50`, builds the cached path, and calls `erase` (Resident `0x800405B4`). The erase return is ignored: the routine always shows success `0x5C`, clears 32 owner/validity/visibility entries, invalidates both scans/counts, and requests rebuild. Cancellation before the erase call preserves the file. A successful erase has no backup or undelete, while a failed erase can make the supposedly deleted entry reappear on rescan.
+`RunMemoryCardDeleteOperation` at `menu-overlay:0x801CD2AC` accepts any occupied file, not only Xenogears saves. After prompts `0x56` and `0x59`, it shows `0x50`, builds the cached path, and calls `DeleteMemoryCardFile` (Resident `0x800405B4`). The erase return is ignored: the routine always shows success `0x5C`, clears 32 owner/validity/visibility entries, invalidates both scans/counts, and requests rebuild. Cancellation before the erase call preserves the file. A successful erase has no backup or undelete, while a failed erase can make the supposedly deleted entry reappear on rescan.
 
 ## 15. Preview, Icons, And Header Facts
 
@@ -451,7 +451,7 @@ Mode 6 first presents card-sensitive `0x7D` and `0x80`, enters save with save-nu
 
 ## 17. Callback Backup, Restore, And Cleanup
 
-`InitializeLoadSaveMemoryCards` at `menu-overlay:0x801D9C84` shows checking status `0x20`, waits for transition completion, restarts card services, and in a critical section calls `CdSyncCallback(NULL)`, `CdReadyCallback(NULL)`, and `CdReadCallback(NULL)`, saving all returned callbacks. It invalidates both presence/enumeration states and forces immediate two-port scan.
+`InitializeLoadSaveMemoryCards` at `menu-overlay:0x801D9C84` shows checking status `0x20`, waits for transition completion, restarts card services, and in a critical section calls `HandleCdSyncCompletion(NULL)`, `HandleCdReadyCompletion(NULL)`, and `HandleCdReadCompletion(NULL)`, saving all returned callbacks. It invalidates both presence/enumeration states and forces immediate two-port scan.
 
 `ShutdownLoadSaveMemoryCards` at `menu-overlay:0x801D9E3C` clears preview, releases 32 tiles and preview storage, clears visible flags/counts, and restores all three callbacks in a critical section. `ProcessLoadSaveMenu` finalizes four event handles on every exit; top-level shutdown frees `0x5034`. No event, cache pointer, or detached callback survives Menu lifetime.
 
@@ -567,7 +567,7 @@ All addresses below belong to the General Menu module.
 
 | Address group | Services |
 |---|---|
-| Resident `0x80040474`, `0x80040494`, `0x800404A4`, `0x800404C4` | `OpenEvent`, `TestEvent`, `EnableEvent`, `UnDeliverEvent` |
-| Resident `0x80040534`..`0x800405B4` | `open`, `read`, `write`, `close`, `format`, `firstfile`, `nextfile`, `rename`, `erase` |
+| Resident `0x80040474`, `0x80040494`, `0x800404A4`, `0x800404C4` | `CreateKernelEvent`, `ProbeKernelEvent`, `ActivateKernelEvent`, `WithdrawKernelEvent` |
+| Resident `0x80040534`..`0x800405B4` | `AcquireBiosFileHandle`, `FetchBiosFileBytes`, `StoreBiosFileBytes`, `ReleaseBiosFileHandle`, `format`, `FindFirstMemoryCardFile`, `FindNextMemoryCardFile`, `ChangeCardFileName`, `DeleteMemoryCardFile` |
 | Resident `0x80040FB4`, `0x80040FCC`, `0x8004373C` | CD sync, ready, and read callback setters |
-| Resident `0x8004E784`, `0x8004E794`, `0x8004E7E8` | `_card_info`, `InitCARD`, `StartCARD` |
+| Resident `0x8004E784`, `0x8004E794`, `0x8004E7E8` | `ReadCardDirectoryStatus`, `InitializeCardSubsystem`, `ActivateCardSubsystem` |

@@ -163,7 +163,7 @@ max_hp = min(999, max_hp + max(gain, 0))
 
 Levels 100+ use a second target byte and a `200 - next_level`-based
 denominator for all three formula families; see `battle/08` §8 for the exact
-post-99 variants. Every growth roll draws its own independent `rand()` call
+post-99 variants. Every growth roll draws its own independent `NextPseudoRandomValue()` call
 — indexed in [`rng/02-battle-rng.md` §7](../rng/02-battle-rng.md#7-results-progression-and-drops).
 
 ## 7. Attacks, Deathblows, And Attack Level
@@ -296,11 +296,11 @@ Two data tables implied by the mechanisms above remain incomplete:
    `BattleResultApplyPhysicalLevelStatGrowth`/`...EtherLevelStatGrowth` read
    `table_base + type*0x110 + level_band + field_offset`. `0x800D2C08` loads
    from an LZSS-compressed member inside the archive selected by
-   `ArchiveSetIndex(0x10, 2)`. Extraction stalls one level deeper: the size
-   the loader allocates for that read comes from `ArchiveDecodeSize`
+   `SelectArchiveDirectoryEntry(0x10, 2)`. Extraction stalls one level deeper: the size
+   the loader allocates for that read comes from `MeasureArchivePayload`
    (`0x80028738`), which — on the retail CD path (confirmed; the alternate
-   branch only runs under a PsyQ host-PC dev-kit link via `PCopen`/`PCclose`/
-   `PClseek`, never in the shipped game) — computes its result from two
+   branch only runs under a PsyQ host-PC dev-kit link via `OpenHostFile`/`CloseHostFile`/
+   `SeekHostFile`, never in the shipped game) — computes its result from two
    further resident lookup bases (`0x8005FE14`, and `0x8005FDF0` via the
    neighboring size-decoder) that are themselves populated from disc-loaded
    filesystem metadata nobody has reverse-engineered yet. Getting real values

@@ -3,7 +3,7 @@
 ## 1. Ownership Model
 
 ```text
-Resident SystemMenu
+Resident ResidentMenuState
     +-- embedded frame environments and common state
     +-- owner pointers for managers, windows, cursors, and pages
     +-- selected Menu module
@@ -17,11 +17,11 @@ Resident SystemMenu
 Every allocation has one release path. Embedded records share the lifetime of
 their parent. Borrowed pointers never release the referenced storage. Manager
 disable paths do not clear owner fields after release; those fields can remain
-stale until `SystemMenu` itself is released.
+stale until `ResidentMenuState` itself is released.
 
-## 2. Resident `SystemMenu`
+## 2. Resident `ResidentMenuState`
 
-Resident `MenuMain` allocates and clears `0x1E98` bytes. The shared fields with
+Resident `RunResidentMenu` allocates and clears `0x1E98` bytes. The shared fields with
 stable runtime roles are:
 
 | Offset | Size | Field and owner |
@@ -77,14 +77,14 @@ Each `0xB4` environment contains:
 
 | Offset | Size | Field |
 |---:|---:|---|
-| `+0x00` | `0x5C` | `DRAWENV`. |
-| `+0x5C` | `0x14` | `DISPENV`. |
+| `+0x00` | `0x5C` | `GpuRasterEnvironment`. |
+| `+0x5C` | `0x14` | `GpuDisplayEnvironment`. |
 | `+0x70` | `0x40` | Sixteen-entry ordering table. |
 | `+0xB0` | 4 | Environment state. |
 
-The active pointer alternates between `SystemMenu+0x6C` and
-`SystemMenu+0x120`. Both records are embedded and are released with
-`SystemMenu`.
+The active pointer alternates between `ResidentMenuState+0x6C` and
+`ResidentMenuState+0x120`. Both records are embedded and are released with
+`ResidentMenuState`.
 
 ## 4. General Menu Owners
 
@@ -97,7 +97,7 @@ owner must not be read or passed to a manager again after disable.
 |---:|---:|---|---:|
 | `+0x32C` | `0x5034` | Memory-card workspace. | Menu `0x801C5B54` |
 | `+0x33C` | `0x006C` | Presentation and manager flags. | Menu `0x801C5BB8` |
-| `+0x350` | `0x1194` | Main-menu entries and `MoveImage` state. | Menu `0x801C5C1C` |
+| `+0x350` | `0x1194` | Main-menu entries and `RelocateVramRectangle` state. | Menu `0x801C5C1C` |
 | `+0x354` | `0x140C` | Menu text batches. | Menu `0x801C5C80` |
 | `+0x330` | `0x00CC` | Resource and dressing state. | Menu `0x801C5CE4` |
 | `+0x340` | `0x0328` | Cursor rendering. | Menu `0x801C5D48` |
@@ -116,7 +116,7 @@ clears each complete record, and releases it through the matching manager:
 |---:|---:|---|---:|
 | `+0x32C` | `0x5034` | Resource state. | Enter Name `0x801C505C` |
 | `+0x33C` | `0x006C` | Manager and render flags. | Enter Name `0x801C50C0` |
-| `+0x350` | `0x1194` | Selection and `MoveImage` state. | Enter Name `0x801C5124` |
+| `+0x350` | `0x1194` | Selection and `RelocateVramRectangle` state. | Enter Name `0x801C5124` |
 | `+0x354` | `0x140C` | Lifecycle reservation; unused after clear. | Enter Name `0x801C5188` |
 | `+0x330` | `0x00CC` | Lifecycle reservation; unused after clear. | Enter Name `0x801C51EC` |
 | `+0x348` | `0x015C` | Overlay packet state. | Enter Name `0x801C5250` |
@@ -136,9 +136,9 @@ The display allocation contains these packet groups and controls:
 | `+0x140` | `0x050` | Two projected-header FT4 packets. |
 | `+0x190` | `0xB40` | Seventy-two keyboard FT4 packets. |
 | `+0xCD0` | `0x050` | Two selection FT4 packets. |
-| `+0xD20` | `0x030` | Two top `LINE_F3` packets. |
-| `+0xD50` | `0x030` | Two bottom `LINE_F3` packets. |
-| `+0xD80` | `0x020` | Two caret `LINE_F2` packets. |
+| `+0xD20` | `0x030` | Two top `FlatLine3Primitive` packets. |
+| `+0xD50` | `0x030` | Two bottom `FlatLine3Primitive` packets. |
+| `+0xD80` | `0x020` | Two caret `FlatLine2Primitive` packets. |
 | `+0xDA0` | `0x020` | Projected-header source quad. |
 | `+0xDC0` | `0x020` | Selection source quad. |
 | `+0xDE0` | 5 | UI, header, keyboard, selection, and line parity. |
@@ -151,8 +151,8 @@ The display allocation contains these packet groups and controls:
 
 ## 7. Shared Windows
 
-Each of the seven `SystemMenu+0x364` slots owns one `0x720` window record. The
-matching `SystemMenu+0x380` slot owns one `0x18` animation record.
+Each of the seven `ResidentMenuState+0x364` slots owns one `0x720` window record. The
+matching `ResidentMenuState+0x380` slot owns one `0x18` animation record.
 
 | Offset | Size | Window field |
 |---:|---:|---|
@@ -174,10 +174,10 @@ before releasing the packet and animation owners.
 
 | Owner | Allocation | Contract |
 |---|---:|---|
-| `SystemMenu+0x428` | `0x14C` | Pointer cursor with eight FT4 packets, enables, projection flags, and parity. |
-| `SystemMenu+0x1DE0[0..3]` | Four `0x80` records | Prompt FT4 pair, source quad, upload rectangle, transient raster pointer, and controls. |
-| `SystemMenu+0x364[0..6]` | `0x720` each | Window packet owner. |
-| `SystemMenu+0x380[0..6]` | `0x18` each | Window animation owner. |
+| `ResidentMenuState+0x428` | `0x14C` | Pointer cursor with eight FT4 packets, enables, projection flags, and parity. |
+| `ResidentMenuState+0x1DE0[0..3]` | Four `0x80` records | Prompt FT4 pair, source quad, upload rectangle, transient raster pointer, and controls. |
+| `ResidentMenuState+0x364[0..6]` | `0x720` each | Window packet owner. |
+| `ResidentMenuState+0x380[0..6]` | `0x18` each | Window animation owner. |
 
 Even prompt records allocate raster surfaces during setup. Adjacent prompt
 records can borrow one surface; the owning prompt performs the sole release and
@@ -190,13 +190,13 @@ with module-specific record types:
 
 ```text
 enable:
-    owner = HeapAlloc(record_size)
+    owner = AllocateHeapBlock(record_size)
     clear(owner, record_size)
 
 disable:
     disable draw and callback reachability
     release children
-    HeapFree(owner)
+    ReleaseHeapBlock(owner)
 ```
 
 The managers neither test `owner == NULL` before allocation nor clear the owner
@@ -228,14 +228,14 @@ track and trail pools.
 6. For Gear Shop, release model slots and then Gear Helper pools.
 7. Release top-level managers in reverse dependency order.
 8. Treat released owner fields as stale and do not reuse them.
-9. Release `SystemMenu` last; this discards the stale owner fields.
-10. Return through the selected module entry to resident `MenuExecute`.
+9. Release `ResidentMenuState` last; this discards the stale owner fields.
+10. Return through the selected module entry to resident `DispatchMenuMode`.
 
 ## 12. Function Index
 
 | Address | Function |
 |---:|---|
-| Resident `0x8001C634` | Allocate and clear `SystemMenu`. |
+| Resident `0x8001C634` | Allocate and clear `ResidentMenuState`. |
 | Resident `0x80031BDC` | Allocate heap storage. |
 | Resident `0x800320E8` | Release heap storage. |
 | Resident `0x8003F8E8` | Clear an allocated record. |

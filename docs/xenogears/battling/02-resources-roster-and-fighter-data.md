@@ -64,7 +64,7 @@ order:
    compressed allocation, scales the 16,384 heights, and creates the terrain
    packet pools through `BattlingGraphicsResourcesInitialize` at `0x80081ECC`.
 3. It expands file `0x30:3`, releases the compressed allocation, resolves the
-   two member starts with `ResolveArchiveEntryPointers` at `0x8003342C`, and
+   two member starts with `LinkArchiveDirectoryEntries` at `0x8003342C`, and
    installs the text and common fighter-table pointers.
 4. `BattlingBuildGearRoster` at `0x8007EEE8` filters the 49 fighter descriptors
    against the current roster policy and progress state.
@@ -139,7 +139,7 @@ The text member contains 69 indexed strings:
 The first entry offset is `0x011C` and the terminal entry offset is `0x1CE3`.
 Text IDs `0..5` all select the same empty string at `+0x011C`. The
 `serialized_prelude` and 77-byte trailer remain outside every indexed string.
-`GetStringEntry` at `0x80033728` resolves an ID with:
+`LookupSystemString` at `0x80033728` resolves an ID with:
 
 ```text
 entry = text_base + entry_offset[id]
@@ -699,8 +699,8 @@ frees render trees before a later selection can replace the underlying slot.
 
 | Address | Function | Resource responsibility |
 |---:|---|---|
-| `0x8003342C` | `ResolveArchiveEntryPointers` | Replace count-prefixed archive member offsets with runtime pointers |
-| `0x80033728` | `GetStringEntry` | Resolve a 16-bit text offset by ID |
+| `0x8003342C` | `LinkArchiveDirectoryEntries` | Replace count-prefixed archive member offsets with runtime pointers |
+| `0x80033728` | `LookupSystemString` | Resolve a 16-bit text offset by ID |
 | `0x80071794` | `BattlingTutorialTextureLoad` | Upload graphics member 23 |
 | `0x800740E4` | `BattlingProcessAnimationAttackEvent` | Consume type-0 animation commands |
 | `0x80074678` | `BattlingProcessCrossedAnimationFrameEvents` | Scan action event ranges and dispatch commands |

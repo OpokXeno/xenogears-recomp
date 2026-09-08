@@ -669,7 +669,7 @@
 0x800B383C, function start — BattleFaderDelete; unregisters and frees the Battle fader task.
 0x800B3878, function start — BattleFaderDraw; emits the fullscreen semitransparent fader packets.
 0x800B3934, call site — Battle fader completes its GPU draw-state packet.
-0x800B393C, instruction site — captures the completed authenticated Battle POLY_F4 fader packet.
+0x800B393C, instruction site — captures the completed authenticated Battle FlatQuadrilateralPrimitive fader packet.
 0x800B3948, call site — inserts the Battle fader quad into the ordering table.
 0x800B3950, return site — resumes after inserting the Battle fader quad.
 0x800B3958, call site — inserts the Battle fader draw-state packet.

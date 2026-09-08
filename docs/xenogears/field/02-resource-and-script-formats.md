@@ -102,7 +102,7 @@ There is one 16-byte record at `0x190 + entity_id * 0x10`:
 
 | Offset | Type | Runtime destination |
 |---:|---|---|
-| `+0x00` | `s16` | Initial actor status at `FieldActor+0x58` |
+| `+0x00` | `s16` | Initial actor status at `ActorRuntimeSlot+0x58` |
 | `+0x02` | `s16` | Model rotation X |
 | `+0x04` | `s16` | Model rotation Y |
 | `+0x06` | `s16` | Model rotation Z |
@@ -113,9 +113,9 @@ There is one 16-byte record at `0x190 + entity_id * 0x10`:
 
 The loader copies position into both transform matrices. Actor initialization
 then sign-extends it and creates the fixed-point physical position in
-`ActorData`.
+`SceneActorRecord`.
 
-## 4. ScriptsFile Layout
+## 4. FieldScriptResource Layout
 
 After LZSS decompression, section 5 contains:
 

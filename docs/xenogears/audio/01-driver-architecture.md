@@ -105,7 +105,7 @@ Its order is important:
 1. Return early if global sound suspension flag `0x40` is set.
 2. Increment the sound callback counter.
 3. On alternating callbacks, update common-volume ramps and call
-   `SpuSetCommonAttr`. This auxiliary work is 120 Hz.
+   `SetSpuCommonAttributes`. This auxiliary work is 120 Hz.
 4. Call `CommitPendingSpuVoiceWrites`. This writes staged voice registers and
    key-ons from the previous callback.
 5. Walk every active manager and update manager fades and tempo state.
@@ -209,7 +209,7 @@ The WDS loading path at `0x80037FD8`:
 5. Record the actual SPU address.
 6. Link the bank into the loaded-WDS list.
 
-The transfer queue contains eight entries. It uses `SpuSetTransferStartAddr`
+The transfer queue contains eight entries. It uses `SetSpuTransferAddress`
 and asynchronous SPU writes.
 
 Loaded banks are looked up by numeric WDS ID. A sequence does not contain a

@@ -11,8 +11,8 @@ General Menu `MenuDraw` at `0x801C7BF4` translates input and presents one frame:
 5. Compose the active page from the page state that preceded the new command.
 6. Link enabled current-parity packets into the ordering table.
 7. Synchronize prior GPU work and vertical blank.
-8. Install `DRAWENV`, then `DISPENV`.
-9. Perform the parity-selected framebuffer `MoveImage` operation.
+8. Install `GpuRasterEnvironment`, then `GpuDisplayEnvironment`.
+9. Perform the parity-selected framebuffer `RelocateVramRectangle` operation.
 10. Submit the ordering table.
 11. Service memory-card hotplug and enumeration work requested by the page.
 
@@ -28,7 +28,7 @@ while supplying module-specific packet groups and commands.
 |---:|---|
 | Resident `0x800594A4` | Current and queued logical buttons for directions and supplemental actions. |
 | Resident `0x8005948C` | Press-edge logical buttons for actions and specialized commands. |
-| `SystemMenu+0x325` | One translated Menu command. |
+| `ResidentMenuState+0x325` | One translated Menu command. |
 
 Input translation waits for controller availability, repairs queue overflow,
 and drains snapshots until it finds a recognized event. It publishes at most
@@ -50,7 +50,7 @@ one command per frame.
 | `0x09` | Next | R1, mask `0x0008` | Select the next member, category, or page. |
 | `0x0A` | Previous | L1, mask `0x0004` | Select the previous member, category, or page. |
 | `0x0B` | Start action | Start, mask `0x0800` | Run the specialized Start action. |
-| `0x0C` | Select action | Select, mask `0x0100` | Toggle `SystemMenu+0x1E94` where supported. |
+| `0x0C` | Select action | Select, mask `0x0100` | Toggle `ResidentMenuState+0x1E94` where supported. |
 
 Each page accepts the subset defined by its current state.
 
@@ -110,11 +110,11 @@ entry and whose eligibility check occurs on Confirm.
 
 | Offset | Meaning |
 |---:|---|
-| `SystemMenu+0x336` | Current top-level choice. |
-| `SystemMenu+0x337` | Previous top-level choice. |
-| `SystemMenu+0x338` | Current submenu choice. |
-| `SystemMenu+0x339` | Previous submenu choice. |
-| `SystemMenu+0x33A` | Submenu choice count. |
+| `ResidentMenuState+0x336` | Current top-level choice. |
+| `ResidentMenuState+0x337` | Previous top-level choice. |
+| `ResidentMenuState+0x338` | Current submenu choice. |
+| `ResidentMenuState+0x339` | Previous submenu choice. |
+| `ResidentMenuState+0x33A` | Submenu choice count. |
 
 Pages additionally own row, scroll, category, quantity, source, target, and
 confirmation state. An accepted selection update follows this order:
@@ -152,7 +152,7 @@ exception: Cross performs backspace only and cannot cancel or exit name entry.
 
 ## 9. Transitions
 
-General Menu stores this transition state at `SystemMenu+0x329`:
+General Menu stores this transition state at `ResidentMenuState+0x329`:
 
 | Value | State |
 |---:|---|
@@ -205,7 +205,7 @@ operations read selected item, party, Gear, and card identifiers from page state
 ## 12. Framebuffer And Parity
 
 Menu uses two 320 by 224 frame environments and two packet parities. Menu
-`0x801C7BF4` flips `SystemMenu+0x308`, selects current-parity packets, and leaves
+`0x801C7BF4` flips `ResidentMenuState+0x308`, selects current-parity packets, and leaves
 the opposite parity alive for prior GPU work.
 
 The presentation boundary preserves:
@@ -213,9 +213,9 @@ The presentation boundary preserves:
 1. Two-frame packet ownership.
 2. Presentation of the pre-command state, followed by page-loop command
    consumption and a later visual rebuild.
-3. `DRAWENV` and `DISPENV` selection.
+3. `GpuRasterEnvironment` and `GpuDisplayEnvironment` selection.
 4. Ordering-table insertion order.
-5. `MoveImage` timing relative to environment installation and submission.
+5. `RelocateVramRectangle` timing relative to environment installation and submission.
 6. Caller-owned framebuffer content across the modal handoff.
 
 Menu logic owns selection, eligibility, transitions, values, enables, and object

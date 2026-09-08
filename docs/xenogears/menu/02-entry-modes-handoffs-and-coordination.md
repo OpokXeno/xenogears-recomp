@@ -2,7 +2,7 @@
 
 ## 1. Mode Dispatch
 
-Resident `MenuExecute` at `0x8001C1A8` treats mode as the complete dispatch
+Resident `DispatchMenuMode` at `0x8001C1A8` treats mode as the complete dispatch
 selector. Modes 0, 2, and 6 use the General Menu entry; the remaining modes use
 their specialized module entry.
 
@@ -86,7 +86,7 @@ Field `0x800799D4` runs an in-place modal handoff:
    that Menu replaces.
 6. Release or suspend volatile Field rendering resources.
 7. Publish mode, party mount state, and Menu scratch storage.
-8. Call resident `MenuMain` at `0x8001C634`.
+8. Call resident `RunResidentMenu` at `0x8001C634`.
 9. Consume the mode-2 result when Load Game was selected.
 10. Rebuild Field display environments, framebuffer content, streamed assets,
     party resources, GTE view state, and per-frame services.
@@ -126,7 +126,7 @@ World uses its own modal preparation and restoration pair:
 ```text
 World runtime
     -> prepare for Menu
-    -> Resident MenuMain
+    -> Resident RunResidentMenu
     -> selected Menu module
     -> restore World
     -> resume World runtime
@@ -137,7 +137,7 @@ procedures for their simulation and rendering state.
 
 ## 9. Resident State Boundary
 
-Resident `ChangeGameState` at `0x8001996C` uses this state table:
+Resident `CommitGameStateTransition` at `0x8001996C` uses this state table:
 
 | State | Module |
 |---:|---|
@@ -150,7 +150,7 @@ Resident `ChangeGameState` at `0x8001996C` uses this state table:
 | 6 | Movie |
 
 Field and World can invoke Menu as an in-place modal service. A top-level state-5
-transition reaches the same resident `MenuMain` through the state dispatcher.
+transition reaches the same resident `RunResidentMenu` through the state dispatcher.
 
 ## 10. Coordination Invariants
 

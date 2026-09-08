@@ -245,7 +245,7 @@ address, and code-boundary analysis.
 - Position-fixed base recovery correlates independent `jal` targets with MIPS
   stack-frame prologues. The latest eight images add 110 audited native
   functions: 29 Field diagnostics, 51 Battle loader, and 30 Battle effects.
-- The resident `MenuExecute` debug selector names mode 3 `Enter Name`, loads
+- The resident `DispatchMenuMode` debug selector names mode 3 `Enter Name`, loads
   logical file `0x10/0x08` at `0x801C5000`, and calls its entry point at
   `0x801CBDBC`. Its character/robot index selector and the overlay's editable
   ten-code buffer independently agree with that identity. The embedded

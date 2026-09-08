@@ -116,7 +116,7 @@ refreshes the Gear stat panel.
 
 ## 6. Compatibility And Equipped Markers
 
-`GearShopMenuGearCanEquip` returns the bitwise intersection:
+`CheckGearStoreEligibility` returns the bitwise intersection:
 
 ```text
 item_equip_flags & gear_equip_mask[gear_id]
@@ -251,7 +251,7 @@ return value. No or Cross on `Change anyway?` preserves gold and equipment.
 
 ## 13. Confirmation Window Contract
 
-`GearShopMenuConfirmationWindowInitialize(stringIndex)` renders three
+`OpenGearStoreConfirmation(stringIndex)` renders three
 consecutive entries beginning at `stringIndex`. Manual choice defaults to No;
 Left selects Yes, Right selects No, Circle accepts, and Cross returns No. A
 second index other than `0xFF` causes a second three-row prompt.
@@ -326,7 +326,7 @@ All original IDs are restored after aggregate comparison.
 5. Ordinary and special Gear Weapons.
 
 Buy initialization recomputes all eleven character-linked Gears and snapshots
-`MenuDressingRoom+0xB0` as Attack and `+0xA4` as Defense. Candidate simulation
+`GearPreviewState+0xB0` as Attack and `+0xA4` as Defense. Candidate simulation
 recomputes the same fields, produces absolute deltas with increase/decrease
 colors, restores every equipment ID, and recomputes the original aggregates.
 
@@ -471,8 +471,8 @@ these exact consumers:
 
 | Mask bit | Written destination | Role |
 |---:|---:|---|
-| `0` | `SystemMenu+0x228` (`cameraPosition.vz`) | Camera Z |
-| `1` | `SystemMenu+0x224` (`cameraPosition.vy`) | Camera Y |
+| `0` | `ResidentMenuState+0x228` (`cameraPosition.vz`) | Camera Z |
+| `1` | `ResidentMenuState+0x224` (`cameraPosition.vy`) | Camera Y |
 | `2` | Helper model slot 1 `+0x56` | Model root coordinate |
 
 `GearShopMenuStartGearPreviewTransition` uses the prior Camera-Z target as its
@@ -515,8 +515,8 @@ subtraction. Normal transition updates use `0x10` substeps.
 `GearShopMenuUpdateTransitionEffect` advances each enabled destination,
 clamps it exactly to target, and clears its mask bit. Mask zero means complete.
 `GearShopMenuUpdateTransforms` then builds the camera rotation/translation
-matrix from `SystemMenu+0x218/+0x220` and the model transform matrix from
-`SystemMenu+0x1D8/+0x1E0`.
+matrix from `ResidentMenuState+0x218/+0x220` and the model transform matrix from
+`ResidentMenuState+0x1D8/+0x1E0`.
 
 `GearShopMenuInitializePreviewTransition` reverses from the current targets to:
 
@@ -558,23 +558,23 @@ dead code in the retail build rather than a live source of randomness. See
 [`rng/01` §2.4](../rng/01-generators-and-determinism.md#24-consumers-across-modules).
 
 ```text
-801C511C GearShopMenuGetRandomRangeValue | 801C51B8 GearShopMenuSetFt4Rect | 801C5228 GearShopMenuIsCharacterFlagSet | 801C5244 GearShopMenuGetCharacterBitMask | 801C5260 GearShopMenuGetGearEquipFlags | 801C527C GearShopMenuGearCanEquip | 801C5298 GearShopMenuParseNumberToString | 801C5344 GearShopMenuManageResourceState
-801C53A8 GearShopMenuManageCoreState | 801C540C GearShopSelectionMenuManager | 801C5470 GearShopMenuManageTextBatchState | 801C54D4 GearShopMenuDressingRoomManager | 801C5538 GearShopMenuManageOverlayPacketState | 801C559C GearShopMenuManageExtendedDisplayState | 801C5600 GearShopMenuShopManager | 801C5664 GearShopMenuManagePreviewState
-801C56C8 GearShopMenuLoadResources | 801C5B08 GearShopMenuFilterPartyMembers | 801C5C98 GearShopMenuResetRenderContext | 801C5CA8 GearShopMenuInitializeStringFt4Pair | 801C5EE8 GearShopMenuInitializeMenuStringArray | 801C6098 GearShopMenuUploadSmallVramImage | 801C6114 GearShopMenuInitializeTextResources | 801C6170 GearShopMenuInitializeWindowBorders
-801C6278 GearShopMenuMovePointerCursor | 801C665C GearShopMenuClearManagerFlags | 801C668C GearShopMenuSetPolyGradientColor | 801C6708 GearShopMenuInitializeBackgrounds | 801C6A54 GearShopMenuShopDataManager | 801C6E74 GearShopMenuInitializeShopData | 801C7604 GearShopMenuSetVertices | 801C765C GearShopMenuSetWindowBorderPrimitive
-801C76A4 GearShopMenuUpdateScrollBarHandle | 801C782C GearShopMenuFreeScrollBarHandle | 801C7870 GearShopMenuInitializeArrowCursor | 801C78EC GearShopMenuUpdateArrowCursor | 801C7A88 GearShopMenuFreeArrowCursor | 801C7AE4 GearShopMenuInitializeWindowGraphics | 801C7E00 GearShopMenuInitializeScrollBar | 801C7F64 GearShopMenuInitializeWindowBorderCorners
-801C81AC GearShopMenuSetWindowBorderTop | 801C84F0 GearShopMenuSetWindowBorderBottom | 801C883C GearShopMenuSetWindowBorderLeft | 801C8B84 GearShopMenuSetWindowBorderRight | 801C8ED0 GearShopMenuSetWindow | 801C9054 GearShopMenuFreeWindow | 801C90E0 GearShopMenuInitializeWindow | 801C9264 GearShopMenuUpdateWindows
-801C93B0 GearShopMenuRenderPolygons | 801C94CC GearShopMenuRenderString | 801C9550 GearShopMenuRenderScrollBarHandle | 801C959C GearShopMenuRenderSelectionPointer | 801C962C GearShopMenuRenderShoulderButtonUi | 801C9690 GearShopMenuRenderTopWindowBorder | 801C9864 GearShopMenuRenderBottomWindowBorder | 801C9A38 GearShopMenuRenderLeftWindowBorder
-801C9C0C GearShopMenuRenderRightWindowBorder | 801C9DE0 GearShopMenuRenderWindowBackground | 801C9F1C GearShopMenuRenderWindowBorderCorners | 801CA068 GearShopMenuRenderScrollBar | 801CA28C GearShopMenuRenderWindows | 801CA404 GearShopMenuRenderPointerCursors | 801CA754 GearShopMenuRenderAuxGroup4 | 801CA7E4 GearShopMenuRenderAuxGroup8
-801CA874 GearShopMenuRenderAuxQuads | 801CA9EC GearShopMenuRenderAuxGroup6 | 801CAA7C GearShopMenuRenderConfirmationText | 801CABD8 GearShopMenuRenderBackgroundDim | 801CABE0 GearShopMenuRenderAuxiliaryGroups | 801CAC20 GearShopMenuRenderSelectionMenu | 801CB2E8 GearShopMenuRenderAuxTextGroups | 801CB35C GearShopMenuRenderArrowCursors
-801CB3D0 GearShopMenuRender | 801CB498 GearShopMenuPlaySoundEffect | 801CB4E4 GearShopMenuPollInput | 801CB690 GearShopMenuInitializeTransitionInterpolation | 801CBA2C GearShopMenuUpdateTransitionEffect | 801CBDA0 GearShopMenuUpdateTransforms | 801CBE60 GearShopMenuRenderDebugValues | 801CC1C4 GearShopMenuUpdateAndRender
-801CC31C GearShopMenuInitializePointerCursors | 801CC4DC GearShopMenuFreePointerCursors | 801CC520 GearShopMenuNoOpCallback0 | 801CC528 GearShopMenuNoOpCallback1 | 801CC530 GearShopMenuConfirmationWindowInitialize | 801CC9A0 GearShopMenuConfirmationWindowFree | 801CCA40 GearShopMenuConfirmationWindowGetChoice | 801CCC18 GearShopMenuConfirmationWindow
-801CCD20 GearShopMenuFree | 801CCE90 GearShopMenuInitializeAuxTextGroup | 801CCEBC GearShopMenuClearByteFlags | 801CCEE8 GearShopMenuPositionSelectionString | 801CD310 GearShopMenuInitializeShopModeSelectionMenu | 801CD564 GearShopMenuInitializeSubmenu | 801CD838 GearShopMenuUpdateShopModeSelectionMenu | 801CDA0C GearShopMenuUpdateSubmenuTextures
-801CDC68 GearShopMenuShopModeMenuHandleSelectedOption | 801CDD74 GearShopMenuShopModeMain | 801CE024 GearShopMenuMain | 801CE1D0 GearShopMenuShoulderButtonUiInitialize | 801CE2E8 GearShopMenuShoulderButtonUiFree | 801CE32C GearShopMenuRenderShopScreen | 801CE7E0 GearShopMenuRenderHelperModels | 801CE82C GearShopMenuRenderGearPreviewUi
+801C511C GearShopMenuGetRandomRangeValue | 801C51B8 GearShopMenuSetFt4Rect | 801C5228 TestGearStoreCharacterFlag | 801C5244 GetGearStoreCharacterMask | 801C5260 GearShopMenuGetGearEquipFlags | 801C527C CheckGearStoreEligibility | 801C5298 FormatGearStoreNumber | 801C5344 GearShopMenuManageResourceState
+801C53A8 GearShopMenuManageCoreState | 801C540C GearShopSelectionMenuManager | 801C5470 GearShopMenuManageTextBatchState | 801C54D4 UpdateGearStorePreview | 801C5538 GearShopMenuManageOverlayPacketState | 801C559C GearShopMenuManageExtendedDisplayState | 801C5600 GearShopMenuShopManager | 801C5664 GearShopMenuManagePreviewState
+801C56C8 LoadGearStoreResources | 801C5B08 FilterGearStoreRoster | 801C5C98 ResetGearStoreRenderState | 801C5CA8 GearShopMenuInitializeStringFt4Pair | 801C5EE8 GearShopMenuInitializeMenuStringArray | 801C6098 GearShopMenuUploadSmallVramImage | 801C6114 GearShopMenuInitializeTextResources | 801C6170 BuildGearStoreBorderPackets
+801C6278 GearShopMenuMovePointerCursor | 801C665C GearShopMenuClearManagerFlags | 801C668C SetGearStoreGradient | 801C6708 LoadGearStoreBackgrounds | 801C6A54 UpdateGearStoreInventory | 801C6E74 GearShopMenuInitializeShopData | 801C7604 SetGearStoreVertices | 801C765C SetGearStoreBorderPrimitive
+801C76A4 UpdateGearStoreScrollHandle | 801C782C ReleaseGearStoreScrollHandle | 801C7870 CreateGearStoreArrow | 801C78EC UpdateGearStoreArrow | 801C7A88 ReleaseGearStoreArrow | 801C7AE4 BuildGearStoreWindowGraphics | 801C7E00 CreateGearStoreScrollBar | 801C7F64 BuildGearStoreCornerPackets
+801C81AC SetGearStoreTopBorder | 801C84F0 SetGearStoreBottomBorder | 801C883C SetGearStoreLeftBorder | 801C8B84 SetGearStoreRightBorder | 801C8ED0 SetGearStoreWindow | 801C9054 ReleaseGearStoreWindow | 801C90E0 CreateGearStoreWindow | 801C9264 UpdateGearStoreWindows
+801C93B0 RenderGearStorePolygons | 801C94CC RenderGearStoreText | 801C9550 RenderGearStoreScrollHandle | 801C959C GearShopMenuRenderSelectionPointer | 801C962C RenderGearStoreShoulderHints | 801C9690 RenderGearStoreTopBorder | 801C9864 RenderGearStoreBottomBorder | 801C9A38 RenderGearStoreLeftBorder
+801C9C0C RenderGearStoreRightBorder | 801C9DE0 RenderGearStoreWindowFill | 801C9F1C RenderGearStoreCorners | 801CA068 RenderGearStoreScrollBar | 801CA28C RenderGearStoreWindows | 801CA404 RenderGearStorePointers | 801CA754 GearShopMenuRenderAuxGroup4 | 801CA7E4 GearShopMenuRenderAuxGroup8
+801CA874 GearShopMenuRenderAuxQuads | 801CA9EC GearShopMenuRenderAuxGroup6 | 801CAA7C GearShopMenuRenderConfirmationText | 801CABD8 RenderGearStoreDimmer | 801CABE0 GearShopMenuRenderAuxiliaryGroups | 801CAC20 RenderGearStoreSelection | 801CB2E8 GearShopMenuRenderAuxTextGroups | 801CB35C RenderGearStoreArrows
+801CB3D0 RenderGearStoreMenu | 801CB498 PlayGearStoreSound | 801CB4E4 ReadGearStoreInput | 801CB690 GearShopMenuInitializeTransitionInterpolation | 801CBA2C GearShopMenuUpdateTransitionEffect | 801CBDA0 GearShopMenuUpdateTransforms | 801CBE60 GearShopMenuRenderDebugValues | 801CC1C4 UpdateRenderGearStore
+801CC31C CreateGearStorePointers | 801CC4DC ReleaseGearStorePointers | 801CC520 GearShopMenuNoOpCallback0 | 801CC528 GearShopMenuNoOpCallback1 | 801CC530 OpenGearStoreConfirmation | 801CC9A0 ReleaseGearStoreConfirmation | 801CCA40 ReadGearStoreConfirmationChoice | 801CCC18 GearShopMenuConfirmationWindow
+801CCD20 ReleaseGearStoreState | 801CCE90 GearShopMenuInitializeAuxTextGroup | 801CCEBC GearShopMenuClearByteFlags | 801CCEE8 GearShopMenuPositionSelectionString | 801CD310 CreateGearStoreModeMenu | 801CD564 CreateGearStoreSubmenu | 801CD838 GearShopMenuUpdateShopModeSelectionMenu | 801CDA0C UpdateGearStoreSubmenuTextures
+801CDC68 HandleGearStoreModeChoice | 801CDD74 RunGearStoreMode | 801CE024 RunGearStoreMenu | 801CE1D0 CreateGearStoreShoulderHints | 801CE2E8 ReleaseGearStoreShoulderHints | 801CE32C GearShopMenuRenderShopScreen | 801CE7E0 GearShopMenuRenderHelperModels | 801CE82C GearShopMenuRenderGearPreviewUi
 801CEA68 GearShopMenuUpdateDualPreviewEffects | 801CEEA8 GearShopMenuUpdatePreviewEffect | 801CF184 GearShopMenuUpdatePreviewAnimation | 801CF33C GearShopMenuRenderPreviewEffects | 801CF38C GearShopMenuUploadGearName | 801CF448 GearShopMenuUpdateGearStatsGraphics | 801CF9BC GearShopMenuLoadGearModelResources | 801CFAB8 GearShopMenuInitializeGearPreviewModel
-801CFC60 GearShopMenuStartGearPreviewTransition | 801CFC68 GearShopMenuStartGearPreviewTransitionWithLoadedX | 801CFF18 GearShopMenuInitializePreviewTransition | 801D0054 GearShopMenuSetDigitColor | 801D0220 GearShopMenuUpdateCharacterPortraits | 801D0348 GearShopMenuSetAvailableCharacterCount | 801D0398 GearShopMenuChangeCurrentGear | 801D04E8 GearShopMenuUpdateBuyExplanationGraphics
+801CFC60 GearShopMenuStartGearPreviewTransition | 801CFC68 GearShopMenuStartGearPreviewTransitionWithLoadedX | 801CFF18 GearShopMenuInitializePreviewTransition | 801D0054 GearShopMenuSetDigitColor | 801D0220 UpdateGearStorePortraits | 801D0348 SetGearStoreRosterCount | 801D0398 SelectGearStoreItem | 801D04E8 GearShopMenuUpdateBuyExplanationGraphics
 801D05EC GearShopMenuUpdateSellExplanationGraphics | 801D06D8 GearShopMenuUpdateTransactionGraphics | 801D0C20 GearShopMenuSetFinalPriceGraphics | 801D0D4C GearShopMenuUpdateCurrentGoldGraphics | 801D0EC8 GearShopMenuClearSellScreenState | 801D1078 GearShopMenuGetItemEquippedGearFlags | 801D1304 GearShopMenuUpdateSellItemPreview | 801D18F8 GearShopMenuUpdateSellItemListGraphics
-801D1F20 GearShopMenuHandleSoldItems | 801D2054 GearShopMenuSellMenu | 801D2784 GearShopMenuSellWeaponsMenu | 801D27C4 GearShopMenuSellPartsMenu | 801D2804 GearShopMenuSellModeMenuHandleSelectedOption | 801D2950 GearShopMenuUpdateEquippedPartGraphics | 801D2B74 GearShopMenuUpdateBuyItemListGraphics | 801D3558 GearShopMenuComputeEquipmentStatChanges
+801D1F20 GearShopMenuHandleSoldItems | 801D2054 RunGearStoreSellMenu | 801D2784 RunGearStoreWeaponSale | 801D27C4 RunGearStorePartsSale | 801D2804 HandleGearStoreSellMode | 801D2950 GearShopMenuUpdateEquippedPartGraphics | 801D2B74 GearShopMenuUpdateBuyItemListGraphics | 801D3558 GearShopMenuComputeEquipmentStatChanges
 801D3A3C GearShopMenuLookupByteByKey | 801D3A80 GearShopMenuUpdateItemQuantityGraphics | 801D3C78 GearShopMenuUpdateItemPreview | 801D44FC GearShopMenuHandleBoughtItems | 801D4888 GearShopMenuIsTuneUpUpgrade | 801D498C GearShopMenuBuyOrTuneUpMenu | 801D5398 GearShopMenuFuelTuneUpMenu | 801D573C GearShopMenuExitSubmenu
 801D57A8 GearShopMenuDispatchTuneUpOption | 801D5828 GearShopMenuSubmenuMain | 801D5D38 GearShopMenuInitializePreviewResources | 801D5EB8 GearShopMenuFreePreviewResources | 801D5F94 GearShopMenuComputeDisplayStats | 801D6150 GearShopMenuRecomputeGearStats | 801D61B8 GearShopMenuApplyFrameStats | 801D6250 GearShopMenuApplyArmorStats
 801D62A4 GearShopMenuApplyEngineStats | 801D6334 GearShopMenuApplyAccessoryStats | 801D6738 GearShopMenuApplyWeaponStats | 801D690C GearShopMenuComputeWeightPenalty

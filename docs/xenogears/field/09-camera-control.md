@@ -50,7 +50,7 @@ The logical camera pipeline is:
    derives the desired eye from yaw, dip, depth, and scale.
 5. `FieldCameraInterpolationUpdate` at `0x80072D74` advances target/eye
    interpolation, depth, and shake.
-6. `FieldMatrixLookAt` at `0x80073750` consumes the completed logical vectors.
+6. `ConstructFieldViewMatrix` at `0x80073750` consumes the completed logical vectors.
 
 Camera logic therefore sees positions after ordinary actor collision but before
 party followers are presented.

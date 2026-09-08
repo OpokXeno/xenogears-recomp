@@ -26,8 +26,8 @@ entity can do and supplies the shared bytecode executed while that map is active
 |---|---|
 | **Map** | One indexed Field scene and all resources loaded with it. |
 | **Entity** | A static indexed entry in the map. It has initial flags, transform, a visual resource ID, and a matching row of routine entry points. |
-| **Actor** | The live realization of an entity. It consists of a `FieldActor`, an `ActorData`, and optional model, sprite, shadow, animation, and collision allocations. |
-| **ScriptsFile** | The decompressed script section: variable type bitmap, entity routine rows, and shared bytecode. |
+| **Actor** | The live realization of an entity. It consists of an `ActorRuntimeSlot`, a `SceneActorRecord`, and optional model, sprite, shadow, animation, and collision allocations. |
+| **FieldScriptResource** | The decompressed script section: variable type bitmap, entity routine rows, and shared bytecode. |
 | **Routine row** | The 32 entry-point offsets associated with one entity index. |
 | **Routine** | Entry point 0 through 31 in an entity's row. A routine is only an offset; the file stores no routine length or isolated body. |
 | **Script slot** | An eight-byte runtime continuation record. Each actor owns eight slots. |
@@ -61,10 +61,10 @@ Loading creates the runtime side:
 entity N
    |
    v
-FieldActor N ----------------------+
+ActorRuntimeSlot N ----------------------+
    | model/sprite/shadow           |
    | transform and status          |
-   +----------------> ActorData N  |
+   +----------------> SceneActorRecord N  |
                          |         |
                          +-- position, collision, animation, dialogue
                          +-- four return PCs
@@ -74,9 +74,9 @@ FieldActor N ----------------------+
                                   +-- one invocation per active slot
 ```
 
-`FieldActor` is the compact scene/render record. `ActorData` is the larger state
+`ActorRuntimeSlot` is the compact scene/render record. `SceneActorRecord` is the larger state
 object used by movement, collision, dialogue, animation, and the VM. The pointer
-from `FieldActor+0x4C` joins them.
+from `ActorRuntimeSlot+0x4C` joins them.
 
 ## 4. Identities And Cardinalities
 
@@ -90,7 +90,7 @@ from `FieldActor+0x4C` joins them.
 | Script slot | `slot_id`, 0..7 | 8 per actor | Actor runtime |
 | Invocation | Active slot | Up to 8 represented per actor | Start until completion |
 
-The map header entity count and the `ScriptsFile` row count are separate values.
+The map header entity count and the `FieldScriptResource` row count are separate values.
 Normal retail maps keep them compatible. The loader does not collapse them into
 one field: allocation uses the entity count, while script scheduling uses the
 routine-row count.
@@ -167,11 +167,11 @@ The bytecode itself is never copied into the actor.
 1. The game selects a `field_id` and reads its map container.
 2. Field allocates and decompresses textures, walkmesh, models, sprites, CLUTs,
    scripts, encounters, dialogues, and triggers.
-3. It reads the entity initialization records and allocates the `FieldActor`
+3. It reads the entity initialization records and allocates the `ActorRuntimeSlot`
    array.
-4. It allocates one `ActorData` for each scriptable actor and initializes
+4. It allocates one `SceneActorRecord` for each scriptable actor and initializes
    movement, collision, animation, dialogue, and all eight script slots.
-5. It installs the `ScriptsFile`, row count, and shared bytecode base.
+5. It installs the `FieldScriptResource`, row count, and shared bytecode base.
 6. It runs map-entry routines and constructs actor graphics.
 7. Each scheduler pass selects one invocation per eligible actor and gives it a
    normal budget of eight opcode dispatches.
@@ -190,7 +190,7 @@ Field scripts and sprite animation scripts are not the same VM.
 
 | System | State | Purpose |
 |---|---|---|
-| Field VM | `ActorData` slots, working PC, return stack | Scene logic and game systems |
+| Field VM | `SceneActorRecord` slots, working PC, return stack | Scene logic and game systems |
 | Sprite animation VM | Sprite bytecode pointer, animation wait timer, 16-byte stack | Frame and animation playback |
 
 Field opcodes can start an animation or wait for it, but sprite animation bytes

@@ -15,8 +15,8 @@ are descriptive names assigned by this project.
 2. [`02-resource-and-script-formats.md`](02-resource-and-script-formats.md)
    documents the map container, compression, script section, variables, and
    operand encodings.
-3. [`03-runtime-objects.md`](03-runtime-objects.md) documents `FieldActor`,
-   `ActorData`, script slots, global VM state, and persistence.
+3. [`03-runtime-objects.md`](03-runtime-objects.md) documents `ActorRuntimeSlot`,
+   `SceneActorRecord`, script slots, global VM state, and persistence.
 4. [`04-scheduler-and-vm.md`](04-scheduler-and-vm.md) explains how routines are
    started, selected, dispatched, suspended, resumed, and completed.
 5. [`05-primary-opcodes.md`](05-primary-opcodes.md) catalogs all 256 primary

@@ -33,36 +33,36 @@ records for the six rows beginning at the viewport offset.
 
 ## 3. Complete Lifecycle
 
-`MemberChangeMenuMain` at `0x801CB0A8` owns the modal operation:
+`RunRosterMenu` at `0x801CB0A8` owns the modal operation:
 
 1. Allocate and clear the six top-level managers.
 2. Allocate and clear six bench and three active display records.
-3. Configure the `MoveImage` rectangle as `(0x2C0,0x100,0x140,0x0E0)`.
+3. Configure the `RelocateVramRectangle` rectangle as `(0x2C0,0x100,0x140,0x0E0)`.
 4. Initialize availability and copy valid persistent party IDs into working
    slots.
 5. Load menu resources, upload textures, initialize sound, text packets,
    background packets, and window-border metadata.
-6. Enable composition and enter `MemberChangeMenuMainLoop`.
+6. Enable composition and enter `RunRosterMenuLoop`.
 7. Build the bench list, create window 2, create the two selection cursors, and
    wait for the window to finish opening.
 8. Poll input, update the visible rows, and process two-stage exchanges.
 9. On exit, destroy the cursors and window, then directly copy the three working
    bytes to persistent party storage.
-10. `MemberChangeMenuFree` compacts the working party into persistent storage,
+10. `ReleaseRosterMenu` compacts the working party into persistent storage,
     drains both packet parities, and releases every owned allocation.
 
-The resident menu controller supplies the outer `SystemMenu` block. Member
+The resident menu controller supplies the outer `ResidentMenuState` block. Member
 Change frees that block last.
 
 ## 4. Managers And Ownership
 
 ### 4.1 Functional managers
 
-| Owner in `SystemMenu` | Size | Role |
+| Owner in `ResidentMenuState` | Size | Role |
 |---:|---:|---|
 | `+0x32C` | `0x5034` | Loaded resource and texture state |
 | `+0x33C` | `0x006C` | Render enables and working party IDs |
-| `+0x350` | `0x1194` | `MoveImage` rectangle |
+| `+0x350` | `0x1194` | `RelocateVramRectangle` rectangle |
 | `+0x348` | `0x015C` | Overlay GPU packets and dim layer |
 | `+0x1DF0[0..5]` | `6 * 0x0BEC` | Six visible bench-character states |
 | `+0x1E08[0..2]` | `3 * 0x0BEC` | Three active-party character states |
@@ -98,7 +98,7 @@ Initialization computes:
 available_mask = (game_state+0x1D30 & game_state+0x1D32) & 0x07FF
 ```
 
-`MemberChangeMenuIsCharacterFlagSet` tests this mask through a static 16-bit bit
+`TestRosterCharacterFlag` tests this mask through a static 16-bit bit
 table. The initializer fills sixteen cache bytes, but `0x07FF` admits only IDs
 `0..10`.
 
@@ -137,7 +137,7 @@ row             active: 0..2, bench: 0..5
 viewport_offset absolute bench index of visible row 0
 ```
 
-`MemberChangeMenuUpdateCharacters(viewport_offset)` rebuilds three active rows
+`UpdateRosterCharacters(viewport_offset)` rebuilds three active rows
 and up to six bench rows from:
 
 ```text
@@ -179,7 +179,7 @@ captured source.
 ### 8.2 Complete or release
 
 1. Up and Down select a destination on the opposite side.
-2. Circle calls `MemberChangeMenuSwapCharacters` with the captured and current
+2. Circle calls `SwapRosterCharacters` with the captured and current
    locations.
 3. An accepted exchange clears capture state, hides cursor 1, invalidates all
    displayed character rows, and plays sound 2.
@@ -219,7 +219,7 @@ It is always tested before a byte is used as a character index.
 
 ## 10. Input Command Map
 
-`MemberChangeMenuPollInput` waits for controller 1. If the controller disconnects,
+`ReadRosterInput` waits for controller 1. If the controller disconnects,
 the menu mutes all SPU channels, waits without advancing formation state, and
 restores audio after reconnection.
 
@@ -249,7 +249,7 @@ The menu writes persistent party storage twice:
 
 1. At modal-loop exit, after destroying cursors and window 2, it directly copies
    all three working bytes. Slot positions and `0xFF` holes are preserved.
-2. At the start of `MemberChangeMenuFree`, it copies non-`0xFF` working bytes
+2. At the start of `ReleaseRosterMenu`, it copies non-`0xFF` working bytes
    left-to-right and pads the remaining persistent slots with `0xFF`.
 
 Cross has contextual behavior:
@@ -264,7 +264,7 @@ modal session commits the current formation.
 
 Each update polls input, checks soft reset, switches packet parity, clears a
 16-entry reverse ordering table, advances windows, queues cursors and character
-packets, synchronizes GPU/VBlank work, installs `DRAWENV` and `DISPENV`, copies
+packets, synchronizes GPU/VBlank work, installs `GpuRasterEnvironment` and `GpuDisplayEnvironment`, copies
 the configured `320x224` VRAM rectangle to the parity-selected page, and submits
 the ordering table.
 
@@ -283,11 +283,11 @@ The exit sequence is:
 4. Compact-copy nonempty members and append `0xFF` padding.
 5. Render twice, disable top-level composition, render once, and continue until
    packet parity returns to zero.
-6. Free resource, flags/party, MoveImage, lifecycle-reservation, and GPU managers.
+6. Free resource, flags/party, RelocateVramRectangle, lifecycle-reservation, and GPU managers.
 7. Free retained resource products and the shared text raster.
 8. In debug sound mode, unregister and free the owned sound resource.
 9. Free six bench and three active display records.
-10. Free `SystemMenu`.
+10. Free `ResidentMenuState`.
 
 The flush frames ensure that neither parity bank still references released
 packet storage.
@@ -311,7 +311,7 @@ packet storage.
 
 | Address | Logical function |
 |---:|---|
-| `0x801C5018` | `MemberChangeMenuIsCharacterFlagSet` |
+| `0x801C5018` | `TestRosterCharacterFlag` |
 | `0x801C5034` | `MemberChangeMenuManageResourceState` |
 | `0x801C5098` | `MemberChangeMenuManageFlagsAndPartyState` |
 | `0x801C50FC` | `MemberChangeMenuManageMoveImageState` |
@@ -319,62 +319,62 @@ packet storage.
 | `0x801C51C4` | `MemberChangeMenuManageReservedSmallState` |
 | `0x801C5228` | `MemberChangeMenuManageOverlayGpuState` |
 | `0x801C528C` | `MemberChangeMenuManageCharacterDisplayStates` |
-| `0x801C5390` | `MemberChangeMenuLoadResources` |
-| `0x801C559C` | `MemberChangeMenuInitialize` |
-| `0x801C5714` | `MemberChangeMenuResetRenderContext` |
+| `0x801C5390` | `LoadRosterResources` |
+| `0x801C559C` | `InitializeRosterMenu` |
+| `0x801C5714` | `ResetRosterRenderState` |
 | `0x801C5724` | `MemberChangeMenuUploadSmallVramImage` |
 | `0x801C57A0` | `MemberChangeMenuInitializeStringFt4Pair` |
 | `0x801C59E0` | `MemberChangeMenuInitializeStringGroup` |
 | `0x801C5B90` | `MemberChangeMenuInitializeTextGraphics` |
-| `0x801C5BEC` | `MemberChangeMenuInitializeWindowBorders` |
+| `0x801C5BEC` | `BuildRosterBorderPackets` |
 | `0x801C5CF4` | `MemberChangeMenuClearManagerFlags` |
 | `0x801C5D24` | `MemberChangeMenuInitializeShadedQuad` |
-| `0x801C5DA0` | `MemberChangeMenuInitializeBackground` |
-| `0x801C60EC` | `MemberChangeMenuSetVertices` |
-| `0x801C6144` | `MemberChangeMenuSetWindowBorderPrimitive` |
-| `0x801C618C` | `MemberChangeMenuInitializeWindowGraphics` |
-| `0x801C64A8` | `MemberChangeMenuInitializeScrollBar` |
-| `0x801C660C` | `MemberChangeMenuInitializeWindowBorderCorners` |
-| `0x801C6854` | `MemberChangeMenuSetWindowBorderTop` |
-| `0x801C6B98` | `MemberChangeMenuSetWindowBorderBottom` |
-| `0x801C6EE4` | `MemberChangeMenuSetWindowBorderLeft` |
-| `0x801C722C` | `MemberChangeMenuSetWindowBorderRight` |
-| `0x801C7578` | `MemberChangeMenuSetWindow` |
-| `0x801C76FC` | `MemberChangeMenuFreeWindow` |
-| `0x801C7788` | `MemberChangeMenuInitializeWindow` |
-| `0x801C790C` | `MemberChangeMenuUpdateWindows` |
-| `0x801C7A58` | `MemberChangeMenuDrawCursors` |
+| `0x801C5DA0` | `LoadRosterBackground` |
+| `0x801C60EC` | `SetRosterVertices` |
+| `0x801C6144` | `SetRosterBorderPrimitive` |
+| `0x801C618C` | `BuildRosterWindowGraphics` |
+| `0x801C64A8` | `CreateRosterScrollBar` |
+| `0x801C660C` | `BuildRosterCornerPackets` |
+| `0x801C6854` | `SetRosterTopBorder` |
+| `0x801C6B98` | `SetRosterBottomBorder` |
+| `0x801C6EE4` | `SetRosterLeftBorder` |
+| `0x801C722C` | `SetRosterRightBorder` |
+| `0x801C7578` | `SetRosterWindow` |
+| `0x801C76FC` | `ReleaseRosterWindow` |
+| `0x801C7788` | `CreateRosterWindow` |
+| `0x801C790C` | `UpdateRosterWindows` |
+| `0x801C7A58` | `DrawRosterCursors` |
 | `0x801C7DA8` | `MemberChangeMenuRenderAuxGroup4` |
 | `0x801C7E38` | `MemberChangeMenuRenderAuxGroup8` |
 | `0x801C7EC8` | `MemberChangeMenuRenderAuxQuads` |
-| `0x801C8040` | `MemberChangeMenuRenderBackgroundDim` |
-| `0x801C80BC` | `MemberChangeMenuRenderCharacter` |
-| `0x801C83D0` | `MemberChangeMenuRenderCharacters` |
+| `0x801C8040` | `RenderRosterDimmer` |
+| `0x801C80BC` | `RenderRosterCharacter` |
+| `0x801C83D0` | `RenderRosterCharacters` |
 | `0x801C846C` | `MemberChangeMenuRenderAuxiliaryGroups` |
-| `0x801C849C` | `MemberChangeMenuRenderTopWindowBorder` |
-| `0x801C8670` | `MemberChangeMenuRenderBottomWindowBorder` |
-| `0x801C8844` | `MemberChangeMenuRenderLeftWindowBorder` |
-| `0x801C8A18` | `MemberChangeMenuRenderRightWindowBorder` |
-| `0x801C8BEC` | `MemberChangeMenuRenderWindowBackground` |
-| `0x801C8D28` | `MemberChangeMenuRenderWindowBorderCorners` |
-| `0x801C8E74` | `MemberChangeMenuRenderScrollBar` |
-| `0x801C9098` | `MemberChangeMenuRenderWindows` |
-| `0x801C9210` | `MemberChangeMenuRender` |
-| `0x801C9270` | `MemberChangeMenuPlaySoundEffect` |
-| `0x801C92AC` | `MemberChangeMenuPollInput` |
-| `0x801C94A0` | `MemberChangeMenuUpdateAndRender` |
+| `0x801C849C` | `RenderRosterTopBorder` |
+| `0x801C8670` | `RenderRosterBottomBorder` |
+| `0x801C8844` | `RenderRosterLeftBorder` |
+| `0x801C8A18` | `RenderRosterRightBorder` |
+| `0x801C8BEC` | `RenderRosterWindowFill` |
+| `0x801C8D28` | `RenderRosterCorners` |
+| `0x801C8E74` | `RenderRosterScrollBar` |
+| `0x801C9098` | `RenderRosterWindows` |
+| `0x801C9210` | `RenderRosterMenu` |
+| `0x801C9270` | `PlayRosterSound` |
+| `0x801C92AC` | `ReadRosterInput` |
+| `0x801C94A0` | `UpdateRenderRosterMenu` |
 | `0x801C95A0` | `MemberChangeMenuUploadCharacterNamePair` |
-| `0x801C969C` | `MemberChangeMenuParseNumberToString` |
-| `0x801C9748` | `MemberChangeMenuFree` |
+| `0x801C969C` | `FormatRosterNumber` |
+| `0x801C9748` | `ReleaseRosterMenu` |
 | `0x801C9908` | `MemberChangeMenuRebuildAvailableCharacters` |
 | `0x801C9A08` | `MemberChangeMenuBuildCharacterLabel` |
-| `0x801C9F80` | `MemberChangeMenuSetCharacterLevelStrings` |
-| `0x801CA24C` | `MemberChangeMenuSetCharacterHpAndMpStrings` |
-| `0x801CA5C0` | `MemberChangeMenuUpdateCharacter` |
-| `0x801CA690` | `MemberChangeMenuUpdateCharacters` |
-| `0x801CA810` | `MemberChangeMenuSetCursorToCharacter` |
-| `0x801CA944` | `MemberChangeMenuInitializeCursors` |
-| `0x801CAB04` | `MemberChangeMenuFreeCursors` |
-| `0x801CAB48` | `MemberChangeMenuSwapCharacters` |
-| `0x801CAD14` | `MemberChangeMenuMainLoop` |
-| `0x801CB0A8` | `MemberChangeMenuMain` |
+| `0x801C9F80` | `SetRosterLevelLabels` |
+| `0x801CA24C` | `SetRosterVitalLabels` |
+| `0x801CA5C0` | `UpdateRosterCharacter` |
+| `0x801CA690` | `UpdateRosterCharacters` |
+| `0x801CA810` | `SelectRosterCharacter` |
+| `0x801CA944` | `CreateRosterCursors` |
+| `0x801CAB04` | `ReleaseRosterCursors` |
+| `0x801CAB48` | `SwapRosterCharacters` |
+| `0x801CAD14` | `RunRosterMenuLoop` |
+| `0x801CB0A8` | `RunRosterMenu` |

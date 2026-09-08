@@ -50,7 +50,7 @@ from persistent party and vehicle state.
 `WorldMapOverlayEntryPoint` at `0x80070CFC` performs the complete invocation:
 
 ```text
-synchronize cache, GPU, display, and VSync callback
+synchronize cache, GPU, display, and WaitForVerticalRetrace callback
                         |
                         v
 initialize geometry and first-entry defaults
@@ -142,7 +142,7 @@ GPU synchronization and environment swap
 pause/controller/encounter/menu arbitration
               |
               v
-animated textures and DrawOTag
+animated textures and SubmitOrderingTable
 ```
 
 Task order is semantic. The leader updates before followers, party Gears update

@@ -39,7 +39,7 @@ The byte at the active PC directly selects one of these 256 entries.
 | `1E` | 1 | `0x8009E208` | `ResetActorElevationTracking` | clears the actor elevation offset, anchors elevation to the current Y position, and enables elevation updates. |
 | `1F` | 2 | `0x8009E1A0` | `SetActorLowFlagsFromPackedByte` | replaces low actor flags from a packed byte. |
 | `20` | 3 | `0x8009E10C` | `SetCurrentActorFlags` | decodes a script mask into current-actor flags. |
-| `21` | 3 | `0x8009E094` | `SetActorMovementSpeed` | writes the evaluated speed to ActorData+0x76, propagates it to the actor's bound field entity, and advances three bytecode bytes. |
+| `21` | 3 | `0x8009E094` | `SetActorMovementSpeed` | writes the evaluated speed to SceneActorRecord+0x76, propagates it to the actor's bound field entity, and advances three bytecode bytes. |
 | `22` | 1 | `0x8009DF10` | `ShowActor` | shows the current actor. |
 | `23` | 1 | `0x8009E040` | `HideActor` | hides the current actor. |
 | `24` | 2 | `0x8009DDEC` | `ShowActorById` | shows an actor by ID. |

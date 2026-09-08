@@ -104,7 +104,7 @@ coordinator.
 
 ## 7. Top-Level Field Entry
 
-`FieldMain` at `0x80077E88` performs these outer phases:
+`RunFieldCoordinator` at `0x80077E88` performs these outer phases:
 
 1. Initialize resident-to-overlay bindings and transition request globals.
 2. Bind the persistent game-state block.
@@ -116,8 +116,8 @@ coordinator.
 7. On a handoff request, persist state, tear down the required lifetime domain,
    and return an exit mode to the resident game-state dispatcher.
 
-The map loader creates one `0x5C` `FieldActor` per entity and allocates a
-`0x138` `ActorData` record plus a `0x70` auxiliary block for each scriptable
+The map loader creates one `0x5C` `ActorRuntimeSlot` per entity and allocates a
+`0x138` `SceneActorRecord` record plus a `0x70` auxiliary block for each scriptable
 entity. Actor allocation is implemented at `0x80080F44`.
 
 ## 8. Map Installation
@@ -307,22 +307,22 @@ described in [`01-concepts-and-lifecycle.md`](01-concepts-and-lifecycle.md#4-ide
 
 Each entity contributes:
 
-- Compact `FieldActor` status fields.
+- Compact `ActorRuntimeSlot` status fields.
 - A compact motion snapshot captured from the installed object.
-- The complete `0x138` `ActorData` record.
-- An optional 12-byte attachment snapshot when `ActorData+0x134` bit `0x80` is
+- The complete `0x138` `SceneActorRecord` record.
+- An optional 12-byte attachment snapshot when `SceneActorRecord+0x134` bit `0x80` is
   set.
 - An optional 16-byte scripted movement-boundary record when
-  `ActorData+0x12C` bit `0x1000` is set.
+  `SceneActorRecord+0x12C` bit `0x1000` is set.
 
 `FieldRestoreSerializedRuntimeState` consumes the same order, restores global
 arrays, copies actor records, recreates both optional allocations, and restores
 all 1024 variables. It preserves newly allocated pointer fields instead of
-copying stale addresses from the saved `ActorData` bytes.
+copying stale addresses from the saved `SceneActorRecord` bytes.
 
 ## 14. Reinstallation Parameters
 
-Actor installation at `0x80076AC0` records enough parameters in `ActorData` to
+Actor installation at `0x80076AC0` records enough parameters in `SceneActorRecord` to
 rebuild the installed object later:
 
 | Offset | Saved parameter |

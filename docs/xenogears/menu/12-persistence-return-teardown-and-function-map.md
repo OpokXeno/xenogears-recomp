@@ -47,10 +47,10 @@ caller reentry.
 | Status/Abilities child | Domain owned by the selected child | Child-specific | Child commit helper | Closing the parent does not undo child commits |
 | Gear get on/off | Character mount-state byte | Immediate on accepted toggle | Accepted branch in General Menu `OpenStatusMenu` `0x801E23CC` | Closing Gear preserves an accepted toggle |
 | Sound selection | Resident output mode and active mixer state | Staged selection | Confirm in General Menu `ProcessSoundMenu` `0x801D9808` | Cancel leaves the resident mode unchanged |
-| Member Change | Three current party IDs | Three-byte working party | Direct copy followed by compact commit in Member Change `MemberChangeMenuFree` `0x801C9748` | Cross with no captured source exits and commits; no entry rollback exists |
+| Member Change | Three current party IDs | Three-byte working party | Direct copy followed by compact commit in Member Change `ReleaseRosterMenu` `0x801C9748` | Cross with no captured source exits and commits; no entry rollback exists |
 | Enter Name | Three mapped 20-byte name records | Two local edit buffers | Acceptance in Enter Name `EnterNameMenuMainLoop` `0x801CB33C` | No cancel exit; resident records remain unchanged until acceptance |
-| Shop Buy | Gold, category IDs, and quantities | Staged quantities and resulting gold | Shop `ShopMenuHandleBoughtItems` `0x801CF2A0`; every duplicate matching ID receives the staged quantity, while no match uses the first empty slot; without either, gold commits and insertion is skipped | No resumes staging; discard confirmation drops it |
-| Shop Sell | Gold, inventory IDs/quantities, or the selected one of three equipped Accessory slots | Staged selected counts and resulting gold | Shop `ShopMenuHandleSoldItems` `0x801D0C18`; each staged count is subtracted from every duplicate matching persistent ID | No resumes staging; discard confirmation drops it |
+| Shop Buy | Gold, category IDs, and quantities | Staged quantities and resulting gold | Shop `CommitBoughtItems` `0x801CF2A0`; every duplicate matching ID receives the staged quantity, while no match uses the first empty slot; without either, gold commits and insertion is skipped | No resumes staging; discard confirmation drops it |
+| Shop Sell | Gold, inventory IDs/quantities, or the selected one of three equipped Accessory slots | Staged selected counts and resulting gold | Shop `CommitSoldItems` `0x801D0C18`; each staged count is subtracted from every duplicate matching persistent ID | No resumes staging; discard confirmation drops it |
 | Gear Shop Buy | Gold, Gear Part IDs/quantities, and Gear Weapon IDs/quantities | Staged quantities and resulting gold | Gear Shop `GearShopMenuHandleBoughtItems` `0x801D44FC`; every duplicate matching ID receives the staged quantity, while no match uses the first empty slot; without either, gold commits and insertion is skipped | No resumes staging; discard confirmation drops it |
 | Gear Shop Sell | Gold, Gear Part IDs/quantities, and Gear Weapon IDs/quantities | Staged selected counts and resulting gold | Gear Shop `GearShopMenuHandleSoldItems` `0x801D1F20`; each staged count is subtracted from every duplicate matching persistent ID | No resumes staging; discard confirmation drops it |
 | Armor/Frame/Engine Tune Up | Gold and one equipped component ID | One staged candidate with quantity one | Gear Shop `GearShopMenuHandleBoughtItems` `0x801D44FC` | No or Cross on the actionable prompt preserves gold and component ID |
@@ -59,7 +59,7 @@ caller reentry.
 | New save | One destination card block | Snapshot followed by temporary publication | Successful rename to the final card name | Failure after temporary-entry creation leaves temporary data until the next scan; the final name stays absent |
 | Overwrite | Existing destination card block | Destructive replacement | Successful rename of the new temporary entry | Failure after old-entry erasure leaves the old entry absent; no rollback copy exists |
 | Copy | Destination card blocks | Temporary copy followed by an unchecked rename attempt | Completion of the preceding copy I/O; physical publication still requires rename, but Copy ignores its return | Copy reports success and invalidates caches even when rename fails; on rename failure, the final name is absent and the next scan removes the temporary entry. Source data remains unchanged |
-| Delete | Selected card entry | Immediate unchecked erase request | The BIOS `erase` call is issued; Delete ignores its return | Cancellation before the call preserves the entry. After the call, Delete reports success and invalidates caches even if erasure failed; on erase failure, a later scan rediscovers the entry |
+| Delete | Selected card entry | Immediate unchecked erase request | The BIOS `DeleteMemoryCardFile` call is issued; Delete ignores its return | Cancellation before the call preserves the entry. After the call, Delete reports success and invalidates caches even if erasure failed; on erase failure, a later scan rediscovers the entry |
 | Format | Selected card contents | Immediate after confirmation | BIOS `format` | Completion is destructive and has no Menu rollback |
 | Load application | Gameplay payload domains in Section 4 plus play time, configuration, names, and ordered Gear restoration | Read, checksum, then non-transactional ordered restore | General Menu `ApplyLoadedSavePayload` `0x801CB28C` after I/O completion and checksum success | A bounded one-block I/O failure or checksum mismatch does not invoke restoration. A malformed multi-block count can overflow the retail buffer before validation and has no atomicity guarantee |
 | Mode-2 outcome | Resident result byte `0x800594D0` | Immediate coordination write | Exit selected by New Game, idle-attract, or accepted load | Values `0`, `1`, and `2` retain the contracts in Section 7 |
@@ -124,7 +124,7 @@ success boundary. Returning to a parent page or closing mode 0 does not revert
 them. General Menu captures no top-level cancellation snapshot.
 
 Member Change edits a working three-byte party. Exit first copies all three
-bytes, then `MemberChangeMenuFree` compacts non-`0xFF` IDs leftward and pads the
+bytes, then `ReleaseRosterMenu` compacts non-`0xFF` IDs leftward and pads the
 remaining slots. Cross without a captured source means finish and commit.
 
 ### 3.3 Explicit Snapshots
@@ -295,14 +295,14 @@ supported medium can satisfy, and the non-cancellable retry loop never returns.
 | New save | Rename fully written temporary data to the final card name | Failure after temporary-entry creation leaves temporary data until the next scan; final name is absent |
 | Overwrite | Erase old final entry, write temporary replacement, then rename | Old and new final entries may both be absent |
 | Copy | Physical publication requires rename, but Copy ignores the rename return and reports success from the preceding I/O result | If rename fails, the final name is absent and the temporary entry remains until the next scan removes it; source is unchanged |
-| Delete | Issue BIOS `erase` after two confirmations, ignore its return, report success, and invalidate caches | If erase fails, the entry remains intact and the next scan rediscovers it |
+| Delete | Issue BIOS `DeleteMemoryCardFile` after two confirmations, ignore its return, report success, and invalidate caches | If erase fails, the entry remains intact and the next scan rediscovers it |
 | Format | BIOS `format` after confirmation | Destructive after `format` |
 | Load | For a bounded one-block input, valid checksum followed by ordered payload restoration | Ordinary read/checksum failure does not invoke restoration; a malformed multi-block count can overflow the retail buffer before validation and is not atomic |
 
 Save retries cover create, reopen, header write, payload writes, and rename, but
 they do not create an overwrite backup. Copy retries its data-transfer I/O but
 neither checks nor retries the final rename. Delete neither checks nor retries
-`erase`. Consequently, Copy/Delete success presentation and cache invalidation
+`DeleteMemoryCardFile`. Consequently, Copy/Delete success presentation and cache invalidation
 do not prove physical publication or deletion. A later scan removes a stale
 Copy temporary entry, can rediscover an entry whose Delete erase failed, and
 cannot recreate an old entry erased before replacement failure.
@@ -318,7 +318,7 @@ Every load/save action exit converges on both cleanup levels:
 1. General Menu `FinalizeMemoryCardEventHandles` `0x801C8960` closes all four
    card events.
 2. General Menu `ShutdownLoadSaveMemoryCards` `0x801D9E3C` clears preview and
-   tile ownership, drains draw/VSync work, and restores all three CD callbacks
+   tile ownership, drains draw/WaitForVerticalRetrace work, and restores all three CD callbacks
    in a critical section.
 
 No card event, scan cache pointer, preview owner, or detached callback survives
@@ -353,7 +353,7 @@ Field `FieldLoadAndOpenMenu` at `0x800799D4` is an in-place modal coordinator.
 Before Menu it preserves required Field state and framebuffer content, prepares
 common Menu resources and the selected module, prepares Gear Helper for mode 5,
 rearranges required VRAM rectangles, suspends ordinary presentation, publishes
-mode inputs, and calls Resident `MenuMain`.
+mode inputs, and calls Resident `RunResidentMenu`.
 
 After the selected module has returned and released its owners, Field:
 
@@ -399,20 +399,20 @@ not a substitute for these World-specific steps.
    cursor, indexed-resource, secondary-resource, and text-raster owners.
 5. Release mode-specific card work and normal-mode cursor, gold, party-card, and
    remaining window owners.
-6. Free the root `SystemMenu` allocation last and return to Resident
-   `MenuExecute` `0x8001C1A8`.
+6. Free the root `ResidentMenuState` allocation last and return to Resident
+   `DispatchMenuMode` `0x8001C1A8`.
 
 ### 9.2 Member Change
 
-1. `MemberChangeMenuFreeCursors` `0x801CAB04` disables cursors, flushes one
+1. `ReleaseRosterCursors` `0x801CAB04` disables cursors, flushes one
    frame, and frees them.
-2. `MemberChangeMenuFreeWindow` `0x801C76FC` releases window 2 and animation.
+2. `ReleaseRosterWindow` `0x801C76FC` releases window 2 and animation.
 3. Copy three working party bytes directly.
-4. `MemberChangeMenuFree` `0x801C9748` compacts and commits the final party.
+4. `ReleaseRosterMenu` `0x801C9748` compacts and commits the final party.
 5. Render twice, disable composition, render once, and drain parity to zero.
 6. Free top-level states, retained resources, optional debug sound, six bench
    records, and three active records.
-7. Free `SystemMenu` last and return through `MemberChangeMenuMain`
+7. Free `ResidentMenuState` last and return through `RunRosterMenu`
    `0x801CB0A8`.
 
 ### 9.3 Enter Name
@@ -425,7 +425,7 @@ not a substitute for these World-specific steps.
 4. `EnterNameMenuFree` `0x801CA400` renders settling frames, disables top-level
    composition, and drains parity.
 5. Free top-level states, retained resources, and optional debug sound.
-6. Free `SystemMenu` last and return through `EnterNameMenuMain` `0x801CBDBC`.
+6. Free `ResidentMenuState` last and return through `EnterNameMenuMain` `0x801CBDBC`.
 
 ### 9.4 Shop
 
@@ -433,11 +433,11 @@ not a substitute for these World-specific steps.
    category screens through `ShopMenuFreeTransactionScreen` `0x801D1F10` and
    the owning Sell cleanup paths.
 2. Return to Buy/Sell/Exit until Exit or Cross is accepted.
-3. `ShopMenuFree` `0x801CBB08` performs two updates, disables drawing, and
+3. `ReleaseShopMenu` `0x801CBB08` performs two updates, disables drawing, and
    drains render parity to zero.
 4. Free manager blocks, definitions, descriptions, common resources, shop data,
    and optional debug sound.
-5. Free `SystemMenu` last and return through `ShopMenuMain` `0x801CCD28`.
+5. Free `ResidentMenuState` last and return through `RunShopMenu` `0x801CCD28`.
 
 ### 9.5 Gear Shop And Gear Helper
 
@@ -450,10 +450,10 @@ not a substitute for these World-specific steps.
    the 17-record trail allocation.
 5. Mark both data wrappers inactive and free them after helper shutdown.
 6. Disable and free shoulder-button UI at Gear Shop `0x801CE2E8`.
-7. `GearShopMenuFree` `0x801CCD20` drains Menu parity and frees managers,
+7. `ReleaseGearStoreState` `0x801CCD20` drains Menu parity and frees managers,
    definitions, text, common resources, and optional sound.
-8. `GearShopMenuFree` releases `SystemMenu` last and returns through
-   `GearShopMenuMain` `0x801CE024`.
+8. `ReleaseGearStoreState` releases `ResidentMenuState` last and returns through
+   `RunGearStoreMenu` `0x801CE024`.
 
 Changing the selected Gear follows the same inner order:
 `GearHelperFreeModelSlot` `0x801E8030` releases slot 1 before Gear Shop replaces
@@ -463,9 +463,9 @@ the wrapper contents used to reconstruct it.
 
 The following state is never serialized as a save field:
 
-- `SystemMenu` and every heap pointer in its owner fields.
+- `ResidentMenuState` and every heap pointer in its owner fields.
 - GPU packet addresses, DMA links, ordering-table heads, render parity, and
-  current `DRAWENV`/`DISPENV` pointers.
+  current `GpuRasterEnvironment`/`GpuDisplayEnvironment` pointers.
 - Window, cursor, prompt, text-raster, card-tile, preview, and scroll owners.
 - Card event handles and retained CD callback pointers.
 - Open card handles, temporary operation names, retry counters, and scan-cache
@@ -514,7 +514,7 @@ block. Heap addresses and volatile ownership remain process-local.
 13. Drawing and helper-render flags become unreachable before packet or model
     storage is freed.
 14. GPU-visible packet ownership drains before top-level managers are released.
-15. `SystemMenu` is the last primary-module root freed and is never serialized.
+15. `ResidentMenuState` is the last primary-module root freed and is never serialized.
 16. Field or World restoration starts only after the selected module returns.
 17. A waiting Field script resumes only after restoration and request clear.
 18. Mode-2 results `0`, `1`, and `2` mean no-load transition, idle-attract, and
@@ -529,7 +529,7 @@ block. Heap addresses and volatile ownership remain process-local.
 
 | Domain | Anchors | Owning chapter |
 |---|---|---|
-| Resident dispatch and root lifetime | Resident `ChangeGameState` `0x8001996C`; `MenuExecute` `0x8001C1A8`; `MenuMain` `0x8001C634` | [Chapter 2, Function Index](02-entry-modes-handoffs-and-coordination.md#11-function-index) |
+| Resident dispatch and root lifetime | Resident `CommitGameStateTransition` `0x8001996C`; `DispatchMenuMode` `0x8001C1A8`; `RunResidentMenu` `0x8001C634` | [Chapter 2, Function Index](02-entry-modes-handoffs-and-coordination.md#11-function-index) |
 | Field request and restoration | Field `FieldLoadAndOpenMenu` `0x800799D4`; `FieldScriptWaitForMenuClose` `0x800936E4`; transient restore/save `0x800A3474`/`0x800A3F4C` | [Chapter 2, Field Handoff](02-entry-modes-handoffs-and-coordination.md#6-field-handoff) |
 | World restoration | World save `0x80075460`; restore `0x8007565C`; prepare `0x800758C0`; rebuild `0x80075B58`; reconcile `0x80075D4C` | [Chapter 2, World Handoff](02-entry-modes-handoffs-and-coordination.md#8-world-handoff) |
 | General entry, return, and teardown | General Menu entry `0x801C62A8`; mode-2 loop `0x801C58EC`; mode-6 loop `0x801C57A4`; action cleanup `0x801E3088`; shutdown `0x801C5FE4` | [Chapter 6, Entry, Dispatch, Input, And Common State](06-general-menu-pages-and-gameplay.md#171-entry-dispatch-input-and-common-state) |

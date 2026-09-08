@@ -29,7 +29,7 @@ into ordering tables (OTs). Correct reproduction requires all of the following:
   and only the selected copy may be rewritten or linked.
 - Preserve the producer's depth sample and shift. `SZ3`, minimum depth, maximum
   depth, and averaged depth are not interchangeable.
-- Preserve head insertion. A later `AddPrim` to the same bucket is encountered
+- Preserve head insertion. A later `LinkGpuPrimitive` to the same bucket is encountered
   before the prior head during DMA traversal.
 - Preserve explicit packet chains. Several UI, horizon, fade, and transition
   paths depend on a command retaining the prior bucket head as an external tail.
@@ -43,7 +43,7 @@ Producer call order alone is therefore not painter order.
 
 ### 3.1 Render Contexts
 
-`FieldInitializeRenderContexts` at `0x80071FB0` creates paired 320 x 224 Field
+`PrepareFieldRenderContexts` at `0x80071FB0` creates paired 320 x 224 Field
 contexts, initializes the geometry engine, sets screen center `(160,112)`, and
 initially installs the second context's display and draw environments. Startup
 later selects the first logical context through the Field state initializer and
@@ -54,23 +54,23 @@ Each context is `0x80F4` bytes:
 
 | Offset | Size | Contents |
 |---:|---:|---|
-| `+0x0000` | `0x5C` | First `DRAWENV` |
-| `+0x005C` | `0x5C` | Second `DRAWENV` |
-| `+0x00B8` | `0x14` | `DISPENV` |
+| `+0x0000` | `0x5C` | First `GpuRasterEnvironment` |
+| `+0x005C` | `0x5C` | Second `GpuRasterEnvironment` |
+| `+0x00B8` | `0x14` | `GpuDisplayEnvironment` |
 | `+0x00CC` | `0x4000` | Primary OT, `0x1000` entries |
 | `+0x40CC` | `4` | Inter-OT chain word outside the primary OT |
 | `+0x40D0` | `0x4000` | Secondary OT, `0x1000` entries |
 | `+0x80D0` | `4` | Inter-OT chain word outside the secondary OT |
-| `+0x80D4` | `0x20` | Compact OT, eight entries; entry 7 at `+0x80F0` is the `DrawOTag` root |
+| `+0x80D4` | `0x20` | Compact OT, eight entries; entry 7 at `+0x80F0` is the `SubmitOrderingTable` root |
 
 The two records begin at `0x800B249C` and `0x800BA590`.
-`FieldClearAndSwapOTagInternal` at `0x80073F50` toggles the frame index and clears
-the compact OT. `FieldClearAndSwapOTag` at `0x80073FE0` also clears the primary
+`SwapFieldOrderingTableInternal` at `0x80073F50` toggles the frame index and clears
+the compact OT. `SwapFieldOrderingTable` at `0x80073FE0` also clears the primary
 OT and, when enabled, the secondary OT.
 
 Primary and secondary scene packets use depth-derived entries. Compact layers
 use fixed entries from `context+0x80D4` through `context+0x80F0`.
-`FieldAddPrimitives` at `0x80075458` attaches the secondary OT at the selected
+`AppendFieldFramePrimitives` at `0x80075458` attaches the secondary OT at the selected
 primary boundary and attaches that primary boundary below the compact root.
 Panorama mode always enables the secondary OT; otherwise
 `FieldShouldEnableGroundOrderingTable` at `0x8007469C` enables it when an active
@@ -78,8 +78,8 @@ object requests that domain.
 
 ### 3.2 Ordinary Frame Order
 
-`FieldPerFrameReset` at `0x80077DAC` calls `VSync(1)`, swaps and clears the active
-context, polls controllers, and synchronizes persistent Field state. `FieldMain`
+`FieldPerFrameReset` at `0x80077DAC` calls `WaitForVerticalRetrace(1)`, swaps and clears the active
+context, polls controllers, and synchronizes persistent Field state. `RunFieldCoordinator`
 at `0x80077E88` then calls `FieldPresentationPassA` at `0x8007554C`.
 
 The ordinary presentation calls execute in this order; non-presentation
@@ -87,37 +87,37 @@ maintenance between them is omitted:
 
 | Order | Address | Function or operation |
 |---:|---:|---|
-| 1 | resident | Record `VSync(1)` and `VSync(-1)` timing |
+| 1 | resident | Record `WaitForVerticalRetrace(1)` and `WaitForVerticalRetrace(-1)` timing |
 | 2 | `0x800739C0` | `FieldUpdateEntitiesAndCameraMatrices` |
-| 3 | `0x80071CB4` | `FieldFadeUpdateAndDraw` |
+| 3 | `0x80071CB4` | `AdvanceAndRenderFade` |
 | 4 | `0x80074108` | `FieldRenderCompass` |
-| 5 | `0x800748E8` | `FieldRenderModels` |
+| 5 | `0x800748E8` | `RenderFieldModelSet` |
 | 6 | `0x800752C8` | `FieldRenderCharactersAndShadows` |
-| 7 | `0x800A9688` | `FieldParticlesTickAndRender` |
-| 8 | `0x800A4DAC` | `FieldDistortionDraw` |
+| 7 | `0x800A9688` | `AdvanceParticlesAndDraw` |
+| 8 | `0x800A4DAC` | `RenderScreenDistortion` |
 | 9 | `0x800A84C0` | `FieldSciFiHudUpdateAndDraw` |
 | 10 | `0x80075484` | `FieldRenderPanoramicBackground` |
 | 11 | `0x8007520C` | `FieldRenderMechas` |
 | 12 | `0x800ABEC8` | `FieldFullscreenStripDraw` |
-| 13 | resident | `DrawSync(0)` |
+| 13 | resident | `WaitForGpuDrawing(0)` |
 | 14 | `0x800805F4` | `FieldDialogueWindowMaintenance` |
 | 15 | `0x8008004C` | `FieldTextBoxRender` |
-| 16 | resident | `VSync(0)` |
-| 17 | `0x80032CB8` | `HeapTickDelayedFree` |
-| 18 | resident | `ClearImage` or `MoveImage` for the selected framebuffer route |
-| 19 | resident | `PutDispEnv`, then `PutDrawEnv` |
-| 20 | resident | Optional additional `VSync` wait selected by Field timing state |
+| 16 | resident | `WaitForVerticalRetrace(0)` |
+| 17 | `0x80032CB8` | `DrainDelayedHeapReleases` |
+| 18 | resident | `EraseVramRectangle` or `RelocateVramRectangle` for the selected framebuffer route |
+| 19 | resident | `InstallDisplayEnvironment`, then `InstallDrawingEnvironment` |
+| 20 | resident | Optional additional `WaitForVerticalRetrace` wait selected by Field timing state |
 | 21 | `0x80025044` | `GfxFlushImageTransferQueue` |
 | 22 | `0x800920D8` | `FieldUpdateLineScrollEffects` |
-| 23 | resident | Optional `LoadImage` requested by the current transition state |
+| 23 | resident | Optional `UploadVramImage` requested by the current transition state |
 | 24 | `0x80075458` | Attach secondary and primary OT domains to the root |
-| 25 | `0x800758C8` | `DrawOTag(context+0x80F0)` |
-| 26 | resident | Poll `VSync(-1)` through the configured minimum interval |
+| 25 | `0x800758C8` | `SubmitOrderingTable(context+0x80F0)` |
+| 26 | resident | Poll `WaitForVerticalRetrace(-1)` through the configured minimum interval |
 
 `FieldPresentationPassB` at `0x80075910` is the reduced presentation path. It
 polls controllers, runs `0x800A2030`, prepares presentation, renders text boxes,
 synchronizes, moves the alternate framebuffer rectangle, installs environments,
-and calls `DrawOTag` at `0x800759CC`. It does not invoke ordinary scene
+and calls `SubmitOrderingTable` at `0x800759CC`. It does not invoke ordinary scene
 producers.
 
 ### 3.3 Camera And Projection
@@ -133,10 +133,10 @@ consume the camera result built earlier in the same pass:
 | `0x80072A38` | `FieldComputeTrackedCameraPose` | Corrects the target against camera collision and derives the eye |
 | `0x80072D74` | `FieldCameraInterpolationUpdate` | Advances camera interpolation, projection depth, and shake |
 | `0x80073230` | `FieldUpdateCameraTrackingMode` | Selects scripted or tracked motion and clamps eye height to terrain |
-| `0x80073750` | `FieldMatrixLookAt` | Builds the look-at matrix |
+| `0x80073750` | `ConstructFieldViewMatrix` | Builds the look-at matrix |
 | `0x800739C0` | `FieldUpdateEntitiesAndCameraMatrices` | Integrates entities, builds world/screen state, and updates actor facing and sprite angles |
 
-`FieldMatrixCreateWorldToScreen` at `0x800722F4` produces the matrix consumed by
+`BuildWorldToScreenMatrix` at `0x800722F4` produces the matrix consumed by
 model, sprite, shadow, particle, and panorama producers. `FieldRenderCompass`
 instead derives a private look-at matrix from shared camera state, temporarily
 changes projection center to `(266,166)` and distance to `0x80`, then restores
@@ -146,25 +146,25 @@ center `(160,112)` and the Field projection distance.
 
 | Producer | Primitive family and capacity | OT destination and order | Asset source |
 |---|---|---|---|
-| `FieldRenderModels` `0x800748E8` | Resident model grammar; object count is `DAT_800AFB0C`, and each model's packet capacity is its resource primitive count | Primary `+0x00CC` or secondary `+0x40D0`; resident model depth and per-object mode select the entry | Relocated Field model resources, their two packet buffers, TIM textures, CLUTs, light matrices, and object transforms |
+| `RenderFieldModelSet` `0x800748E8` | Resident model grammar; object count is `DAT_800AFB0C`, and each model's packet capacity is its resource primitive count | Primary `+0x00CC` or secondary `+0x40D0`; resident model depth and per-object mode select the entry | Relocated Field model resources, their two packet buffers, TIM textures, CLUTs, light matrices, and object transforms |
 | `RenderFieldCharacterSprites` `0x80075B44` | Resident sprite objects, normally textured quads; capacity is the active actor count `DAT_800ADBFC` times each sprite resource's part count | Primary OT; projected body depth is shifted by the resident sprite ordering rule | Actor sprite sheets uploaded by the Field sprite loader, per-part descriptors, animation state, and actor matrices |
-| `FieldRenderActorShadows` `0x800764B4` | One `POLY_FT4` packet for each eligible actor; double-buffered `0x28`-byte packets, bounded by `DAT_800ADBFC` | Primary OT; `RotAverage4` depth is shifted by the global ordering shift | Double-buffered semitransparent shadow quads with local X/Z half-extents of 24, producing a 48 x 48 footprint; initialized by `FieldInitializeActorShadowQuad` `0x8007AA44` |
+| `FieldRenderActorShadows` `0x800764B4` | One `FlatTexturedQuadrilateralPrimitive` packet for each eligible actor; double-buffered `0x28`-byte packets, bounded by `DAT_800ADBFC` | Primary OT; `TransformAverageQuadrilateral` depth is shifted by the global ordering shift | Double-buffered semitransparent shadow quads with local X/Z half-extents of 24, producing a 48 x 48 footprint; initialized by `FieldInitializeActorShadowQuad` `0x8007AA44` |
 | `FieldRenderMechas` `0x8007520C`, `GearCollectionRender_RE` `0x801E7D14` | Gear model packets; ten model slots are traversed, and the separate model-trail segment pool has 16 renderable records plus one overflow/fallback record (`17 * 0x7C = 0x83C` bytes) | Primary OT `+0x00CC`; Gear model depth rules select entries | Loaded Gear helper image, Gear model and animation resources, Field ambient RGB, current projection matrix, and two packet buffers |
-| `FieldParticlesTickAndRender` `0x800A9688`, `FieldParticleRender` `0x800A9B54` | One semitransparent `POLY_FT4` per accepted particle; 64 controller slots, eight banks per controller, and each bank allocates `particle_count * 0xC0` bytes | Primary OT; projected depth with bank mode adjustment `0`, `-0x10`, or `+0x10`, accepted only in entries `1..0xFFF` | Bank-selected UV template, RGB, scale, rotation, actor attachment matrix, `GetTPage(0,abr,0x3C0,0x140)`, and `GetClut(0x100,0xF7)` |
-| `FieldRenderCompass` `0x80074108` | Up to 25 double-buffered `POLY_FT4` packets plus the prepared compact-chain control packet | Compass quads prepend to compact entry 1; the final chain bridge prepends to compact entry 0 | Indexed compass position/UV tables; shadow quads use `GetTPage(0,2,0x280,0x1C0)` and `GetClut(0x100,0xF2)` |
-| `FieldFadeUpdateAndDraw` `0x80071CB4`, `FieldFadeDraw` `0x8007DA44` | Two logical fade contexts; each active context links one `TILE` and one `DR_TPAGE`, with both packet types double buffered | Fade context 0 uses compact entry 0; context 1 uses compact entry 1; the draw command is the final inserted head | Full 320 x 224 solid-color tile, per-context RGB deltas, duration, and `GetTPage(0,abr,0,0)` |
-| `FieldDistortionDraw` `0x800A4DAC` | 340 active `POLY_FT4`; each packet arena reserves 360. Sixteen allocated movement/state commands and one final draw-state command complete the chain | Every FT4 and state command prepends to primary entry 1 at `context+0x00D0` | Captured framebuffer pages, 17 x 20 logical mesh layout, phase accumulators, amplitudes, and tpages from `0x2C0` through `0x3C0` |
-| `FieldSciFiHudUpdateAndDraw` `0x800A84C0` | 109 double-buffered `POLY_FT4`, all active except the one status-gated slot | Compact entry 4 at `context+0x80E4`, head insertion in ascending packet index | Atlas metadata, fixed texture upload at tpage origin `(0x380,0)`, `GetClut(0,0xE8)`, camera angles, status bits, and three-frame animation state |
-| `FieldRenderPanoramicBackground` `0x80075484`, `RenderFieldPanoramaSpan` `0x800273C4` | Per frame: up to eight `POLY_FT4` texture strips, two `POLY_F4` clipping fills, and one `POLY_G4`; storage has two copies of every family | Selected secondary-OT boundary at `context+0x40CC+boundary*4`; packets prepend in the helper's strip and clipping order | Panorama resource created by `CreateFieldPanoramaPrimitiveSet` `0x8002709C`, camera eye/target, wrapping texture dimensions, CLUT, and script-set geometry/color fields |
-| `FieldFullscreenStripDraw` `0x800ABEC8` | Five `SPRT` plus five `DR_MODE`, all double buffered | Each pair prepends to compact entry 0; the `DR_MODE` for a strip becomes the pair head | Five 128 x 224 strips at tpage X values `0x280..0x380`, `GetClut(0,0xE8)` |
-| `FieldTextBoxRender` `0x8008004C` | Four slots. Each slot can link one background `TILE`, eight border `SPRT`, one continue-arrow `SPRT`, one cursor `SPRT`, one portrait `POLY_FT4`, resident text packets, and their draw-mode commands | Explicit chain at compact entry 0; slot order fields control which active box is linked first | Field font, border and arrow atlases, optional 64 x 64 portrait, box dimensions, opening state, and resident string state |
-| `SystemStringEntryRender` `0x80034888` | Two draw-mode packets, optional background `TILE`, and one or two `SPRT` slices per visible text cell | Prepends to the caller-supplied compact OT head | Resident font mapping, glyph cache, per-cell packet records, and `LoadImage` updates for newly generated glyphs |
-| `FieldScriptSpriteDraw` `0x800AAE4C` | One `SPRT` plus one `DR_MODE` per linked entry; 33 entries, all double buffered | Compact entry 0; each pair is an explicit chain | Script coordinates and RGB; `GetTPage(0,0,0x3C0,0x100/0x140)` and `GetClut(0x100,0xF7)` |
-| `FieldMapOverlayDraw` `0x800AB378` | One `SPRT`, three `POLY_FT4`, and four `DR_MODE`: eight packets | Compact entry 0; each visual packet is paired with its draw mode | Area-map artwork and masks, active actor position, map offsets, tpages `0x300..0x380`, CLUTs at `0xF6` and `0xF7` |
-| `FieldCreditsScrollAndDraw` `0x800AC99C` | Two `POLY_GT4`, 64 `SPRT`, and 64 `DR_MODE`: 130 packets | Compact entry 0; two backdrops precede sixteen rows of four sprite/draw-mode pairs | Credits stream, resident and generated font glyphs, `GetTPage(1,2,0x3C0,0x100)`, `GetClut(0,0x1FF)`, and a 16-row circular buffer |
-| `FieldZoomFadeEffectUpdate` `0x800A6408` | Five `POLY_FT4` plus five `DR_MODE`, double buffered | Compact entry 0; each draw mode is linked after its projected quad and becomes the pair head | Five 64-pixel-wide captured-screen strips at tpages `0x2C0..0x3C0`, scale matrix, and transition RGB |
-| `FieldMosaicFadeUpdateAndDraw` `0x800A6C40` | 20 x 14 = 280 `POLY_GT4`, double buffered, plus one compact-chain bridge | Compact entry 0; all tiles prepend in row-major order | Captured display divided into 16 x 16 cells, tpages selected in four-column groups, and four per-vertex radial intensity arrays |
-| `FieldDrawSolidColorFrame` `0x80079784` | One `TILE` plus one `DR_TPAGE`, double buffered | Primary entry 0, with traversal begun from primary entry 1 | Full-screen solid RGB value and a fixed draw-mode template |
+| `AdvanceParticlesAndDraw` `0x800A9688`, `RenderFieldParticles` `0x800A9B54` | One semitransparent `FlatTexturedQuadrilateralPrimitive` per accepted particle; 64 controller slots, eight banks per controller, and each bank allocates `particle_count * 0xC0` bytes | Primary OT; projected depth with bank mode adjustment `0`, `-0x10`, or `+0x10`, accepted only in entries `1..0xFFF` | Bank-selected UV template, RGB, scale, rotation, actor attachment matrix, `DecodeTexturePage(0,abr,0x3C0,0x140)`, and `DecodePaletteLocation(0x100,0xF7)` |
+| `FieldRenderCompass` `0x80074108` | Up to 25 double-buffered `FlatTexturedQuadrilateralPrimitive` packets plus the prepared compact-chain control packet | Compass quads prepend to compact entry 1; the final chain bridge prepends to compact entry 0 | Indexed compass position/UV tables; shadow quads use `DecodeTexturePage(0,2,0x280,0x1C0)` and `DecodePaletteLocation(0x100,0xF2)` |
+| `AdvanceAndRenderFade` `0x80071CB4`, `RenderFadeOverlay` `0x8007DA44` | Two logical fade contexts; each active context links one `FillTilePrimitive` and one `GpuTexturePagePacket`, with both packet types double buffered | Fade context 0 uses compact entry 0; context 1 uses compact entry 1; the draw command is the final inserted head | Full 320 x 224 solid-color tile, per-context RGB deltas, duration, and `DecodeTexturePage(0,abr,0,0)` |
+| `RenderScreenDistortion` `0x800A4DAC` | 340 active `FlatTexturedQuadrilateralPrimitive`; each packet arena reserves 360. Sixteen allocated movement/state commands and one final draw-state command complete the chain | Every FT4 and state command prepends to primary entry 1 at `context+0x00D0` | Captured framebuffer pages, 17 x 20 logical mesh layout, phase accumulators, amplitudes, and tpages from `0x2C0` through `0x3C0` |
+| `FieldSciFiHudUpdateAndDraw` `0x800A84C0` | 109 double-buffered `FlatTexturedQuadrilateralPrimitive`, all active except the one status-gated slot | Compact entry 4 at `context+0x80E4`, head insertion in ascending packet index | Atlas metadata, fixed texture upload at tpage origin `(0x380,0)`, `DecodePaletteLocation(0,0xE8)`, camera angles, status bits, and three-frame animation state |
+| `FieldRenderPanoramicBackground` `0x80075484`, `RenderFieldPanoramaSpan` `0x800273C4` | Per frame: up to eight `FlatTexturedQuadrilateralPrimitive` texture strips, two `FlatQuadrilateralPrimitive` clipping fills, and one `GouraudQuadrilateralPrimitive`; storage has two copies of every family | Selected secondary-OT boundary at `context+0x40CC+boundary*4`; packets prepend in the helper's strip and clipping order | Panorama resource created by `CreateFieldPanoramaPrimitiveSet` `0x8002709C`, camera eye/target, wrapping texture dimensions, CLUT, and script-set geometry/color fields |
+| `FieldFullscreenStripDraw` `0x800ABEC8` | Five `SpritePrimitive` plus five `GpuDrawModePacket`, all double buffered | Each pair prepends to compact entry 0; the `GpuDrawModePacket` for a strip becomes the pair head | Five 128 x 224 strips at tpage X values `0x280..0x380`, `DecodePaletteLocation(0,0xE8)` |
+| `FieldTextBoxRender` `0x8008004C` | Four slots. Each slot can link one background `FillTilePrimitive`, eight border `SpritePrimitive`, one continue-arrow `SpritePrimitive`, one cursor `SpritePrimitive`, one portrait `FlatTexturedQuadrilateralPrimitive`, resident text packets, and their draw-mode commands | Explicit chain at compact entry 0; slot order fields control which active box is linked first | Field font, border and arrow atlases, optional 64 x 64 portrait, box dimensions, opening state, and resident string state |
+| `SystemStringEntryRender` `0x80034888` | Two draw-mode packets, optional background `FillTilePrimitive`, and one or two `SpritePrimitive` slices per visible text cell | Prepends to the caller-supplied compact OT head | Resident font mapping, glyph cache, per-cell packet records, and `UploadVramImage` updates for newly generated glyphs |
+| `FieldScriptSpriteDraw` `0x800AAE4C` | One `SpritePrimitive` plus one `GpuDrawModePacket` per linked entry; 33 entries, all double buffered | Compact entry 0; each pair is an explicit chain | Script coordinates and RGB; `DecodeTexturePage(0,0,0x3C0,0x100/0x140)` and `DecodePaletteLocation(0x100,0xF7)` |
+| `FieldMapOverlayDraw` `0x800AB378` | One `SpritePrimitive`, three `FlatTexturedQuadrilateralPrimitive`, and four `GpuDrawModePacket`: eight packets | Compact entry 0; each visual packet is paired with its draw mode | Area-map artwork and masks, active actor position, map offsets, tpages `0x300..0x380`, CLUTs at `0xF6` and `0xF7` |
+| `FieldCreditsScrollAndDraw` `0x800AC99C` | Two `GouraudTexturedQuadrilateralPrimitive`, 64 `SpritePrimitive`, and 64 `GpuDrawModePacket`: 130 packets | Compact entry 0; two backdrops precede sixteen rows of four sprite/draw-mode pairs | Credits stream, resident and generated font glyphs, `DecodeTexturePage(1,2,0x3C0,0x100)`, `DecodePaletteLocation(0,0x1FF)`, and a 16-row circular buffer |
+| `AdvanceZoomFade` `0x800A6408` | Five `FlatTexturedQuadrilateralPrimitive` plus five `GpuDrawModePacket`, double buffered | Compact entry 0; each draw mode is linked after its projected quad and becomes the pair head | Five 64-pixel-wide captured-screen strips at tpages `0x2C0..0x3C0`, scale matrix, and transition RGB |
+| `FieldMosaicFadeUpdateAndDraw` `0x800A6C40` | 20 x 14 = 280 `GouraudTexturedQuadrilateralPrimitive`, double buffered, plus one compact-chain bridge | Compact entry 0; all tiles prepend in row-major order | Captured display divided into 16 x 16 cells, tpages selected in four-column groups, and four per-vertex radial intensity arrays |
+| `FieldDrawSolidColorFrame` `0x80079784` | One `FillTilePrimitive` plus one `GpuTexturePagePacket`, double buffered | Primary entry 0, with traversal begun from primary entry 1 | Full-screen solid RGB value and a fixed draw-mode template |
 
 `FieldScriptSpriteListInitialize` at `0x800AAC08` allocates `0x840` bytes for
 the 33 script-sprite pairs. `FieldMapOverlayPrimitivesInitialize` at `0x800AAF80`
@@ -176,21 +176,21 @@ next circular row and upload generated glyph cells.
 
 ### 3.5 Resident Model Packet Grammar
 
-`FieldRenderModels`, panoramic model users, World models, and Gear helpers rely
+`RenderFieldModelSet`, panoramic model users, World models, and Gear helpers rely
 on the resident model packet grammar. The retail dispatcher at `0x8004FE50`
 uses these record codes and packet sizes:
 
 | Record codes | Packet | Bytes |
 |---|---|---:|
-| `0`, `4` | `POLY_F3` | `0x14` |
-| `1`, `5` | `POLY_FT3` | `0x20` |
-| `2`, `6` | `POLY_G3` | `0x1C` |
-| `3`, `7` | `POLY_GT3` | `0x28` |
-| `8`, `12` | `POLY_F4` | `0x18` |
-| `9`, `13` | `POLY_FT4` | `0x28` |
-| `10`, `14` | `POLY_G4` | `0x24` |
-| `11`, `15` | `POLY_GT4` | `0x34` |
-| `16` | Environment-mapped `POLY_FT3` | `0x20` |
+| `0`, `4` | `FlatTrianglePrimitive` | `0x14` |
+| `1`, `5` | `FlatTexturedTrianglePrimitive` | `0x20` |
+| `2`, `6` | `GouraudTrianglePrimitive` | `0x1C` |
+| `3`, `7` | `GouraudTexturedTrianglePrimitive` | `0x28` |
+| `8`, `12` | `FlatQuadrilateralPrimitive` | `0x18` |
+| `9`, `13` | `FlatTexturedQuadrilateralPrimitive` | `0x28` |
+| `10`, `14` | `GouraudQuadrilateralPrimitive` | `0x24` |
+| `11`, `15` | `GouraudTexturedQuadrilateralPrimitive` | `0x34` |
+| `16` | Environment-mapped `FlatTexturedTrianglePrimitive` | `0x20` |
 
 The duplicate code families select different raster and depth callbacks while
 retaining the same packet grammar. Their complete state includes resource group
@@ -205,14 +205,14 @@ framebuffer capture and restoration:
 
 | Transition route | Rendering sequence |
 |---|---|
-| Fade or hold | Clear/swap, update the two fade contexts, present through Pass A or `FieldDisplay` `0x800A6924`, then restore the saved VRAM strip |
+| Fade or hold | Clear/swap, update the two fade contexts, present through Pass A or `PresentFieldFrame` `0x800A6924`, then restore the saved VRAM strip |
 | Zoom | Initialize five captured-screen quads at `0x800A663C`, emit five quad/draw-mode pairs each frame, and vary scale and RGB |
 | Radial mosaic | Allocate two 280-packet grids at `0x800A6E70`, darken vertices outside the expanding radius by six per update, present through Pass A, then free the grids |
 | Map-load routes | Tear down Field state, preserve the required display regions, load the next Field resources, run the selected fade/zoom sequence, and restore normal defaults |
 
 `FieldUpdateLineScrollEffects` at `0x800920D8` is not an OT producer. Up to 32
 registered descriptors call the resident line-scroll helper at `0x80027EAC`,
-which performs paired `MoveImage` operations for each configured scanline group.
+which performs paired `RelocateVramRectangle` operations for each configured scanline group.
 
 Field graphics companion tags `0x1200` and `0x1201` are also transfer-only
 paths. They carry independent image and palette relocation state but share the
@@ -220,7 +220,7 @@ same sector-chunk upload grammar: a descriptor sector followed by one pixel
 sector per chunk, with `width_words * chunk_height * 2 <= 2048`. Field uses both
 channels in absolute-coordinate mode; neither channel inserts an OT packet.
 The resident async and host callbacks are both authenticated at their descriptor,
-per-sector `LoadImage`, and final-chunk sites. Native resource publication stages
+per-sector `UploadVramImage`, and final-chunk sites. Native resource publication stages
 the sectors as one contiguous image or CLUT and exposes it only after the final
 chunk branch, so draws cannot acquire a partially streamed companion resource.
 
@@ -237,7 +237,7 @@ Field movie playback is separate from OT rendering:
 - `FieldMovieAdvanceDecoder` `0x800A732C` pumps decoding and frame-timed sound
   cues.
 - `MovieStrMdecOutputCallback` `0x801D30C4` uploads twenty 16-pixel vertical
-  strips with `LoadImage`; it emits no OT packet.
+  strips with `UploadVramImage`; it emits no OT packet.
 
 The library sequence is `MovieStrLibraryInitialize` `0x801D3538`,
 `MovieStrStartPlayback` `0x801D37CC`, `MovieStrAcquireNextFrame` `0x801D3B00`,
@@ -269,21 +269,21 @@ Each context is `0x78` bytes:
 
 | Offset | Contents |
 |---:|---|
-| `+0x00` | `DRAWENV` |
-| `+0x5C` | `DISPENV` |
+| `+0x00` | `GpuRasterEnvironment` |
+| `+0x5C` | `GpuDisplayEnvironment` |
 | `+0x70` | Pointer to a `0x400`-entry OT |
-| `+0x74` | Pointer to the `0x10000`-byte terrain `POLY_FT3` arena |
+| `+0x74` | Pointer to the `0x10000`-byte terrain `FlatTexturedTrianglePrimitive` arena |
 
 The ordinary frame path selects the other context, toggles packet-buffer index,
 clears `0x400` OT entries, resets resident sprite state, dispatches 64 task
 slots through `WorldMapDispatchTasks` at `0x80097800`, synchronizes the GPU,
 installs environments, updates both animated texture sets, and calls
-`DrawOTag(ot_base+0x0FFC)` at `0x800719B4`. Ordinary traversal therefore begins
+`SubmitOrderingTable(ot_base+0x0FFC)` at `0x800719B4`. Ordinary traversal therefore begins
 at bucket 1023 and proceeds toward bucket zero.
 
 `WorldMapFrameCoordinator` at `0x800712D0` owns controller and
 per-frame state around task dispatch. The two animated texture updates occur at
-`0x80074F2C` and `0x80075104` after task execution and before `DrawOTag`.
+`0x80074F2C` and `0x80075104` after task execution and before `SubmitOrderingTable`.
 
 ### 4.2 Producer Dispatch Order
 
@@ -341,19 +341,19 @@ shadows, sky, horizon, clouds, and effects.
 
 | Producer | Primitive family and capacity | OT destination and order | Asset source |
 |---|---|---|---|
-| `WorldMapRenderEffects` `0x80089C78` | One `POLY_FT4` per accepted effect particle; 256 render slots and ten geometry/UV table entries, with selector zero disabled and selectors `1..9` renderable | `bucket=SZ3>>4`; reject `SZ3>=0x0C00`; head insertion into the 1024-entry frame OT | Effect type geometry and UV table, per-particle RGB/tpage, `GetClut(0x100,0x1FF)` value `0x7FD0`, wrapped position, optional billboard rotation |
-| `WorldMapDrawSpriteActors` `0x80085CDC` | Resident `POLY_FT4` body and shadow parts; 64 actor slots, 63 descriptor slots, eight part transforms per actor | `bucket=actor_depth>>4`; reject `actor_depth>=0x0B00` | Resident sprite resources, part flags and UVs, body origin/scale matrix, and terrain-height shadow matrix |
-| `WorldMapRenderDecorations` `0x8008615C`, `WorldMapRenderCellDecorationPackets` `0x80099BFC` | Up to 512 `POLY_FT4`, stride `0x28`; source directory has 256 chunks and 1,756 positions | `bucket=SZ3>>4`; the helper projects vertices 0..2 with RTPT and vertex 3 with RTPS, but retains `SZ3` from the first projection | Prior-dispatch 5 x 5 active-tile array, relocated chunk directory, fixed UV rectangle `(0,0x40)..(0x1F,0x6F)`, `GetTPage(0,0,0x380,0x100)`, and 16 CLUTs from `(0xF0,0x1F0+index)` |
-| `WorldMapRenderEntityShadows` `0x800747DC` | Storage has 16 marker records and 16 double-buffered `POLY_FT4` packets; the modulo-16 pending counter safely represents at most 15 queued markers | `bucket=min(SZ0,SZ1,SZ2,SZ3)>>4`; reject minimum depth `>=0x1000` | Wrapped marker position, terrain height/normal, two shadow scale modes, material word `0x2E484040`, CLUT `0x7F92`, tpage `0x001E` |
+| `WorldMapRenderEffects` `0x80089C78` | One `FlatTexturedQuadrilateralPrimitive` per accepted effect particle; 256 render slots and ten geometry/UV table entries, with selector zero disabled and selectors `1..9` renderable | `bucket=SZ3>>4`; reject `SZ3>=0x0C00`; head insertion into the 1024-entry frame OT | Effect type geometry and UV table, per-particle RGB/tpage, `DecodePaletteLocation(0x100,0x1FF)` value `0x7FD0`, wrapped position, optional billboard rotation |
+| `WorldMapDrawSpriteActors` `0x80085CDC` | Resident `FlatTexturedQuadrilateralPrimitive` body and shadow parts; 64 actor slots, 63 descriptor slots, eight part transforms per actor | `bucket=actor_depth>>4`; reject `actor_depth>=0x0B00` | Resident sprite resources, part flags and UVs, body origin/scale matrix, and terrain-height shadow matrix |
+| `WorldMapRenderDecorations` `0x8008615C`, `WorldMapRenderCellDecorationPackets` `0x80099BFC` | Up to 512 `FlatTexturedQuadrilateralPrimitive`, stride `0x28`; source directory has 256 chunks and 1,756 positions | `bucket=SZ3>>4`; the helper projects vertices 0..2 with RTPT and vertex 3 with RTPS, but retains `SZ3` from the first projection | Prior-dispatch 5 x 5 active-tile array, relocated chunk directory, fixed UV rectangle `(0,0x40)..(0x1F,0x6F)`, `DecodeTexturePage(0,0,0x380,0x100)`, and 16 CLUTs from `(0xF0,0x1F0+index)` |
+| `WorldMapRenderEntityShadows` `0x800747DC` | Storage has 16 marker records and 16 double-buffered `FlatTexturedQuadrilateralPrimitive` packets; the modulo-16 pending counter safely represents at most 15 queued markers | `bucket=min(SZ0,SZ1,SZ2,SZ3)>>4`; reject minimum depth `>=0x1000` | Wrapped marker position, terrain height/normal, two shadow scale modes, material word `0x2E484040`, CLUT `0x7F92`, tpage `0x001E` |
 | `WorldMapRenderModels` `0x800848F4` | Resident 17-family model grammar; placement count comes from the loaded section, and packet capacity is each model resource's primitive count | Model ordering depth plus signed bias, shifted by the selected family/mode; coarse reject at `0x0D80` | 16-byte placement records expanded to `0x54`-byte records, relocated model/collision resources, two packet buffers, parent transforms, and ordering-bias table `0x8009AD2C` |
-| `WorldMapDrawGround` `0x8009932C`, `WorldMapEmitGroundCellTriangles` `0x8009980C` | `POLY_FT3`, stride `0x20`; paired emission permits a final count of `0x7FF` = 2,047 packets and uses at most `0xFFE0` arena bytes | `max_depth=max(SZ0,SZ1,SZ2)`; reject `>=0x0F00`; `bucket=min(max_depth>>4,0xEF)` | Current 5 x 5 tile and four-quadrant visibility arrays, streamed cell geometry, seven initialized texture-page entries, 64 CLUT entries, packed diagonal/UV flags, animated water heights |
-| `WorldMapRenderHorizon` `0x80073B04` | Two active `POLY_FT4` plus two `DR_TWIN`; storage has four FT4 templates for two frame buffers | Both quads share `bucket=second_quad_SZ3>>ordering_shift`; DMA order is active-window `DR_TWIN`, second FT4, first FT4, reset `DR_TWIN`, then the prior bucket head | `GetTPage(0,1,0x380,0x100)`, `GetClut(0x110,0x1FE)`, two horizon geometry records, texture windows `(0,0,0x80,0)` and `(0,0,0,0)` |
-| `WorldMapRenderSky` `0x800737EC` | Four active `POLY_G4`, each `0x24` bytes; four templates per frame buffer | Each accepted quad uses its own projected depth: `bucket=quad_SZ3>>ordering_shift` | Four untextured sky geometry records and the gradient colors initialized by `WorldMapInitializeSky` `0x800736DC` |
-| `WorldMapRenderClouds` `0x80086798` | 80 cloud states; near/middle/far emit 48/12/3 `POLY_FT4`; arena capacity 288 | Return before admitting another cloud when count exceeds 240; per packet `bucket=selected_depth>>4` using the retail branch-order comparison | Eight UV groups, wrapped cloud positions, camera wedge matrices, material `0x2E262626`, tpage `0x003F`, CLUT `0x7F93` |
-| `WorldMapRenderMinimap` `0x800740B8` | Four `POLY_G3`, up to 32 `TILE`, one `POLY_FT4`, and one `DR_TPAGE`: at most 38 insertions | Every command prepends to the current OT head rather than a depth entry; explicit final chaining retains the caller's prior head | Player-relative triangle templates, 32-bit marker mask and marker coordinates, panel `GetTPage(0,0,0x380,0x100)`, `GetClut(0x100,0x1FE)` |
-| `WorldMapFaderTaskUpdate` `0x800925A0` | One double-buffered `POLY_G4` plus one `DR_TPAGE` | Both prepend to bucket zero; the draw-mode command becomes the final head | Full 320 x 216 untextured gradient quad, fade level and step, and `GetTPage(0,abr,0x380,0x100)` |
-| `WorldMapFadeTransition` `0x80072DB4` | Three `POLY_FT4` at bucket 1, then one active double-buffered `POLY_G4` and one `DR_TPAGE` at bucket 0: five commands | Fixed buckets 1 and 0; each frame clears the OT and rebuilds this chain before `DrawOTag` | Three captured-screen texture pages at X `0x2C0`, `0x340`, `0x3C0`, full-screen fade quad, selected ABR, and alternating World contexts |
-| `WorldMapMode16ScanlineWarpTaskUpdate` `0x80081D80` | 192 raw-texture `POLY_FT4`, one per screen row, plus one double-buffered `DR_MOVE`; each FT4 arena is `0x1E00` bytes | Every FT4 prepends to bucket zero; `DR_MOVE` is prepended last and therefore executes first | Captured rectangle `(64,buffer*216,192,216)` moved to `(640,256)`, `GetTPage(2,0,0x280,0x100)`, and 192 randomized displacement amplitudes |
+| `WorldMapDrawGround` `0x8009932C`, `WorldMapEmitGroundCellTriangles` `0x8009980C` | `FlatTexturedTrianglePrimitive`, stride `0x20`; paired emission permits a final count of `0x7FF` = 2,047 packets and uses at most `0xFFE0` arena bytes | `max_depth=max(SZ0,SZ1,SZ2)`; reject `>=0x0F00`; `bucket=min(max_depth>>4,0xEF)` | Current 5 x 5 tile and four-quadrant visibility arrays, streamed cell geometry, seven initialized texture-page entries, 64 CLUT entries, packed diagonal/UV flags, animated water heights |
+| `WorldMapRenderHorizon` `0x80073B04` | Two active `FlatTexturedQuadrilateralPrimitive` plus two `GpuTextureWindowPacket`; storage has four FT4 templates for two frame buffers | Both quads share `bucket=second_quad_SZ3>>ordering_shift`; DMA order is active-window `GpuTextureWindowPacket`, second FT4, first FT4, reset `GpuTextureWindowPacket`, then the prior bucket head | `DecodeTexturePage(0,1,0x380,0x100)`, `DecodePaletteLocation(0x110,0x1FE)`, two horizon geometry records, texture windows `(0,0,0x80,0)` and `(0,0,0,0)` |
+| `WorldMapRenderSky` `0x800737EC` | Four active `GouraudQuadrilateralPrimitive`, each `0x24` bytes; four templates per frame buffer | Each accepted quad uses its own projected depth: `bucket=quad_SZ3>>ordering_shift` | Four untextured sky geometry records and the gradient colors initialized by `WorldMapInitializeSky` `0x800736DC` |
+| `WorldMapRenderClouds` `0x80086798` | 80 cloud states; near/middle/far emit 48/12/3 `FlatTexturedQuadrilateralPrimitive`; arena capacity 288 | Return before admitting another cloud when count exceeds 240; per packet `bucket=selected_depth>>4` using the retail branch-order comparison | Eight UV groups, wrapped cloud positions, camera wedge matrices, material `0x2E262626`, tpage `0x003F`, CLUT `0x7F93` |
+| `WorldMapRenderMinimap` `0x800740B8` | Four `GouraudTrianglePrimitive`, up to 32 `FillTilePrimitive`, one `FlatTexturedQuadrilateralPrimitive`, and one `GpuTexturePagePacket`: at most 38 insertions | Every command prepends to the current OT head rather than a depth entry; explicit final chaining retains the caller's prior head | Player-relative triangle templates, 32-bit marker mask and marker coordinates, panel `DecodeTexturePage(0,0,0x380,0x100)`, `DecodePaletteLocation(0x100,0x1FE)` |
+| `WorldMapFaderTaskUpdate` `0x800925A0` | One double-buffered `GouraudQuadrilateralPrimitive` plus one `GpuTexturePagePacket` | Both prepend to bucket zero; the draw-mode command becomes the final head | Full 320 x 216 untextured gradient quad, fade level and step, and `DecodeTexturePage(0,abr,0x380,0x100)` |
+| `WorldMapFadeTransition` `0x80072DB4` | Three `FlatTexturedQuadrilateralPrimitive` at bucket 1, then one active double-buffered `GouraudQuadrilateralPrimitive` and one `GpuTexturePagePacket` at bucket 0: five commands | Fixed buckets 1 and 0; each frame clears the OT and rebuilds this chain before `SubmitOrderingTable` | Three captured-screen texture pages at X `0x2C0`, `0x340`, `0x3C0`, full-screen fade quad, selected ABR, and alternating World contexts |
+| `WorldMapMode16ScanlineWarpTaskUpdate` `0x80081D80` | 192 raw-texture `FlatTexturedQuadrilateralPrimitive`, one per screen row, plus one double-buffered `GpuImageMovePacket`; each FT4 arena is `0x1E00` bytes | Every FT4 prepends to bucket zero; `GpuImageMovePacket` is prepended last and therefore executes first | Captured rectangle `(64,buffer*216,192,216)` moved to `(640,256)`, `DecodeTexturePage(2,0,0x280,0x100)`, and 192 randomized displacement amplitudes |
 
 The terrain arena allocation is `0x10000` bytes. The producer tests its count
 once before each two-triangle cell, so a call beginning at count `0x7FD` can
@@ -371,7 +371,7 @@ Packet template ownership is initialized by the following functions:
 - `WorldMapInitializeHorizon` `0x800739B8` prepares four FT4 templates and the
   active/reset texture-window commands.
 - `WorldMapInitializeMinimap` `0x80073E30` prepares two panel FT4 packets, eight
-  G3 packets, 64 TILE packets, and the draw-mode command.
+  G3 packets, 64 FillTilePrimitive packets, and the draw-mode command.
 - `WorldMapInitializeEffectMarkers` `0x80074594` creates the 16-entry entity-
   shadow marker array and two 16-packet output buffers. Because the pending
   count wraps modulo 16, at most 15 markers may be pending without becoming
@@ -429,10 +429,10 @@ them through the normal model depth and ordering-bias path.
 
 | Initializer | Users | Packet storage and material | OT ownership |
 |---:|---|---|---|
-| `0x8007A06C` | Goliath destruction, Aveh rescue, Mode 13, Babel finale | Double-buffered `POLY_FT4`, asset primitive count, semitransparent RGB `0x80`, `GetTPage(1,3,0x340,0x100)`, `GetClut(0x100,0x1FF)` | Ordinary model OT submission |
-| `0x8007EBBC` | Babel approach and follower effects | Double-buffered `POLY_FT4`, asset primitive count, RGB `(0x3C,0x3C,0xC0)`, `GetTPage(0,abr,0x300,0x100)`, `GetClut(0,0x1FF)` | Ordinary model OT submission |
-| `0x800816DC` | Mode 16 primary and dual fade layers | Double-buffered `POLY_FT4`, asset primitive count, template UV/color/CLUT retained, `GetTPage(0,abr,0x180,0)` | Ordinary model OT submission |
-| `0x80083108` | Mode 17 animated models | Double-buffered `POLY_FT3`, asset primitive count, semitransparent RGB zero, `GetTPage(0,abr,0x2C0,0x100)` | Ordinary model OT submission |
+| `0x8007A06C` | Goliath destruction, Aveh rescue, Mode 13, Babel finale | Double-buffered `FlatTexturedQuadrilateralPrimitive`, asset primitive count, semitransparent RGB `0x80`, `DecodeTexturePage(1,3,0x340,0x100)`, `DecodePaletteLocation(0x100,0x1FF)` | Ordinary model OT submission |
+| `0x8007EBBC` | Babel approach and follower effects | Double-buffered `FlatTexturedQuadrilateralPrimitive`, asset primitive count, RGB `(0x3C,0x3C,0xC0)`, `DecodeTexturePage(0,abr,0x300,0x100)`, `DecodePaletteLocation(0,0x1FF)` | Ordinary model OT submission |
+| `0x800816DC` | Mode 16 primary and dual fade layers | Double-buffered `FlatTexturedQuadrilateralPrimitive`, asset primitive count, template UV/color/CLUT retained, `DecodeTexturePage(0,abr,0x180,0)` | Ordinary model OT submission |
+| `0x80083108` | Mode 17 animated models | Double-buffered `FlatTexturedTrianglePrimitive`, asset primitive count, semitransparent RGB zero, `DecodeTexturePage(0,abr,0x2C0,0x100)` | Ordinary model OT submission |
 
 The initializers copy exactly `primitive_count * packet_stride` bytes to the
 second frame buffer. Updates at `0x8007A1B4`, `0x8007B394`, `0x8007B798`,
@@ -456,13 +456,13 @@ buffers and writes bucket zero without passing through the model producer.
 These paths retain the following boundaries:
 
 1. Field primary, secondary, and compact OTs are separate domains joined only
-   by `FieldAddPrimitives` before presentation.
+   by `AppendFieldFramePrimitives` before presentation.
 2. World terrain packet storage is not an OT, and its packet guard is smaller
    than the `0x10000`-byte allocation.
 3. World decorations consume prior-dispatch visibility, while terrain consumes
    current visibility.
-4. World sky is four `POLY_G4`; it is not textured.
-5. World horizon is two `POLY_FT4` bracketed by two `DR_TWIN` commands.
+4. World sky is four `GouraudQuadrilateralPrimitive`; it is not textured.
+5. World horizon is two `FlatTexturedQuadrilateralPrimitive` bracketed by two `GpuTextureWindowPacket` commands.
 6. World decoration ordering uses the `SZ3` retained after the first three
    vertices, not the fourth vertex's later depth.
 7. Minimap, fade, compass, text, and cinematic scanline paths retain their

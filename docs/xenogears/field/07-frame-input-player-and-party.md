@@ -13,7 +13,7 @@ actor has produced intent is documented in
 
 ## 2. Main Field Iteration
 
-`FieldMain` at `0x80077E88` owns the overlay's long-running loop:
+`RunFieldCoordinator` at `0x80077E88` owns the overlay's long-running loop:
 
 1. Check controller connectivity. A disconnected controller enters a modal
    polling loop without advancing actors.
@@ -29,7 +29,7 @@ actor has produced intent is documented in
 
 1. Wait for the frame boundary and record timing.
 2. Reset per-frame presentation storage.
-3. Poll Field controller state through `FieldPollControllers` at `0x80074700`.
+3. Poll Field controller state through `CollectFieldInput` at `0x80074700`.
 4. Record an optional diagnostics checkpoint.
 5. Synchronize persistent Field and party state through `0x800A31E8`.
 
@@ -55,7 +55,7 @@ and device-specific remapping occur before this boundary.
 | Newly pressed | `0x800C2694` | `0x800C38F8` |
 | Press/repeat event | `0x800C3900` | `0x800C3908` |
 
-`FieldPollControllers` clears all six values, drains every available snapshot,
+`CollectFieldInput` clears all six values, drains every available snapshot,
 and ORs each category. Controller 1 is then filtered as:
 
 ```text
@@ -144,8 +144,8 @@ afterward.
 |---:|---|
 | `0x800B226C` | Physically controlled actor index |
 | `0x800B233E` | Camera-tracked actor index |
-| `0x800B0078` | Temporary current `ActorData *` during VM dispatch |
-| `0x800B06B8` | Temporary current `FieldActor *` during VM dispatch |
+| `0x800B0078` | Temporary current `SceneActorRecord *` during VM dispatch |
+| `0x800B06B8` | Temporary current `ActorRuntimeSlot *` during VM dispatch |
 
 `FE B6` changes player control:
 
@@ -180,7 +180,7 @@ When eligible it:
    terrain-direction checks.
 5. Converts the directional nibble through one of two 16-entry direction tables.
 6. Subtracts camera yaw modulo `0x1000`.
-7. Stores the resulting physical target heading at `ActorData+0x104`.
+7. Stores the resulting physical target heading at `SceneActorRecord+0x104`.
 
 The handler creates intent only. The common movement and collision pipeline
 commits the position later in the same actor update.
@@ -190,11 +190,11 @@ commits the position later in the same actor update.
 `0x80082BB8` starts with locomotion animation `1` (walk). For the player-controlled
 actor, held logical input `0x0040` (Cross by default) changes the selection to
 animation `2` (run) while ordinary player movement is available. Script-forced
-locomotion flags at `ActorData+0x00` can override that selection.
+locomotion flags at `SceneActorRecord+0x00` can override that selection.
 
 `0x80081F80` then derives planar displacement. Ordinary field characters use the
 selected animation's root motion through Resident `0x80021FE0`, so walk versus
-run changes both the animation and effective movement speed. `ActorData+0x76`
+run changes both the animation and effective movement speed. `SceneActorRecord+0x76`
 is a shared movement scale/divisor, not the run-button state.
 
 ### Current-frame availability
@@ -219,8 +219,8 @@ trailing slots contain `0xFF`; a full three-member party has no terminator:
 | 2 | `0x80062598` |
 
 The valid persistent domain is character ID `0..10` or sentinel `0xFF`.
-`GamePartyCharactersInitializeSkins` at Resident `0x8001AD4C` and
-`GamePartyGearsInitializeSkins` at Resident `0x8001AEB8` only remove `0xFF`;
+`InitializeCharacterSkinSet` at Resident `0x8001AD4C` and
+`InitializeGearSkinSet` at Resident `0x8001AEB8` only remove `0xFF`;
 they retain every other byte without checking the eleven-character domain.
 
 Two actor maps are maintained:
@@ -254,15 +254,15 @@ Three staging slots hold the active party resources:
 | Temporary allocation | `0x800ADBC0` |
 | Load state | `0x800ADBC4`; `0xFF` is idle |
 
-`FieldPartyAllocateSkinDataBuffers` at `0x80077C88` allocates and pins three
+`AllocatePartySkinBuffers` at `0x80077C88` allocates and pins three
 fixed `0x14000`-byte output buffers. Full-party synchronization selects an
 archive member for each retained ID, reads compressed data into temporary
-storage, and `GamePartySyncStreamedData` at Resident `0x8001B3A8` calls resident
+storage, and `CommitStreamedPartyData` at Resident `0x8001B3A8` calls resident
 LZSS `0x80032EB4` with no destination-capacity argument.
 
 Character skin initialization maps `party_id` directly to logical archive
 member `party_id + 5`. Gear skin initialization first passes the unchecked ID
-to `GameCharacterGetGearID` at Resident `0x8001ACF0`, which indexes the
+to `LookupCharacterGearId` at Resident `0x8001ACF0`, which indexes the
 eleven-record character array directly; IDs `11..254` therefore read beyond the
 array. The archive size/read helpers reject nonpositive IDs and sizes but do not
 bound the logical member to the current skin group.

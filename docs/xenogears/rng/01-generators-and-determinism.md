@@ -8,7 +8,7 @@ to another's state:
 
 | Generator | Algorithm | State | Domain |
 |---|---|---|---|
-| Gameplay | PsyQ `rand`/`srand`, linear congruential | One 32-bit word at `0x8005A1FC` | Battle, Field, World Map, menus and shops |
+| Gameplay | PsyQ `NextPseudoRandomValue`/`SeedPseudoRandomGenerator`, linear congruential | One 32-bit word at `0x8005A1FC` | Battle, Field, World Map, menus and shops |
 | Movie | Combined dual linear-congruential, XOR-mixed | Two 32-bit words at `0x80076EF4`/`0x80076EF8` | Movie-overlay CD self-test and background decoration |
 | Sound modulator | Two-round xorshift | One 32-bit word at `0x800594E4` | SPU sequencer modulator waveforms 6 and 7 |
 
@@ -20,7 +20,7 @@ real-world entropy. Section 5 states the consequence precisely.
 
 ### 2.1 Core Algorithm And Seed
 
-Resident `rand` at `0x8003FA38` implements the textbook ANSI C reference
+Resident `NextPseudoRandomValue` at `0x8003FA38` implements the textbook ANSI C reference
 generator:
 
 ```text
@@ -30,8 +30,8 @@ return (seed >> 16) & 0x7FFF
 
 The 32-bit seed lives at `0x8005A1FC`. `0x41C64E6D` (1103515245 decimal) and
 `12345` are the classic constants shared by many C library implementations;
-this is not a Xenogears-specific algorithm. Resident `srand` at `0x8003FA68`
-sits immediately after `rand` in memory and simply overwrites the seed word
+this is not a Xenogears-specific algorithm. Resident `SeedPseudoRandomGenerator` at `0x8003FA68`
+sits immediately after `NextPseudoRandomValue` in memory and simply overwrites the seed word
 with its argument.
 
 `0x8005A1FC` falls outside the executable's loaded text/data range
@@ -66,18 +66,18 @@ The full-span case skips the modulo/offset arithmetic entirely once
 ### 2.3 Sixteen-Bit Range Wrappers
 
 Three further functions reproduce the same shape at 16 bits, each calling
-`rand` directly rather than through `RandomU8RangeInclusive`:
+`NextPseudoRandomValue` directly rather than through `RandomU8RangeInclusive`:
 
 - `BattleRandomU16InRange` (`0x80089B50`, battle-overlay)
 - `GearShopMenuGetRandomRangeValue` (`0x801C511C`, gear-shop-menu-overlay,
   byte-identical compiled size to the battle-overlay copy)
-- `FieldParticlesRandRange` (`0x800A987C`, field-overlay, a shorter
+- `RandomizeParticleRange` (`0x800A987C`, field-overlay, a shorter
   direct-modulo form without the sentinel handling)
 
-All three, and `RandomU8RangeInclusive`, resolve to the one shared `rand` and
+All three, and `RandomU8RangeInclusive`, resolve to the one shared `NextPseudoRandomValue` and
 its one shared seed word. Overlays cannot call each other directly, so each
 overlay that needs range-random values carries its own compiled copy of the
-wrapper, but every copy calls back into the same resident `rand`. There is
+wrapper, but every copy calls back into the same resident `NextPseudoRandomValue`. There is
 exactly one gameplay random stream, not one per overlay.
 
 ### 2.4 Consumers Across Modules
@@ -106,7 +106,7 @@ survey:
   the retail build rather than an active consumer of this stream; see
   [`menu/11`](../menu/11-gear-shop-tuning-and-preview.md#25-function-index) for
   where it's cataloged.
-- Battling (the colosseum minigame) draws on the same `rand` for camera
+- Battling (the colosseum minigame) draws on the same `NextPseudoRandomValue` for camera
   placement, particle jitter, and COM AI tactical randomization, all through
   its own overlay-local wrapper calls; the gameplay-affecting rolls are
   indexed in [`06-battling-rng.md`](06-battling-rng.md).
@@ -124,13 +124,13 @@ here).
 
 ### 2.5 Determinism
 
-No call to `srand` (`0x8003FA68`) exists anywhere in the recompiled game —
+No call to `SeedPseudoRandomGenerator` (`0x8003FA68`) exists anywhere in the recompiled game —
 not in the main executable, and not in any overlay. This was checked
 exhaustively (every generated call site for that address, across every
 shard and every overlay's compiled output) rather than sampled. Combined with
 the BSS zero-initialization from 2.1, the gameplay seed begins every cold
 boot at `0`, and its entire subsequent sequence is a pure function of how
-many times, and in what order, code calls `rand`. Two runs that perform the
+many times, and in what order, code calls `NextPseudoRandomValue`. Two runs that perform the
 same sequence of actions from power-on produce the same sequence of rolls.
 
 ## 3. The Movie Generator
@@ -138,7 +138,7 @@ same sequence of actions from power-on produce the same sequence of rolls.
 ### 3.1 Combined Algorithm And State
 
 `MovieRandom` at `0x80074AF0` (movie-overlay) is a self-contained generator
-with no call into resident `rand`. It carries two independent 32-bit words,
+with no call into resident `NextPseudoRandomValue`. It carries two independent 32-bit words,
 `A` at `0x80076EF4` and `B` at `0x80076EF8`:
 
 ```text
@@ -214,7 +214,7 @@ underneath it.
 ## 5. Determinism Summary
 
 No generator in this survey draws on any source of real-world entropy — no
-VBlank/VSync count, no controller-timing jitter, no CD-read latency. All
+VBlank/WaitForVerticalRetrace count, no controller-timing jitter, no CD-read latency. All
 three begin every cold boot from a fixed state (zero for two of them, a fixed
 literal constant for the third) and evolve purely as a function of how many
 times, and in what order, the running game calls into them. This means:
@@ -233,17 +233,17 @@ times, and in what order, the running game calls into them. This means:
 
 | Address | Function |
 |---|---|
-| Resident `0x8003FA38` | `rand` — advance and return from the gameplay LCG |
-| Resident `0x8003FA68` | `srand` — overwrite the gameplay LCG seed (never called anywhere) |
-| Resident `0x8001BD40` | `RandomU8RangeInclusive` — sentinel-aware inclusive byte range over `rand` |
+| Resident `0x8003FA38` | `NextPseudoRandomValue` — advance and return from the gameplay LCG |
+| Resident `0x8003FA68` | `SeedPseudoRandomGenerator` — overwrite the gameplay LCG seed (never called anywhere) |
+| Resident `0x8001BD40` | `RandomU8RangeInclusive` — sentinel-aware inclusive byte range over `NextPseudoRandomValue` |
 | Resident `0x8003F42C` | `SeedSoundModulatorRandom` — overwrite the sound xorshift state (never called anywhere) |
 | Resident `0x8003F43C` | `GenerateSoundRandom15` — advance the sound xorshift and return its low 15 bits |
 | Resident `0x8003F354` | `SoundModulatorTickUnipolarRandomHold` — sample-and-hold consumer of the sound generator |
 | Resident `0x8003F3C0` | `SoundModulatorTickBipolarRandomHold` — bipolar sample-and-hold consumer |
 | Resident `0x80037B88` | `InitializeSoundSubsystem` — seeds the sound generator with `0x12345678` at boot |
-| `0x80089B50` | `BattleRandomU16InRange` (battle-overlay) — sentinel-aware inclusive 16-bit range over `rand` |
+| `0x80089B50` | `BattleRandomU16InRange` (battle-overlay) — sentinel-aware inclusive 16-bit range over `NextPseudoRandomValue` |
 | `0x801C511C` | `GearShopMenuGetRandomRangeValue` (gear-shop-menu-overlay) — same wrapper, independently compiled |
-| `0x800A987C` | `FieldParticlesRandRange` (field-overlay) — direct-modulo 16-bit range over `rand` |
+| `0x800A987C` | `RandomizeParticleRange` (field-overlay) — direct-modulo 16-bit range over `NextPseudoRandomValue` |
 | `0x801E65A4` | `BattleEventOpcode14RandomVariable` (battle-event-overlay) — stores a raw `BattleRandomU16InRange` roll |
 | `0x801E65FC` | `BattleEventOpcode15RandomRangeVariable` (battle-event-overlay) — stores a bounded `BattleRandomU16InRange` roll |
 | `0x80074AF0` | `MovieRandom` (movie-overlay) — advance the combined dual-LCG Movie generator |

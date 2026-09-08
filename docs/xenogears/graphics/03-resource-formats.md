@@ -321,9 +321,9 @@ addressed by the uploader.
 
 ## 5. Field Graphics Resources
 
-### 5.1 ActorFile section directory
+### 5.1 SceneActorResource section directory
 
-The Field ActorFile begins with VRAM mappings and nine compressed sections. The
+The Field SceneActorResource begins with VRAM mappings and nine compressed sections. The
 first `0x100` bytes are 32 mapping records:
 
 ```c
@@ -451,7 +451,7 @@ the descriptor, then uploads each following sector using its corresponding
 height. The authenticated Disc 1 implementations are
 `ArchiveTextureStreamDataCallback` `0x8002BB50..0x8002BF37` and its synchronous
 host mirror `PumpHostTextureStream` `0x8002BF38..0x8002C30F`. Each path observes
-the descriptor tag at `0x8002BC10`/`0x8002BFF8`, calls `LoadImage` once per
+the descriptor tag at `0x8002BC10`/`0x8002BFF8`, calls `UploadVramImage` once per
 sector at `0x8002BE14`/`0x8002C1FC`, and tests the post-decrement chunk count at
 `0x8002BE5C`/`0x8002C24C`. Thus one logical resource spans all tightly packed
 chunk rows and becomes complete only when that final count reaches zero.
@@ -507,7 +507,7 @@ reviewed index and inferred range is valid.
 
 ### 5.6 Entities, backgrounds, sprites, and models
 
-Camera and entity setup begins at ActorFile offset `0x154`. The static entity
+Camera and entity setup begins at SceneActorResource offset `0x154`. The static entity
 count is `uint16_t` at `0x18C`; fixed 16-byte records begin at `0x190`:
 
 ```c
@@ -535,7 +535,7 @@ Other flag bits are preserved and passed with entity state. Section 2 hands
 model archives to the model relocator. Section 3 hands selected offset-bundle
 members to the sprite actor decoder. Field backgrounds are therefore composed
 from static 3D models, sprite actors, TIM/raw VRAM images, and optional panorama
-geometry; the ActorFile does not introduce a separate framebuffer-background
+geometry; the SceneActorResource does not introduce a separate framebuffer-background
 codec.
 
 ## 6. World Graphics Resources
@@ -681,8 +681,8 @@ six images.
 
 The generated bank is one semantic CLUT resource. Its authenticated lifecycle
 begins inside `WorldMapLoadGroundTextures` at `0x800979CC`, stages the
-`256 x 64` `LoadImage` at `0x80097AC8`, and commits at `0x80097ADC` after
-`DrawSync(0)`. No partial fog bank is visible to a source frame.
+`256 x 64` `UploadVramImage` at `0x80097AC8`, and commits at `0x80097ADC` after
+`WaitForGpuDrawing(0)`. No partial fog bank is visible to a source frame.
 
 ### 6.5 Shared TIM bundle, file `+3`
 
@@ -712,8 +712,8 @@ renderer exposes CLUT IDs for all 16 rows `496..511`.
 
 The generated rows are one semantic CLUT resource. Its authenticated lifecycle
 begins inside `WorldMapLoadSharedTextureResources` at `0x80084410`, stages the
-`256 x 15` `LoadImage` at `0x80084508`, and commits at `0x8008451C` after
-`DrawSync(0)`. The separately loaded row at `y=511` is not part of this
+`256 x 15` `UploadVramImage` at `0x80084508`, and commits at `0x8008451C` after
+`WaitForGpuDrawing(0)`. The separately loaded row at `y=511` is not part of this
 publication.
 
 ### 6.6 Model placements and collision
@@ -855,7 +855,7 @@ are:
 ```
 
 The stream updaters advance frame pointers and transfer the selected raw VRAM
-rectangle with `LoadImage`.
+rectangle with `UploadVramImage`.
 
 ## 7. Battle Graphics Resources
 
@@ -1059,7 +1059,7 @@ The principal dialog bitmap font is identical on both discs. It expands to
 
 | Offset | Value | Observed or inferred meaning |
 |---:|---:|---|
-| `+0x00` | `0x013A` | Serialized source word, retained but not read by `SystemInitializeFont`; equals the highest represented single-glyph code |
+| `+0x00` | `0x013A` | Serialized source word, retained but not read by `BootSystemFont`; equals the highest represented single-glyph code |
 | `+0x02` | `0x000E` | Bitmap data offset |
 | `+0x04` | `0x00FE` | Double-byte lead base |
 | `+0x06` | `0x1474` | Double-byte bitmap-region offset |

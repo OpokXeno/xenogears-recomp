@@ -7,7 +7,7 @@ generator's side: what each roll consumes, and where its formula is already
 documented in full. All rolls in this chapter draw from the shared gameplay
 generator described in
 [`01-generators-and-determinism.md`](01-generators-and-determinism.md) —
-either directly through `rand`, or through `RandomU8RangeInclusive` /
+either directly through `NextPseudoRandomValue`, or through `RandomU8RangeInclusive` /
 `BattleRandomU16InRange`. None of them touch the Movie or sound-modulator
 generators.
 
@@ -49,14 +49,14 @@ functions but only calls this "a chance roll" with no threshold given. Both
 were traced here, and their mechanisms differ from each other:
 
 - **`BattleDispelSelectedStatusGroups`** (`0x800958D8`) draws **one**
-  `rand() % 100` residue and requires it to satisfy **two** independent
+  `NextPseudoRandomValue() % 100` residue and requires it to satisfy **two** independent
   thresholds (an AND, not two separate rolls) before doing anything. Passing
   both clears status groups `5`, `7`, and `9` together — both the active and
   protection words for each — gated by a bitmask of which of those groups
   were actually requested. Failing either threshold leaves everything
   unchanged, silently.
 - **`BattleRemoveConfiguredStatuses`** (`0x80095BAC`) draws its own
-  `rand() % 100` residue against a **single** threshold. On failure it writes
+  `NextPseudoRandomValue() % 100` residue against a **single** threshold. On failure it writes
   an explicit "no effect" result code and returns immediately. On success it
   clears a wider, more varied set of individual status bits (spanning groups
   `0` and `2`, plus at least one field not present in `battle/04`'s status

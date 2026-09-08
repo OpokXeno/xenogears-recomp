@@ -123,14 +123,14 @@ operations retain their program counter while moving:
 `BattlingStartRandomArenaReentryMotion` at `0x80070FD8` picks between two
 *computed* inward headings, sets maximum-speed recovery movement, and resets
 the animation phase before opcode `0D` resumes its distance test. Despite its
-name, the function contains no random roll: it calls `ratan2` (PsyQ libgte,
+name, the function contains no random roll: it calls `ComputeFixedAtan2` (PsyQ libgte,
 `0x8004B32C`) toward the arena center and, only when that result falls below
 a small threshold (an edge case near a particular facing), substitutes a
 fixed fallback angle instead of the shared side-to-side heading global
 (`0x80092934`, see [`06`](06-ai-practice-and-rubber-band.md#2-fighter-fields-used-by-ai)).
 The exact final combination of the two candidate angles was not traced in
 full; what's confirmed is that no call in this function reaches the shared
-`rand` generator or any of its wrappers.
+`NextPseudoRandomValue` generator or any of its wrappers.
 
 ## 5. Fighter Action And Control Operations
 

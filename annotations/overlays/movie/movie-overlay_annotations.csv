@@ -12,7 +12,7 @@
 0x800712C4, function start — MovieAdvanceCdReadVerification; verifies asynchronous readback data and records mismatches.
 0x80071BA0, function start — MovieQueueRandomSectorRead; allocates and queues a random-sector test read.
 0x80071C34, function start — MovieStartCdReadTestOperation; starts a selected CD stress operation.
-0x80072428, function start — MovieAdvanceCdStressVSyncClock; increments the CD stress monitor's VSync counter and converts each 60 ticks into one elapsed second.
+0x80072428, function start — MovieAdvanceCdStressVSyncClock; increments the CD stress monitor's WaitForVerticalRetrace counter and converts each 60 ticks into one elapsed second.
 0x80072480, function start — MovieRunDiscChangeTest; runs the interactive disc-change diagnostic.
 0x8007293C, function start — MovieReinitializeCdAfterDiscChange; resets CD state after media replacement.
 0x800729A8, function start — MovieReadHostFile; reads a development host file into memory.

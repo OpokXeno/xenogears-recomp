@@ -129,7 +129,7 @@ strings already encoded for the runtime decoder bypass it.
 
 ## 7. Resident Bitmap Font
 
-Resident `SystemInitializeFont` at `0x80033558` reads these header fields:
+Resident `BootSystemFont` at `0x80033558` reads these header fields:
 
 | Offset | Size | Field |
 |---:|---:|---|
@@ -236,12 +236,12 @@ decoder do not enforce them:
 
 ## 12. Item, Weapon, And Accessory Name Database
 
-Resident `GetWeaponName` (`0x80033848`), `GetAccessoryName` (`0x800337E8`),
-and `GetItemName` (`0x80033818`) all resolve an item ID to a display name
+Resident `LookupWeaponDisplayName` (`0x80033848`), `LookupAccessoryDisplayName` (`0x800337E8`),
+and `LookupItemDisplayName` (`0x80033818`) all resolve an item ID to a display name
 from one shared database, loaded once at boot immediately after the main
 bitmap font (directory `0x01`, file `7`, LZSS-compressed like the font).
-Resident `SystemInitializeData` (`0x800335F4`) receives the decompressed
-blob and calls `ResolveArchiveEntryPointers` (`0x8003342C`) on it before
+Resident `BootSystemData` (`0x800335F4`) receives the decompressed
+blob and calls `LinkArchiveDirectoryEntries` (`0x8003342C`) on it before
 publishing the result through two resident globals (`0x80059360`,
 `0x80059368`).
 
@@ -255,7 +255,7 @@ The decompressed blob is a packet-style member array:
 Each member is itself a `DialogStringBundle`
 ([Section 5](#5-string-bundle)): a `u32` entry count, a `u16` offset array
 relative to that member's own base, then the encoded, `0x00`-terminated
-strings. `GetItemName`'s shared lookup core is resident `GetStringEntry`
+strings. `LookupItemDisplayName`'s shared lookup core is resident `LookupSystemString`
 (`0x80033728`) — the same generic offset-table accessor
 [`battling/02` §3.2](../battling/02-resources-roster-and-fighter-data.md#32-text-member)
 uses for Battling's own text bundle. Here it's applied twice: once to pick a
@@ -295,13 +295,13 @@ drop-class lookups above; it is the reference implementation used by
 |---:|---|
 | Resident `0x80032EB4` | Expand a Xenogears LZSS stream. |
 | Resident `0x80033558` | Initialize font header fields and glyph bases. |
-| Resident `0x80033728` | `GetStringEntry`; resolve a 16-bit text offset by ID (also used by Battling). |
-| Resident `0x800337E8` | `GetAccessoryName`. |
-| Resident `0x80033818` | `GetItemName`. |
-| Resident `0x80033848` | `GetWeaponName`. |
+| Resident `0x80033728` | `LookupSystemString`; resolve a 16-bit text offset by ID (also used by Battling). |
+| Resident `0x800337E8` | `LookupAccessoryDisplayName`. |
+| Resident `0x80033818` | `LookupItemDisplayName`. |
+| Resident `0x80033848` | `LookupWeaponDisplayName`. |
 | Resident `0x80033B34` | Expand stored string codes to encoded bytes. |
-| Resident `0x800335F4` | `SystemInitializeData`; installs the resolved item-database pointer. |
-| Resident `0x8003342C` | `ResolveArchiveEntryPointers`; fixes up one archive's relative offsets. |
+| Resident `0x800335F4` | `BootSystemData`; installs the resolved item-database pointer. |
+| Resident `0x8003342C` | `LinkArchiveDirectoryEntries`; fixes up one archive's relative offsets. |
 | Menu `0x801C9038` | Read one memory-card title frame. |
 | Menu `0x801C90B0` | Register one save header. |
 | Menu `0x801C9270` | Match the save identifier. |

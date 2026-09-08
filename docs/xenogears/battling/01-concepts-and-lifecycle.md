@@ -106,7 +106,7 @@ path. The startup transaction clears the selector after consuming it.
 
 `BattlingMain` at `0x80088E90` first calls `BattlingSystemInitialize` at
 `0x80088D1C`, creates the cooperative Battling task, and enters the permanent
-display loop. System initialization installs the VSync callback, geometry and
+display loop. System initialization installs the WaitForVerticalRetrace callback, geometry and
 font state, two display-buffer records, packed-image offsets, vibration state,
 and viewport defaults.
 

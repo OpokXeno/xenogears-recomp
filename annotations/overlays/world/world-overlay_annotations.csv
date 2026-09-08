@@ -10,7 +10,7 @@
 0x80070CFC, function start — WorldMapOverlayEntryPoint; synchronizes drawing and cache state then initializes the overlay and runs the selected World Map mode through its eventual exit.
 0x80070D10, function start — WorldMapOverlayEntryAfterCacheSync; resumes overlay entry by synchronizing GPU and display state before installing callbacks and initializing the World Map runtime.
 0x80070D18, function start — WorldMapOverlayEntryAfterDrawSync; resumes overlay entry with vertical synchronization before callback and geometry initialization.
-0x80070D20, function start — WorldMapOverlayEntryInstallVSyncCallback; installs the World Map VSync callback then initializes geometry and the remaining overlay state.
+0x80070D20, function start — WorldMapOverlayEntryInstallVSyncCallback; installs the World Map WaitForVerticalRetrace callback then initializes geometry and the remaining overlay state.
 0x80070D30, function start — WorldMapOverlayEntryInitializeGeometry; initializes the GTE geometry state then proceeds with World Map configuration and mode dispatch.
 0x80070D38, function start — WorldMapOverlayEntryInitializeRuntimeState; establishes first-entry defaults when necessary then derives mode configuration and runs the World Map lifecycle.
 0x80070F4C, function start — WorldMapOverlayEntryAllocateRuntimeData; allocates the main World Map working data and paired render buffers before deriving travel state.
@@ -167,7 +167,7 @@
 0x80079538, function start — WorldMapGoliathDestructionTerrainAnchorTaskUpdate; wraps the anchor position samples its terrain height and publishes the resulting model coordinates.
 0x800795E4, function start — WorldMapGoliathCrashModelTaskInit; attaches the Goliath submodels and initializes the crash position rotations and engine sound.
 0x80079778, function start — WorldMapGoliathCrashModelTaskUpdate; animates the Goliath's fall and rebound while spawning impact effects and rebuilding every submodel transform.
-0x8007A06C, function start — WorldMapInitializeCinematicQuadPackets; initializes a semitransparent POLY_FT4 array with randomized palette and texture-page selections.
+0x8007A06C, function start — WorldMapInitializeCinematicQuadPackets; initializes a semitransparent FlatTexturedQuadrilateralPrimitive array with randomized palette and texture-page selections.
 0x8007A148, function start — WorldMapGoliathExplosionRingTaskInitContinuation; continues through the manifest's interior fallthrough after the task-index shift and initializes both expanding textured-quad groups before idling the task.
 0x8007A1B4, function start — WorldMapGoliathExplosionRingTaskUpdate; expands and rotates the two textured-quad groups until their scale phases complete.
 0x8007A410, function start — WorldMapGoliathSmokeBurstTaskInit; initializes the timed smoke-burst task with a ninety-six-frame lifetime.
@@ -269,7 +269,7 @@
 0x8008440C, function start — WorldMapLoadSharedTextureResources; uploads shared textures and generated palette ramps.
 0x80084410, instruction site — authenticated begin seam for generated shared World CLUT publication, before resource ownership changes.
 0x80084508, instruction site — WorldMapLoadSharedTextureResources uploads the generated 256-by-15 CLUT bank at VRAM (0,496).
-0x8008451C, instruction site — authenticated shared CLUT commit seam after DrawSync and before the 16 CLUT IDs are derived.
+0x8008451C, instruction site — authenticated shared CLUT commit seam after WaitForGpuDrawing and before the 16 CLUT IDs are derived.
 0x80084580, function start — WorldMapInitializeModels; creates models, transforms, and collision meshes.
 0x80084770, call site — copies a World Map model packet template.
 0x80084778, return site — resumes after the authenticated model packet copy.
@@ -326,7 +326,7 @@
 0x80088F5C, function start — WorldMapDormantLandmarkTaskUpdate; keeps the unavailable configured-landmark task in the idle state.
 0x80088F64, function start — WorldMapInitializeEffectStatePools; initializes World Map effect state pools.
 0x80088FF4, function start — WorldMapFreeEffectStatePools; frees World Map effect state pools.
-0x8008901C, function start — WorldMapInitializeEffectRenderPackets; allocates two 0x2800-byte buffers of 256 POLY_FT4 effect packets, initializes semitransparent templates with GetTPage(1,1,0x340,0x100) and GetClut(0x100,0x1FF), then copies them into the second frame-parity buffer.
+0x8008901C, function start — WorldMapInitializeEffectRenderPackets; allocates two 0x2800-byte buffers of 256 FlatTexturedQuadrilateralPrimitive effect packets, initializes semitransparent templates with DecodeTexturePage(1,1,0x340,0x100) and DecodePaletteLocation(0x100,0x1FF), then copies them into the second frame-parity buffer.
 0x80089128, function start — WorldMapFreeEffectRenderPackets; frees both frame-parity World Map effect-packet buffers and clears their pointers.
 0x80089160, function start — WorldMapConfigureEffectEmitterTransforms; applies optional translation and negated rotation vectors to an owner's eight emitters and initializes all eight only when none was already enabled.
 0x800893E0, function start — WorldMapConfigureEffectEmitterContinuation; continues the overlapping owner-emitter configuration path by preserving existing enable states or initializing all eight emitters before writing secondary-offset and rotation vectors.
@@ -466,7 +466,7 @@
 0x800979C8, function start — WorldMapLoadGroundTextures; builds fogged palettes and uploads ground textures.
 0x800979CC, instruction site — authenticated begin seam for generated terrain CLUT publication, before the loader reads or allocates resources.
 0x80097AC8, instruction site — WorldMapLoadGroundTextures uploads the generated contiguous 256-by-64 terrain CLUT bank at VRAM (0,432).
-0x80097ADC, instruction site — authenticated commit seam after DrawSync and before CLUT IDs are derived.
+0x80097ADC, instruction site — authenticated commit seam after WaitForGpuDrawing and before CLUT IDs are derived.
 0x80097BC0, function start — WorldMapSetupInitialGrid; initializes the streamed grid and water phase.
 0x80097CB8, function start — WorldMapResetStreamingGrid; resets streamed-grid pointers and indices.
 0x80097D64, function start — WorldMapFreeLoadedChunks; frees all loaded World Map chunks.

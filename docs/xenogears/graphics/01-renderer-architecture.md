@@ -5,7 +5,7 @@
 Xenogears uses the original PlayStation CPU, Geometry Transformation Engine
 (GTE), and GPU as a staged renderer. Game code creates render intent in main
 RAM. The GTE transforms and projects geometry. CPU code writes PsyQ-compatible
-GPU packets and links them into ordering tables (OTs). `DrawOTag` submits an OT
+GPU packets and links them into ordering tables (OTs). `SubmitOrderingTable` submits an OT
 through GPU DMA channel 2, and the GPU interprets its GP0 command stream into
 VRAM. A display environment then selects a VRAM rectangle for scanout.
 
@@ -28,7 +28,7 @@ double-buffered PsyQ primitive packets
 depth buckets in an ordering table
         |
         v
-DrawOTag -> DMA2 linked-list transfer -> GP0
+SubmitOrderingTable -> DMA2 linked-list transfer -> GP0
         |
         v
 VRAM draw page -> display page -> video output
@@ -88,23 +88,23 @@ the contexts, cameras, packet buffers, OTs, and frame scheduling.
 
 | Resident function | Address | Role |
 |---|---:|---|
-| `SetDefDrawEnv` | `0x80043928` | Build a default drawing environment for a VRAM rectangle. |
-| `SetDefDispEnv` | `0x800439E0` | Build a default display environment for a VRAM rectangle. |
-| `ResetGraph` | `0x80044110` | Reset or initialize GPU state. |
-| `SetDispMask` | `0x80044534` | Enable or disable display output. |
-| `DrawSync` | `0x800445D0` | Wait for, or query, GPU drawing completion. |
-| `ClearImage` | `0x80044764` | Fill a VRAM rectangle. |
-| `LoadImage` | `0x80044894` | Transfer CPU image data into VRAM. |
-| `StoreImage` | `0x800448F8` | Transfer a VRAM rectangle back to CPU memory. |
-| `MoveImage` | `0x8004495C` | Copy a rectangle within VRAM. |
-| `ClearOTag` | `0x80044A20` | Initialize a forward OT chain. |
-| `ClearOTagR` | `0x80044AD8` | Initialize a reverse OT chain. |
-| `DrawPrim` | `0x80044B70` | Submit one linked GPU command packet. |
-| `DrawOTag` | `0x80044BD0` | Submit an ordering table through GPU DMA2. |
-| `PutDrawEnv` | `0x80044C44` | Queue drawing-area, offset, mask, color, and related GP0 state. |
-| `DrawOTagEnv` | `0x80044D48` | Submit an OT with an associated draw environment. |
-| `PutDispEnv` | `0x80044E9C` | Program the GPU display range and display mode. |
-| `VSync` | `0x8004B54C` | Wait for or query vertical synchronization. |
+| `BuildDefaultDrawingEnvironment` | `0x80043928` | Build a default drawing environment for a VRAM rectangle. |
+| `BuildDefaultDisplayEnvironment` | `0x800439E0` | Build a default display environment for a VRAM rectangle. |
+| `ReinitializeGpu` | `0x80044110` | Reset or initialize GPU state. |
+| `ApplyDisplayMask` | `0x80044534` | Enable or disable display output. |
+| `WaitForGpuDrawing` | `0x800445D0` | Wait for, or query, GPU drawing completion. |
+| `EraseVramRectangle` | `0x80044764` | Fill a VRAM rectangle. |
+| `UploadVramImage` | `0x80044894` | Transfer CPU image data into VRAM. |
+| `CommitVramImage` | `0x800448F8` | Transfer a VRAM rectangle back to CPU memory. |
+| `RelocateVramRectangle` | `0x8004495C` | Copy a rectangle within VRAM. |
+| `TerminateOrderingTable` | `0x80044A20` | Initialize a forward OT chain. |
+| `TerminateOrderingTableReverse` | `0x80044AD8` | Initialize a reverse OT chain. |
+| `SubmitGpuPrimitive` | `0x80044B70` | Submit one linked GPU command packet. |
+| `SubmitOrderingTable` | `0x80044BD0` | Submit an ordering table through GPU DMA2. |
+| `InstallDrawingEnvironment` | `0x80044C44` | Queue drawing-area, offset, mask, color, and related GP0 state. |
+| `SubmitOrderingTableWithEnvironment` | `0x80044D48` | Submit an OT with an associated draw environment. |
+| `InstallDisplayEnvironment` | `0x80044E9C` | Program the GPU display range and display mode. |
+| `WaitForVerticalRetrace` | `0x8004B54C` | Wait for or query vertical synchronization. |
 
 The table identifies entry points and their recovered contracts. It does not
 imply that every caller uses them in the same order.
@@ -115,22 +115,22 @@ Important resident GTE wrappers include:
 
 | Resident function | Address | Role |
 |---|---:|---|
-| `InitGeom` | `0x80048BC4` | Initialize default GTE geometry state. |
-| `SetFogNearFar` | `0x80048AB0` | Derive depth-cue parameters from near and far distances. |
-| `SetRotMatrix` | `0x80049EFC` | Install the active rotation matrix. |
-| `SetLightMatrix` | `0x80049F2C` | Install the directional-light matrix. |
-| `SetColorMatrix` | `0x80049F5C` | Install the light color matrix. |
-| `SetTransMatrix` | `0x80049F8C` | Install translation for the active transform. |
-| `SetBackColor` | `0x8004A0EC` | Set ambient/background lighting color. |
-| `SetFarColor` | `0x8004A10C` | Set the far color used by depth cueing. |
-| `SetGeomOffset` | `0x8004A12C` | Set the screen-space projection center. |
-| `SetGeomScreen` | `0x8004A14C` | Set projection-plane distance. |
-| `NormalColor` | `0x8004A19C` | Light one normal into one output color. |
-| `RotTransPers` | `0x8004A64C` | Rotate, translate, and perspective-project one vertex. |
-| `RotTransPers3` | `0x8004A67C` | Project three vertices. |
-| `RotTransPers4` | `0x8004A73C` | Project four vertices. |
-| `RotAverage4` | `0x8004A7BC` | Project four vertices and derive average depth. |
-| `RotAverageNclip4` | `0x8004A83C` | Project, average depth, and support face clipping. |
+| `InitializeGteGeometry` | `0x80048BC4` | Initialize default GTE geometry state. |
+| `ConfigureFogInterval` | `0x80048AB0` | Derive depth-cue parameters from near and far distances. |
+| `InstallGteRotationMatrix` | `0x80049EFC` | Install the active rotation matrix. |
+| `InstallGteLightMatrix` | `0x80049F2C` | Install the directional-light matrix. |
+| `InstallGteColorMatrix` | `0x80049F5C` | Install the light color matrix. |
+| `InstallGteTranslationMatrix` | `0x80049F8C` | Install translation for the active transform. |
+| `WriteGteBackgroundColor` | `0x8004A0EC` | Set ambient/background lighting color. |
+| `WriteGteFarColor` | `0x8004A10C` | Set the far color used by depth cueing. |
+| `WriteGteOffset` | `0x8004A12C` | Set the screen-space projection center. |
+| `WriteProjectionDistance` | `0x8004A14C` | Set projection-plane distance. |
+| `ShadeVertexNormal` | `0x8004A19C` | Light one normal into one output color. |
+| `ProjectRotatedVertex` | `0x8004A64C` | Rotate, translate, and perspective-project one vertex. |
+| `ProjectRotatedTriangle` | `0x8004A67C` | Project three vertices. |
+| `ProjectRotatedQuadrilateral` | `0x8004A73C` | Project four vertices. |
+| `TransformAverageQuadrilateral` | `0x8004A7BC` | Project four vertices and derive average depth. |
+| `TransformClipAverageQuadrilateral` | `0x8004A83C` | Project, average depth, and support face clipping. |
 
 These wrappers expose global coprocessor state. A model resource does not carry
 a complete GTE snapshot; the caller must install matrices, projection values,
@@ -148,7 +148,7 @@ render-resource object:
   Field `0x80070488` starts the once-per-field transfer, while
   `FieldFinalizeGraphicsUploadAndMask` at `0x80070508` waits for archive and GPU
   work before masking the staging rectangle.
-- Field `FieldLoadTIMWithClut` at `0x80070340` and `FieldLoadTIM` at
+- Field `DecodeFieldImageWithPalette` at `0x80070340` and `DecodeFieldTim` at
   `0x800771F8` handle TIM image and CLUT transfers.
 - World `WorldMapInitializeModeRuntime` at `0x80072238` loads primary assets,
   creates streaming model state, and installs rendering tasks. Terrain cells
@@ -183,7 +183,7 @@ Mode code combines resource data with runtime state:
 Field provides a directly authenticated example. The actor-shadow producer
 `FieldRenderActorShadows` at Field `0x800764B4` stores the transformed actor
 origin from GTE `MAC1`, `MAC2`, and `MAC3` at `0x80076858..0x80076860`, builds
-the terrain-aligned shadow transform, invokes resident `RotAverage4` at
+the terrain-aligned shadow transform, invokes resident `TransformAverageQuadrilateral` at
 `0x800769C8`, derives an OT bucket at `0x800769EC`, and links the packet at
 `0x80076A24`.
 
@@ -202,7 +202,7 @@ packets into the active OT.
 contains a 24-bit next-address field and a command-word count in its high byte.
 An OT is an array of compatible tags used as depth buckets. Primitive packets
 are inserted by rewriting packet and bucket links; geometry is not copied into
-the OT itself. `ClearOTagR` builds a reverse chain so submission starts at the
+the OT itself. `TerminateOrderingTableReverse` builds a reverse chain so submission starts at the
 far end and walks toward the terminator.
 
 **Game evidence:** Xenogears allocates packet templates and packet workspaces
@@ -220,11 +220,11 @@ belong in [GPU Packets And Ordering Tables](02-gpu-packets-and-ordering-tables.m
 
 ### 4.4 DMA2, GP0, and VRAM
 
-**PS1 generic:** `DrawOTag` programs GPU DMA channel 2 for linked-list mode. DMA
+**PS1 generic:** `SubmitOrderingTable` programs GPU DMA channel 2 for linked-list mode. DMA
 follows packet tags in main RAM and writes packet command words to GP0. GP0
 commands change drawing state, draw primitives, fill VRAM, copy CPU data to
 VRAM, or copy within VRAM. Completion of the CPU call does not by itself mean
-that rasterization is complete; callers use `DrawSync` where that distinction
+that rasterization is complete; callers use `WaitForGpuDrawing` where that distinction
 matters.
 
 **Game evidence:** Xenogears deliberately mixes primitive packets and state
@@ -244,10 +244,10 @@ display environment belongs to the current frame.
 
 | Mode | Demonstrated setup | Context behavior |
 |---|---|---|
-| Field | `FieldInitializeRenderContexts`, Field `0x80071FB0` | Two work areas based at `0x800B249C` and `0x800BA590`, separated by `0x80F4`; active pointer at `0x800C426C`, parity at `0x800ADB08`. |
+| Field | `PrepareFieldRenderContexts`, Field `0x80071FB0` | Two work areas based at `0x800B249C` and `0x800BA590`, separated by `0x80F4`; active pointer at `0x800C426C`, parity at `0x800ADB08`. |
 | World | `WorldMapInitializeGraphics`, World `0x80072BB0` | Paired `320x216` draw pages at VRAM Y `0` and `216`, with display environments selecting the opposite page. |
 | Battle | `BattleInitRenderContexts`, Battle `0x800B8284` | Paired `320x224` draw pages at VRAM Y `0` and `224`; `BattleInit3dRendering` at `0x800B88C4` adds frame compensation state. |
-| Battling | `BattlingViewportInitialize`, Battling `0x8008976C` | Two `0xF8` frame contexts at `0x8009A0D8`; each contains `DRAWENV +0x00`, `DISPENV +0x5C`, and the frame root at `+0x70`. Projection is rescaled to the requested viewport. |
+| Battling | `BattlingViewportInitialize`, Battling `0x8008976C` | Two `0xF8` frame contexts at `0x8009A0D8`; each contains `GpuRasterEnvironment +0x00`, `GpuDisplayEnvironment +0x5C`, and the frame root at `+0x70`. Projection is rescaled to the requested viewport. |
 | Menu | `SetupMainMenu`, Menu `0x801C7B0C` | Explicit parity is reset by `ResetMenuParity` at `0x801C6D4C`; `MenuDraw` selects the per-frame context and packets. |
 | Movie | `MovieStrStartPlayback`, STR library `0x801D37CC` | All USA retail streams are `320x224`. MDEC output is uploaded as 20 vertical strips into alternating playback rectangles rather than through the polygon OT. |
 
@@ -275,20 +275,20 @@ install display environment for completed page
         |
 install draw environment for next draw page
         |
-submit completed OT through DrawOTag/DMA2
+submit completed OT through SubmitOrderingTable/DMA2
         |
 advance parity and preserve asynchronous state
 ```
 
 The apparent order can overlap frame N and frame N+1. Installing a display
 environment chooses scanout state, installing a draw environment changes
-future GP0 drawing state, and `DrawOTag` starts asynchronous GPU consumption.
+future GP0 drawing state, and `SubmitOrderingTable` starts asynchronous GPU consumption.
 These are separate operations.
 
 ### 6.1 Field
 
 Field `FieldPerFrameReset` at `0x80077DAC` records timing, clears and swaps the
-OT, polls input, and synchronizes persistent state. `FieldClearAndSwapOTag` at
+OT, polls input, and synchronizes persistent state. `SwapFieldOrderingTable` at
 `0x80073FE0` clears the active main reverse OT with 4096 entries and conditionally
 clears the secondary ground OT. Producers then add models, mechas, characters,
 shadows, panorama, compass, particles, fades, distortion, sci-fi HUD, text
@@ -297,25 +297,25 @@ strips.
 
 Presentation has at least two authenticated paths:
 
-- `FieldPresentationPassA` at `0x8007554C` includes a resident `VSync` call at
-  `0x80075694` and reaches resident `DrawOTag` at `0x800758C8`.
-- `FieldPresentationPassB` at `0x80075910` reaches resident `DrawOTag` at
+- `FieldPresentationPassA` at `0x8007554C` includes a resident `WaitForVerticalRetrace` call at
+  `0x80075694` and reaches resident `SubmitOrderingTable` at `0x800758C8`.
+- `FieldPresentationPassB` at `0x80075910` reaches resident `SubmitOrderingTable` at
   `0x800759CC`.
 
-The main loop also reaches `VSync` at Field `0x800781BC`. Transitions and menu
+The main loop also reaches `WaitForVerticalRetrace` at Field `0x800781BC`. Transitions and menu
 entry add VRAM moves, full-screen clears, masks, and extra synchronization, so
 the two presentation functions are not the only Field GPU paths.
 
 ### 6.2 World
 
 World `WorldMapOverlayEntryPoint` at `0x80070CFC` synchronizes cache, GPU, and
-display state before installing a VSync callback and initializing GTE state.
+display state before installing a WaitForVerticalRetrace callback and initializing GTE state.
 `WorldMapGroundTaskUpdate` at `0x80071A58` dispatches effects, actor sprites,
 decorations, shadows, models, terrain and water, horizon, sky, clouds, and the
 minimap. Separate task update functions cover alternate modes and cinematics.
 
 `WorldMapFadeTransition` at `0x80072DB4` is a blocking full-screen presentation
-path and submits an OT at World `0x80073280`. Another direct `DrawOTag` call is
+path and submits an OT at World `0x80073280`. Another direct `SubmitOrderingTable` call is
 present at World `0x800719B4`. Menu transitions preserve the current
 framebuffer, release volatile resources, and reconstruct graphics through
 `WorldMapRestoreAfterMenu` at `0x80075B58`.
@@ -337,15 +337,15 @@ that a resource load boundary is not necessarily a presentation boundary.
 ### 6.4 Battling
 
 `BattlingMain` at Battling `0x80088E90` runs the authenticated state-4 render
-and timing loop. `BattlingVsyncCallback` at `0x80088C00` samples VSync into its
+and timing loop. `BattlingVsyncCallback` at `0x80088C00` samples WaitForVerticalRetrace into its
 timing state. `BattlingOrderingTableBegin` at `0x8008AC0C` clears the active OT,
 and `BattlingSubmitOrderingTableAndEnvironments` at `0x8008AE1C` queues the OT
 and enabled environment packets.
 
 The scene callback links its OT, environments, HUD, and final overlay into the
-active frame root. After `VSync`, limited OT-chain repair, and `DrawSync`,
-`BattlingMain` submits that root with resident `DrawOTagEnv`. This differs from
-Battle's direct `DrawOTag` lifecycle even though both modes use DMA2.
+active frame root. After `WaitForVerticalRetrace`, limited OT-chain repair, and `WaitForGpuDrawing`,
+`BattlingMain` submits that root with resident `SubmitOrderingTableWithEnvironment`. This differs from
+Battle's direct `SubmitOrderingTable` lifecycle even though both modes use DMA2.
 
 ### 6.5 Menu
 
@@ -354,11 +354,11 @@ frame. Its recovered presentation sequence includes:
 
 | Site | Operation |
 |---:|---|
-| `0x801C7C74` | Clear the active reverse OT with `ClearOTagR`. |
-| `0x801C7CE0` | Synchronize with `VSync`. |
-| `0x801C7CF8` | Install the selected draw environment with `PutDrawEnv`. |
-| `0x801C7D10` | Install the selected display environment with `PutDispEnv`. |
-| `0x801C7D4C` | Submit the selected OT with `DrawOTag`. |
+| `0x801C7C74` | Clear the active reverse OT with `TerminateOrderingTableReverse`. |
+| `0x801C7CE0` | Synchronize with `WaitForVerticalRetrace`. |
+| `0x801C7CF8` | Install the selected draw environment with `InstallDrawingEnvironment`. |
+| `0x801C7D10` | Install the selected display environment with `InstallDisplayEnvironment`. |
+| `0x801C7D4C` | Submit the selected OT with `SubmitOrderingTable`. |
 
 Menu drawing is packet-based even though most geometry is two-dimensional.
 Glyphs, cursors, gradients, card icons, borders, backgrounds, and draw-mode
@@ -406,16 +406,16 @@ quads. Their OT behavior must not be confused with the MDEC playback path.
 
 ## 7. Synchronization Rules
 
-`VSync`, `DrawSync`, DMA completion, and CD/MDEC callbacks synchronize different
+`WaitForVerticalRetrace`, `WaitForGpuDrawing`, DMA completion, and CD/MDEC callbacks synchronize different
 things:
 
 | Mechanism | What it establishes | What it does not establish |
 |---|---|---|
-| `VSync` | A vertical-blank timing point or counter observation. | That all queued GPU drawing has completed. |
-| `DrawSync` | GPU command/drawing completion according to its argument. | That a display page has reached scanout. |
+| `WaitForVerticalRetrace` | A vertical-blank timing point or counter observation. | That all queued GPU drawing has completed. |
+| `WaitForGpuDrawing` | GPU command/drawing completion according to its argument. | That a display page has reached scanout. |
 | DMA2 completion | Completion of linked-list transfer to the GPU command port. | Necessarily the end of all rasterization caused by those commands. |
-| `PutDispEnv` | Display registers are programmed for a VRAM rectangle. | That the rectangle contains a complete frame. |
-| `PutDrawEnv` | Future drawing state is queued or installed. | That prior commands used that state. |
+| `InstallDisplayEnvironment` | Display registers are programmed for a VRAM rectangle. | That the rectangle contains a complete frame. |
+| `InstallDrawingEnvironment` | Future drawing state is queued or installed. | That prior commands used that state. |
 | CD callback | More resource or STR data is available. | That it has been decoded, uploaded, or displayed. |
 | MDEC output callback | One decode output slice is available. | A full movie frame, until all slices are committed. |
 
@@ -424,8 +424,8 @@ mode transitions, resource release, framebuffer preservation, and movie
 decoder reset. Normal packet production is instead double-buffered so CPU and
 GPU work can overlap.
 
-The renderer must preserve these distinctions. Treating every `VSync` as a
-GPU flush hides races; treating every `DrawOTag` as an immediately displayed
+The renderer must preserve these distinctions. Treating every `WaitForVerticalRetrace` as a
+GPU flush hides races; treating every `SubmitOrderingTable` as an immediately displayed
 frame loses the draw/display page relationship.
 
 ## 8. GTE State And Numeric Model
@@ -441,7 +441,7 @@ for more than vertex projection:
 - screen-space clipping and orientation tests;
 - sprite anchors, shadows, particles, terrain, and UI world markers.
 
-Matrix composition is mode-owned. Field `FieldComputeSceneMatrices` at
+Matrix composition is mode-owned. Field `BuildFieldSceneTransforms` at
 `0x80072150`, World model and cinematic task updates, Battle camera functions,
 and Battling `BattlingBuildLookAtTransform` at `0x800898BC` all construct or
 install different views. Movie even has `MovieInitGteViewState` at
@@ -473,7 +473,7 @@ Important consequences are:
 - Texture-page and CLUT packet fields are addresses into current VRAM state,
   not stable resource identifiers.
 - Menu and transition code can preserve or rearrange a framebuffer with
-  `MoveImage` before loading another overlay.
+  `RelocateVramRectangle` before loading another overlay.
 - Text and UI labels may be rendered on the CPU or into temporary images and
   then uploaded to VRAM.
 - Animated textures can update an existing VRAM location without rebuilding
@@ -486,7 +486,7 @@ Important consequences are:
 Draw environments are also GPU commands or command-derived state. Drawing
 area, draw offset, texture window, mask behavior, and dithering must be tracked
 in GP0 command order. Display range and display mode are GP1 scanout state
-installed by `PutDispEnv`; their temporal order relative to draw-state updates
+installed by `InstallDisplayEnvironment`; their temporal order relative to draw-state updates
 and OT submission must also be preserved. See
 [Graphics Resource Formats](03-resource-formats.md).
 
@@ -506,7 +506,7 @@ render transaction. On its own it does not establish:
   OT selection;
 - draw-environment and texture-window command order;
 - the current contents and mask bits of VRAM;
-- CLUT and texture-page placement after uploads or `MoveImage` operations;
+- CLUT and texture-page placement after uploads or `RelocateVramRectangle` operations;
 - which page is drawing and which page is displayed;
 - GPU, VBlank, CD, and MDEC timing;
 - commands emitted by another producer into the same OT;

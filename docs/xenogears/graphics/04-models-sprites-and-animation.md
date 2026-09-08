@@ -36,25 +36,25 @@ Related chapters:
 
 ### 2.1 Archive header
 
-A model archive starts with a 16-byte `ModelFileHeader`, followed immediately
-by a fixed array of `ModelPart` records:
+A model archive starts with a 16-byte `SerializedModelHeader`, followed immediately
+by a fixed array of `SubmeshRuntimeState` records:
 
 ```c
-struct ModelFileHeader {
+struct SerializedModelHeader {
     uint32_t num_model_parts;  // +0x00
     uint32_t flags;            // +0x04
     uint32_t reserved_08;      // +0x08, zero in retail corpus
     uint32_t reserved_0c;      // +0x0C, zero in retail corpus
-    ModelPart parts[];         // +0x10, 0x38 bytes each
+    SubmeshRuntimeState parts[];         // +0x10, 0x38 bytes each
 };
 ```
 
-`flags` bit 0 is the relocation guard set by `ModelResolvePointers`. Bit 1
+`flags` bit 0 is the relocation guard set by `LinkModelReferences`. Bit 1
 records that the heap block was split at the first part's display-list start
 after packet initialization. Bits 2 through 31 are not used by the retail model
 path. All three words are zero in the 16,451 Disc 1 archives before loading.
 
-The retail relocator `ModelResolvePointers` at `0x8002C3E8` returns
+The retail relocator `LinkModelReferences` at `0x8002C3E8` returns
 `num_model_parts` and unconditionally rebases each part's `vertices`, `normals`,
 `mesh_groups`, and `display_list` fields. It rebases `deformation` only when
 that field is nonzero; once present, every channel-pointer pair and the trailing
@@ -72,30 +72,30 @@ all referenced ranges remain inside the containing resource
 Do not identify an archive from `num_model_parts` alone. Small integers occur
 frequently in compressed texture and script data.
 
-### 2.2 ModelPart
+### 2.2 SubmeshRuntimeState
 
-`ModelPart` is exactly `0x38` bytes in the retail ABI.
+`SubmeshRuntimeState` is exactly `0x38` bytes in the retail ABI.
 
 ```c
-struct ModelPart {
+struct SubmeshRuntimeState {
     uint16_t flags;                    // +0x00
     uint16_t vertex_count;             // +0x02
     uint16_t primitive_count;          // +0x04
     uint16_t mesh_group_count;         // +0x06
-    SVECTOR *vertices;                  // +0x08
-    SVECTOR *normals;                   // +0x0C
+    PackedShortVector *vertices;                  // +0x08
+    PackedShortVector *normals;                   // +0x0C
     uint8_t *mesh_groups;               // +0x10
     uint8_t *display_list;              // +0x14
     void *lighting_cache;               // +0x18, runtime-owned
     ModelDeformationTable *deformation; // +0x1C
-    SVECTOR bounds_min;                  // +0x20
-    SVECTOR bounds_max;                  // +0x28
+    PackedShortVector bounds_min;                  // +0x20
+    PackedShortVector bounds_max;                  // +0x28
     uint32_t lighting_cache_size;        // +0x30
     uint32_t packet_buffer_size;         // +0x34
 };                                      // 0x38
 ```
 
-`ModelPart.flags` has the following complete retail contract:
+`SubmeshRuntimeState.flags` has the following complete retail contract:
 
 | Bit | Meaning |
 |---:|---|
@@ -112,10 +112,10 @@ for `01/09`, `4 * count` for `02`, and zero for all other families.
 
 ### 2.3 Vertices and normals
 
-Vertices and normals are arrays of eight-byte `SVECTOR` records:
+Vertices and normals are arrays of eight-byte `PackedShortVector` records:
 
 ```c
-struct SVECTOR {
+struct PackedShortVector {
     int16_t x;
     int16_t y;
     int16_t z;
@@ -237,7 +237,7 @@ command during rendering.
 Metadata records occupy four bytes and are recognized only by the template
 builders for families `01/03/05/07/09/0B/0D/0F`. They must not precede an
 attribute record for `00/02/04/06/08/0A/0C/0E/10`, whose builders do not call
-`ModelPacketSetTextureData`.
+`AssignModelTexturePayload`.
 
 ```c
 struct ModelMetadataCommand {
@@ -247,7 +247,7 @@ struct ModelMetadataCommand {
 };
 ```
 
-`ModelPacketSetTextureData` at `0x8002CD64`, normalized hash
+`AssignModelTexturePayload` at `0x8002CD64`, normalized hash
 `225d6cc5477011cff9abc3d043211e8ce31d57f2f6b5c8f2d25ad4646875af75`,
 updates persistent template state:
 
@@ -317,7 +317,7 @@ Its logical signature is:
 
 ```c
 bool RenderModelPart(
-    ModelPart *part,
+    SubmeshRuntimeState *part,
     void *packet_base,
     uint32_t *ordering_table,
     uint32_t render_mode);
@@ -365,7 +365,7 @@ The common retail pipeline is:
 6. Run normal/color or depth-cue operations where selected.
 7. Write XY and color fields into the prebuilt packet template.
 8. Compute the OT bucket using the selected depth policy and global shift.
-9. Rewrite the packet tag and link it with `AddPrim` semantics.
+9. Rewrite the packet tag and link it with `LinkGpuPrimitive` semantics.
 
 Lighting uses the currently installed light matrix, color matrix, and back
 color. The model format does not carry a complete independent lighting rig;
@@ -406,7 +406,7 @@ Use this order to validate traversal before mutation:
 
 ### 4.5 Model deformation channels
 
-`ModelPart+0x1C` points to an optional deformation table:
+`SubmeshRuntimeState+0x1C` points to an optional deformation table:
 
 ```c
 struct ModelDelta {                 /* 0x08 */
@@ -434,7 +434,7 @@ struct ModelDeformationTable {
 `0x14 + channel_count * 0x20`, clones vertices, and also clones normals when
 part flag `0x10` is set. `ApplyModelDeformationChannels` at `0x800305D8`
 restores listed vertices, applies each delta as `delta * weight >> 12`, and
-renormalizes modified normals with `VectorNormalSS`. The default evaluator
+renormalizes modified normals with `NormalizePackedShortVector`. The default evaluator
 moves current weight toward target by a clamped step. Field can replace it with
 a callback that supplies 32 sequential Q12 weights from an external `0x80`-byte
 block. `FreeModelDeformationState` at `0x800306D0` restores resource pointers
@@ -756,7 +756,7 @@ tpage = ((depth & 3) << 7) | ((tpage_y & 0x100) >> 4)
 clut  = ((clut_y & 0x1FF) << 6) | ((clut_x >> 4) & 0x3F)
 ```
 
-Each `POLY_FT4` packet is `0x28` bytes. Double-buffered storage reserves
+Each `FlatTexturedQuadrilateralPrimitive` packet is `0x28` bytes. Double-buffered storage reserves
 `0x50` bytes per descriptor:
 
 ```text
@@ -770,7 +770,7 @@ subsequently enable semi-transparency or modulated color.
 ## 9. Projected Sprite FT4 Emission
 
 The projected sprite path constructs four local vertices, invokes the GTE
-equivalent of `RotTransPers4`, and maps projected vertices to packet order
+equivalent of `ProjectRotatedQuadrilateral`, and maps projected vertices to packet order
 `0, 1, 3, 2`. This remap is required because a PS1 FT4 packet and the source
 rectangle use different lower-corner ordering.
 
@@ -925,7 +925,7 @@ container. Its recovered payload order is:
 | Payload | Purpose |
 |---:|---|
 | `0` | Texture data |
-| `1` | `ModelFileHeader` model archive |
+| `1` | `SerializedModelHeader` model archive |
 | `2` | `BoneLink` hierarchy table |
 | `3` | Small model/Gear configuration object in parsers that expose the end sentinel as a payload |
 
@@ -941,7 +941,7 @@ the final boundary before exposing spans.
 The Battle model constructor is `0x8009EBA8`, normalized hash
 `5a465b04614f281ca530d2ffef49c2838cff60a40b129840cab4b84e0ea3f702`.
 It calls the resident model relocator, allocates `part_count * 4`, and builds an
-array of pointers to the `ModelPart` records at archive offsets
+array of pointers to the `SubmeshRuntimeState` records at archive offsets
 `0x10 + index * 0x38`.
 
 This array is separate from the skeleton. A bone stores a model-part index;
@@ -983,11 +983,11 @@ struct MechaBoneRuntime {
     uint8_t enabled;                // +0x07
     int16_t model_part_index;       // +0x08
     int16_t bone_count_or_id;       // +0x0A
-    MATRIX local_matrix;            // +0x0C, 0x20 bytes
-    MATRIX final_matrix;            // +0x2C, 0x20 bytes
+    TransformBasis local_matrix;            // +0x0C, 0x20 bytes
+    TransformBasis final_matrix;            // +0x2C, 0x20 bytes
     int16_t scale[3];               // +0x4C
     int16_t value_52;               // +0x52
-    SVECTOR rotation;               // +0x54
+    PackedShortVector rotation;               // +0x54
     int32_t translation[3];         // +0x5C
     void *packet_buffer[2];         // +0x68
     AnimTrack *rotation_track;      // +0x70
@@ -1380,8 +1380,8 @@ That distinction affects callback timing and externally visible pose state.
 
 ### Model loader
 
-- Parse `ModelFileHeader` and `ModelPart` with exact `0x10`/`0x38` sizes.
-- Keep `SVECTOR.pad` and all serialized-but-unread words.
+- Parse `SerializedModelHeader` and `SubmeshRuntimeState` with exact `0x10`/`0x38` sizes.
+- Keep `PackedShortVector.pad` and all serialized-but-unread words.
 - Validate topology counts, indices, attribute cursor, and packet capacity.
 - Treat `0xC4/0xC8` as metadata only in families
   `01/03/05/07/09/0B/0D/0F`, not as primitives.

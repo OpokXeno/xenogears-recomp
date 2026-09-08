@@ -51,7 +51,7 @@
 0x801C865C, function start — TestDescendingBitMask16; isolates the indexed most-to-least-significant bit from a 16-bit value.
 0x801C8678, function start — TestAscendingBitMask32; isolates the indexed least-to-most-significant bit from a 32-bit value.
 0x801C8694, function start — EnsureRequestedDiscLoaded; maps the request low byte from a zero-based to a one-based disc number, returns if that disc is already loaded, otherwise loops non-cancellable prompt and marker validation with 29-frame failure waits until the expected disc is inserted, then reloads both indexes; requests outside 0..1 cannot complete.
-0x801C87C4, function start — ConsumeMemoryCardEventDeliveries; calls UnDeliverEvent for the complete, error, timeout, and new-device memory-card events without closing their handles.
+0x801C87C4, function start — ConsumeMemoryCardEventDeliveries; calls WithdrawKernelEvent for the complete, error, timeout, and new-device memory-card events without closing their handles.
 0x801C881C, function start — WaitAndConsumeMemoryCardEvent; polls until new-device, error, I/O-complete, or timeout occurs, consumes all four event deliveries, and returns code 3, 1, 0, or 2 respectively.
 0x801C891C, function start — RequestMemoryCardInfoStatus; starts a card-information request and maps its completion to success 0, error -3, timeout -1, or new-device -2.
 0x801C8960, function start — FinalizeMemoryCardEventHandles; renders one frame and closes all four memory-card event handles inside a critical section.
