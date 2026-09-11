@@ -1146,6 +1146,8 @@ static bool current_artifact_is_authorized(void) {
 
 static bool current_artifact_code_range_overlaps(uint32_t address,
                                                    uint32_t size) {
+    XgRenderRuntimeHostServices host = {0};
+    (void)xg_render_runtime_host_services(&host);
     for (uint32_t index = 0u;
          index < XG_RENDER_AUTH_ARTIFACT_CAPACITY; ++index) {
         const XgRenderAuthenticatedArtifact *record =
@@ -1155,8 +1157,18 @@ static bool current_artifact_code_range_overlaps(uint32_t address,
             record->scene_generation == state.scene_generation &&
             normalized_ranges_overlap(
                 record->candidate.range_start, record->candidate.range_size,
-                address, size))
+                address, size)) {
+            /* An authenticated image includes mutable data. Only writes to its
+             * executable ranges break temporal continuity; a data update is
+             * precisely what consecutive source frames are meant to capture. */
+            if (host.artifact_code_write_overlaps != NULL &&
+                host.artifact_code_write_overlaps(
+                    record->candidate.artifact_sha256,
+                    record->candidate.artifact_base,
+                    record->candidate.artifact_size, address, size) == 0)
+                continue;
             return true;
+        }
     }
     return false;
 }

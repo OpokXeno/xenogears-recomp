@@ -456,6 +456,7 @@ def generate_dispatch_shards(
         "/* Generated native overlay dispatch router. DO NOT EDIT. */",
         '#include "psx_runtime.h"',
         '#include "game_identity.h"',
+        '#include <string.h>',
         "",
         "static const PsxGameIdentity k_psx_overlay_static_identity = {",
         f"    {{{game_identity}}},",
@@ -557,8 +558,33 @@ def generate_dispatch_shards(
             "        psx_ov_static_image_misses++;",
             "    }",
         ]
+    lines += ["    return 0;", "}", ""]
     lines += [
-        "    return 0;",
+        "int psx_overlay_static_artifact_code_write_overlaps(const uint8_t sha256[32],",
+        "        uint32_t base, uint32_t size, uint32_t address, uint32_t write_size) {",
+        "    const uint64_t begin = address & 0x1FFFFFFFu;",
+        "    const uint64_t end = begin + write_size;",
+        "    base &= 0x1FFFFFFFu;",
+    ]
+    for image in unique_images:
+        digest = ", ".join(f"0x{v:02x}u" for v in bytes.fromhex(image["artifact_sha256"]))
+        flat = ", ".join(f"0x{v:X}u" for pair in image["ranges"] for v in pair)
+        lines += [
+            "    {",
+            f"        static const uint8_t digest[32] = {{{digest}}};",
+            f"        static const uint32_t ranges[] = {{{flat}}};",
+            f"        if (base == 0x{image['load_addr'] & 0x1fffffff:X}u && size == 0x{image['size']:X}u &&",
+            "            memcmp(sha256, digest, sizeof(digest)) == 0) {",
+            "            for (uint32_t i = 0; i < sizeof(ranges) / sizeof(ranges[0]); i += 2u) {",
+            "                const uint64_t lo = ranges[i] & 0x1FFFFFFFu;",
+            "                if (write_size && begin < lo + ranges[i + 1u] && lo < end) return 1;",
+            "            }",
+            "            return 0;",
+            "        }",
+            "    }",
+        ]
+    lines += [
+        "    return -1;",
         "}",
         "",
         "int psx_overlay_dispatch(CPUState *cpu, uint32_t addr) {",

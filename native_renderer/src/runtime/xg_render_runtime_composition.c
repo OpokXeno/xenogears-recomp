@@ -604,6 +604,14 @@ static bool source_context_matches(XgRenderAuthTier tier,
     bool identity_valid;
 
     query_state(&state);
+    if (xg_render_submission_native_work_mode() &&
+        tier == XG_RENDER_AUTH_TIER_STATIC) {
+        XgRenderArtifactAuthority authority;
+        const bool authorized = artifact_authority_for_pc(
+            UINT32_C(0x800764b4), &authority);
+        if (out_context_bits != NULL) *out_context_bits = authorized ? 16u : 0u;
+        return authorized;
+    }
     candidate_context = tier == XG_RENDER_AUTH_TIER_COLD_INTERPRETER ||
         (tier == XG_RENDER_AUTH_TIER_WARM_NATIVE &&
          ((state.active && state.candidate_matched &&
@@ -638,6 +646,18 @@ static bool capture_auth_context(XgFieldCharacterSourceCaptureRequest *request) 
     XgRenderRuntimeAuthSceneState state;
     XgRenderAuthSnapshot snapshot = {0};
 
+    if (request != NULL && xg_render_submission_native_work_mode()) {
+        XgRenderArtifactAuthority authority;
+        if (!artifact_authority_for_pc(UINT32_C(0x800764b4), &authority))
+            return false;
+        query_state(&state);
+        request->scene_generation = state.scene_generation;
+        request->visual_state.scene_epoch = state.scene_generation;
+        request->visual_state.state_sequence = request->source_generation;
+        request->producer_record_id = xg_render_manifest_validation.producer_record_id;
+        request->producer_entry = UINT32_C(0x800764b4);
+        return true;
+    }
     if (request == NULL || auth_scene.auth_snapshot == NULL ||
         !auth_scene.auth_snapshot(&snapshot))
         return false;
@@ -663,6 +683,33 @@ static void reject_auth(void) {
     if (auth_scene.reject_auth != NULL) auth_scene.reject_auth(0u);
 }
 
+static XgRenderFieldCharacterStageResult stage_field_character(
+        const XgRenderIrNativePrimitive *primitive,
+        const GpuRenderSemantic *semantic, uint32_t packet_address,
+        uint32_t source_primitive_index, uint32_t ot_bucket,
+        GpuRenderTransactionId visual_id) {
+    if (!xg_render_submission_native_work_mode())
+        return xg_render_submission_stage_field_character(primitive, semantic,
+            packet_address, source_primitive_index, ot_bucket, visual_id);
+    XgRenderProducerLifecycle lifecycle;
+    if (primitive == NULL || semantic == NULL ||
+        !lifecycle_begin(UINT32_C(0x800764b4), &lifecycle))
+        return XG_RENDER_FIELD_CHARACTER_STAGE_AUTH_FAILED;
+    const XgRenderPreScenePrimitive record = {
+        .primitive = *primitive,
+        .packet_address = packet_address,
+        .source_primitive_index = source_primitive_index,
+        .ot_bucket = ot_bucket,
+        .payload_word_count = 9u,
+        .interpolation_producer_id = semantic->interpolation_identity.producer_id,
+        .interpolation_primitive_id = semantic->interpolation_identity.primitive_id,
+        .interpolation_identity_valid = true,
+    };
+    return xg_render_submission_pre_scene_stage(&record)
+        ? XG_RENDER_FIELD_CHARACTER_STAGE_OK
+        : XG_RENDER_FIELD_CHARACTER_STAGE_SUBMISSION_FAILED;
+}
+
 static const XgRenderFieldCharacterPipelineServices *field_character_services(void) {
     static const XgRenderFieldCharacterPipelineServices services = {
         .source_context_matches = source_context_matches,
@@ -670,7 +717,7 @@ static const XgRenderFieldCharacterPipelineServices *field_character_services(vo
         .capture_auth_context = capture_auth_context,
         .scene_generation = field_character_scene_generation,
         .interpolation_scene_generation = interpolation_scene_generation,
-        .stage_candidate = xg_render_submission_stage_field_character,
+        .stage_candidate = stage_field_character,
         .reject_auth = reject_auth,
     };
     return &services;

@@ -583,7 +583,9 @@ static void process_producer_family_candidate(
         xg_render_semantic_set_interpolation_identity(
             &semantic, services->interpolation_scene_generation(),
             geometry.source_snapshot.identity.producer_record_id,
-            source_primitive_index);
+            /* ft4_index selects the two packet buffers of the same shadow.
+             * Temporal identity follows the actor, not the alternating arena. */
+            geometry.source_snapshot.identity.actor_index);
         visual_id = (GpuRenderTransactionId){
             geometry.source_snapshot.generation.visual_state.scene_epoch,
             geometry.source_snapshot.generation.visual_state.state_sequence,

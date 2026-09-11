@@ -9,6 +9,11 @@ typedef struct XgRenderRuntimeHostServices {
     uint32_t (*read_word)(uint32_t address);
     bool (*semantic_module)(uint32_t *out_module);
     bool (*native_text_authorizes_pc)(uint32_t owner_entry);
+    /* -1: unknown artifact, 0: data-only write, 1: executable range overlap.
+     * Classification uses immutable code ranges, even after code was changed. */
+    int (*artifact_code_write_overlaps)(const uint8_t sha256[32],
+        uint32_t artifact_base, uint32_t artifact_size,
+        uint32_t address, uint32_t size);
 } XgRenderRuntimeHostServices;
 
 #ifdef __cplusplus

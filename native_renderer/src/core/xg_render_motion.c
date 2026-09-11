@@ -1,6 +1,7 @@
 #include "xg_render_motion.h"
 #include "psx_gte_divide.h"
 #include "xg_render_scene_snapshot.h"
+#include "xg_host_3d.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -626,6 +627,42 @@ bool xg_render_motion_bind_command(uint32_t command_id, XgRenderNativeOperation 
             xg_render_motion_note(XG_MOTION_BIND_RESOURCE_REJECT, command_id);
             return false;
         }
+        /* All faces of a bound model share the same source projection. Some
+         * packet families carry only integer XY; leaving those next to Native
+         * subpixel faces splits duplicate source vertices during motion. Recover
+         * the Native view from the authenticated local geometry, never screen XY.
+         * This runs on the guest owner, where the Native-view configuration lives. */
+        const XgRenderMotionPose *pose;
+        if (!xg_render_motion_view(c->binding.motion, &pose)) return false;
+        const XgHost3dMatrix *matrix =
+            &pose->nodes[c->binding.motion_part_index].source_model_to_view;
+        for (uint32_t t = 0u; t < c->binding.triangle_count; ++t) {
+            bool missing_native = false;
+            for (uint32_t v = 0u; v < 3u; ++v)
+                missing_native |= !op->semantic.triangles[t].vertices[v].native_view_position;
+            if (!missing_native) continue;
+            XgHost3dProject4Input input = {0};
+            XgHost3dRotTransPers4Output output;
+            memcpy(input.projection.rotation, matrix->rotation, sizeof(matrix->rotation));
+            memcpy(input.projection.translation, matrix->translation, sizeof(matrix->translation));
+            input.projection.screen_offset_x = (int32_t)(pose->screen_offset[0] * 65536.0);
+            input.projection.screen_offset_y = (int32_t)(pose->screen_offset[1] * 65536.0);
+            input.projection.projection_distance = (uint16_t)pose->projection_distance;
+            for (uint32_t v = 0u; v < 3u; ++v) input.vertices[v] = c->binding.local[t][v];
+            input.vertices[3] = input.vertices[2];
+            if (!xg_host_3d_rot_trans_pers4(&input, &output)) return false;
+            for (uint32_t v = 0u; v < 3u; ++v) {
+                GpuRenderSemanticVertex *vertex = &op->semantic.triangles[t].vertices[v];
+                const XgHost3dProjectedVertex *projected = &output.vertices[v];
+                if (!vertex->native_view_position && projected->native_view_position &&
+                    vertex->x == (int32_t)projected->x * INT32_C(65536) &&
+                    vertex->y == (int32_t)projected->y * INT32_C(65536)) {
+                    vertex->native_view_x = projected->native_view_x_16_16;
+                    vertex->native_view_y = projected->native_view_y_16_16;
+                    vertex->native_view_position = 1u;
+                }
+            }
+        }
         op->motion = c->binding;
         xg_render_motion_note(XG_MOTION_BOUND, command_id);
         return true;
@@ -855,6 +892,44 @@ bool xg_render_motion_evaluate(XgRenderMotionRef previous, XgRenderMotionRef cur
     return true;
 }
 
+static void project_source_vertex(const XgHost3dProjection *source,
+        const XgHost3dVector *p, double screen[2], double native[2]) {
+    int64_t mac[3];
+    for (unsigned r = 0; r < 3; ++r) {
+        const int64_t raw = (int64_t)source->translation[r] * 4096 +
+            (int64_t)source->rotation[r][0] * p->x +
+            (int64_t)source->rotation[r][1] * p->y +
+            (int64_t)source->rotation[r][2] * p->z;
+        const uint32_t low = (uint32_t)(int64_t)floor(raw / 4096.0);
+        mac[r] = low < UINT32_C(0x80000000) ? (int64_t)low :
+            (int64_t)low - INT64_C(4294967296);
+    }
+    const uint16_t depth = mac[2] < 0 ? 0 : mac[2] > 65535 ? 65535 : (uint16_t)mac[2];
+    const int32_t q = psx_gte_divide(source->projection_distance, depth, NULL);
+    for (unsigned axis = 0; axis < 2; ++axis) {
+        const int64_t ir = mac[axis] < -32768 ? -32768 : mac[axis] > 32767 ? 32767 : mac[axis];
+        const int64_t xy = (axis ? source->screen_offset_y : source->screen_offset_x) + ir * q;
+        const uint32_t low = (uint32_t)xy;
+        screen[axis] = fmax(-1024.0, fmin(1023.0, floor(xy / 65536.0)));
+        native[axis] = (low < UINT32_C(0x80000000) ? (int64_t)low :
+            (int64_t)low - INT64_C(4294967296)) / 65536.0;
+    }
+}
+
+bool xg_render_motion_source_vertex(const XgRenderMotionPose *pose, uint32_t part,
+        const XgHost3dVector *vertex, double screen[2], double native[2]) {
+    if (!pose || part >= pose->node_count || !vertex || !screen || !native) return false;
+    XgHost3dProjection projection = {0};
+    const XgHost3dMatrix *matrix = &pose->nodes[part].source_model_to_view;
+    memcpy(projection.rotation, matrix->rotation, sizeof(projection.rotation));
+    memcpy(projection.translation, matrix->translation, sizeof(projection.translation));
+    projection.screen_offset_x = (int32_t)(pose->screen_offset[0] * 65536.0);
+    projection.screen_offset_y = (int32_t)(pose->screen_offset[1] * 65536.0);
+    projection.projection_distance = (uint16_t)pose->projection_distance;
+    project_source_vertex(&projection, vertex, screen, native);
+    return true;
+}
+
 XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluation *e,
                                                       const XgRenderMotionDrawBinding *b,
                                                       double screen_delta[2][3][3],
@@ -896,29 +971,7 @@ XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluat
             double anchors[2][2], native_anchors[2][2];
             for (unsigned endpoint = 0; endpoint < 2; ++endpoint) {
                 const XgHost3dProjection *source = &e->source_projection[endpoint][b->motion_part_index];
-                int64_t mac[3];
-                /* RTPS SF12: floor before wrapping MAC32, then saturate IR/SZ.
-                 * All sums fit exactly in double (<2^44); division is by 2^12.
-                 * Do not read the guest-owner's global native-view configuration. */
-                for (unsigned r = 0; r < 3; ++r) {
-                    const int64_t raw = (int64_t)source->translation[r] * 4096 +
-                        (int64_t)source->rotation[r][0] * p->x +
-                        (int64_t)source->rotation[r][1] * p->y +
-                        (int64_t)source->rotation[r][2] * p->z;
-                    const uint32_t low = (uint32_t)(int64_t)floor(raw / 4096.0);
-                    mac[r] = low < UINT32_C(0x80000000) ? (int64_t)low :
-                        (int64_t)low - INT64_C(4294967296);
-                }
-                const uint16_t depth = mac[2] < 0 ? 0 : mac[2] > 65535 ? 65535 : (uint16_t)mac[2];
-                const int32_t q = psx_gte_divide(source->projection_distance, depth, NULL);
-                for (unsigned axis = 0; axis < 2; ++axis) {
-                    const int64_t ir = mac[axis] < -32768 ? -32768 : mac[axis] > 32767 ? 32767 : mac[axis];
-                    const int64_t xy = (axis ? source->screen_offset_y : source->screen_offset_x) + ir * q;
-                    const uint32_t low = (uint32_t)xy;
-                    anchors[endpoint][axis] = fmax(-1024.0, fmin(1023.0, floor(xy / 65536.0)));
-                    native_anchors[endpoint][axis] = (low < UINT32_C(0x80000000) ? (int64_t)low :
-                        (int64_t)low - INT64_C(4294967296)) / 65536.0;
-                }
+                project_source_vertex(source, p, anchors[endpoint], native_anchors[endpoint]);
             }
             for (unsigned axis = 0; axis < 2; ++axis) {
                 const double a = anchors[0][axis], c = anchors[1][axis];
