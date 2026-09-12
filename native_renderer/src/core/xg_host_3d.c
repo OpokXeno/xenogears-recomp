@@ -1,5 +1,6 @@
 #include "xg_host_3d.h"
 #include "psx_gte_divide.h"
+#include "psx_render_nclip.h"
 
 #include <limits.h>
 #include <stddef.h>
@@ -555,6 +556,23 @@ static void project_vertex(XgHost3dMathState *state,
         state->ir0 = saturate_ir0(
             wrap_i32(shift_right_floor(mac0, 12u)), &state->flags);
     }
+}
+
+int32_t xg_host_3d_nclip(const XgHost3dProjectedVertex *vertices) {
+    if (vertices == NULL) return 0;
+    const int32_t area = (int32_t)vertices[0].x * vertices[1].y +
+        (int32_t)vertices[1].x * vertices[2].y +
+        (int32_t)vertices[2].x * vertices[0].y -
+        (int32_t)vertices[0].x * vertices[2].y -
+        (int32_t)vertices[1].x * vertices[0].y -
+        (int32_t)vertices[2].x * vertices[1].y;
+    int32_t x[3], y[3];
+    for (unsigned i = 0; i < 3; ++i) {
+        if (!vertices[i].native_view_position) return area;
+        x[i] = vertices[i].native_view_x_16_16;
+        y[i] = vertices[i].native_view_y_16_16;
+    }
+    return psx_render_nclip(area, x, y);
 }
 
 int xg_host_3d_rtps(const XgHost3dProjection *projection,

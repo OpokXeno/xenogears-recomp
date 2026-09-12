@@ -168,17 +168,68 @@ static bool trs_valid(const XgRenderMotionTrs *t) {
 }
 
 bool xg_render_motion_camera_from_view(const XgHost3dMatrix *view, XgRenderMotionTrs *out) {
-    XgRenderMotionTrs camera;
-    if (out == NULL || !xg_render_motion_decompose(view, &camera))
-        return false;
-    const double scale = (camera.scale[0] + camera.scale[1] + camera.scale[2]) / 3.0;
+    if (!view || !out) return false;
+    XgRenderMotionTrs camera = {0};
+    double matrix[3][3], rotation[3][3], norm = 0;
     for (unsigned i = 0; i < 3; ++i)
-        if (fabs(camera.scale[i] - scale) > 0.002 * scale)
-            return false;
+        for (unsigned j = 0; j < 3; ++j) {
+            matrix[i][j] = view->rotation[i][j] / 4096.0;
+            norm += matrix[i][j] * matrix[i][j];
+        }
+    norm = sqrt(norm / 3.0);
+    if (!isfinite(norm) || norm < 1.0 / 4096.0) return false;
+    for (unsigned i = 0; i < 3; ++i)
+        for (unsigned j = 0; j < 3; ++j) rotation[i][j] = matrix[i][j] / norm;
+    /* Camera MATRIXs accumulate Q12 composition error and need not be exact
+     * uniform-scale TRS. Polar decomposition extracts the closest rotation
+     * without a frame-dependent shear rejection. The shared matrix anchoring
+     * in motion_evaluate retains the actual affine endpoint matrices. */
+    bool converged = false;
+    for (unsigned iteration = 0; iteration < 32; ++iteration) {
+        double cofactor[3][3], next[3][3];
+        for (unsigned i = 0; i < 3; ++i)
+            for (unsigned j = 0; j < 3; ++j)
+                cofactor[i][j] = rotation[(i+1)%3][(j+1)%3]*rotation[(i+2)%3][(j+2)%3] -
+                    rotation[(i+1)%3][(j+2)%3]*rotation[(i+2)%3][(j+1)%3];
+        const double det = rotation[0][0]*cofactor[0][0] +
+            rotation[0][1]*cofactor[0][1] + rotation[0][2]*cofactor[0][2];
+        if (!isfinite(det) || det <= 1e-12) return false;
+        double change = 0;
+        for (unsigned i = 0; i < 3; ++i)
+            for (unsigned j = 0; j < 3; ++j) {
+                next[i][j] = 0.5*(rotation[i][j] + cofactor[i][j]/det);
+                change = fmax(change, fabs(next[i][j]-rotation[i][j]));
+            }
+        memcpy(rotation, next, sizeof(rotation));
+        if (change < 1e-12) { converged = true; break; }
+    }
+    if (!converged) return false;
+    double scale = 0;
+    for (unsigned i = 0; i < 3; ++i)
+        for (unsigned j = 0; j < 3; ++j) scale += rotation[i][j]*matrix[i][j]/3.0;
+    if (!isfinite(scale) || scale < 1e-8) return false;
+    const double trace = rotation[0][0]+rotation[1][1]+rotation[2][2];
+    if (trace > 0) {
+        const double s = sqrt(trace+1.0)*2;
+        camera.rotation[3] = s*0.25;
+        camera.rotation[0] = (rotation[2][1]-rotation[1][2])/s;
+        camera.rotation[1] = (rotation[0][2]-rotation[2][0])/s;
+        camera.rotation[2] = (rotation[1][0]-rotation[0][1])/s;
+    } else {
+        unsigned i = rotation[1][1] > rotation[0][0] ? 1u : 0u;
+        if (rotation[2][2] > rotation[i][i]) i = 2;
+        const unsigned j = (i+1)%3, k = (i+2)%3;
+        const double s = sqrt(1+rotation[i][i]-rotation[j][j]-rotation[k][k])*2;
+        camera.rotation[i] = s*0.25;
+        camera.rotation[j] = (rotation[j][i]+rotation[i][j])/s;
+        camera.rotation[k] = (rotation[k][i]+rotation[i][k])/s;
+        camera.rotation[3] = (rotation[k][j]-rotation[j][k])/s;
+    }
+    if (!normalize(camera.rotation)) return false;
     for (unsigned i = 0; i < 3; ++i) {
         double t = 0;
         for (unsigned j = 0; j < 3; ++j)
-            t -= (view->rotation[j][i] / 4096.0) * view->translation[j] / (scale * scale);
+            t -= rotation[j][i] * view->translation[j] / scale;
         camera.translation[i] = t;
         camera.rotation[i] = -camera.rotation[i];
         camera.scale[i] = 1.0 / scale;
@@ -892,44 +943,6 @@ bool xg_render_motion_evaluate(XgRenderMotionRef previous, XgRenderMotionRef cur
     return true;
 }
 
-static void project_source_vertex(const XgHost3dProjection *source,
-        const XgHost3dVector *p, double screen[2], double native[2]) {
-    int64_t mac[3];
-    for (unsigned r = 0; r < 3; ++r) {
-        const int64_t raw = (int64_t)source->translation[r] * 4096 +
-            (int64_t)source->rotation[r][0] * p->x +
-            (int64_t)source->rotation[r][1] * p->y +
-            (int64_t)source->rotation[r][2] * p->z;
-        const uint32_t low = (uint32_t)(int64_t)floor(raw / 4096.0);
-        mac[r] = low < UINT32_C(0x80000000) ? (int64_t)low :
-            (int64_t)low - INT64_C(4294967296);
-    }
-    const uint16_t depth = mac[2] < 0 ? 0 : mac[2] > 65535 ? 65535 : (uint16_t)mac[2];
-    const int32_t q = psx_gte_divide(source->projection_distance, depth, NULL);
-    for (unsigned axis = 0; axis < 2; ++axis) {
-        const int64_t ir = mac[axis] < -32768 ? -32768 : mac[axis] > 32767 ? 32767 : mac[axis];
-        const int64_t xy = (axis ? source->screen_offset_y : source->screen_offset_x) + ir * q;
-        const uint32_t low = (uint32_t)xy;
-        screen[axis] = fmax(-1024.0, fmin(1023.0, floor(xy / 65536.0)));
-        native[axis] = (low < UINT32_C(0x80000000) ? (int64_t)low :
-            (int64_t)low - INT64_C(4294967296)) / 65536.0;
-    }
-}
-
-bool xg_render_motion_source_vertex(const XgRenderMotionPose *pose, uint32_t part,
-        const XgHost3dVector *vertex, double screen[2], double native[2]) {
-    if (!pose || part >= pose->node_count || !vertex || !screen || !native) return false;
-    XgHost3dProjection projection = {0};
-    const XgHost3dMatrix *matrix = &pose->nodes[part].source_model_to_view;
-    memcpy(projection.rotation, matrix->rotation, sizeof(projection.rotation));
-    memcpy(projection.translation, matrix->translation, sizeof(projection.translation));
-    projection.screen_offset_x = (int32_t)(pose->screen_offset[0] * 65536.0);
-    projection.screen_offset_y = (int32_t)(pose->screen_offset[1] * 65536.0);
-    projection.projection_distance = (uint16_t)pose->projection_distance;
-    project_source_vertex(&projection, vertex, screen, native);
-    return true;
-}
-
 XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluation *e,
                                                       const XgRenderMotionDrawBinding *b,
                                                       double screen_delta[2][3][3],
@@ -971,7 +984,29 @@ XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluat
             double anchors[2][2], native_anchors[2][2];
             for (unsigned endpoint = 0; endpoint < 2; ++endpoint) {
                 const XgHost3dProjection *source = &e->source_projection[endpoint][b->motion_part_index];
-                project_source_vertex(source, p, anchors[endpoint], native_anchors[endpoint]);
+                int64_t mac[3];
+                /* RTPS SF12: floor before wrapping MAC32, then saturate IR/SZ.
+                 * All sums fit exactly in double (<2^44); division is by 2^12.
+                 * Do not read the guest-owner's global native-view configuration. */
+                for (unsigned r = 0; r < 3; ++r) {
+                    const int64_t raw = (int64_t)source->translation[r] * 4096 +
+                        (int64_t)source->rotation[r][0] * p->x +
+                        (int64_t)source->rotation[r][1] * p->y +
+                        (int64_t)source->rotation[r][2] * p->z;
+                    const uint32_t low = (uint32_t)(int64_t)floor(raw / 4096.0);
+                    mac[r] = low < UINT32_C(0x80000000) ? (int64_t)low :
+                        (int64_t)low - INT64_C(4294967296);
+                }
+                const uint16_t depth = mac[2] < 0 ? 0 : mac[2] > 65535 ? 65535 : (uint16_t)mac[2];
+                const int32_t q = psx_gte_divide(source->projection_distance, depth, NULL);
+                for (unsigned axis = 0; axis < 2; ++axis) {
+                    const int64_t ir = mac[axis] < -32768 ? -32768 : mac[axis] > 32767 ? 32767 : mac[axis];
+                    const int64_t xy = (axis ? source->screen_offset_y : source->screen_offset_x) + ir * q;
+                    const uint32_t low = (uint32_t)xy;
+                    anchors[endpoint][axis] = fmax(-1024.0, fmin(1023.0, floor(xy / 65536.0)));
+                    native_anchors[endpoint][axis] = (low < UINT32_C(0x80000000) ? (int64_t)low :
+                        (int64_t)low - INT64_C(4294967296)) / 65536.0;
+                }
             }
             for (unsigned axis = 0; axis < 2; ++axis) {
                 const double a = anchors[0][axis], c = anchors[1][axis];

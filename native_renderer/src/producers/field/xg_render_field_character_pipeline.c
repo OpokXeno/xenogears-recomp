@@ -569,6 +569,24 @@ static void process_producer_family_candidate(
         }
         xg_render_primitive_apply_projected_quad_positions(
             &primitive, candidate.source_derived.projection.vertices);
+        /* A shadow lies on a 3D surface. Retain its source projection so the
+         * phase follows depth/camera motion instead of a screen-space chord. */
+        static const uint8_t split[2][3] = {{0, 1, 2}, {2, 1, 3}};
+        for (uint32_t t = 0u; t < 2u; ++t)
+            for (uint32_t v = 0u; v < 3u; ++v) {
+                XgRenderIrVertex *target = &primitive.triangles[t].vertices[v];
+                const XgHost3dProjectedVertex *source =
+                    &candidate.source_derived.projection.vertices[split[t][v]];
+                target->projective_view_x = source->projective_view_x;
+                target->projective_view_y = source->projective_view_y;
+                target->projective_view_z = source->projective_view_z;
+                target->projective_offset_x = source->projective_offset_x_16_16;
+                target->projective_offset_y = source->projective_offset_y_16_16;
+                target->projective_native_offset_x = source->projective_native_offset_x_16_16;
+                target->projective_native_offset_y = source->projective_native_offset_y_16_16;
+                target->projective_distance = source->projective_distance;
+                target->projective_position = source->projective_position;
+            }
         if (xg_render_backend_translate_primitive(&primitive, &semantic) !=
             XG_RENDER_BACKEND_OK) {
             xg_render_field_character_reject(12u, services);
@@ -582,7 +600,9 @@ static void process_producer_family_candidate(
         }
         xg_render_semantic_set_interpolation_identity(
             &semantic, services->interpolation_scene_generation(),
-            geometry.source_snapshot.identity.producer_record_id,
+            /* Each actor owns an independent shadow. Visibility of another
+             * actor must not invalidate this quad's temporal component. */
+            UINT32_C(0x53000000) | geometry.source_snapshot.identity.actor_index,
             /* ft4_index selects the two packet buffers of the same shadow.
              * Temporal identity follows the actor, not the alternating arena. */
             geometry.source_snapshot.identity.actor_index);

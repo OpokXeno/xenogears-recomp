@@ -152,6 +152,10 @@ typedef enum SpritePhase {
 
 typedef struct SpriteState {
     XgSpriteFt4Record native;
+    XgRenderMotionRef motion;
+    XgRenderMotionDrawBinding motion_binding;
+    XgHost3dProjection motion_projection;
+    bool motion_attempted;
     SpriteStageRecord native_records[SPRITE_CAPACITY];
     XgRenderProducerLifecycle native_lifecycles[SPRITE_CAPACITY];
     uint8_t native_opcodes[SPRITE_CAPACITY];
@@ -692,6 +696,9 @@ static void clear_sprite(void) {
     sprite_ft4.payload_matches = false;
     sprite_ft4.invocation_matches = false;
     sprite_ft4.wrapper_scope = false;
+    sprite_ft4.motion = (XgRenderMotionRef){0};
+    sprite_ft4.motion_binding = (XgRenderMotionDrawBinding){0};
+    sprite_ft4.motion_attempted = false;
 }
 
 static void block_sprite(uint32_t blocker) {
@@ -1040,7 +1047,7 @@ static bool capture_field_motion(CPUState *cpu, ModelContext *context,
     return true;
 }
 
-static void bind_model_motion(uint32_t packet, const XgHost3dVector *vertices,
+static bool bind_model_motion(uint32_t packet, const XgHost3dVector *vertices,
                               const uint32_t *indices, uint32_t count, uint32_t attribute,
                               bool triangle) {
     const ModelContext *context = &model_ft4.context;
@@ -1049,17 +1056,71 @@ static void bind_model_motion(uint32_t packet, const XgHost3dVector *vertices,
                                          .motion_part_index = context->motion_part,
                                          .triangle_count = count == 3 ? 1u : 2u};
     if (!context->motion.handle.resource_id)
-        return;
+        return false;
     for (uint32_t t = 0; t < binding.triangle_count; ++t)
         for (unsigned v = 0; v < 3; ++v) {
             binding.local[t][v] = vertices[split[t][v]];
             binding.local[t][v].pad = 0;
             binding.vertex_ids[t][v] = indices[split[t][v]];
         }
-    (void)xg_render_motion_register_command(
+    return xg_render_motion_register_command(
         packet + 4, &binding, context->instance_address & 0x1fffffffu,
         (attribute & 0x1fffffffu) | ((uint32_t)(context->dispatch_mode & 7u) << 29u) |
             (triangle ? 1u : 0u));
+}
+
+static bool capture_model_motion_geometry(uint32_t packet, uint32_t descriptor,
+        uint32_t family, const XgHost3dVector vertices[4], const uint32_t indices[4]) {
+    const ModelContext *context = &model_ft4.context;
+    const XgRenderMotionPose *pose;
+    XgHost3dProject4Input input = {.projection = context->projection};
+    XgHost3dRotTransPers4Output output;
+    GpuRenderSemantic semantic = {0};
+    const uint8_t split[2][3] = {{0, 1, 2}, {2, 1, 3}};
+    const uint32_t corners = family & 8u ? 4u : 3u;
+    if (!xg_render_motion_view(context->motion, &pose)) return false;
+    memcpy(input.vertices, vertices, sizeof(input.vertices));
+    if (corners == 3u) input.vertices[3] = input.vertices[2];
+    if (!xg_host_3d_rot_trans_pers4(&input, &output)) return false;
+    semantic.material.textured = (family & 1u) != 0u || family == 16u;
+    semantic.material.shading = family & 2u
+        ? GPU_RENDER_SHADING_GOURAUD : GPU_RENDER_SHADING_FLAT;
+    semantic.triangle_count = corners - 2u;
+    const uint32_t producer = context->instance_address & 0x1fffffffu;
+    xg_render_semantic_set_interpolation_identity(&semantic, pose->continuity_generation,
+        producer, (descriptor & 0x1fffffffu) |
+            ((uint32_t)(context->dispatch_mode & 7u) << 29u) | (corners == 3u));
+    for (uint32_t t = 0; t < semantic.triangle_count; ++t) {
+        semantic.triangles[t].split_index = (uint8_t)t;
+        semantic.triangles[t].split_count = (uint8_t)semantic.triangle_count;
+        for (uint32_t v = 0; v < 3u; ++v) {
+            const uint32_t corner = split[t][v];
+            const XgHost3dProjectedVertex *source = &output.vertices[corner];
+            GpuRenderSemanticVertex *target = &semantic.triangles[t].vertices[v];
+            target->x = (int32_t)source->x * 65536;
+            target->y = (int32_t)source->y * 65536;
+            target->native_view_x = source->native_view_x_16_16;
+            target->native_view_y = source->native_view_y_16_16;
+            target->native_view_position = source->native_view_position;
+            target->projective_view_x = source->projective_view_x;
+            target->projective_view_y = source->projective_view_y;
+            target->projective_view_z = source->projective_view_z;
+            target->projective_offset_x = source->projective_offset_x_16_16;
+            target->projective_offset_y = source->projective_offset_y_16_16;
+            target->projective_native_offset_x = source->projective_native_offset_x_16_16;
+            target->projective_native_offset_y = source->projective_native_offset_y_16_16;
+            target->projective_distance = source->projective_distance;
+            target->projective_position = source->projective_position;
+            target->interpolation_group_id = producer;
+            target->interpolation_vertex_id = indices[corner];
+            target->interpolation_vertex_identity_valid = 1u;
+        }
+    }
+    /* As in the resident Battle model capture, this binds geometry to an output
+     * slot; acceptance checks exact GTE XY and takes final material/OT order from
+     * the actual draw. A culled slot does not publish a polygon. */
+    return xg_render_submission_stage_exact((GpuRenderTransactionId){0},
+        (packet & 0x1fffffffu) + 4u, &semantic) == GUEST_RENDER_TRANSACTION_OK;
 }
 
 /* Capture the whole local geometry binding at model entry. This also covers
@@ -1070,14 +1131,30 @@ static void capture_motion_bindings(CPUState *cpu,
     uint32_t topology = context->topology_base, attribute = context->material_base;
     uint32_t packet = context->packet_base;
     uint16_t tpage = context->tpage, clut = context->clut;
+    /* Resident dispatch LUT 8004fe50: every row has 8-byte topology. Bit 3
+     * selects quads, bit 1 Gouraud, bit 0 texture; row 16 is mapped FT3.
+     * A mixed model must retain one pose across ALL its polygon families. */
+    static const uint8_t packet_sizes[17] = {
+        20, 32, 28, 40, 20, 32, 28, 40, 24, 40, 36, 52, 24, 40, 36, 52, 32,
+    };
+    static const uint8_t attribute_sizes[17] = {
+        4, 8, 4, 8, 4, 8, 4, 8, 4, 12, 4, 12, 4, 12, 4, 12, 4,
+    };
     if (!context->motion.handle.resource_id || !services || !services->lifecycle ||
         !services->lifecycle->guest_data_range_is_valid)
         return;
     const uint32_t count = cpu->read_half(context->model_address + 6);
     const uint32_t vertex_count = cpu->read_half(context->model_address + 2);
+    uint32_t packet_bytes = cpu->read_word(context->model_address + 0x34);
+    if (!services->lifecycle->guest_data_range_is_valid(packet, packet_bytes, 4, false))
+        goto fail;
     for (uint32_t g = 0; g < count; ++g) {
+        if (!services->lifecycle->guest_data_range_is_valid(topology, 4, 2, false))
+            goto fail;
         const uint32_t family = cpu->read_byte(topology), n = cpu->read_half(topology + 2);
-        if ((family != 5 && family != 13) ||
+        if (family >= 17u || n > packet_bytes / packet_sizes[family] ||
+            cpu->read_word(0x8004fe6cu + family * 40u) != 8u ||
+            cpu->read_word(0x8004fe74u + family * 40u) != packet_sizes[family] ||
             !services->lifecycle->guest_data_range_is_valid(topology, 4 + n * 8, 2, false)) {
             xg_render_motion_note(XG_MOTION_BIND_GEOMETRY_UNSUPPORTED,family);
             goto fail;
@@ -1085,7 +1162,7 @@ static void capture_motion_bindings(CPUState *cpu,
         for (uint32_t p = 0; p < n; ++p) {
             XgHost3dVector vertices[4] = {0};
             uint32_t indices[4] = {0};
-            const uint32_t size = family == 5 ? 3u : 4u;
+            const uint32_t size = family & 8u ? 4u : 3u;
             if (!consume_controls(cpu, &attribute, &tpage, &clut))
                 goto fail;
             for (uint32_t v = 0; v < size; ++v) {
@@ -1099,13 +1176,19 @@ static void capture_motion_bindings(CPUState *cpu,
                 vertices[v] = (XgHost3dVector){low_s16(xy), low_s16(xy >> 16), low_s16(z), 0};
             }
             const XgRenderModelFt4Template *material =
-                xg_render_model_repository_find_packet_template(packet, GUEST_RENDER_RENDER_NATIVE,
-                                                                services->repository);
+                family == 5u || family == 13u
+                    ? xg_render_model_repository_find_packet_template(packet,
+                        GUEST_RENDER_RENDER_NATIVE, services->repository) : NULL;
             const uint32_t descriptor =
                 material && material->descriptor_address ? material->descriptor_address : attribute;
-            bind_model_motion(packet, vertices, indices, size, descriptor, family == 5);
-            packet += family == 5 ? 0x20 : 0x28;
-            attribute += family == 5 ? 8 : 12;
+            if (!bind_model_motion(packet, vertices, indices, size, descriptor, size == 3u))
+                goto fail;
+            if (family != 5u && family != 13u &&
+                !capture_model_motion_geometry(packet, descriptor, family, vertices, indices))
+                goto fail;
+            packet += packet_sizes[family];
+            packet_bytes -= packet_sizes[family];
+            attribute += attribute_sizes[family];
         }
         topology += 4 + n * 8;
     }
@@ -1774,13 +1857,14 @@ void xg_render_model_sprite_pipeline_observe_ft4_guest_pass(
     }
 }
 
-static bool publish_model_endpoint(const XgRenderIrNativePrimitive *primitive,
-    uint32_t command_id, uint32_t producer_id, uint32_t primitive_id) {
+static bool publish_pose_endpoint(const XgRenderIrNativePrimitive *primitive,
+    uint32_t command_id, uint32_t producer_id, uint32_t primitive_id,
+    XgRenderMotionRef motion) {
     if (!xg_render_submission_native_work_mode()) return true;
-    if (model_ft4.context.motion.handle.resource_id != 0u) {
+    if (motion.handle.resource_id != 0u) {
         GpuRenderSemantic semantic;
         const XgRenderMotionPose *pose;
-        if (!xg_render_motion_view(model_ft4.context.motion, &pose) ||
+        if (!xg_render_motion_view(motion, &pose) ||
             xg_render_backend_translate_primitive(primitive, &semantic) !=
                 XG_RENDER_BACKEND_OK)
             return false;
@@ -1799,6 +1883,12 @@ static bool publish_model_endpoint(const XgRenderIrNativePrimitive *primitive,
         .interpolation_primitive_id = primitive_id,
         .interpolation_identity_valid = producer_id != 0u,
     });
+}
+
+static bool publish_model_endpoint(const XgRenderIrNativePrimitive *primitive,
+    uint32_t command_id, uint32_t producer_id, uint32_t primitive_id) {
+    return publish_pose_endpoint(primitive, command_id, producer_id, primitive_id,
+        model_ft4.context.motion);
 }
 
 static bool publish_model_ft4(
@@ -1948,12 +2038,7 @@ static void finish_model_ft4(
 }
 
 static int32_t model_ft3_nclip(const XgHost3dProjectedVertex vertices[3]) {
-    return (int32_t)vertices[0].x * vertices[1].y +
-        (int32_t)vertices[1].x * vertices[2].y +
-        (int32_t)vertices[2].x * vertices[0].y -
-        (int32_t)vertices[0].x * vertices[2].y -
-        (int32_t)vertices[1].x * vertices[0].y -
-        (int32_t)vertices[2].x * vertices[1].y;
+    return xg_host_3d_nclip(vertices);
 }
 
 static bool decode_ft3_material(
@@ -2937,7 +3022,83 @@ void xg_render_model_sprite_pipeline_sprite_begin(
     sprite_ft4.snapshot.context_active = true;
 }
 
-static bool prepare_sprite(CPUState *cpu) {
+static void capture_sprite_motion(CPUState *cpu, const XgSpriteFt4Source *sprite,
+        const XgRenderModelSpritePipelineServices *services) {
+    const uint32_t producer = sprite_ft4.sprite_address & 0x1fffffffu;
+    const uint64_t entity = UINT64_C(0x5350524900000000) | producer;
+    sprite_ft4.motion_binding = (XgRenderMotionDrawBinding){0};
+    if (!sprite_ft4.motion_attempted) {
+        XgRenderMotionSource source;
+        XgRenderMotionPose pose = {0};
+        XgHost3dMatrix matrix = {0};
+        sprite_ft4.motion_attempted = true;
+        /* This is the Field actor renderer's resident billboard invocation.
+         * Its authenticated update owns placement; the changing cel descriptors
+         * own the current local quads, not a previous frame's mesh topology. */
+        const uint32_t caller = sprite_ft4.snapshot.last_caller & 0x1fffffffu;
+        if (caller != 0x7622cu ||
+            !services || !services->motion_source ||
+            !services->motion_source(0x80075b44u, &source)) return;
+        memcpy(matrix.rotation, sprite->projection.rotation, sizeof(matrix.rotation));
+        memcpy(matrix.translation, sprite->projection.translation, sizeof(matrix.translation));
+        pose.node_count = 1;
+        pose.entity_id = entity;
+        const uint32_t identity[3] = {producer,
+            cpu->read_word(sprite_ft4.sprite_address + 0x20u), sprite_ft4.wrapper_scope};
+        pose.geometry_id = xg_render_resource_digest(identity, sizeof(identity));
+        pose.geometry_generation = 1;
+        /* The game has already billboarded this transform in view space. */
+        pose.camera_id = UINT64_C(0x5350524956494557);
+        pose.camera.rotation[3] = 1;
+        pose.camera.scale[0] = pose.camera.scale[1] = pose.camera.scale[2] = 1;
+        pose.geometry_scale = 1;
+        pose.nodes[0].id = producer;
+        pose.nodes[0].parent = -1;
+        pose.nodes[0].source_matrix_valid = 1;
+        pose.nodes[0].source_model_to_view = matrix;
+        if (!xg_render_motion_decompose(&matrix, &pose.nodes[0].local)) return;
+        pose.screen_offset[0] = sprite->projection.screen_offset_x / 65536.0;
+        pose.screen_offset[1] = sprite->projection.screen_offset_y / 65536.0;
+        pose.projection_distance = sprite->projection.projection_distance;
+        if (!xg_render_motion_publish(&source, &pose, &sprite_ft4.motion)) return;
+        if (!xg_render_motion_watch(sprite_ft4.motion, sprite_ft4.sprite_address + 0x20u, 4u)) {
+            xg_render_motion_forget_entity(entity);
+            sprite_ft4.motion = (XgRenderMotionRef){0};
+            return;
+        }
+        sprite_ft4.motion_projection = sprite->projection;
+    }
+    if (!sprite_ft4.motion.handle.resource_id) return;
+    const XgHost3dProjection *prior = &sprite_ft4.motion_projection;
+    const XgHost3dProjection *current = &sprite->projection;
+    if (memcmp(prior->rotation, current->rotation, sizeof(prior->rotation)) ||
+        memcmp(prior->translation, current->translation, sizeof(prior->translation)) ||
+        prior->screen_offset_x != current->screen_offset_x ||
+        prior->screen_offset_y != current->screen_offset_y ||
+        prior->projection_distance != current->projection_distance) {
+        /* All pieces must describe the same placement within an invocation. */
+        xg_render_motion_forget_entity(entity);
+        sprite_ft4.motion = (XgRenderMotionRef){0};
+        return;
+    }
+    XgRenderMotionDrawBinding *binding = &sprite_ft4.motion_binding;
+    binding->motion = sprite_ft4.motion;
+    binding->triangle_count = 2;
+    const uint8_t split[2][3] = {{0, 1, 2}, {2, 1, 3}};
+    const uint32_t primitive = (sprite_ft4.descriptor_address & 0x1ffffffeu) |
+        (sprite_ft4.wrapper_scope ? 1u : 0u);
+    for (uint32_t t = 0; t < 2; ++t)
+        for (uint32_t v = 0; v < 3; ++v)
+            for (uint32_t p = 0; p < 4; ++p)
+                if (sprite->packet_vertex_for_projection[p] == split[t][v]) {
+                    binding->local[t][v] = sprite->vertices[p];
+                    binding->local[t][v].pad = 0;
+                    binding->vertex_ids[t][v] = primitive * 4u + split[t][v];
+                }
+}
+
+static bool prepare_sprite(CPUState *cpu,
+        const XgRenderModelSpritePipelineServices *services) {
     XgSpriteFt4Source source = {0};
     XgSpriteFt4Record projected;
     GpuDrawState draw = {0};
@@ -3017,6 +3178,8 @@ static bool prepare_sprite(CPUState *cpu) {
     memcpy(sprite_ft4.uv, source.uv, sizeof(source.uv));
     sprite_ft4.packet_address = packet_address;
     sprite_ft4.descriptor_address = descriptor_address;
+    xg_render_motion_forget_range(packet_address + 4u, 0x24u);
+    capture_sprite_motion(cpu, &source, services);
     sprite_ft4.phase = SPRITE_EXPECT_XY;
     sprite_ft4.geometry_matches = true;
     sprite_ft4.payload_matches = true;
@@ -3054,6 +3217,10 @@ static bool stage_sprite(
         .payload_word_count = 9u,
         .interpolation_identity_valid = true,
     };
+    if (sprite_ft4.geometry_matches && sprite_ft4.motion_binding.motion.handle.resource_id)
+        (void)xg_render_motion_register_command(record->packet_address + 4u,
+            &sprite_ft4.motion_binding, record->interpolation_producer_id,
+            record->interpolation_primitive_id);
     if (sprite_ft4.wrapper_scope) {
         uint32_t ot_address;
         if (cpu->read_word == NULL) return true;
@@ -3102,7 +3269,7 @@ void xg_render_model_sprite_pipeline_sprite_geometry_seam(
     (void)render_mode;
     (void)services;
     if (sprite_ft4.snapshot.context_active && !sprite_ft4.snapshot.pending &&
-        !prepare_sprite(cpu)) {
+        !prepare_sprite(cpu, services)) {
         block_sprite(86u);
         return;
     }
@@ -3234,6 +3401,17 @@ void xg_render_model_sprite_pipeline_sprite_end(
             block_sprite(88u);
             return;
         }
+        if (sprite_ft4.motion.handle.resource_id)
+            for (uint32_t index = 0u; index < sprite_ft4.native_record_count; ++index) {
+                const SpriteStageRecord *record = &sprite_ft4.native_records[index];
+                if (!publish_pose_endpoint(&record->primitive,
+                        (record->packet_address & 0x1fffffffu) + 4u,
+                        record->interpolation_producer_id, record->interpolation_primitive_id,
+                        sprite_ft4.motion)) {
+                    block_sprite(88u);
+                    return;
+                }
+            }
         sprite_ft4.snapshot.resident_publish_source_count +=
             sprite_ft4.native_record_count;
         ++sprite_ft4.snapshot.native_cutover_count;

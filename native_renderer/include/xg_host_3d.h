@@ -11,6 +11,9 @@ int xg_host_3d_rtps(const XgHost3dProjection *projection,
                     const XgHost3dVector *vertex,
                     XgHost3dProjectedVertex *output,
                     uint32_t *flags);
+/* Source culling follows Native Q16 geometry when present; otherwise it uses
+ * the canonical signed screen-area result. Reads the first three vertices. */
+int32_t xg_host_3d_nclip(const XgHost3dProjectedVertex *vertices);
 void xg_host_3d_configure_native_view(int enabled,
                                       int32_t center_offset_x_16_16);
 void xg_host_3d_configure_native_view_aspect(

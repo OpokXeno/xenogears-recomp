@@ -6,12 +6,7 @@
 #include <string.h>
 
 static int32_t nclip(const XgHost3dProjectedVertex vertices[4]) {
-    return (int32_t)vertices[0].x * vertices[1].y +
-        (int32_t)vertices[1].x * vertices[2].y +
-        (int32_t)vertices[2].x * vertices[0].y -
-        (int32_t)vertices[0].x * vertices[2].y -
-        (int32_t)vertices[1].x * vertices[0].y -
-        (int32_t)vertices[2].x * vertices[1].y;
+    return xg_host_3d_nclip(vertices);
 }
 
 static uint32_t packed_xy(const XgHost3dProjectedVertex *vertex) {

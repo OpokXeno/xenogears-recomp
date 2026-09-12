@@ -200,10 +200,6 @@ bool xg_render_motion_bind_command(uint32_t command_id, struct XgRenderNativeOpe
  * Incompatible lifecycle/hierarchy selects current without interpolation. */
 bool xg_render_motion_evaluate(XgRenderMotionRef previous, XgRenderMotionRef current, double alpha,
                                XgRenderMotionEvaluation *out);
-/* Pure source projection, independent of the guest thread's Native-view globals.
- * Used to reconstruct a retained face against the current immutable pose. */
-bool xg_render_motion_source_vertex(const XgRenderMotionPose *pose, uint32_t part,
-    const XgHost3dVector *vertex, double screen[2], double native[2]);
 /* Transform LOCAL geometry with a shared endpoint-anchored matrix curve, then
  * anchor each local vertex to exact GTE screen endpoints. Equal local vertices
  * share the result, including aliases in different polygons. Both alpha 0 and 1
