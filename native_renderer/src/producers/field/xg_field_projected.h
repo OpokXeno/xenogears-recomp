@@ -67,6 +67,7 @@ typedef struct XgRenderProjectedNativeRecord {
     uint32_t packet_tag;
     XgRenderProjectedRecordKind kind;
     uint8_t payload_word_count;
+    bool preserve_image_aspect;
 } XgRenderProjectedNativeRecord;
 
 typedef enum XgFieldProjectedOrderingDomain {

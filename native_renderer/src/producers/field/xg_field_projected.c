@@ -495,7 +495,7 @@ static bool capture_config(CPUState *cpu, uint32_t object_address,
 }
 
 static void set_native_view_position(
-        XgRenderQuadSourceVertex *vertex,
+        XgRenderQuadSourceVertex *vertex, bool preserve_image_aspect,
         const XgFieldProjectedPipelineServices *services) {
     const XgNativeView *view = services != NULL && services->native_view != NULL
         ? services->native_view() : NULL;
@@ -509,7 +509,10 @@ static void set_native_view_position(
         return;
     surface_width = (int32_t)(view->surface_width_16_16 >> 16u);
     if (surface_width <= (int32_t)view->canonical_width) return;
-    if (vertex->x <= 0) {
+    if (preserve_image_aspect) {
+        native_x = (int64_t)vertex->x * INT32_C(65536) +
+            view->center_offset_x_16_16;
+    } else if (vertex->x <= 0) {
         native_x = 0;
     } else if ((uint32_t)(uint16_t)vertex->x >= view->canonical_width) {
         native_x = (int64_t)surface_width * INT32_C(65536);
@@ -569,7 +572,8 @@ static bool build_primitive(
             record->u[vertex], record->v[vertex],
             color[0], color[1], color[2],
         };
-        set_native_view_position(&quad.vertices[vertex], services);
+        set_native_view_position(
+            &quad.vertices[vertex], record->preserve_image_aspect, services);
     }
     return xg_render_quad_build_primitive(&quad, &record->primitive) ==
         XG_RENDER_QUAD_BUILDER_OK;
@@ -663,6 +667,12 @@ static bool build_strips(
             .kind = XG_RENDER_PROJECTED_RECORD_FT4,
             .packet_address = source->object_address +
                 (buffer_index & 1u) * 0x140u + strip * 0x28u,
+            /* The shared producer also draws fixed artwork (the title logo).
+             * With no angular scroll, radial placement or distance scaling,
+             * keep the image's canonical proportions. Panoramas and the flat
+             * upper/lower coverage bands retain their full-width projection. */
+            .preserve_image_aspect = config->phase_multiplier == 0 &&
+                config->point_radius == 0 && config->fade_divisor == 0,
         };
 
         if (texture_page < 0) texture_page = wrap_add(texture_page, 0x3f);
