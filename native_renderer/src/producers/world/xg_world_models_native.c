@@ -1019,15 +1019,7 @@ XgWorldModelsNativeResult xg_world_models_native_build_anchor_vertex(
 
 static int32_t normal_clip(
     const XgHost3dProjectedVertex vertices[XG_HOST_3D_VERTEX_COUNT]) {
-    const int64_t value =
-        (int64_t)vertices[0].x * vertices[1].y +
-        (int64_t)vertices[1].x * vertices[2].y +
-        (int64_t)vertices[2].x * vertices[0].y -
-        (int64_t)vertices[0].x * vertices[2].y -
-        (int64_t)vertices[1].x * vertices[0].y -
-        (int64_t)vertices[2].x * vertices[1].y;
-
-    return wrap_i32((uint32_t)value);
+    return xg_host_3d_nclip(vertices);
 }
 
 static uint32_t packed_xy(const XgHost3dProjectedVertex *vertex) {

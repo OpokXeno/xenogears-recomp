@@ -1,4 +1,5 @@
 #include "xg_render_model_sprite_pipeline.h"
+#include "xg_model_primitive_layout.h"
 
 #include "gpu.h"
 #include "xg_field_render_services.h"
@@ -1123,23 +1124,15 @@ static bool capture_model_motion_geometry(uint32_t packet, uint32_t descriptor,
         (packet & 0x1fffffffu) + 4u, &semantic) == GUEST_RENDER_TRANSACTION_OK;
 }
 
-/* Capture the whole local geometry binding at model entry. This also covers
- * average-depth FT3, whose endpoint source lane finishes at capture_ft3_link. */
+/* Capture every family's geometry at the authenticated model entry, including
+ * FT3/FT4. Later observers may have lost initializer templates after a module
+ * transition, or be absent altogether for the Gear helper's relit dispatch. */
 static void capture_motion_bindings(CPUState *cpu,
                                     const XgRenderModelSpritePipelineServices *services) {
     ModelContext *context = &model_ft4.context;
     uint32_t topology = context->topology_base, attribute = context->material_base;
     uint32_t packet = context->packet_base;
     uint16_t tpage = context->tpage, clut = context->clut;
-    /* Resident dispatch LUT 8004fe50: every row has 8-byte topology. Bit 3
-     * selects quads, bit 1 Gouraud, bit 0 texture; row 16 is mapped FT3.
-     * A mixed model must retain one pose across ALL its polygon families. */
-    static const uint8_t packet_sizes[17] = {
-        20, 32, 28, 40, 20, 32, 28, 40, 24, 40, 36, 52, 24, 40, 36, 52, 32,
-    };
-    static const uint8_t attribute_sizes[17] = {
-        4, 8, 4, 8, 4, 8, 4, 8, 4, 12, 4, 12, 4, 12, 4, 12, 4,
-    };
     if (!context->motion.handle.resource_id || !services || !services->lifecycle ||
         !services->lifecycle->guest_data_range_is_valid)
         return;
@@ -1152,9 +1145,11 @@ static void capture_motion_bindings(CPUState *cpu,
         if (!services->lifecycle->guest_data_range_is_valid(topology, 4, 2, false))
             goto fail;
         const uint32_t family = cpu->read_byte(topology), n = cpu->read_half(topology + 2);
-        if (family >= 17u || n > packet_bytes / packet_sizes[family] ||
+        XgModelPrimitiveLayout layout;
+        if (!xg_model_primitive_layout(family, &layout) ||
+            n > packet_bytes / layout.packet_size ||
             cpu->read_word(0x8004fe6cu + family * 40u) != 8u ||
-            cpu->read_word(0x8004fe74u + family * 40u) != packet_sizes[family] ||
+            cpu->read_word(0x8004fe74u + family * 40u) != layout.packet_size ||
             !services->lifecycle->guest_data_range_is_valid(topology, 4 + n * 8, 2, false)) {
             xg_render_motion_note(XG_MOTION_BIND_GEOMETRY_UNSUPPORTED,family);
             goto fail;
@@ -1162,7 +1157,7 @@ static void capture_motion_bindings(CPUState *cpu,
         for (uint32_t p = 0; p < n; ++p) {
             XgHost3dVector vertices[4] = {0};
             uint32_t indices[4] = {0};
-            const uint32_t size = family & 8u ? 4u : 3u;
+            const uint32_t size = layout.vertex_count;
             if (!consume_controls(cpu, &attribute, &tpage, &clut))
                 goto fail;
             for (uint32_t v = 0; v < size; ++v) {
@@ -1183,12 +1178,11 @@ static void capture_motion_bindings(CPUState *cpu,
                 material && material->descriptor_address ? material->descriptor_address : attribute;
             if (!bind_model_motion(packet, vertices, indices, size, descriptor, size == 3u))
                 goto fail;
-            if (family != 5u && family != 13u &&
-                !capture_model_motion_geometry(packet, descriptor, family, vertices, indices))
+            if (!capture_model_motion_geometry(packet, descriptor, family, vertices, indices))
                 goto fail;
-            packet += packet_sizes[family];
-            packet_bytes -= packet_sizes[family];
-            attribute += attribute_sizes[family];
+            packet += layout.packet_size;
+            packet_bytes -= layout.packet_size;
+            attribute += layout.attribute_size;
         }
         topology += 4 + n * 8;
     }
@@ -2827,15 +2821,12 @@ void xg_render_model_sprite_pipeline_capture_ft3_link(
     } else {
         material = xg_render_model_repository_find_packet_template(
             packet, render_mode, services->repository);
-        if (material == NULL && !decode_ft3_material(
-                cpu, cpu->gpr[16], cpu->read_half(UINT32_C(0x80059308)),
-                cpu->read_half(UINT32_C(0x8005930c)), &decoded)) {
+        if (material == NULL) {
+            /* At this render-loop seam s0 is the vertex pool, not a material
+             * descriptor. Model-entry capture already provides authenticated
+             * geometry independently of this optional initializer template. */
             ++model_ft3.snapshot.template_miss_count;
             return;
-        }
-        if (material == NULL) {
-            ++model_ft3.snapshot.template_miss_count;
-            material = &decoded;
         }
     }
     if (!material->valid) return;

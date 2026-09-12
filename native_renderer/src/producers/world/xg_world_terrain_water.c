@@ -152,15 +152,7 @@ static bool triangle_is_on_screen(
 
 static bool triangle_is_front_facing(
     const XgHost3dProjectedVertex vertices[3]) {
-    const int64_t area =
-        (int64_t)vertices[0].x * vertices[1].y +
-        (int64_t)vertices[1].x * vertices[2].y +
-        (int64_t)vertices[2].x * vertices[0].y -
-        (int64_t)vertices[0].x * vertices[2].y -
-        (int64_t)vertices[1].x * vertices[0].y -
-        (int64_t)vertices[2].x * vertices[1].y;
-
-    return area > 0;
+    return xg_host_3d_nclip(vertices) > 0;
 }
 
 static void decode_material(uint16_t tpage, uint16_t clut,

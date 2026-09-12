@@ -1,4 +1,5 @@
 #include "xg_render_gear_motion.h"
+#include "xg_model_primitive_layout.h"
 #include "cpu_state.h"
 #include "xg_field_render_services.h"
 #include "xg_host_3d.h"
@@ -497,20 +498,24 @@ static void render_begin(CPUState *cpu, uint32_t pc, const XgRenderGearMotionSer
                 return;
             }
             const uint32_t family = cpu->read_byte(cursor), n = cpu->read_half(cursor + 2);
-            /* These are the shared FT3/FT4 source lanes. Reject the entire
-             * skeleton if another geometry lane would leave a discrete limb. */
-            if ((family != 5 && family != 13) || !n ||
+            XgModelPrimitiveLayout layout;
+            /* Model entry now binds every resident polygon family. Validate
+             * the same LUT contract here so mixed limbs keep one whole pose. */
+            if (!xg_model_primitive_layout(family, &layout) || !n ||
+                !services->range(0x8004fe6cu + family * 40u, 12, 4, false) ||
+                cpu->read_word(0x8004fe6cu + family * 40u) != 8u ||
+                cpu->read_word(0x8004fe74u + family * 40u) != layout.packet_size ||
                 !services->range(cursor, 4 + n * 8, 2, false)) {
                 reject(XG_RENDER_GEAR_MOTION_GEOMETRY);
                 return;
             }
             for (uint32_t p = 0; p < n; ++p)
-                for (uint32_t v = 0; v < (family == 5 ? 3u : 4u); ++v)
+                for (uint32_t v = 0; v < layout.vertex_count; ++v)
                     if (cpu->read_half(cursor + 4 + p * 8 + v * 2) >= count) {
                         reject(XG_RENDER_GEAR_MOTION_GEOMETRY);
                         return;
                     }
-            packet_bytes += (uint64_t)n * (family == 5 ? 0x20u : 0x28u);
+            packet_bytes += (uint64_t)n * layout.packet_size;
             cursor += 4 + n * 8;
         }
         render.models[i] = header;
