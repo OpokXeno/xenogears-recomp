@@ -24,6 +24,8 @@ typedef struct TestReader {
     bool invalid_resource_pointer;
     bool invalid_native_output;
     bool hide_lower_quadrants;
+    bool hide_tile;
+    bool capture_all_samples;
 } TestReader;
 
 static uint32_t terrain_word(uint32_t index) {
@@ -71,7 +73,8 @@ static bool read_u16(void *context, uint32_t address, uint16_t *out_value) {
     }
     if (address >= UINT32_C(0x8009d618) &&
         address < UINT32_C(0x8009d64a) && (address & 1u) == 0u) {
-        *out_value = address == UINT32_C(0x8009d618) ? 0u : UINT16_MAX;
+        *out_value = address == UINT32_C(0x8009d618) && !reader->hide_tile
+            ? 0u : UINT16_MAX;
         return true;
     }
     if (address >= UINT32_C(0x8009d650) &&
@@ -228,6 +231,7 @@ static XgWorldTerrainWaterCaptureResult capture_source(
             .texture_window_offset_y = 4u,
         },
         .projection_state_authenticated = true,
+        .capture_all_samples = context->capture_all_samples,
     };
     const XgWorldTerrainWaterAuthenticatedReader reader = {
         .context = context,
@@ -607,6 +611,30 @@ static int test_temporal_anchors_cover_retired_tile(void) {
     return 1;
 }
 
+static int test_temporal_capture_survives_tile_visibility(void) {
+    static XgWorldTerrainWaterAnchor anchors[XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY];
+    static XgWorldTerrainWaterRecord records[XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY];
+    TestReader reader = {.capture_all_samples = true};
+    XgWorldTerrainWaterCapture visible, hidden;
+    uint32_t anchor_count = 0u, record_count = 0u;
+    CHECK(capture_source(&reader, &visible) == XG_WORLD_TERRAIN_WATER_CAPTURE_OK);
+    reader.hide_tile = true;
+    CHECK(capture_source(&reader, &hidden) == XG_WORLD_TERRAIN_WATER_CAPTURE_OK);
+    CHECK(!hidden.source.tiles[0].active);
+    CHECK(hidden.source.tiles[0].has_data);
+    CHECK(memcmp(visible.source.tiles[0].samples, hidden.source.tiles[0].samples,
+                 sizeof(hidden.source.tiles[0].samples)) == 0);
+    CHECK(xg_world_terrain_water_build(&hidden.source, records,
+              XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY, &record_count) == XG_WORLD_TERRAIN_WATER_OK);
+    CHECK(record_count == 0u);
+    CHECK(xg_world_terrain_water_append_temporal_tile_anchors(
+              hidden.source.tiles, XG_WORLD_TERRAIN_WATER_TILE_COUNT,
+              &hidden.source, anchors, XG_WORLD_TERRAIN_WATER_ANCHOR_CAPACITY,
+              &anchor_count) == XG_WORLD_TERRAIN_WATER_OK);
+    CHECK(anchor_count == 289u);
+    return 1;
+}
+
 static int test_native_preparation_and_scratch_ledger(void) {
     static XgWorldTerrainWaterRecord records[
         XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY];
@@ -731,6 +759,7 @@ int main(void) {
     ok &= test_capture_and_source_fail_closed();
     ok &= test_temporal_coverage_captures_culled_quadrants();
     ok &= test_temporal_anchors_cover_retired_tile();
+    ok &= test_temporal_capture_survives_tile_visibility();
     ok &= test_native_preparation_and_scratch_ledger();
     return ok ? 0 : 1;
 }

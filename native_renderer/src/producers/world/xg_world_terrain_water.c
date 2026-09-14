@@ -682,7 +682,7 @@ XgWorldTerrainWaterResult xg_world_terrain_water_append_temporal_tile_anchors(
         const int32_t row_delta = (int32_t)(grid_index / 9u) -
             (int32_t)(current_grid / 9u);
 
-        if (!tile_source->active || !tile_source->has_data || grid_index >= 81u)
+        if (!tile_source->has_data || grid_index >= 81u)
             continue;
         for (uint32_t quadrant = 0u;
              quadrant < XG_WORLD_TERRAIN_WATER_QUADRANT_COUNT; ++quadrant) {

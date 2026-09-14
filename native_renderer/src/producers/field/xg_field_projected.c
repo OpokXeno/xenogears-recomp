@@ -5,6 +5,7 @@
 #include "gpu.h"
 #include "psx_cyc.h"
 #include "xg_field_render_services.h"
+#include "xg_render_backend.h"
 #include "xg_render_primitive_utils.h"
 #include "xg_render_quad_builder.h"
 
@@ -665,6 +666,7 @@ static bool build_strips(
         int32_t next_phase;
         XgRenderProjectedNativeRecord record = {
             .kind = XG_RENDER_PROJECTED_RECORD_FT4,
+            .interpolation_primitive_id = strip,
             .packet_address = source->object_address +
                 (buffer_index & 1u) * 0x140u + strip * 0x28u,
             /* The shared producer also draws fixed artwork (the title logo).
@@ -789,7 +791,7 @@ static bool stage_records(
                     UINT32_C(0x40000000) |
                         (records[index].packet_address & UINT32_C(0x001ffffc)),
                     ot_bucket, records[index].payload_word_count,
-                    interpolation_producer_id, index, NULL))
+                    interpolation_producer_id, records[index].interpolation_primitive_id, NULL))
                 return false;
         }
         return true;
@@ -801,7 +803,7 @@ static bool stage_records(
                     &records[index].primitive, records[index].packet_address,
                     UINT32_C(0x40000000) |
                         (records[index].packet_address & UINT32_C(0x001ffffc)),
-                    interpolation_producer_id, index))
+                    interpolation_producer_id, records[index].interpolation_primitive_id))
                 return false;
         }
         return true;
@@ -819,7 +821,7 @@ static bool stage_records(
                 (records[index].packet_address & UINT32_C(0x001ffffc)),
             .ot_bucket = ot_bucket,
             .interpolation_producer_id = interpolation_producer_id,
-            .interpolation_primitive_id = index,
+            .interpolation_primitive_id = records[index].interpolation_primitive_id,
             .payload_word_count = records[index].payload_word_count,
             .interpolation_identity_valid = interpolation_producer_id != 0u,
         };
@@ -851,7 +853,7 @@ static bool stage_temporal_strips(
         for (index = 0u; index < count; ++index) {
             if (!services->stage_temporal(
                     &records[index].primitive, interpolation_producer_id,
-                    index, &policy))
+                    records[index].interpolation_primitive_id, &policy))
                 return false;
         }
         return true;
@@ -865,7 +867,7 @@ static bool stage_temporal_strips(
         const XgRenderPreScenePrimitive staged = {
             .primitive = records[index].primitive,
             .interpolation_producer_id = interpolation_producer_id,
-            .interpolation_primitive_id = index,
+            .interpolation_primitive_id = records[index].interpolation_primitive_id,
             .interpolation_identity_valid = true,
             .temporal_only = true,
             .temporal_cull = policy,
@@ -874,6 +876,67 @@ static bool stage_temporal_strips(
             return false;
     }
     return true;
+}
+
+static bool append_band(
+        CPUState *cpu, XgRenderProjectedNativeRecord records[], uint32_t *count,
+        XgRenderProjectedNativeRecord temporal[], uint32_t *temporal_count,
+        const XgRenderProjectedSource *source, const GpuDrawState *draw,
+        XgRenderProjectedNativeRecord *record, bool visible,
+        const XgFieldProjectedPipelineServices *services) {
+    /* Band identity is its authored role, never its compacted draw index.
+     * Retain hidden band geometry in the same component as the adjacent strips
+     * so interpolation cannot open a gap along their common boundary. */
+    record->interpolation_primitive_id = XG_RENDER_PROJECTED_MAX_STRIPS +
+        (uint32_t)record->kind - 1u;
+    if (visible) return append_record(cpu, records, count, source, draw, record, services);
+    if (!xg_render_submission_native_work_mode()) return true;
+    if (*temporal_count >= XG_RENDER_PROJECTED_MAX_RECORDS ||
+        !build_primitive(record, source, draw, services)) return false;
+    temporal[(*temporal_count)++] = *record;
+    return true;
+}
+
+static bool publish_projected_coverage(
+        const XgRenderProjectedSource *source, const XgRenderProjectedConfig *config,
+        const XgRenderProjectedNativeRecord records[], uint32_t count,
+        const XgRenderProjectedNativeRecord temporal[], uint32_t temporal_count) {
+    if (!xg_render_submission_native_work_mode()) return true;
+    const uint32_t total = count + temporal_count;
+    if (total > XG_RENDER_PROJECTED_MAX_RECORDS) return false;
+    const uint32_t producer = source->object_address & UINT32_C(0x1fffffff);
+    const uint64_t component = UINT64_C(0x50414e4f00000000) | producer;
+    uint32_t strip_count = 0u;
+    for (uint32_t i = 0u; i < total; ++i) {
+        const XgRenderProjectedNativeRecord *record = i < count ? &records[i] : &temporal[i - count];
+        strip_count += record->kind == XG_RENDER_PROJECTED_RECORD_FT4;
+    }
+    /* Palette and camera are not geometry. Source recreation and changes to
+     * strip topology do require a new endpoint, even at the same object address. */
+    const uint64_t key[] = {source->generation, strip_count,
+        (uint32_t)config->strip_width, (uint32_t)config->strip_height,
+        (uint16_t)config->fixed_groups};
+    const XgRenderTemporalComponent owner = {
+        .component_id = component,
+        .geometry_id = xg_render_resource_digest(key, sizeof(key)),
+        .scene_id = xg_render_submission_temporal_scene(),
+        .producer_id = producer,
+    };
+    XgRenderTemporalSample samples[XG_RENDER_PROJECTED_MAX_RECORDS * 4u];
+    XgRenderTemporalCommandBinding bindings[XG_RENDER_PROJECTED_MAX_RECORDS];
+    for (uint32_t i = 0u; i < total; ++i) {
+        const XgRenderProjectedNativeRecord *record = i < count ? &records[i] : &temporal[i - count];
+        GpuRenderSemantic semantic;
+        if (xg_render_backend_translate_primitive(&record->primitive, &semantic) != XG_RENDER_BACKEND_OK)
+            return false;
+        xg_render_semantic_set_corner_identities(&semantic, producer, record->interpolation_primitive_id);
+        for (uint32_t corner = 0u; corner < 4u; ++corner)
+            samples[i * 4u + corner] = (XgRenderTemporalSample){component,
+                corner < 3u ? semantic.triangles[0].vertices[corner] : semantic.triangles[1].vertices[2]};
+        if (i < count) bindings[i] = (XgRenderTemporalCommandBinding){record->packet_address + 4u, component};
+    }
+    return xg_render_submission_publish_temporal_coverage(producer, &owner, 1u,
+        samples, total * 4u, bindings, count);
 }
 
 static void write_half(CPUState *cpu, uint32_t address, int16_t value) {
@@ -944,7 +1007,7 @@ bool xg_field_projected_cutover(
     XgRenderProjectedConfig config;
     const XgRenderProjectedSource *source;
     XgRenderProjectedNativeRecord records[XG_RENDER_PROJECTED_MAX_RECORDS];
-    XgRenderProjectedNativeRecord temporal_strips[XG_RENDER_PROJECTED_MAX_STRIPS];
+    XgRenderProjectedNativeRecord temporal_strips[XG_RENDER_PROJECTED_MAX_RECORDS];
     XgHost3dLongVector direction;
     XgHost3dLongVector normalized;
     XgHost3dMatrix matrix;
@@ -1074,16 +1137,16 @@ bool xg_field_projected_cutover(
         int16_t upper_y = (int16_t)((uint16_t)first_projection.y -
                                     (uint16_t)config.strip_height);
         if (upper_y > 0xf0) upper_y = 0xf0;
-        if (upper_y > 0) {
+        {
             XgRenderProjectedNativeRecord record = {
                 .kind = XG_RENDER_PROJECTED_RECORD_F4_UPPER,
                 .packet_address = object_address + 0x280u + buffer_index * 0x18u,
                 .x = { 0, 0x140, 0, 0x140 },
                 .y = { 0, 0, upper_y, upper_y },
             };
-            if (!append_record(
-                    cpu, records, &record_count, source, &draw, &record,
-                    services))
+            if (!append_band(cpu, records, &record_count,
+                    temporal_strips, &temporal_strip_count, source, &draw, &record,
+                    upper_y > 0, services))
                 return reject_projected(66u, services);
         }
         product = wrap_multiply(normalized.x, config.point_radius);
@@ -1099,7 +1162,7 @@ bool xg_field_projected_cutover(
             return reject_projected(63u, services);
         if ((int32_t)second_projection.y - first_projection.y > 0xf0)
             second_projection.y = (int16_t)(first_projection.y + 0xf0);
-        if (second_projection.y >= 0 && first_projection.y < 0xf0) {
+        {
             XgRenderProjectedNativeRecord record = {
                 .kind = XG_RENDER_PROJECTED_RECORD_G4,
                 .packet_address = object_address + 0x2e0u + buffer_index * 0x24u,
@@ -1107,15 +1170,15 @@ bool xg_field_projected_cutover(
                 .y = { first_projection.y, first_projection.y,
                        second_projection.y, second_projection.y },
             };
-            if (!append_record(
-                    cpu, records, &record_count, source, &draw, &record,
-                    services))
+            if (!append_band(cpu, records, &record_count,
+                    temporal_strips, &temporal_strip_count, source, &draw, &record,
+                    second_projection.y >= 0 && first_projection.y < 0xf0, services))
                 return reject_projected(66u, services);
         }
         {
             const int16_t lower_y = second_projection.y < 0
                 ? 0 : second_projection.y;
-            if (lower_y < 0xf0) {
+            {
                 XgRenderProjectedNativeRecord record = {
                     .kind = XG_RENDER_PROJECTED_RECORD_F4_LOWER,
                     .packet_address = object_address + 0x2b0u +
@@ -1123,9 +1186,9 @@ bool xg_field_projected_cutover(
                     .x = { 0, 0x140, 0, 0x140 },
                     .y = { lower_y, lower_y, 0xf0, 0xf0 },
                 };
-                if (!append_record(
-                        cpu, records, &record_count, source, &draw, &record,
-                        services))
+                if (!append_band(cpu, records, &record_count,
+                        temporal_strips, &temporal_strip_count, source, &draw, &record,
+                        lower_y < 0xf0, services))
                     return reject_projected(66u, services);
             }
         }
@@ -1151,7 +1214,9 @@ bool xg_field_projected_cutover(
             object_address & UINT32_C(0x1fffffff), services) ||
         !stage_temporal_strips(
             temporal_strips, temporal_strip_count, ordering_domain,
-            object_address & UINT32_C(0x1fffffff), services))
+            object_address & UINT32_C(0x1fffffff), services) ||
+        !publish_projected_coverage(source, &config, records, record_count,
+            temporal_strips, temporal_strip_count))
         return reject_projected(67u, services);
     previous_head = cpu->read_word(ot_address);
     for (index = 0u; index < record_count; ++index) {

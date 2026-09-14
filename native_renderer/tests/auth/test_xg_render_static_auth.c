@@ -4892,6 +4892,8 @@ static int test_native_particle_sidecar_and_cutover(void) {
     CHECK(!psx_xg_render_auth_native_ft4_bypass(
         &cpu, UINT32_C(0x800a8eac), UINT32_C(0x27bdff68)));
     materialize_particle_source();
+    const uint32_t particle_generation = (uint32_t)
+        psx_xg_render_auth_runtime_test_particle_generation(PARTICLE_BASE);
     cpu.gpr[5] = PARTICLE_MATRIX;
     cpu.gpr[6] = 0u;
     memcpy(gte_data_before, cpu.gte_data, sizeof(gte_data_before));
@@ -4971,7 +4973,7 @@ static int test_native_particle_sidecar_and_cutover(void) {
     CHECK(temporal_policies[0].ordering_depth_shift == 0u);
     CHECK(temporal_candidates[0].interpolation_identity.producer_id ==
           PARTICLE_BASE);
-    CHECK(temporal_candidates[0].interpolation_identity.primitive_id == 0u);
+    CHECK(temporal_candidates[0].interpolation_identity.primitive_id == particle_generation);
     CHECK(!temporal_candidates[0].triangles[0].vertices[0]
                .projective_position);
     CHECK(temporal_candidates[0].triangles[0].vertices[0]
@@ -4979,9 +4981,9 @@ static int test_native_particle_sidecar_and_cutover(void) {
     CHECK(temporal_candidates[0].triangles[0].vertices[0]
               .temporal_depth == -16);
     CHECK(temporal_candidates[0].triangles[0].vertices[0]
-              .interpolation_vertex_id == 0u);
+               .interpolation_vertex_id == particle_generation * 4u);
     CHECK(temporal_candidates[0].triangles[1].vertices[2]
-              .interpolation_vertex_id == 3u);
+               .interpolation_vertex_id == particle_generation * 4u + 3u);
     CHECK(particle_load_u32(&particle_memory[0x50]) == UINT32_C(0x09123456));
     psx_xg_render_auth_scene_boundary();
     return 1;

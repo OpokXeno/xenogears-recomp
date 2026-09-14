@@ -228,6 +228,7 @@ XgWorldDecorationsResult xg_world_decorations_build_with_temporal(
         candidate.third_depth = output.vertices[2].z;
         candidate.ordering_bucket = output.vertices[2].z >> 4u;
         candidate.source_index = source_index;
+        candidate.position = *position;
         candidate.semantic_id = source_index;
         candidate.packet_index = packet_count;
         candidate.tag_payload_word_count =

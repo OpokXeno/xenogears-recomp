@@ -65,6 +65,7 @@ typedef struct XgRenderProjectedNativeRecord {
     uint16_t tpage;
     uint32_t packet_address;
     uint32_t packet_tag;
+    uint32_t interpolation_primitive_id;
     XgRenderProjectedRecordKind kind;
     uint8_t payload_word_count;
     bool preserve_image_aspect;

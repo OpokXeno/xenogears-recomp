@@ -368,7 +368,9 @@ bool xg_render_overlay_ft4_capture_initialized_packet(
         ((uint32_t)expected_opcode << 24u) |
         (packet_address & UINT32_C(0x00ffffff));
     record->interpolation_producer_id =
-        producer_pc & UINT32_C(0x1fffffff);
+        /* Local producers own one embedded quad (+0x48), not one mesh shared
+         * by every object calling the helper. The packet is stable here. */
+        packet_address & UINT32_C(0x1fffffff);
     record->interpolation_primitive_id =
         packet_address & UINT32_C(0x1fffffff);
     record->family = expected_opcode == 0x2cu ? 11u : 12u;

@@ -417,6 +417,19 @@ target_link_libraries(xg_render_static_auth PUBLIC xg_render_auth)
 
 if(BUILD_TESTING)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_executable(test_xg_field_temporal_continuity
+        tests/field/test_xg_field_temporal_continuity.c
+        src/producers/field/xg_field_particles.c
+        src/producers/field/xg_field_projected.c
+        src/producers/field/xg_field_render_services.c
+        src/infrastructure/xg_render_primitive_utils.c)
+    target_include_directories(test_xg_field_temporal_continuity PRIVATE
+        include ${XG_RENDER_PRIVATE_INCLUDE_DIRS}
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
+    target_link_libraries(test_xg_field_temporal_continuity PRIVATE
+        xg_field_character_adapter xg_render_quad_builder xg_render_backend
+        xg_host_3d xg_semantic_presentation)
+    add_test(NAME xg_field_temporal_continuity COMMAND test_xg_field_temporal_continuity)
     add_library(xg_visual_state_test_impl STATIC src/core/xg_visual_state.c)
     target_include_directories(xg_visual_state_test_impl PUBLIC include)
     target_compile_features(xg_visual_state_test_impl PUBLIC c_std_11)

@@ -430,7 +430,9 @@ bool xg_field_particles_cutover(
                 UINT32_C(0x20000000) |
                     (packet_address & UINT32_C(0x001ffffc)),
                 bucket, XG_FIELD_CHARACTER_PACKET_WORD_COUNT,
-                source->producer_pc, (uint32_t)source->generation, NULL))
+                /* Particles are independent quads. A spawn/cull must not
+                 * make every particle from this initializer discrete. */
+                particle_address, (uint32_t)source->generation, NULL))
             return reject_particle(services, 46u);
         previous_head = cpu->read_word(ot_address);
     } else {
@@ -446,7 +448,7 @@ bool xg_field_particles_cutover(
             .ordering_depth_shift = (uint8_t)ordering_shift,
         };
         if (!services->stage_temporal(
-                &primitive, particle_address, 0u, &policy))
+                &primitive, particle_address, (uint32_t)source->generation, &policy))
             return reject_particle(services, 46u);
         ot_address = 0u;
         previous_head = 0u;

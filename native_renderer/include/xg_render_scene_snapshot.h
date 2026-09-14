@@ -118,8 +118,10 @@ typedef struct XgSemanticResourceRef {
 } XgSemanticResourceRef;
 
 #define XG_RENDER_TEMPORAL_COVERAGE_VERSION UINT32_C(0x54435601)
-#define XG_RENDER_TEMPORAL_COMPONENT_CAPACITY 256u
-#define XG_RENDER_TEMPORAL_SAMPLE_CAPACITY 32768u
+/* World decorations can contain 25 lists of 512 independent quads. Bounds
+ * validate dynamically sized publications; these are not fixed allocations. */
+#define XG_RENDER_TEMPORAL_COMPONENT_CAPACITY 16384u
+#define XG_RENDER_TEMPORAL_SAMPLE_CAPACITY 65536u
 
 /* Producer-declared atomic geometry, not a packet, material or visibility island.
  * scene_id is the vertex namespace (it need not equal presentation scene_generation).

@@ -67,6 +67,8 @@ typedef struct XgWorldDecorationsSource {
 
 typedef struct XgWorldDecorationsRecord {
     XgRenderIrNativePrimitive primitive;
+    /* Authored placement, independent of camera and visibility. */
+    XgWorldDecorationsPosition position;
     XgHost3dProjectedVertex ft4_vertices[XG_WORLD_DECORATIONS_FT4_VERTEX_COUNT];
     /* Derived FT4 payload only; the DMA tag and OT link are intentionally
      * outside this value contract. */

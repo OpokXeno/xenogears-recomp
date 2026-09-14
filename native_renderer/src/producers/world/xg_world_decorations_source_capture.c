@@ -619,7 +619,9 @@ XgWorldDecorationsNativeResult xg_world_decorations_native_prepare_temporal(
                 return result;
             helper_positions[preparation.helper_count] = positions;
             helper_counts[preparation.helper_count] = count;
-            helper_ids[preparation.helper_count] = cell;
+            /* The 5x5 camera window slides over the 9x9 source grid. A window
+             * slot is not a tree identity: it names another list after a move. */
+            helper_ids[preparation.helper_count] = (uint32_t)lookup_index;
             ++preparation.helper_count;
         }
     }

@@ -285,7 +285,10 @@ XgWorldTerrainWaterCaptureResult xg_world_terrain_water_source_capture(
             READ_U16(TERRAIN_QUADRANT_VISIBILITY + index * 8u + quadrant * 2u,
                      &capture.source.quadrant_visibility[index][quadrant]);
         }
-        if (!capture.source.tiles[index].active) continue;
+        /* Temporal coverage needs the source on BOTH sides of a visibility
+         * change. active controls guest emission, not whether the tile exists. */
+        if (!capture.source.tiles[index].active && !request->capture_all_samples)
+            continue;
         READ_U16(TERRAIN_TILE_GRID + grid_index * 2u, &terrain_id);
         if (terrain_id >= 256u)
             return XG_WORLD_TERRAIN_WATER_CAPTURE_SOURCE_MISMATCH;

@@ -120,8 +120,8 @@ static bool publish_terrain_coverage(uint32_t anchor_count, uint32_t record_coun
         const XgWorldTerrainWaterTileSource *tile = &terrain_water.source.tiles[i];
         keys[i][0] = tile->grid_index;
         keys[i][1] = ((uint64_t)tile->terrain_id << 32) | tile->resource_address;
-        keys[i][2] = tile->active | ((uint64_t)tile->has_data << 1);
-        if (tile->active && tile->has_data)
+        keys[i][2] = tile->has_data;
+        if (tile->has_data)
             keys[i][3] = xg_render_resource_digest(tile->samples, sizeof(tile->samples));
     }
     const XgRenderTemporalComponent component = {
@@ -959,6 +959,56 @@ static bool publish_decoration_anchors(
     return true;
 }
 
+static bool publish_decoration_coverage(
+        const XgWorldDecorationsNativePreparation *preparation) {
+    const uint32_t total = preparation->record_count +
+        preparation->temporal_record_count;
+    XgRenderTemporalComponent *components = calloc(total ? total : 1u, sizeof(*components));
+    XgRenderTemporalSample *samples = calloc(total ? (size_t)total * 4u : 1u, sizeof(*samples));
+    XgRenderTemporalCommandBinding bindings[XG_WORLD_DECORATIONS_PACKET_CAPACITY];
+    const uint64_t scene = xg_render_submission_temporal_scene();
+    bool ok = false;
+    if (!components || !samples) goto done;
+    for (uint32_t i = 0u; i < total; ++i) {
+        const XgWorldDecorationsRecord *record = i < preparation->record_count
+            ? &decorations.records[i]
+            : &decorations.temporal_records[i - preparation->record_count];
+        const uint64_t component = UINT64_C(0x5452454500000000) | (record->semantic_id + 1u);
+        const int16_t position[3] = {record->position.x, record->position.y, record->position.z};
+        /* Every tree is a separate quad, not a connected forest mesh. Its
+         * fixed shape is authenticated by the builder. Fog CLUT, camera angle
+         * and screen/depth culling cannot change that geometry's identity. */
+        components[i] = (XgRenderTemporalComponent){
+            .component_id = component,
+            .geometry_id = xg_render_resource_digest(position, sizeof(position)),
+            .scene_id = scene,
+            .producer_id = XG_WORLD_DECORATIONS_NATIVE_ENTRY_PC,
+        };
+        GpuRenderSemantic semantic;
+        if (xg_render_backend_translate_primitive(&record->primitive, &semantic) != XG_RENDER_BACKEND_OK)
+            goto done;
+        xg_render_semantic_set_corner_identities(
+            &semantic, XG_WORLD_DECORATIONS_NATIVE_ENTRY_PC, record->semantic_id);
+        /* Four unique corners; the two triangles share the diagonal. Publish
+         * culled samples as well, so entering visibility has a real endpoint. */
+        for (uint32_t corner = 0u; corner < 4u; ++corner)
+            samples[i * 4u + corner] = (XgRenderTemporalSample){component,
+                corner < 3u ? semantic.triangles[0].vertices[corner]
+                            : semantic.triangles[1].vertices[2]};
+        if (i < preparation->record_count)
+            bindings[i] = (XgRenderTemporalCommandBinding){
+                preparation->packet_base + record->packet_index *
+                    XG_WORLD_DECORATIONS_NATIVE_PACKET_STRIDE + 4u, component};
+    }
+    ok = xg_render_submission_publish_temporal_coverage(
+        XG_WORLD_DECORATIONS_NATIVE_ENTRY_PC, components, total, samples, total * 4u,
+        bindings, preparation->record_count);
+done:
+    free(components);
+    free(samples);
+    return ok;
+}
+
 bool xg_render_world_decorations_cutover(
         CPUState *cpu, const XgRenderWorldSimpleServices *services) {
     XgWorldDecorationsNativePreparation preparation;
@@ -1126,7 +1176,12 @@ bool xg_render_world_decorations_cutover(
         services->abort_submission();
         return false;
     }
-    if (!publish_decoration_anchors(
+    if (xg_render_submission_native_work_mode()) {
+        if (!publish_decoration_coverage(&preparation)) {
+            services->abort_submission();
+            return false;
+        }
+    } else if (!publish_decoration_anchors(
             decorations.records, preparation.record_count, scene_id,
             &anchor_count) ||
         !publish_decoration_anchors(

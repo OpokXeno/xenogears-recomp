@@ -456,6 +456,19 @@ static int test_native_outer_preparation_contract(void) {
     CHECK(preparation.record_count == 1u);
     CHECK(records[0].semantic_id ==
           XG_WORLD_DECORATIONS_POSITION_CAPACITY);
+    const uint32_t tree_identity = records[0].semantic_id;
+    const XgRenderIrNativePrimitive tree_geometry = records[0].primitive;
+    /* The same source grid entry moves from window slot 1 to slot 0. */
+    store_u16(&context, UINT32_C(0x8009d618) + 2u, UINT16_MAX);
+    store_u16(&context, UINT32_C(0x8009d618), 0u);
+    store_u16(&context, UINT32_C(0x8009c838), 1u);
+    CHECK(xg_world_decorations_native_prepare(
+              &request, &reader, records,
+              XG_WORLD_DECORATIONS_PACKET_CAPACITY, &preparation) ==
+          XG_WORLD_DECORATIONS_NATIVE_OK);
+    CHECK(preparation.record_count == 1u);
+    CHECK(records[0].semantic_id == tree_identity);
+    CHECK(memcmp(&records[0].primitive, &tree_geometry, sizeof(tree_geometry)) == 0);
     return 1;
 }
 
