@@ -36,6 +36,7 @@ aspect_ratio = "4:3"
 # fmv_skip_movie_id addresses exist for Xenogears yet. With no table configured the
 # runtime uses the generic START-hold fallback. Verify once by hand.
 auto_skip_fmv = false
+dithering = true
 
 [widescreen]
 #offer = true

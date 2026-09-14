@@ -86,6 +86,9 @@ typedef struct XgSemanticDisplayState {
     /* Captured host raster scale; 0 and 1 both mean 1x. Guest coordinates,
      * VRAM dimensions and display timing are never multiplied by this value. */
     uint16_t render_scale;
+    /* Captured host override. False preserves the guest GP0(E1) dither bit;
+     * true suppresses ordered dithering in endpoints and interpolated phases. */
+    bool dithering_disabled;
 } XgSemanticDisplayState;
 
 typedef enum XgSemanticPassLoadOperation {

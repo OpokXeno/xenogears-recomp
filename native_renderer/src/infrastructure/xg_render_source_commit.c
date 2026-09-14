@@ -406,6 +406,7 @@ static uint64_t commit_digest(const XgRenderSourceSlot *slot) {
     const uint16_t render_scale = slot->header.display.render_scale
         ? slot->header.display.render_scale : 1u;
     HASH_FIELD(render_scale);
+    HASH_FIELD(slot->header.display.dithering_disabled);
     HASH_FIELD(slot->header.source_interval_vblanks);
     HASH_FIELD(slot->header.discontinuity);
     HASH_FIELD(slot->header.temporally_eligible);

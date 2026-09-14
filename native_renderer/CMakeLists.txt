@@ -217,6 +217,7 @@ target_include_directories(xg_semantic_presentation PUBLIC
     "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include"
     PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated" src/runtime)
 target_compile_features(xg_semantic_presentation PUBLIC c_std_11)
+target_link_libraries(xg_semantic_presentation PUBLIC xg_host_3d)
 if(NOT MSVC)
     target_link_libraries(xg_semantic_presentation PUBLIC m)
 endif()
@@ -823,6 +824,12 @@ if(BUILD_TESTING)
     set_tests_properties(xg_render_ui_layout PROPERTIES
         LABELS "ui-layout;synthetic;native-only")
 
+    add_executable(test_xg_render_display_options
+        tests/infrastructure/test_xg_render_display_options.c)
+    target_link_libraries(test_xg_render_display_options PRIVATE
+        xg_semantic_presentation)
+    add_test(NAME xg_render_display_options COMMAND test_xg_render_display_options)
+
     add_executable(test_xg_render_ui_source_commit
         tests/infrastructure/test_xg_render_ui_source_commit.c)
     target_link_libraries(test_xg_render_ui_source_commit PRIVATE
@@ -868,6 +875,7 @@ if(BUILD_TESTING)
             test_xg_render_ui_movie
             test_xg_render_ui_layout
             test_xg_render_ui_source_commit
+            test_xg_render_display_options
             test_xg_render_movie_publisher
             test_xg_render_surface_graph
             test_xg_render_semantic_presentation_synthetic)
