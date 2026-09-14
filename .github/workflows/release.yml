@@ -3,10 +3,10 @@ name: Release
 # Builds XenogearsRecomp for Linux x86_64 and Windows x86_64 and publishes a
 # GitHub Release with both archives.
 #
-# WHY SELF-HOSTED: the build consumes two copyrighted files that must never
-# leave the maintainer's machine — the game EXE (game/slus_006.64) and the PS1
-# BIOS (psxrecomp/bios/SCPH1001.BIN). GitHub-hosted runners cannot see them
-# and secrets are capped at 48 KB, so both build jobs run on a self-hosted
+# WHY SELF-HOSTED: the build consumes copyrighted files that must never leave
+# the maintainer's machine: the game EXE, Disc 1, and the retail PS1 BIOS.
+# GitHub-hosted runners cannot see them and secrets are capped at 48 KB, so
+# both build jobs run on a self-hosted
 # runner registered on the maintainer's Linux PC. The Linux release is built
 # inside a pinned glibc-2.31 container so the host distribution cannot raise
 # the minimum runtime ABI. Only the compiled archives are uploaded. Setup:
@@ -40,10 +40,10 @@ concurrency:
 
 env:
   # Overridable via repo Settings → Secrets and variables → Actions → Variables.
-  # XGR_ASSETS_DIR holds the copyrighted inputs OUTSIDE the runner workspace
-  # (slus_006.64 + SCPH1001.BIN). XGR_DEPS_DIR caches the Windows cross
-  # toolchain between runs.
+  # XGR_ASSETS_DIR and XGR_DISC_DIR hold copyrighted inputs OUTSIDE the runner
+  # workspace. XGR_DEPS_DIR caches the Windows cross toolchain between runs.
   XGR_ASSETS_DIR: ${{ vars.XGR_ASSETS_DIR || '/home/pc/xenogears-assets' }}
+  XGR_DISC_DIR: ${{ vars.XGR_DISC_DIR || vars.XGR_ASSETS_DIR || '/home/pc/xenogears-assets' }}
   XGR_DEPS_DIR: ${{ vars.XGR_DEPS_DIR || '/home/pc/xenogears-port/deps' }}
 
 jobs:
@@ -86,7 +86,7 @@ jobs:
 
       - name: Scrub staged assets
         if: always()
-        run: rm -f game/slus_006.64 psxrecomp/bios/SCPH1001.BIN
+        run: rm -f game/slus_006.64 game/disc1.cue game/disc1.bin game/disc1.iso psxrecomp/bios/SCPH1001.BIN
 
   build-windows:
     name: Windows x86_64 (cross via llvm-mingw)
@@ -111,13 +111,25 @@ jobs:
       - name: Test release archive verifier
         run: cmake -DPROJECT_ROOT="$PWD" -DTEST_WORK_DIR="$RUNNER_TEMP/xgr-release-verifier-tests-windows" -P cmake/tests/test_verify_release_archive.cmake
 
-      - name: Stage game EXE + BIOS from local disk (never uploaded)
+      - name: Stage private build inputs from local disk (never uploaded)
         run: |
           set -e
           [ -f "$XGR_ASSETS_DIR/slus_006.64" ]  || { echo "::error::$XGR_ASSETS_DIR/slus_006.64 missing — see docs/self-hosted-runner.md"; exit 1; }
           [ -f "$XGR_ASSETS_DIR/SCPH1001.BIN" ] || { echo "::error::$XGR_ASSETS_DIR/SCPH1001.BIN missing — see docs/self-hosted-runner.md"; exit 1; }
           install -Dm644 "$XGR_ASSETS_DIR/slus_006.64"  game/slus_006.64
           install -Dm644 "$XGR_ASSETS_DIR/SCPH1001.BIN" psxrecomp/bios/SCPH1001.BIN
+          if [ -f "$XGR_DISC_DIR/disc1.cue" ]; then
+            [ -f "$XGR_DISC_DIR/disc1.bin" ] || { echo "::error::$XGR_DISC_DIR/disc1.bin missing for disc1.cue — see docs/self-hosted-runner.md"; exit 1; }
+            install -Dm644 "$XGR_DISC_DIR/disc1.cue" game/disc1.cue
+            install -Dm644 "$XGR_DISC_DIR/disc1.bin" game/disc1.bin
+          elif [ -f "$XGR_DISC_DIR/disc1.bin" ]; then
+            install -Dm644 "$XGR_DISC_DIR/disc1.bin" game/disc1.bin
+          elif [ -f "$XGR_DISC_DIR/disc1.iso" ]; then
+            install -Dm644 "$XGR_DISC_DIR/disc1.iso" game/disc1.iso
+          else
+            echo "::error::Xenogears Disc 1 missing in $XGR_DISC_DIR — see docs/self-hosted-runner.md"
+            exit 1
+          fi
 
       - name: Compute game and manifest identities
         run: |
@@ -133,12 +145,14 @@ jobs:
         run: |
           cmake -S psxrecomp/recompiler -B psxrecomp/recompiler/build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
             -DPSX_GAME_EXTRA_IDENTITY_SHA256="$XGR_GAME_IDENTITY_SHA256" \
             -DPSX_GAME_MANIFEST_DIGEST_SHA256="$XGR_MANIFEST_IDENTITY_SHA256"
           cmake --build psxrecomp/recompiler/build -j "$(nproc)"
 
       - name: Game codegen from the local EXE
         run: ./psxrecomp/recompiler/build/psxrecomp-game --config game.toml \
+          --source-observation-plan native_renderer/xg_render_resident_plan.txt \
           --game-identity-sha256 "$XGR_GAME_IDENTITY_SHA256" \
           --manifest-digest-sha256 "$XGR_MANIFEST_IDENTITY_SHA256"
 
@@ -177,7 +191,8 @@ jobs:
         run: |
           cmake -S . -B build-win -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-windows-x86_64-llvm-mingw.cmake \
-            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF
           cmake --build build-win -j "$(nproc)"
 
       - name: Build overlay recompiler for Windows
@@ -263,7 +278,7 @@ jobs:
 
       - name: Scrub staged assets
         if: always()
-        run: rm -f game/slus_006.64 psxrecomp/bios/SCPH1001.BIN
+        run: rm -f game/slus_006.64 game/disc1.cue game/disc1.bin game/disc1.iso psxrecomp/bios/SCPH1001.BIN
 
   release:
     name: Publish GitHub Release

@@ -10,12 +10,12 @@
 #endif
 
 #include "xg_render_presentation_host.h"
+#include "xg_threads.h"
 
 #include <stdatomic.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
-#include <threads.h>
 #include <time.h>
 
 #if defined(_WIN32)

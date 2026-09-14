@@ -1,8 +1,8 @@
 #include "xg_render_semantic_presentation.h"
+#include "xg_threads.h"
 
 #include <stdatomic.h>
 #include <string.h>
-#include <threads.h>
 
 _Static_assert(XG_RENDER_SOURCE_COMMIT_CAPACITY > 0u, "FIFO must have capacity");
 _Static_assert(XG_RENDER_PRESENTATION_BATCH_CAPACITY >= 2u,
