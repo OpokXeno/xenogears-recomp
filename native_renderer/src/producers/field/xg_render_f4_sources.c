@@ -3,6 +3,7 @@
 #include "cpu_state.h"
 #include "gpu.h"
 #include "xg_render_address_lookup.h"
+#include "xg_render_array.h"
 #include "xg_render_backend.h"
 #include "xg_render_ir.h"
 #include "xg_render_primitive_utils.h"
@@ -11,8 +12,6 @@
 #include <limits.h>
 #include <stddef.h>
 #include <string.h>
-
-#define XG_RENDER_F4_SOURCE_CAPACITY 128u
 
 typedef struct XgRenderF4SourceRecord {
     XgRenderQuadSourceVertex vertices[XG_RENDER_QUAD_VERTEX_COUNT];
@@ -27,7 +26,8 @@ typedef struct XgRenderF4SourceRecord {
 } XgRenderF4SourceRecord;
 
 typedef struct XgRenderF4SourceState {
-    XgRenderF4SourceRecord records[XG_RENDER_F4_SOURCE_CAPACITY];
+    XgRenderF4SourceRecord *records;
+    uint32_t capacity;
     XgRenderAddressLookupSlot lookup[XG_RENDER_LOOKUP_WORD_CAPACITY];
     uint16_t lookup_epoch;
     uint32_t count;
@@ -113,7 +113,11 @@ static XgRenderF4SourceRecord *source_upsert(uint32_t packet_address) {
             return &sources.records[index];
         }
     }
-    if (sources.count == XG_RENDER_F4_SOURCE_CAPACITY) return NULL;
+    if (sources.count == XG_RENDER_LOOKUP_WORD_CAPACITY) return NULL;
+    XgRenderF4SourceRecord *grown = xg_render_array_reserve(sources.records,
+        sizeof(*grown), &sources.capacity, sources.count + 1u, XG_RENDER_LOOKUP_WORD_CAPACITY);
+    if (!grown) return NULL;
+    sources.records = grown;
     sources.records[sources.count] = (XgRenderF4SourceRecord){
         .source_id = source_id,
     };

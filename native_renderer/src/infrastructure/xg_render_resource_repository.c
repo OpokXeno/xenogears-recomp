@@ -1,4 +1,5 @@
 #include "xg_render_resource_repository.h"
+#include "xg_render_array.h"
 
 #include <stdlib.h>
 #include <stdatomic.h>
@@ -32,11 +33,10 @@ typedef struct XgRenderResourceCapabilityEntry {
     bool restore_created;
 } XgRenderResourceCapabilityEntry;
 
-static XgRenderResourceEntry g_entries[XG_RENDER_RESOURCE_REPOSITORY_CAPACITY];
-static XgRenderResourceIdentityEntry
-    g_identities[XG_RENDER_RESOURCE_REPOSITORY_CAPACITY];
-static XgRenderResourceCapabilityEntry
-    g_capabilities[XG_RENDER_RESOURCE_REPOSITORY_CAPACITY];
+static XgRenderResourceEntry *g_entries;
+static XgRenderResourceIdentityEntry *g_identities;
+static XgRenderResourceCapabilityEntry *g_capabilities;
+static uint32_t g_entry_capacity, g_identity_capacity, g_capability_capacity;
 static XgRenderResourceDiagnostics g_diagnostics;
 static uint64_t g_next_generation = 1u;
 static uint64_t g_next_capability = 1u;
@@ -343,7 +343,7 @@ static bool capability_metadata_valid(
 }
 
 static XgRenderResourceCapabilityEntry *capability_by_id(uint64_t capability) {
-    for (size_t index = 0u; index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY;
+    for (size_t index = 0u; index < g_capability_capacity;
          ++index)
         if (g_capabilities[index].occupied &&
             g_capabilities[index].capability == capability)
@@ -352,10 +352,16 @@ static XgRenderResourceCapabilityEntry *capability_by_id(uint64_t capability) {
 }
 
 static XgRenderResourceCapabilityEntry *available_capability(void) {
-    for (size_t index = 0u; index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY;
+    for (size_t index = 0u; index < g_capability_capacity;
          ++index)
         if (!g_capabilities[index].occupied) return &g_capabilities[index];
-    return NULL;
+    const uint32_t index = g_capability_capacity;
+    if (index == UINT32_MAX) return NULL;
+    XgRenderResourceCapabilityEntry *grown = xg_render_array_reserve(g_capabilities,
+        sizeof(*g_capabilities), &g_capability_capacity, index + 1u, UINT32_MAX);
+    if (!grown) return NULL;
+    g_capabilities = grown;
+    return &g_capabilities[index];
 }
 
 static bool capability_key_matches(
@@ -423,7 +429,7 @@ static XgRenderResourceCapabilityResult capability_register(
         return XG_RENDER_RESOURCE_CAPABILITY_INVALID_ARGUMENT;
     if (out_created != NULL) *out_created = false;
     repository_lock();
-    for (size_t index = 0u; index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY;
+    for (size_t index = 0u; index < g_capability_capacity;
          ++index) {
         XgRenderResourceCapabilityEntry *entry = &g_capabilities[index];
 
@@ -647,13 +653,13 @@ static XgRenderResourceEntry *find_entry(XgRenderResourceHandle handle) {
     uint64_t hash=handle.resource_id^(handle.generation*UINT64_C(0x9e3779b97f4a7c15));
     hash^=hash>>32u;
     const size_t bucket=(size_t)hash&1023u;
-    if(hints[bucket]) {
+    if(hints[bucket] && hints[bucket] <= g_entry_capacity) {
         XgRenderResourceEntry *entry=&g_entries[hints[bucket]-1u];
         if(entry->occupied&&entry->view.handle.resource_id==handle.resource_id&&
             entry->view.handle.generation==handle.generation)return entry;
     }
     size_t index;
-    for (index = 0; index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; index++) {
+    for (index = 0; index < g_entry_capacity; index++) {
         XgRenderResourceEntry *entry = &g_entries[index];
         if (entry->occupied &&
             entry->view.handle.resource_id == handle.resource_id &&
@@ -678,11 +684,11 @@ static void retire_entry(XgRenderResourceEntry *entry) {
 static void reclaim_identity_if_unused(uint64_t resource_id) {
     size_t index;
 
-    for (index = 0u; index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; ++index)
+    for (index = 0u; index < g_entry_capacity; ++index)
         if (g_entries[index].occupied &&
             g_entries[index].view.handle.resource_id == resource_id)
             return;
-    for (index = 0u; index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; ++index) {
+    for (index = 0u; index < g_identity_capacity; ++index) {
         XgRenderResourceIdentityEntry *identity = &g_identities[index];
 
         if (!identity->occupied || identity->resource_id != resource_id)
@@ -693,7 +699,7 @@ static void reclaim_identity_if_unused(uint64_t resource_id) {
 }
 
 static void invalidate_capability_resources_locked(uint64_t capability) {
-    for (size_t index = 0u; index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY;
+    for (size_t index = 0u; index < g_entry_capacity;
          ++index) {
         XgRenderResourceEntry *entry = &g_entries[index];
 
@@ -744,7 +750,7 @@ static void retire_pending_capability_if_unused_locked(uint64_t capability) {
     if (entry == NULL || !entry->live || !entry->retire_pending ||
         entry->restore_staged)
         return;
-    for (size_t index = 0u; index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY;
+    for (size_t index = 0u; index < g_entry_capacity;
          ++index)
         if (g_entries[index].occupied &&
             g_entries[index].view.provenance.capability == capability)
@@ -856,7 +862,7 @@ xg_render_resource_capability_checkpoint_restore_stage(
         }
     } else {
         for (size_t index = 0u;
-             index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; ++index) {
+             index < g_capability_capacity; ++index) {
             XgRenderResourceCapabilityEntry *candidate = &g_capabilities[index];
             if (candidate->occupied && candidate->restore_staged &&
                 candidate->checkpoint_capability == checkpoint_capability &&
@@ -912,7 +918,7 @@ void xg_render_resource_capability_restore_commit(void) {
     repository_lock();
     if (g_capability_restore_active) {
         for (size_t index = 0u;
-              index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; ++index) {
+              index < g_capability_capacity; ++index) {
             XgRenderResourceCapabilityEntry *entry = &g_capabilities[index];
 
             if (!entry->occupied || !entry->restore_staged)
@@ -934,7 +940,7 @@ void xg_render_resource_capability_restore_commit(void) {
 
 void xg_render_resource_capability_restore_cancel(void) {
     repository_lock();
-    for (size_t index = 0u; index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY;
+    for (size_t index = 0u; index < g_capability_capacity;
          ++index) {
         if (g_capabilities[index].restore_created) {
             memset(&g_capabilities[index], 0, sizeof(g_capabilities[index]));
@@ -952,11 +958,11 @@ void xg_render_resource_capability_restore_cancel(void) {
 void xg_render_resource_repository_reset(void) {
     size_t index;
     repository_lock();
-    for (index = 0; index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; index++)
+    for (index = 0; index < g_entry_capacity; index++)
         free(g_entries[index].storage);
-    memset(g_entries, 0, sizeof(g_entries));
-    memset(g_identities, 0, sizeof(g_identities));
-    memset(g_capabilities, 0, sizeof(g_capabilities));
+    free(g_entries); g_entries = NULL; g_entry_capacity = 0u;
+    free(g_identities); g_identities = NULL; g_identity_capacity = 0u;
+    free(g_capabilities); g_capabilities = NULL; g_capability_capacity = 0u;
     memset(&g_diagnostics, 0, sizeof(g_diagnostics));
     capability_session_advance();
     g_restore_fault = XG_RENDER_RESOURCE_RESTORE_FAULT_NONE;
@@ -1003,7 +1009,7 @@ XgRenderResourceResult xg_render_resource_import(
         repository_unlock();
         return XG_RENDER_RESOURCE_INVALID_ARGUMENT;
     }
-    for (index = 0; index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; index++) {
+    for (index = 0; index < g_identity_capacity; index++) {
         XgRenderResourceIdentityEntry *entry = &g_identities[index];
 
         if (!entry->occupied) {
@@ -1024,10 +1030,15 @@ XgRenderResourceResult xg_render_resource_import(
         return XG_RENDER_RESOURCE_IDENTITY_COLLISION;
     }
     if (registered_identity == NULL && available_identity == NULL) {
-        repository_unlock();
-        return XG_RENDER_RESOURCE_CAPACITY_EXCEEDED;
+        const uint32_t next = g_identity_capacity;
+        XgRenderResourceIdentityEntry *grown = next == UINT32_MAX ? NULL :
+            xg_render_array_reserve(g_identities, sizeof(*g_identities),
+                &g_identity_capacity, next + 1u, UINT32_MAX);
+        if (!grown) { repository_unlock(); return XG_RENDER_RESOURCE_OUT_OF_MEMORY; }
+        g_identities = grown;
+        available_identity = &g_identities[next];
     }
-    for (index = 0; index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; index++) {
+    for (index = 0; index < g_entry_capacity; index++) {
         XgRenderResourceEntry *entry = &g_entries[index];
         if (!entry->occupied) {
             if (available == NULL) available = entry;
@@ -1050,9 +1061,20 @@ XgRenderResourceResult xg_render_resource_import(
     if (available == NULL && current != NULL &&
         current->view.retain_count == 0u)
         available = current;
-    if (available == NULL || g_next_generation == 0u) {
+    if (g_next_generation == 0u) {
         repository_unlock();
         return XG_RENDER_RESOURCE_CAPACITY_EXCEEDED;
+    }
+    if (available == NULL) {
+        const uint32_t next = g_entry_capacity;
+        const size_t current_index = current ? (size_t)(current - g_entries) : SIZE_MAX;
+        XgRenderResourceEntry *grown = next == UINT32_MAX ? NULL :
+            xg_render_array_reserve(g_entries, sizeof(*g_entries), &g_entry_capacity,
+                next + 1u, UINT32_MAX);
+        if (!grown) { repository_unlock(); return XG_RENDER_RESOURCE_OUT_OF_MEMORY; }
+        g_entries = grown;
+        available = &g_entries[next];
+        current = current_index != SIZE_MAX ? &g_entries[current_index] : NULL;
     }
     storage = malloc(import->byte_count);
     if (storage == NULL) {
@@ -1134,7 +1156,7 @@ static XgRenderResourceResult resource_import_begin(
         return XG_RENDER_RESOURCE_INVALID_ARGUMENT;
     }
     for (size_t index = 0u;
-         index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; ++index) {
+         index < g_identity_capacity; ++index) {
         XgRenderResourceIdentityEntry *entry = &g_identities[index];
         if (!entry->occupied) {
             if (available_identity == NULL) available_identity = entry;
@@ -1153,11 +1175,16 @@ static XgRenderResourceResult resource_import_begin(
         return XG_RENDER_RESOURCE_IDENTITY_COLLISION;
     }
     if (registered_identity == NULL && available_identity == NULL) {
-        repository_unlock();
-        return XG_RENDER_RESOURCE_CAPACITY_EXCEEDED;
+        const uint32_t next = g_identity_capacity;
+        XgRenderResourceIdentityEntry *grown = next == UINT32_MAX ? NULL :
+            xg_render_array_reserve(g_identities, sizeof(*g_identities),
+                &g_identity_capacity, next + 1u, UINT32_MAX);
+        if (!grown) { repository_unlock(); return XG_RENDER_RESOURCE_OUT_OF_MEMORY; }
+        g_identities = grown;
+        available_identity = &g_identities[next];
     }
     for (size_t index = 0u;
-         index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; ++index) {
+         index < g_entry_capacity; ++index) {
         XgRenderResourceEntry *entry = &g_entries[index];
         if (!entry->occupied) {
             if (available == NULL) available = entry;
@@ -1186,9 +1213,18 @@ static XgRenderResourceResult resource_import_begin(
         repository_unlock();
         return XG_RENDER_RESOURCE_INVALID_STATE;
     }
-    if (available == NULL || g_next_generation == 0u) {
+    if (g_next_generation == 0u) {
         repository_unlock();
         return XG_RENDER_RESOURCE_CAPACITY_EXCEEDED;
+    }
+    if (available == NULL) {
+        const uint32_t next = g_entry_capacity;
+        XgRenderResourceEntry *grown = next == UINT32_MAX ? NULL :
+            xg_render_array_reserve(g_entries, sizeof(*g_entries), &g_entry_capacity,
+                next + 1u, UINT32_MAX);
+        if (!grown) { repository_unlock(); return XG_RENDER_RESOURCE_OUT_OF_MEMORY; }
+        g_entries = grown;
+        available = &g_entries[next];
     }
     storage = malloc(import->byte_count);
     if (storage == NULL) {
@@ -1256,7 +1292,7 @@ XgRenderResourceResult xg_render_resource_import_commit(
         return XG_RENDER_RESOURCE_INVALID_STATE;
     }
     for (size_t index = 0u;
-         index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; ++index) {
+         index < g_entry_capacity; ++index) {
         XgRenderResourceEntry *candidate = &g_entries[index];
         if (candidate != entry && candidate->occupied &&
             candidate->view.current &&
@@ -1321,7 +1357,7 @@ XgRenderResourceResult xg_render_resource_import_commit_many(
 
             if (entry->view.current) continue;
             for (size_t candidate_index = 0u;
-                 candidate_index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY;
+                 candidate_index < g_entry_capacity;
                  ++candidate_index) {
                 XgRenderResourceEntry *candidate =
                     &g_entries[candidate_index];
@@ -1450,7 +1486,7 @@ XgRenderResourceResult xg_render_resource_restore_commit(
         return XG_RENDER_RESOURCE_INVALID_STATE;
     }
     for (size_t index = 0u;
-         index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; ++index) {
+         index < g_entry_capacity; ++index) {
         XgRenderResourceEntry *candidate = &g_entries[index];
         if (candidate != entry && candidate->occupied &&
             candidate->view.current &&
@@ -1724,7 +1760,7 @@ void xg_render_resource_invalidate_owner(XgRenderResourceOwnerKind owner_kind,
     size_t index;
     if (!owner_kind_valid(owner_kind) || owner_generation == 0u) return;
     repository_lock();
-    for (index = 0; index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; index++) {
+    for (index = 0; index < g_entry_capacity; index++) {
         XgRenderResourceEntry *entry = &g_entries[index];
         if (!entry->occupied || entry->view.owner_kind != owner_kind ||
             entry->view.owner_generation != owner_generation ||
@@ -1739,7 +1775,7 @@ void xg_render_resource_invalidate_owner(XgRenderResourceOwnerKind owner_kind,
             reclaim_identity_if_unused(resource_id);
         }
     }
-    for (index = 0u; index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; ++index) {
+    for (index = 0u; index < g_capability_capacity; ++index) {
         XgRenderResourceCapabilityEntry *capability = &g_capabilities[index];
 
         if (capability->occupied && capability->live &&
@@ -1766,7 +1802,7 @@ void xg_render_resource_invalidate_from_owner(
     size_t index;
     if (!owner_kind_valid(first_owner_kind)) return;
     repository_lock();
-    for (index = 0; index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; index++) {
+    for (index = 0; index < g_entry_capacity; index++) {
         XgRenderResourceEntry *entry = &g_entries[index];
         if (!entry->occupied ||
             entry->view.owner_kind < first_owner_kind || entry->restore_staged)
@@ -1780,7 +1816,7 @@ void xg_render_resource_invalidate_from_owner(
             reclaim_identity_if_unused(resource_id);
         }
     }
-    for (index = 0u; index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; ++index) {
+    for (index = 0u; index < g_capability_capacity; ++index) {
         XgRenderResourceCapabilityEntry *capability = &g_capabilities[index];
 
         if (capability->occupied && capability->live &&
@@ -1799,13 +1835,13 @@ void xg_render_resource_repository_diagnostics(
     if (out_diagnostics == NULL) return;
     repository_lock();
     *out_diagnostics = g_diagnostics;
-    for (index = 0; index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; index++) {
+    for (index = 0; index < g_entry_capacity; index++) {
         if (!g_entries[index].occupied) continue;
         out_diagnostics->live_resources++;
         if (g_entries[index].view.retain_count != 0u)
             out_diagnostics->retained_resources++;
     }
-    for (index = 0u; index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; ++index) {
+    for (index = 0u; index < g_capability_capacity; ++index) {
         if (!g_capabilities[index].occupied) continue;
         out_diagnostics->capability_slots++;
         if (g_capabilities[index].live) out_diagnostics->live_capabilities++;

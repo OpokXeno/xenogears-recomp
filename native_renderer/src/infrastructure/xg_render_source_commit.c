@@ -24,7 +24,10 @@ typedef struct XgRenderSourceSlot {
     bool occupied;
 } XgRenderSourceSlot;
 
-static XgRenderSourceSlot g_slots[XG_RENDER_SOURCE_COMMIT_CAPACITY];
+/* The queue has bounded backpressure, but inactive queue slots do not need a
+ * multi-megabyte geometry workspace. Allocate only slots actually used. */
+static XgRenderSourceSlot *g_slots[XG_RENDER_SOURCE_COMMIT_CAPACITY];
+static uint32_t g_slot_generations[XG_RENDER_SOURCE_COMMIT_CAPACITY];
 static atomic_flag g_source_commit_lock = ATOMIC_FLAG_INIT;
 
 static void source_commit_lock(void) {
@@ -661,8 +664,8 @@ static XgRenderSourceSlot *builder_slot(XgRenderSourceBuilder builder) {
 
     if (builder.slot >= XG_RENDER_SOURCE_COMMIT_CAPACITY)
         return NULL;
-    slot = &g_slots[builder.slot];
-    if (!slot->occupied || slot->generation != builder.generation ||
+    slot = g_slots[builder.slot];
+    if (!slot || !slot->occupied || slot->generation != builder.generation ||
         slot->header.state != XG_RENDER_SOURCE_BUILDING)
         return NULL;
     return slot;
@@ -708,8 +711,8 @@ static XgRenderSourceSlot *handle_slot(XgRenderSourceCommitHandle handle) {
     XgRenderSourceSlot *slot;
 
     if (handle.slot >= XG_RENDER_SOURCE_COMMIT_CAPACITY) return NULL;
-    slot = &g_slots[handle.slot];
-    if (!slot->occupied || slot->generation != handle.generation) return NULL;
+    slot = g_slots[handle.slot];
+    if (!slot || !slot->occupied || slot->generation != handle.generation) return NULL;
     return slot;
 }
 
@@ -1189,19 +1192,21 @@ static XgRenderSourceCommitResult validate_ui(
 static void source_commit_reset_unlocked(void) {
     uint32_t index;
     for (index = 0; index < XG_RENDER_SOURCE_COMMIT_CAPACITY; index++) {
-        uint32_t generation = g_slots[index].generation + 1u;
+        XgRenderSourceSlot *slot = g_slots[index];
+        uint32_t generation = (slot ? slot->generation : g_slot_generations[index]) + 1u;
         if (generation == 0u) generation = 1u;
-        if (g_slots[index].occupied) release_resources(&g_slots[index]);
-        memset(&g_slots[index], 0, sizeof(g_slots[index]));
-        g_slots[index].generation = generation;
+        if (slot && slot->occupied) release_resources(slot);
+        free(slot);
+        g_slots[index] = NULL;
+        g_slot_generations[index] = generation;
     }
 }
 
 static void source_commit_cancel_builders_unlocked(void) {
     uint32_t index;
     for (index = 0; index < XG_RENDER_SOURCE_COMMIT_CAPACITY; index++) {
-        XgRenderSourceSlot *slot = &g_slots[index];
-        if (!slot->occupied || slot->header.state != XG_RENDER_SOURCE_BUILDING)
+        XgRenderSourceSlot *slot = g_slots[index];
+        if (!slot || !slot->occupied || slot->header.state != XG_RENDER_SOURCE_BUILDING)
             continue;
         reject_slot(slot, XG_RENDER_SOURCE_CANCELLED);
     }
@@ -1222,8 +1227,14 @@ static XgRenderSourceCommitResult source_commit_begin_unlocked(
         identity->source_sequence == 0u || display->render_scale > XG_SEMANTIC_RENDER_SCALE_MAX)
         return XG_RENDER_SOURCE_COMMIT_INVALID_ARGUMENT;
     for (index = 0; index < XG_RENDER_SOURCE_COMMIT_CAPACITY; index++) {
-        XgRenderSourceSlot *slot = &g_slots[index];
-        if (slot->occupied) continue;
+        XgRenderSourceSlot *slot = g_slots[index];
+        if (slot && slot->occupied) continue;
+        if (!slot) {
+            slot = malloc(sizeof(*slot));
+            if (!slot) return XG_RENDER_SOURCE_COMMIT_CAPACITY_EXCEEDED;
+            slot->generation = g_slot_generations[index];
+            g_slots[index] = slot;
+        }
         if (slot->generation == 0u) slot->generation = 1u;
         memset(&slot->header, 0, sizeof(slot->header));
         slot->header.identity = *identity;

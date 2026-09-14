@@ -31,6 +31,7 @@ static void authorize_source(XgRenderModelAuthenticatedSourceReceipt *source,
             .base = UINT32_C(0x80010000),
             .size = UINT32_C(0x1000),
             .crc32 = 1u,
+            .sha256 = {1u},
         },
         .source = {
             .source_class = XG_RENDER_RESOURCE_SOURCE_MODEL_RANGE,

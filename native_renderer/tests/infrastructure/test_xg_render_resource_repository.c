@@ -10,6 +10,8 @@
 #include <threads.h>
 
 enum { CONCURRENT_CANCEL_ITERATIONS = 256 };
+/* Historical boundary, retained only as a regression-test workload size. */
+enum { XG_RENDER_RESOURCE_REPOSITORY_CAPACITY = 4096 };
 
 #define TEST_PRESENTER_OWNER UINT64_C(0x52504f5349544f52)
 
@@ -985,16 +987,17 @@ static void test_capability_checkpoint_cold_restore_and_reclamation(void) {
         metadata.owner_generation++;
         metadata.source.range_content_digest = metadata.receipt;
         assert(xg_render_resource_capability_register(&metadata, &overflow) ==
-               XG_RENDER_RESOURCE_CAPABILITY_CAPACITY_EXCEEDED);
+               XG_RENDER_RESOURCE_CAPABILITY_OK);
         xg_render_resource_repository_diagnostics(&diagnostics);
         assert(diagnostics.live_capabilities ==
-               XG_RENDER_RESOURCE_REPOSITORY_CAPACITY);
+               XG_RENDER_RESOURCE_REPOSITORY_CAPACITY + 1u);
         assert(diagnostics.capability_slots ==
-               XG_RENDER_RESOURCE_REPOSITORY_CAPACITY);
+               XG_RENDER_RESOURCE_REPOSITORY_CAPACITY + 1u);
         for (size_t index = 0u;
              index < XG_RENDER_RESOURCE_REPOSITORY_CAPACITY; ++index)
             assert(xg_render_resource_capability_revoke(live[index]) ==
                    XG_RENDER_RESOURCE_CAPABILITY_OK);
+        assert(xg_render_resource_capability_revoke(overflow) == XG_RENDER_RESOURCE_CAPABILITY_OK);
     }
     xg_render_resource_repository_diagnostics(&diagnostics);
     assert(diagnostics.live_capabilities == 0u);

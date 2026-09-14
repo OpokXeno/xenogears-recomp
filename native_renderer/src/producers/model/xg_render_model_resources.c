@@ -1,10 +1,8 @@
 #include "xg_render_model_resources.h"
+#include "xg_render_array.h"
 
 #include <stdbool.h>
 #include <string.h>
-
-#define XG_RENDER_MODEL_PUBLICATION_CAPACITY \
-    XG_RENDER_RESOURCE_REPOSITORY_CAPACITY
 
 typedef struct XgRenderModelPendingPublication {
     XgRenderModelPublication publication;
@@ -21,10 +19,9 @@ typedef struct XgRenderModelPublishedMetadata {
     bool occupied;
 } XgRenderModelPublishedMetadata;
 
-static XgRenderModelPendingPublication
-    g_pending[XG_RENDER_MODEL_PUBLICATION_CAPACITY];
-static XgRenderModelPublishedMetadata
-    g_published[XG_RENDER_MODEL_PUBLICATION_CAPACITY];
+static XgRenderModelPendingPublication *g_pending;
+static XgRenderModelPublishedMetadata *g_published;
+static uint32_t g_pending_capacity, g_published_capacity;
 static uint64_t g_next_transaction = 1u;
 
 static bool identity_present(const XgRenderResourceIdentity *identity) {
@@ -129,7 +126,7 @@ static bool handles_equal(XgRenderResourceHandle left,
 
 static XgRenderModelPendingPublication *find_pending(
         XgRenderModelPublication publication) {
-    for (size_t index = 0u; index < XG_RENDER_MODEL_PUBLICATION_CAPACITY;
+    for (size_t index = 0u; index < g_pending_capacity;
          ++index) {
         XgRenderModelPendingPublication *pending = &g_pending[index];
 
@@ -143,14 +140,20 @@ static XgRenderModelPendingPublication *find_pending(
 }
 
 static XgRenderModelPendingPublication *available_pending(void) {
-    for (size_t index = 0u; index < XG_RENDER_MODEL_PUBLICATION_CAPACITY;
+    for (size_t index = 0u; index < g_pending_capacity;
          ++index)
         if (!g_pending[index].occupied) return &g_pending[index];
-    return NULL;
+    const uint32_t next = g_pending_capacity;
+    if (next == UINT32_MAX) return NULL;
+    XgRenderModelPendingPublication *grown = xg_render_array_reserve(g_pending,
+        sizeof(*grown), &g_pending_capacity, next + 1u, UINT32_MAX);
+    if (!grown) return NULL;
+    g_pending = grown;
+    return &g_pending[next];
 }
 
 static bool pending_resource_id(uint64_t resource_id) {
-    for (size_t index = 0u; index < XG_RENDER_MODEL_PUBLICATION_CAPACITY;
+    for (size_t index = 0u; index < g_pending_capacity;
          ++index)
         if (g_pending[index].occupied &&
             g_pending[index].publication.resource.resource_id == resource_id)
@@ -159,7 +162,7 @@ static bool pending_resource_id(uint64_t resource_id) {
 }
 
 static void cancel_pending_publications(void) {
-    for (size_t index = 0u; index < XG_RENDER_MODEL_PUBLICATION_CAPACITY;
+    for (size_t index = 0u; index < g_pending_capacity;
          ++index) {
         XgRenderModelPendingPublication *pending = &g_pending[index];
         XgRenderResourceView view;
@@ -177,7 +180,8 @@ static void cancel_pending_publications(void) {
 
 void xg_render_model_resources_reset(void) {
     cancel_pending_publications();
-    memset(g_published, 0, sizeof(g_published));
+    free(g_pending); g_pending = NULL; g_pending_capacity = 0u;
+    free(g_published); g_published = NULL; g_published_capacity = 0u;
 }
 
 void xg_render_model_resources_scene_boundary(void) {
@@ -186,7 +190,7 @@ void xg_render_model_resources_scene_boundary(void) {
 
 static XgRenderModelPublishedMetadata *published_metadata(
         XgRenderResourceHandle handle) {
-    for (size_t index = 0u; index < XG_RENDER_MODEL_PUBLICATION_CAPACITY;
+    for (size_t index = 0u; index < g_published_capacity;
          ++index) {
         XgRenderModelPublishedMetadata *metadata = &g_published[index];
 
@@ -199,7 +203,7 @@ static XgRenderModelPublishedMetadata *published_metadata(
 static XgRenderModelPublishedMetadata *available_metadata(void) {
     XgRenderResourceView view;
 
-    for (size_t index = 0u; index < XG_RENDER_MODEL_PUBLICATION_CAPACITY;
+    for (size_t index = 0u; index < g_published_capacity;
          ++index) {
         XgRenderModelPublishedMetadata *metadata = &g_published[index];
 
@@ -210,7 +214,13 @@ static XgRenderModelPublishedMetadata *available_metadata(void) {
             return metadata;
         }
     }
-    return NULL;
+    const uint32_t next = g_published_capacity;
+    if (next == UINT32_MAX) return NULL;
+    XgRenderModelPublishedMetadata *grown = xg_render_array_reserve(g_published,
+        sizeof(*grown), &g_published_capacity, next + 1u, UINT32_MAX);
+    if (!grown) return NULL;
+    g_published = grown;
+    return &g_published[next];
 }
 
 XgRenderModelResourceResult xg_render_model_resource_publish_begin(

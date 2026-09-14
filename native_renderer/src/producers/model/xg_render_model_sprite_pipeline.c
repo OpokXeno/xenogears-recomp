@@ -6,6 +6,7 @@
 #include "xg_model_ft4_raw.h"
 #include "xg_render_gear_motion.h"
 #include "xg_render_backend.h"
+#include "xg_render_array.h"
 #include "xg_render_field_sprite.h"
 #include "xg_render_manifest_generated.h"
 #include "xg_render_primitive_utils.h"
@@ -18,7 +19,7 @@
 #include <string.h>
 
 enum {
-    MODEL_CAPACITY = XG_RENDER_IR_ITEM_CAPACITY,
+    MODEL_PRIMITIVE_MAXIMUM = UINT16_MAX,
     SPRITE_CAPACITY = 64u,
     MODEL_PRECONDITION_CONTEXT = 1u << 0,
     MODEL_PRECONDITION_CPU = 1u << 1,
@@ -82,7 +83,8 @@ typedef struct ModelFt4Record {
 } ModelFt4Record;
 
 typedef struct ModelFt4State {
-    ModelFt4Record records[MODEL_CAPACITY];
+    ModelFt4Record *records;
+    uint32_t capacity;
     ModelContext context;
     PsxXgRenderModelFt4ShadowSnapshot snapshot;
     uint32_t initial_packet_cursor;
@@ -125,7 +127,8 @@ typedef struct ModelFt3Record {
 } ModelFt3Record;
 
 typedef struct ModelFt3State {
-    ModelFt3Record records[MODEL_CAPACITY];
+    ModelFt3Record *records;
+    uint32_t capacity;
     PsxXgRenderModelFt3ShadowSnapshot snapshot;
     uint32_t initial_packet_cursor;
     uint32_t initial_counter;
@@ -1414,7 +1417,7 @@ static uint32_t prepare_precondition_mask(CPUState *cpu) {
     if (!physical_address_equals(cpu->gpr[31], UINT32_C(0x8002c86c)))
         mask |= MODEL_PRECONDITION_RETURN;
     if (cpu->gpr[5] == 0u) mask |= MODEL_PRECONDITION_TARGET_ZERO;
-    if (cpu->gpr[5] > MODEL_CAPACITY)
+    if (cpu->gpr[5] > MODEL_PRIMITIVE_MAXIMUM)
         mask |= MODEL_PRECONDITION_TARGET_CAPACITY;
     if (context->valid && context->resident_dispatch &&
         cpu->read_word != NULL) {
@@ -1452,6 +1455,10 @@ static bool prepare_model_ft4(
         return false;
     }
     target_count = cpu->gpr[5];
+    ModelFt4Record *grown = xg_render_array_reserve(model_ft4.records, sizeof(*grown),
+        &model_ft4.capacity, target_count, MODEL_PRIMITIVE_MAXIMUM);
+    if (!grown) { model_ft4.snapshot.prepare_failure_detail = 1u; return false; }
+    model_ft4.records = grown;
     group_address = context->topology_base;
     attribute_address = context->material_base;
     group_count = cpu->read_half(context->model_address + 6u);
@@ -1468,7 +1475,7 @@ static bool prepare_model_ft4(
         const uint32_t primitive_count = cpu->read_half(group_address + 2u);
         const uint32_t descriptors = group_address + 4u;
 
-        if (row >= 17u || primitive_count > 4096u ||
+        if (row >= 17u ||
             descriptors > UINT32_MAX - primitive_count * 8u) {
             model_ft4.snapshot.prepare_failure_detail = 3u;
             return false;
@@ -1484,7 +1491,7 @@ static bool prepare_model_ft4(
                 XgModelFt4RawSource source = {0};
 
                 if (row != 13u || primitive_count != target_count ||
-                    primitive >= MODEL_CAPACITY) {
+                    primitive >= model_ft4.capacity) {
                     model_ft4.snapshot.prepare_failure_detail = 5u;
                     return false;
                 }
@@ -2238,6 +2245,10 @@ static bool prepare_model_ft3(
     if (projection_mismatch_mask != 0u)
         ++model_ft3.snapshot.handler_projection_mismatch_count;
     target_count = cpu->gpr[5];
+    ModelFt3Record *grown = xg_render_array_reserve(model_ft3.records, sizeof(*grown),
+        &model_ft3.capacity, target_count, MODEL_PRIMITIVE_MAXIMUM);
+    if (!grown) { model_ft3.snapshot.prepare_failure_detail = 1u; return false; }
+    model_ft3.records = grown;
     group_address = context->topology_base;
     attribute_address = context->material_base;
     group_count = cpu->read_half(context->model_address + 6u);
@@ -2253,7 +2264,7 @@ static bool prepare_model_ft3(
         const uint8_t row = cpu->read_byte(group_address);
         const uint32_t primitive_count = cpu->read_half(group_address + 2u);
         const uint32_t descriptors = group_address + 4u;
-        if (row >= 17u || primitive_count > 4096u ||
+        if (row >= 17u ||
             descriptors > UINT32_MAX - primitive_count * 8u) {
             model_ft3.snapshot.prepare_failure_detail = 3u;
             return false;
@@ -2272,7 +2283,7 @@ static bool prepare_model_ft3(
                 const uint32_t packet =
                     cpu->read_word(UINT32_C(0x80059424)) + primitive * 0x20u;
                 if (row != 5u || primitive_count != target_count ||
-                    primitive >= MODEL_CAPACITY) {
+                    primitive >= model_ft3.capacity) {
                     model_ft3.snapshot.prepare_failure_detail = 5u;
                     return false;
                 }
@@ -3559,7 +3570,10 @@ void xg_render_model_sprite_pipeline_reset(
     xg_render_motion_reset();
     xg_render_gear_motion_reset();
     gear_helper_mode1_proof = (GearHelperMode1Proof){0};
+    free(model_ft4.records);
+    free(model_ft3.records);
     model_ft4 = (ModelFt4State){0};
+    model_ft3 = (ModelFt3State){0};
     sprite_ft4 = (SpriteState){0};
     xg_render_model_repository_clear_ft4_sources();
     xg_render_model_repository_clear_ft3_sources(

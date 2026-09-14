@@ -8,7 +8,7 @@
 #define XG_RENDER_LOOKUP_WORD_CAPACITY (UINT32_C(0x200000) / 4u)
 
 typedef struct XgRenderAddressLookupSlot {
-    uint16_t index;
+    uint32_t index;
     uint16_t epoch;
 } XgRenderAddressLookupSlot;
 

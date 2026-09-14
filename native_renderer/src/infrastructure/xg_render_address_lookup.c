@@ -30,10 +30,10 @@ void xg_render_lookup_put(
         uint32_t address, uint32_t index) {
     uint32_t key;
 
-    if (lookup == NULL || index > UINT16_MAX ||
+    if (lookup == NULL ||
         !xg_render_lookup_key(address, &key))
         return;
-    lookup[key].index = (uint16_t)index;
+    lookup[key].index = index;
     lookup[key].epoch = epoch;
 }
 
@@ -42,7 +42,7 @@ void xg_render_lookup_remove(
         uint32_t address, uint32_t index) {
     uint32_t key;
 
-    if (lookup == NULL || index > UINT16_MAX ||
+    if (lookup == NULL ||
         !xg_render_lookup_key(address, &key))
         return;
     if (lookup[key].epoch == epoch && lookup[key].index == index)

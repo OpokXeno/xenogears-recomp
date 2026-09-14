@@ -8,13 +8,13 @@
 #include "xg_render_battle_fx.h"
 #include "xg_render_manifest_generated.h"
 #include "xg_render_submission.h"
+#include "xg_render_array.h"
 
 #include <stddef.h>
 #include <string.h>
 
-#define TEMPLATE_CAPACITY XG_RENDER_IR_ITEM_CAPACITY
-
-static XgRenderOverlayFt4Template templates[TEMPLATE_CAPACITY];
+static XgRenderOverlayFt4Template *templates;
+static uint32_t template_capacity;
 static uint32_t template_count;
 static PsxXgRenderOverlayFt4Snapshot overlay_snapshot;
 static bool projected_2e_descriptor_scope;
@@ -240,10 +240,14 @@ static XgRenderOverlayFt4Template *overlay_ft4_upsert(
         if (failure_detail != NULL) *failure_detail = 1u;
         return NULL;
     }
-    if (template_count == TEMPLATE_CAPACITY) {
+    XgRenderOverlayFt4Template *grown = template_count == UINT32_C(0x80000) ? NULL :
+        xg_render_array_reserve(templates, sizeof(*grown), &template_capacity,
+            template_count + 1u, UINT32_C(0x80000));
+    if (!grown) {
         if (failure_detail != NULL) *failure_detail = 2u;
         return NULL;
     }
+    templates = grown;
     record = &templates[template_count++];
     *record = (XgRenderOverlayFt4Template){
         .packet_address = packet_address,
@@ -274,10 +278,14 @@ bool xg_render_overlay_ft4_publish_field_sprite(
     }
     target = overlay_ft4_find(publication->packet_address);
     if (target == NULL) {
-        if (template_count == TEMPLATE_CAPACITY) {
+        XgRenderOverlayFt4Template *grown = template_count == UINT32_C(0x80000) ? NULL :
+            xg_render_array_reserve(templates, sizeof(*grown), &template_capacity,
+                template_count + 1u, UINT32_C(0x80000));
+        if (!grown) {
             if (failure_detail != NULL) *failure_detail = 2u;
             return false;
         }
+        templates = grown;
         target = &templates[template_count++];
     }
     *target = (XgRenderOverlayFt4Template){

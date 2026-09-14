@@ -3,6 +3,7 @@
 #include "cpu_state.h"
 #include "gpu.h"
 #include "xg_render_address_lookup.h"
+#include "xg_render_array.h"
 #include "xg_render_backend.h"
 #include "xg_render_primitive_utils.h"
 
@@ -10,10 +11,7 @@
 #include <stddef.h>
 #include <string.h>
 
-#define XG_RENDER_MODEL_FT3_SOURCE_CAPACITY 16384u
-#define XG_RENDER_MODEL_FT4_SOURCE_CAPACITY XG_RENDER_IR_ITEM_CAPACITY
 #define XG_RENDER_MODEL_FT4_TEMPLATE_CAPACITY 4096u
-#define XG_RENDER_MODEL_ANCHOR_CONTEXT_CAPACITY 4096u
 
 typedef struct XgRenderModelFt4TemplateEntry {
     XgRenderModelFt4Template material;
@@ -35,15 +33,13 @@ typedef struct XgRenderModelAnchorContext {
     uint32_t producer_id;
 } XgRenderModelAnchorContext;
 
-static XgRenderModelFt3SourceRecord ft3_sources[
-    XG_RENDER_MODEL_FT3_SOURCE_CAPACITY];
-static XgRenderModelFt4SourceRecord ft4_sources[
-    XG_RENDER_MODEL_FT4_SOURCE_CAPACITY];
+static XgRenderModelFt3SourceRecord *ft3_sources;
+static XgRenderModelFt4SourceRecord *ft4_sources;
+static uint32_t ft3_source_capacity, ft4_source_capacity;
 /* Compact scan keys avoid pulling entire geometry records into cache for
  * unrelated producers. Validity and lifecycle remain checked on the record. */
-static uint32_t ft3_source_addresses[XG_RENDER_MODEL_FT3_SOURCE_CAPACITY];
-static uint32_t ft3_source_producers[XG_RENDER_MODEL_FT3_SOURCE_CAPACITY];
-static uint32_t ft4_source_producers[XG_RENDER_MODEL_FT4_SOURCE_CAPACITY];
+static uint32_t *ft3_source_addresses, *ft3_source_producers, *ft4_source_producers;
+static uint32_t ft3_address_capacity, ft3_producer_capacity, ft4_producer_capacity;
 typedef struct AnchorScanRange { uint32_t begin, end; } AnchorScanRange;
 static AnchorScanRange ft3_anchor_ranges[256], ft4_anchor_ranges[256];
 
@@ -82,8 +78,8 @@ static uint32_t template_table_epoch = 1u;
 static uint32_t packet_template_count;
 static uint32_t descriptor_template_count;
 static XgRenderModelPacketCopy packet_copy;
-static XgRenderModelAnchorContext anchor_contexts[
-    XG_RENDER_MODEL_ANCHOR_CONTEXT_CAPACITY];
+static XgRenderModelAnchorContext *anchor_contexts;
+static uint32_t anchor_context_capacity;
 static uint32_t anchor_context_count;
 
 static const GuestRenderNativeSourceWriter ft4_2c_writers[] = {
@@ -183,7 +179,15 @@ static XgRenderModelFt4SourceRecord *ft4_source_upsert(uint32_t source_id) {
             return &ft4_sources[index];
         }
     }
-    if (ft4_source_count == XG_RENDER_MODEL_FT4_SOURCE_CAPACITY) return NULL;
+    if (ft4_source_count == XG_RENDER_LOOKUP_WORD_CAPACITY) return NULL;
+    uint32_t *keys = xg_render_array_reserve(ft4_source_producers, sizeof(*keys),
+        &ft4_producer_capacity, ft4_source_count + 1u, XG_RENDER_LOOKUP_WORD_CAPACITY);
+    if (!keys) return NULL;
+    ft4_source_producers = keys;
+    XgRenderModelFt4SourceRecord *grown = xg_render_array_reserve(ft4_sources,
+        sizeof(*grown), &ft4_source_capacity, ft4_source_count + 1u, XG_RENDER_LOOKUP_WORD_CAPACITY);
+    if (!grown) return NULL;
+    ft4_sources = grown;
     return &ft4_sources[ft4_source_count++];
 }
 
@@ -191,7 +195,6 @@ static XgRenderModelFt3SourceRecord *ft3_source_upsert(uint32_t source_id) {
     const uint32_t indexed = xg_render_lookup_find(
         ft3_source_lookup, ft3_source_lookup_epoch, source_id,
         ft3_source_count);
-    XgRenderModelFt3SourceRecord *recyclable = NULL;
 
     if (indexed != UINT32_MAX && ft3_sources[indexed].valid &&
         ft3_sources[indexed].source_id == source_id)
@@ -202,18 +205,20 @@ static XgRenderModelFt3SourceRecord *ft3_source_upsert(uint32_t source_id) {
         if (candidate->valid && candidate->source_id == source_id)
             return candidate;
         if (!candidate->valid) return candidate;
-        if (recyclable == NULL && !candidate->geometry_ready &&
-            !candidate->link_pending)
-            recyclable = candidate;
     }
-    if (ft3_source_count == XG_RENDER_MODEL_FT3_SOURCE_CAPACITY) {
-        if (recyclable == NULL) return NULL;
-        xg_render_lookup_remove(
-            ft3_source_lookup, ft3_source_lookup_epoch,
-            recyclable->source_id,
-            (uint32_t)(recyclable - ft3_sources));
-        return recyclable;
-    }
+    if (ft3_source_count == XG_RENDER_LOOKUP_WORD_CAPACITY) return NULL;
+    uint32_t *addresses = xg_render_array_reserve(ft3_source_addresses, sizeof(*addresses),
+        &ft3_address_capacity, ft3_source_count + 1u, XG_RENDER_LOOKUP_WORD_CAPACITY);
+    if (!addresses) return NULL;
+    ft3_source_addresses = addresses;
+    uint32_t *keys = xg_render_array_reserve(ft3_source_producers, sizeof(*keys),
+        &ft3_producer_capacity, ft3_source_count + 1u, XG_RENDER_LOOKUP_WORD_CAPACITY);
+    if (!keys) return NULL;
+    ft3_source_producers = keys;
+    XgRenderModelFt3SourceRecord *grown = xg_render_array_reserve(ft3_sources,
+        sizeof(*grown), &ft3_source_capacity, ft3_source_count + 1u, XG_RENDER_LOOKUP_WORD_CAPACITY);
+    if (!grown) return NULL;
+    ft3_sources = grown;
     return &ft3_sources[ft3_source_count++];
 }
 
@@ -356,8 +361,11 @@ static XgRenderModelAnchorContext *observe_anchor_context(
         }
     }
     if (context == NULL) {
-        if (anchor_context_count == XG_RENDER_MODEL_ANCHOR_CONTEXT_CAPACITY)
-            return NULL;
+        if (anchor_context_count == UINT32_MAX) return NULL;
+        XgRenderModelAnchorContext *grown = xg_render_array_reserve(anchor_contexts,
+            sizeof(*grown), &anchor_context_capacity, anchor_context_count + 1u, UINT32_MAX);
+        if (!grown) return NULL;
+        anchor_contexts = grown;
         context = &anchor_contexts[anchor_context_count++];
         memset(context, 0, sizeof(*context));
         context->producer_id = resolved->interpolation_identity.producer_id;
@@ -501,37 +509,46 @@ bool xg_render_model_repository_store_ft4_sources(
         const XgRenderModelFt4SourceRecord *records,
         const XgRenderModelSourcePublication *publications, uint32_t count,
         const XgRenderModelRepositoryServices *services) {
-    XgRenderModelFt4SourceRecord *targets[
-        XG_RENDER_MODEL_FT4_SOURCE_CAPACITY];
+    uint32_t *targets;
     uint32_t reserved = 0u;
 
     if (((records == NULL || publications == NULL) && count != 0u) ||
-        count > XG_RENDER_MODEL_FT4_SOURCE_CAPACITY)
+        count > XG_RENDER_LOOKUP_WORD_CAPACITY)
         return false;
+    if (!count) return true;
+    for (uint32_t i = 0u; i < count; ++i) {
+        uint32_t key;
+        if (!records[i].valid || !xg_render_lookup_key(records[i].source_id, &key)) return false;
+    }
+    targets = malloc((size_t)count * sizeof(*targets));
+    if (!targets) return false;
     for (; reserved < count; ++reserved) {
-        targets[reserved] = ft4_source_upsert(records[reserved].source_id);
-        if (targets[reserved] == NULL) {
+        XgRenderModelFt4SourceRecord *target = ft4_source_upsert(records[reserved].source_id);
+        if (target == NULL) {
             for (uint32_t rollback = 0u; rollback < reserved; ++rollback)
-                targets[rollback]->valid = false;
+                ft4_sources[targets[rollback]].valid = false;
+            free(targets);
             return false;
         }
-        targets[reserved]->source_id = records[reserved].source_id;
-        targets[reserved]->valid = true;
+        targets[reserved] = (uint32_t)(target - ft4_sources);
+        target->source_id = records[reserved].source_id;
+        target->valid = true;
+        xg_render_lookup_put(ft4_source_lookup, ft4_source_lookup_epoch,
+            target->source_id, targets[reserved]);
     }
     for (uint32_t index = 0u; index < count; ++index) {
-        *targets[index] = records[index];
-        ft4_source_producers[targets[index] - ft4_sources] =
-            targets[index]->interpolation_producer_id;
-        include_anchor_index(ft4_anchor_ranges, targets[index]->interpolation_producer_id,
-            (uint32_t)(targets[index] - ft4_sources));
-        targets[index]->semantic_ready = false;
+        XgRenderModelFt4SourceRecord *target = &ft4_sources[targets[index]];
+        *target = records[index];
+        ft4_source_producers[targets[index]] = target->interpolation_producer_id;
+        include_anchor_index(ft4_anchor_ranges, target->interpolation_producer_id, targets[index]);
+        target->semantic_ready = false;
         xg_render_lookup_put(
             ft4_source_lookup, ft4_source_lookup_epoch,
-            targets[index]->source_id,
-            (uint32_t)(targets[index] - ft4_sources));
+            target->source_id, targets[index]);
         publish_resource(
-            targets[index]->source_id, true, &publications[index], services);
+            target->source_id, true, &publications[index], services);
     }
+    free(targets);
     return true;
 }
 

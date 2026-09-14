@@ -41,8 +41,6 @@ XgRenderResidentCaptureResult xg_render_resident_capture_resource_templates(
         !services->source_range_valid(services->context, glyph, 4u, 2u))
         return result;
     count = cpu->read_half(glyph);
-    if (count > XG_RENDER_RESIDENT_RESOURCE_TEMPLATE_CAPACITY)
-        return XG_RENDER_RESIDENT_CAPTURE_CAPACITY_EXCEEDED;
     if (count > (UINT32_MAX - glyph - 4u) / 0x1cu ||
         (count != 0u &&
          ((uint64_t)cpu->gpr[6] + (uint64_t)(count - 1u) * 0x50u +

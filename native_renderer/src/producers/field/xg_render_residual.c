@@ -4,6 +4,7 @@
 #include "gpu.h"
 #include "xg_field_render_services.h"
 #include "xg_render_address_lookup.h"
+#include "xg_render_array.h"
 #include "xg_render_primitive_utils.h"
 #include "xg_render_quad_builder.h"
 #include "xg_render_resource_watch.h"
@@ -13,7 +14,6 @@
 #include <string.h>
 
 enum {
-    TEMPLATE_CAPACITY = 1024u,
     MAX_RESOURCE_SIZE = 0x24u,
 };
 
@@ -28,7 +28,8 @@ typedef struct XgRenderResidualTemplate {
     bool valid;
 } XgRenderResidualTemplate;
 
-static XgRenderResidualTemplate templates[TEMPLATE_CAPACITY];
+static XgRenderResidualTemplate *templates;
+static uint32_t template_capacity;
 static XgRenderAddressLookupSlot lookup[XG_RENDER_LOOKUP_WORD_CAPACITY];
 static uint32_t template_count;
 static uint16_t lookup_epoch = 1u;
@@ -103,7 +104,11 @@ static bool store_template(
         }
     }
     if (record == NULL) {
-        if (template_count == TEMPLATE_CAPACITY) return false;
+        if (template_count == XG_RENDER_LOOKUP_WORD_CAPACITY) return false;
+        XgRenderResidualTemplate *grown = xg_render_array_reserve(templates,
+            sizeof(*grown), &template_capacity, template_count + 1u, XG_RENDER_LOOKUP_WORD_CAPACITY);
+        if (!grown) return false;
+        templates = grown;
         record = &templates[template_count++];
     }
     memset(record, 0, sizeof(*record));

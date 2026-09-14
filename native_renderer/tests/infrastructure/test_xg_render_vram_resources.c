@@ -1,5 +1,7 @@
 #include "xg_render_vram_resources.h"
 
+enum { XG_RENDER_RESOURCE_REPOSITORY_CAPACITY = 4096 }; /* Historical stress boundary. */
+
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>

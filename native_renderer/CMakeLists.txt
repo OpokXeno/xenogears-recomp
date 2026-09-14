@@ -417,6 +417,45 @@ target_link_libraries(xg_render_static_auth PUBLIC xg_render_auth)
 
 if(BUILD_TESTING)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_executable(test_xg_render_source_capture_cache
+        tests/infrastructure/test_xg_render_source_capture_cache.c)
+    target_include_directories(test_xg_render_source_capture_cache PRIVATE
+        include ${XG_RENDER_PRIVATE_INCLUDE_DIRS}
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
+    target_compile_features(test_xg_render_source_capture_cache PRIVATE c_std_11)
+    # Keep only the private cache operations exercised by this fixture.
+    if(MSVC)
+        target_compile_options(test_xg_render_source_capture_cache PRIVATE /Gy /Gw)
+        target_link_options(test_xg_render_source_capture_cache PRIVATE /OPT:REF)
+    else()
+        target_compile_options(test_xg_render_source_capture_cache PRIVATE
+            -ffunction-sections -fdata-sections)
+        if(APPLE)
+            target_link_options(test_xg_render_source_capture_cache PRIVATE -Wl,-dead_strip)
+        else()
+            target_link_options(test_xg_render_source_capture_cache PRIVATE -Wl,--gc-sections)
+        endif()
+    endif()
+    add_test(NAME xg_render_source_capture_cache COMMAND test_xg_render_source_capture_cache)
+    add_executable(test_xg_render_dynamic_storage
+        tests/infrastructure/test_xg_render_dynamic_storage.c
+        src/infrastructure/xg_render_address_lookup.c)
+    target_include_directories(test_xg_render_dynamic_storage PRIVATE
+        include ${XG_RENDER_PRIVATE_INCLUDE_DIRS}
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
+    target_link_libraries(test_xg_render_dynamic_storage PRIVATE xg_semantic_presentation)
+    if(MSVC)
+        target_compile_options(test_xg_render_dynamic_storage PRIVATE /Gy /Gw)
+        target_link_options(test_xg_render_dynamic_storage PRIVATE /OPT:REF)
+    else()
+        target_compile_options(test_xg_render_dynamic_storage PRIVATE -ffunction-sections -fdata-sections)
+        if(APPLE)
+            target_link_options(test_xg_render_dynamic_storage PRIVATE -Wl,-dead_strip)
+        else()
+            target_link_options(test_xg_render_dynamic_storage PRIVATE -Wl,--gc-sections)
+        endif()
+    endif()
+    add_test(NAME xg_render_dynamic_storage COMMAND test_xg_render_dynamic_storage)
     add_executable(test_xg_field_temporal_continuity
         tests/field/test_xg_field_temporal_continuity.c
         src/producers/field/xg_field_particles.c

@@ -40,8 +40,11 @@ typedef struct XgRenderSourceCapture {
 } XgRenderSourceCapture;
 
 /* Retain both packet arenas, independently of native-stream visual retirement.
- * Only consumed captures may be evicted to admit a new packet address. */
-static XgRenderSourceCapture source_captures[2u * XG_RENDER_IR_ITEM_CAPACITY];
+ * Full-model capture includes culled polygons which may never be GPU-accepted.
+ * A scene can therefore have more pending captures than the legacy IR budget.
+ * Recycle consumed entries first, then grow; never evict an unconsumed capture. */
+static XgRenderSourceCapture *source_captures;
+static uint32_t source_capture_capacity;
 static uint32_t source_capture_count;
 static uint32_t source_capture_by_command[UINT32_C(0x80000)];
 static uint32_t source_capture_reuse_cursor;
@@ -107,9 +110,7 @@ static bool capture_source_command(const GpuRenderSemantic *semantic,
         source_captures[index].command.command_id != command_id)
         index = source_capture_count;
     if (index == source_capture_count) {
-        if (source_capture_count < 2u * XG_RENDER_IR_ITEM_CAPACITY) {
-            ++source_capture_count;
-        } else {
+        if (source_capture_count == source_capture_capacity) {
             for (uint32_t probe = 0u; probe < source_capture_count; ++probe) {
                 const uint32_t candidate =
                     source_capture_reuse_cursor++ % source_capture_count;
@@ -119,8 +120,27 @@ static bool capture_source_command(const GpuRenderSemantic *semantic,
                     break;
                 }
             }
-            if (index == source_capture_count) return false;
+            if (index == source_capture_count) {
+                /* The address map supplies the real bound: one capture per
+                 * aligned command address in the 2 MiB guest RAM. Allocate
+                 * only the live high-water mark, not that entire address space. */
+                const uint32_t maximum = (uint32_t)(sizeof(source_capture_by_command) /
+                    sizeof(source_capture_by_command[0]));
+                if (source_capture_capacity == maximum) return false;
+                const uint32_t capacity = source_capture_capacity == 0u
+                    ? 2u * XG_RENDER_IR_ITEM_CAPACITY
+                    : source_capture_capacity > maximum / 2u ? maximum
+                    : source_capture_capacity * 2u;
+                XgRenderSourceCapture *grown = realloc(source_captures,
+                    (size_t)capacity * sizeof(*source_captures));
+                if (grown == NULL) return false;
+                memset(grown + source_capture_capacity, 0,
+                    (size_t)(capacity - source_capture_capacity) * sizeof(*grown));
+                source_captures = grown;
+                source_capture_capacity = capacity;
+            }
         }
+        if (index == source_capture_count) ++source_capture_count;
     }
     release_temporal_capture(&source_captures[index]);
     source_captures[index] = (XgRenderSourceCapture){

@@ -4,6 +4,7 @@
 
 #include "gpu.h"
 #include "xg_render_address_lookup.h"
+#include "xg_render_array.h"
 #include "xg_render_primitive_utils.h"
 #include "xg_render_quad_builder.h"
 #include "xg_render_resident_capture.h"
@@ -14,8 +15,6 @@
 #include <string.h>
 
 enum {
-    BUILDER_CAPACITY = 256u,
-    TEMPLATE_CAPACITY = 1024u,
     PRODUCER_PC = UINT32_C(0x8002675c),
 };
 
@@ -36,7 +35,8 @@ typedef struct XgRenderFieldSpriteRecord {
 } XgRenderFieldSpriteRecord;
 
 typedef struct XgRenderFieldSpriteBuilder {
-    XgRenderFieldSpriteRecord records[BUILDER_CAPACITY];
+    XgRenderFieldSpriteRecord *records;
+    uint32_t capacity;
     uint32_t count;
     uint8_t overlay_family;
     XgRenderProducerLifecycle source_lifecycle;
@@ -46,7 +46,8 @@ typedef struct XgRenderFieldSpriteBuilder {
 } XgRenderFieldSpriteBuilder;
 
 static XgRenderFieldSpriteBuilder builder;
-static XgRenderFieldSpriteRecord templates[TEMPLATE_CAPACITY];
+static XgRenderFieldSpriteRecord *templates;
+static uint32_t template_capacity;
 static uint32_t template_count;
 static XgRenderAddressLookupSlot template_lookup[XG_RENDER_LOOKUP_WORD_CAPACITY];
 static uint16_t template_lookup_epoch = 1u;
@@ -145,7 +146,11 @@ static bool capture_template(
         if (telemetry != NULL)
             ++telemetry->field_builder_template_update_count;
     } else {
-        if (template_count == TEMPLATE_CAPACITY) return false;
+        if (template_count == XG_RENDER_LOOKUP_WORD_CAPACITY) return false;
+        XgRenderFieldSpriteRecord *grown = xg_render_array_reserve(templates,
+            sizeof(*grown), &template_capacity, template_count + 1u, XG_RENDER_LOOKUP_WORD_CAPACITY);
+        if (!grown) return false;
+        templates = grown;
         templates[template_count] = *record;
         templates[template_count].semantic_ready = false;
         xg_render_lookup_put(
@@ -173,7 +178,7 @@ bool xg_render_field_sprite_has_template(uint32_t packet_address) {
 }
 
 uint32_t xg_render_field_sprite_available_template_capacity(void) {
-    return TEMPLATE_CAPACITY - template_count;
+    return XG_RENDER_LOOKUP_WORD_CAPACITY - template_count;
 }
 
 bool xg_render_field_sprite_capture_template(
@@ -378,10 +383,13 @@ static bool begin(
     origin_x = (int16_t)cpu->read_half(cpu->gpr[29] + 0x10u);
     origin_y = (int16_t)cpu->read_half(cpu->gpr[29] + 0x14u);
     scale = cpu->read_half(cpu->gpr[29] + 0x18u);
-    if (count > BUILDER_CAPACITY) {
+    XgRenderFieldSpriteRecord *grown = count ? xg_render_array_reserve(builder.records,
+        sizeof(*grown), &builder.capacity, count, UINT16_MAX) : builder.records;
+    if (count && !grown) {
         block_builder(3u, services);
         return false;
     }
+    builder.records = grown;
     gpu_get_draw_state(&draw);
     for (uint32_t index = 0u; index < count; ++index) {
         const uint32_t descriptor = descriptor_base + 4u + index * 0x1cu;
@@ -521,7 +529,10 @@ static bool authored_pending(void *context, uint32_t base, uint32_t parity,
         const XgRenderResidentResourceTemplate *records, uint32_t count) {
     (void)context;
     (void)parity;
-    if (count > BUILDER_CAPACITY) return false;
+    XgRenderFieldSpriteRecord *grown = count ? xg_render_array_reserve(builder.records,
+        sizeof(*grown), &builder.capacity, count, UINT16_MAX) : builder.records;
+    if (count && !grown) return false;
+    builder.records = grown;
     for (uint32_t index = 0u; index < count; ++index) {
         builder.records[index] = (XgRenderFieldSpriteRecord){
             .primitive = records[index].primitive,
@@ -1041,6 +1052,7 @@ void xg_render_field_sprite_diagnostics_reset(void) {
 }
 
 void xg_render_field_sprite_reset(void) {
+    free(builder.records);
     builder = (XgRenderFieldSpriteBuilder){0};
     template_count = 0u;
     xy_override.active = false;

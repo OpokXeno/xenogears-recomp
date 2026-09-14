@@ -2,13 +2,15 @@
 #include "psx_gte_divide.h"
 #include "xg_render_scene_snapshot.h"
 #include "xg_host_3d.h"
+#include "xg_render_array.h"
 
 #include <math.h>
 #include <stddef.h>
 #include <string.h>
 
-#define MOTION_INSTANCE_CAPACITY 512u
-#define MOTION_COMMAND_CAPACITY 16384u
+#define MOTION_INITIAL_INSTANCE_CAPACITY 512u
+#define MOTION_INITIAL_COMMAND_CAPACITY 16384u
+#define MOTION_COMMAND_MAXIMUM (0x200000u / 4u)
 #define MOTION_TOMBSTONE UINT32_MAX
 #define MOTION_WATCH_CAPACITY (XG_RENDER_MOTION_NODE_CAPACITY * 3u + 4u)
 
@@ -33,9 +35,11 @@ typedef struct MotionCommand {
 } MotionCommand;
 
 /* Only the guest owner touches these caches; consumers use immutable resources. */
-static MotionInstance instances[MOTION_INSTANCE_CAPACITY];
-static MotionCommand commands[MOTION_COMMAND_CAPACITY];
-static uint64_t command_pages[512][MOTION_COMMAND_CAPACITY / 64u];
+static MotionInstance *instances;
+static uint32_t instance_capacity;
+static MotionCommand *commands;
+static uint32_t command_capacity;
+static uint64_t *command_pages;
 static bool commands_dirty;
 static uint64_t serial;
 static uint64_t geometry_serial;
@@ -70,7 +74,7 @@ static void clear_command(MotionCommand *command) {
     commands_dirty = true;
     if(command->command_id&&command->command_id!=MOTION_TOMBSTONE) {
         const size_t index=(size_t)(command-commands);
-        command_pages[command->command_id/4096u][index/64u]&=~(UINT64_C(1)<<(index%64u));
+        command_pages[(size_t)(command->command_id/4096u)*(command_capacity/64u)+index/64u]&=~(UINT64_C(1)<<(index%64u));
     }
     if (command->binding.motion.handle.resource_id) {
         (void)xg_render_resource_release(command->binding.motion.handle);
@@ -82,6 +86,27 @@ static void clear_command(MotionCommand *command) {
 static bool ref_equal(XgRenderMotionRef a, XgRenderMotionRef b) {
     return a.handle.resource_id == b.handle.resource_id &&
            a.handle.generation == b.handle.generation && a.digest == b.digest;
+}
+
+static bool grow_commands(void) {
+    if (command_capacity == MOTION_COMMAND_MAXIMUM) return false;
+    const uint32_t capacity = command_capacity ? command_capacity * 2u : MOTION_INITIAL_COMMAND_CAPACITY;
+    MotionCommand *grown = calloc(capacity, sizeof(*grown));
+    uint64_t *pages = calloc((size_t)512u * (capacity / 64u), sizeof(*pages));
+    if (!grown || !pages) { free(grown); free(pages); return false; }
+    /* Rehash under guest ownership. The immutable resource retains transfer
+     * with the bindings; resizing must neither release nor reacquire poses. */
+    for (uint32_t i = 0u; i < command_capacity; ++i) {
+        const MotionCommand *c = &commands[i];
+        if (!c->command_id || c->command_id == MOTION_TOMBSTONE) continue;
+        uint32_t slot = ((c->command_id >> 2u) * 2654435761u) % capacity;
+        while (grown[slot].command_id) slot = (slot + 1u) % capacity;
+        grown[slot] = *c;
+        pages[(size_t)(c->command_id / 4096u) * (capacity / 64u) + slot / 64u] |= UINT64_C(1) << (slot % 64u);
+    }
+    free(commands); free(command_pages);
+    commands = grown; command_pages = pages; command_capacity = capacity;
+    return true;
 }
 
 static bool normalize(double q[4]) {
@@ -365,19 +390,26 @@ bool xg_render_motion_publish(const XgRenderMotionSource *source, const XgRender
     }
     if (!pose_valid(&pose))
         return false;
-    MotionInstance *slot = NULL, *oldest = &instances[0];
-    for (unsigned i = 0; i < MOTION_INSTANCE_CAPACITY; ++i) {
+    MotionInstance *slot = NULL, *empty = NULL;
+    for (unsigned i = 0; i < instance_capacity; ++i) {
         MotionInstance *s = &instances[i];
         if (s->entity_id == pose.entity_id && s->epoch == pose.presentation_epoch &&
             s->scene == pose.scene_generation) {
             slot = s;
             break;
         }
-        if (s->used < oldest->used)
-            oldest = s;
+        if (!s->ref.handle.resource_id && !empty) empty = s;
     }
-    if (slot == NULL)
-        slot = oldest;
+    if (!slot) slot = empty;
+    if (!slot) {
+        const uint32_t next = instance_capacity;
+        if (next == UINT32_MAX) return false;
+        MotionInstance *grown = xg_render_array_reserve(instances, sizeof(*grown),
+            &instance_capacity, next ? next + 1u : MOTION_INITIAL_INSTANCE_CAPACITY, UINT32_MAX);
+        if (!grown) return false;
+        instances = grown;
+        slot = &instances[next];
+    }
     const bool same_instance = slot->entity_id == pose.entity_id &&
                                slot->epoch == pose.presentation_epoch &&
                                slot->scene == pose.scene_generation;
@@ -474,10 +506,11 @@ bool xg_render_motion_register_command(uint32_t command_id,
     command_id &= UINT32_C(0x1fffffff);
     if (!command_id || command_id > 0x1ffffcu || (command_id & 3u))
         return false;
-    const unsigned start = ((command_id >> 2) * 2654435761u) % MOTION_COMMAND_CAPACITY;
+    if (!command_capacity && (!binding || !grow_commands())) return binding == NULL;
+    const unsigned start = ((command_id >> 2) * 2654435761u) % command_capacity;
     MotionCommand *empty = NULL, *slot = NULL;
-    for (unsigned i = 0; i < MOTION_COMMAND_CAPACITY; ++i) {
-        MotionCommand *c = &commands[(start + i) % MOTION_COMMAND_CAPACITY];
+    for (unsigned i = 0; i < command_capacity; ++i) {
+        MotionCommand *c = &commands[(start + i) % command_capacity];
         if (c->command_id == command_id) {
             slot = c;
             break;
@@ -494,8 +527,11 @@ bool xg_render_motion_register_command(uint32_t command_id,
         return false;
     if (slot == NULL)
         slot = empty;
-    if (slot == NULL)
-        return binding == NULL;
+    if (slot == NULL) {
+        if (!binding) return true;
+        if (!grow_commands()) return false;
+        return xg_render_motion_register_command(command_id, binding, producer_id, primitive_id);
+    }
     if (binding != NULL &&
         xg_render_resource_acquire_snapshot(binding->motion.handle, binding->motion.digest) !=
             XG_RENDER_RESOURCE_OK)
@@ -514,7 +550,7 @@ bool xg_render_motion_register_command(uint32_t command_id,
                                 .primitive_id = primitive_id};
         ++motion_diagnostics.active_commands;
         const size_t index=(size_t)(slot-commands);
-        command_pages[command_id/4096u][index/64u]|=UINT64_C(1)<<(index%64u);
+        command_pages[(size_t)(command_id/4096u)*(command_capacity/64u)+index/64u]|=UINT64_C(1)<<(index%64u);
     }
     return true;
 }
@@ -528,9 +564,9 @@ void xg_render_motion_forget_range(uint32_t address, uint32_t size) {
     if(last-first<128u) {
         /* Union exact page membership, then visit slots in the original table
          * order. Full address predicates and reference retirement are unchanged. */
-        for(unsigned word=0;word<MOTION_COMMAND_CAPACITY/64u;++word) {
+        for(unsigned word=0;word<command_capacity/64u;++word) {
             uint64_t candidates=0;
-            for(unsigned page=first;page<=last;++page)candidates|=command_pages[page][word];
+            for(unsigned page=first;page<=last;++page)candidates|=command_pages[(size_t)page*(command_capacity/64u)+word];
             while(candidates) {
                 unsigned bit=0;
                 while(!(candidates&(UINT64_C(1)<<bit)))++bit;
@@ -541,7 +577,7 @@ void xg_render_motion_forget_range(uint32_t address, uint32_t size) {
         }
         return;
     }
-    for (unsigned i = 0; i < MOTION_COMMAND_CAPACITY; ++i) {
+    for (unsigned i = 0; i < command_capacity; ++i) {
         MotionCommand *c = &commands[i];
         if (c->command_id && c->command_id != MOTION_TOMBSTONE && c->command_id >= begin &&
             c->command_id < end) {
@@ -558,11 +594,12 @@ void xg_render_motion_reset(void) {
         return;
     }
     xg_render_motion_forget_range(0, 0x200000u);
-    memset(commands, 0, sizeof(commands));
-    memset(command_pages,0,sizeof(command_pages));
+    free(commands); commands = NULL;
+    free(command_pages); command_pages = NULL; command_capacity = 0u;
     commands_dirty = false;
-    for (unsigned i = 0; i < MOTION_INSTANCE_CAPACITY; ++i)
+    for (unsigned i = 0; i < instance_capacity; ++i)
         release_instance(&instances[i]);
+    free(instances); instances = NULL; instance_capacity = 0u;
     serial = 0;
 }
 
@@ -570,7 +607,7 @@ bool xg_render_motion_watch(XgRenderMotionRef ref, uint32_t address, uint32_t si
     address &= 0x1fffffffu;
     if (!size || address >= 0x200000u || size > 0x200000u - address)
         return false;
-    for (unsigned i = 0; i < MOTION_INSTANCE_CAPACITY; ++i) {
+    for (unsigned i = 0; i < instance_capacity; ++i) {
         MotionInstance *s = &instances[i];
         if (!ref_equal(ref, s->ref))
             continue;
@@ -603,7 +640,7 @@ void xg_render_motion_invalidate_range(uint32_t address, uint32_t size) {
         xg_render_motion_note(XG_MOTION_INVALIDATE_SKIPPED, address);
         return;
     }
-    for (unsigned i = 0; i < MOTION_INSTANCE_CAPACITY; ++i) {
+    for (unsigned i = 0; i < instance_capacity; ++i) {
         MotionInstance *s = &instances[i];
         bool overlap = false;
         for (unsigned j = 0; j < s->watch_count; ++j)
@@ -612,7 +649,7 @@ void xg_render_motion_invalidate_range(uint32_t address, uint32_t size) {
                        s->watch_address[j] < end;
         if (!overlap)
             continue;
-        for (unsigned j = 0; j < MOTION_COMMAND_CAPACITY; ++j) {
+        for (unsigned j = 0; j < command_capacity; ++j) {
             MotionCommand *c = &commands[j];
             if (c->command_id &&
                 c->binding.motion.handle.resource_id == s->ref.handle.resource_id) {
@@ -624,11 +661,11 @@ void xg_render_motion_invalidate_range(uint32_t address, uint32_t size) {
 }
 
 void xg_render_motion_forget_entity(uint64_t entity_id) {
-    for (unsigned i = 0; i < MOTION_INSTANCE_CAPACITY; ++i) {
+    for (unsigned i = 0; i < instance_capacity; ++i) {
         MotionInstance *s = &instances[i];
         if (!entity_id || s->entity_id != entity_id)
             continue;
-        for (unsigned j = 0; j < MOTION_COMMAND_CAPACITY; ++j) {
+        for (unsigned j = 0; j < command_capacity; ++j) {
             MotionCommand *c = &commands[j];
             if (c->binding.motion.handle.resource_id == s->ref.handle.resource_id) {
                 clear_command(c);
@@ -639,7 +676,7 @@ void xg_render_motion_forget_entity(uint64_t entity_id) {
 }
 
 void xg_render_motion_prune_authority(void) {
-    for (unsigned i = 0; i < MOTION_INSTANCE_CAPACITY; ++i) {
+    for (unsigned i = 0; i < instance_capacity; ++i) {
         MotionInstance *s = &instances[i];
         XgRenderResourceView view;
         XgRenderResourceCapabilityMetadata metadata;
@@ -658,9 +695,10 @@ bool xg_render_motion_bind_command(uint32_t command_id, XgRenderNativeOperation 
         return false;
     op->motion = (XgRenderMotionDrawBinding){0};
     command_id &= UINT32_C(0x1fffffff);
-    const unsigned start = ((command_id >> 2) * 2654435761u) % MOTION_COMMAND_CAPACITY;
-    for (unsigned i = 0; i < MOTION_COMMAND_CAPACITY; ++i) {
-        const MotionCommand *c = &commands[(start + i) % MOTION_COMMAND_CAPACITY];
+    if (!command_capacity) return false;
+    const unsigned start = ((command_id >> 2) * 2654435761u) % command_capacity;
+    for (unsigned i = 0; i < command_capacity; ++i) {
+        const MotionCommand *c = &commands[(start + i) % command_capacity];
         if (!c->command_id)
             break;
         if (!command_id || c->command_id != command_id)

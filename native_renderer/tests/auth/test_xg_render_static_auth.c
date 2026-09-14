@@ -1,4 +1,6 @@
 #include "game_identity.h"
+
+enum { XG_RENDER_RESOURCE_REPOSITORY_CAPACITY = 4096 }; /* Historical stress boundary. */
 #include "guest_render_bridge.h"
 #include "guest_render_native_stream.h"
 #include "guest_render_transaction.h"
