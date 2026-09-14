@@ -1,7 +1,7 @@
 schema = "xenogears-overlay-aot-roots/v1"
 
 # Roots are identity-qualified. The same virtual address in an unlisted byte
-# variant remains eligible for runtime capture/autocompilation.
+# variant does not authorize AOT execution and must be added to the build plan.
 
 [[images]]
 id = "world-overlay"

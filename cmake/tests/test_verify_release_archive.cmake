@@ -67,10 +67,7 @@ function(create_package_root platform case_name output_variable)
     file(MAKE_DIRECTORY
         "${_package_root}/assets"
         "${_package_root}/bios"
-        "${_package_root}/mods"
-        "${_package_root}/overlay_toolchain/include"
-        "${_package_root}/overlay_toolchain/licenses"
-        "${_package_root}/overlay_toolchain/tcc")
+        "${_package_root}/mods")
 
     if(platform STREQUAL "linux")
         file(WRITE "${_package_root}/XenogearsRecomp" "#!/bin/sh\nexit 0\n")
@@ -79,15 +76,8 @@ function(create_package_root platform case_name output_variable)
                 OWNER_READ OWNER_WRITE OWNER_EXECUTE
                 GROUP_READ GROUP_EXECUTE
                 WORLD_READ WORLD_EXECUTE)
-        add_placeholder("${_package_root}" "overlay_toolchain/psxrecomp-game")
-        add_placeholder("${_package_root}" "overlay_toolchain/python/bin/python3")
-        add_placeholder("${_package_root}" "overlay_toolchain/tcc/tcc")
-        add_placeholder("${_package_root}" "overlay_toolchain/tcc/tcc.real")
     elseif(platform STREQUAL "windows")
         file(WRITE "${_package_root}/XenogearsRecomp.exe" "Synthetic Windows executable fixture.\n")
-        add_placeholder("${_package_root}" "overlay_toolchain/psxrecomp-game.exe")
-        add_placeholder("${_package_root}" "overlay_toolchain/python/python.exe")
-        add_placeholder("${_package_root}" "overlay_toolchain/tcc/tcc.exe")
     else()
         message(FATAL_ERROR "Unknown release platform: ${platform}")
     endif()
@@ -101,17 +91,6 @@ function(create_package_root platform case_name output_variable)
     file(COPY "${BUILTIN_MODS_CATALOG}/" DESTINATION "${_package_root}/mods")
     copy_fixture_file("${OPENBIOS_IMAGE}" "${_package_root}/bios/openbios.bin")
     copy_fixture_file("${OPENBIOS_LICENSE}" "${_package_root}/bios/OpenBIOS.LICENSE")
-    add_placeholder("${_package_root}" "overlay_toolchain/compile_overlays.py")
-    add_placeholder("${_package_root}" "overlay_toolchain/native_render_manifest_model.py")
-    add_placeholder("${_package_root}" "overlay_toolchain/native_render_overlay_codegen.py")
-    add_placeholder("${_package_root}" "overlay_toolchain/native_render_overlay_ranges.py")
-    add_placeholder("${_package_root}" "overlay_toolchain/native_render_runtime_variant_model.py")
-    add_placeholder("${_package_root}" "overlay_toolchain/native_renderer/xg_render_overlay_ranges.toml")
-    add_placeholder("${_package_root}" "overlay_toolchain/native_renderer/xg_render_runtime_variants.toml")
-    add_placeholder("${_package_root}" "overlay_toolchain/include/overlay_api.h")
-    add_placeholder("${_package_root}" "overlay_toolchain/include/overlay_codegen_hash.h")
-    add_placeholder("${_package_root}" "overlay_toolchain/licenses/PYTHON-LICENSE.txt")
-    add_placeholder("${_package_root}" "overlay_toolchain/licenses/TCC-COPYING.txt")
 
     set(${output_variable} "${_package_root}" PARENT_SCOPE)
 endfunction()
@@ -296,18 +275,6 @@ function(assert_fixture_tree archive platform case_name)
         "bios/OpenBIOS.LICENSE"
         "bios/openbios.bin"
         "game.toml")
-    list(APPEND _expected_files
-        "overlay_toolchain/compile_overlays.py"
-        "overlay_toolchain/native_render_manifest_model.py"
-        "overlay_toolchain/native_render_overlay_codegen.py"
-        "overlay_toolchain/native_render_overlay_ranges.py"
-        "overlay_toolchain/native_render_runtime_variant_model.py"
-        "overlay_toolchain/native_renderer/xg_render_overlay_ranges.toml"
-        "overlay_toolchain/native_renderer/xg_render_runtime_variants.toml"
-        "overlay_toolchain/include/overlay_api.h"
-        "overlay_toolchain/include/overlay_codegen_hash.h"
-        "overlay_toolchain/licenses/PYTHON-LICENSE.txt"
-        "overlay_toolchain/licenses/TCC-COPYING.txt")
     file(GLOB_RECURSE _builtin_mod_files
         RELATIVE "${BUILTIN_MODS_CATALOG}"
         LIST_DIRECTORIES FALSE
@@ -315,18 +282,6 @@ function(assert_fixture_tree archive platform case_name)
     foreach(_mod_file IN LISTS _builtin_mod_files)
         list(APPEND _expected_files "mods/${_mod_file}")
     endforeach()
-    if(platform STREQUAL "linux")
-        list(APPEND _expected_files
-            "overlay_toolchain/psxrecomp-game"
-            "overlay_toolchain/python/bin/python3"
-            "overlay_toolchain/tcc/tcc"
-            "overlay_toolchain/tcc/tcc.real")
-    else()
-        list(APPEND _expected_files
-            "overlay_toolchain/psxrecomp-game.exe"
-            "overlay_toolchain/python/python.exe"
-            "overlay_toolchain/tcc/tcc.exe")
-    endif()
     list(SORT _expected_files)
     file(GLOB_RECURSE _actual_files
         RELATIVE "${_package_root}"
@@ -463,10 +418,8 @@ function(assert_invalid_fixture archive platform case_name)
         set(_unexpected_path "overlay_captures.json")
     elseif(case_name STREQUAL "extra-top-level-path")
         set(_unexpected_path "unexpected/marker.txt")
-    elseif(case_name STREQUAL "missing-toolchain-script")
-        if(EXISTS "${_package_root}/overlay_toolchain/compile_overlays.py")
-            message(FATAL_ERROR "Missing-toolchain-script fixture still contains the script")
-        endif()
+    elseif(case_name STREQUAL "obsolete-overlay-toolchain")
+        set(_unexpected_path "overlay_toolchain/compile_overlays.py")
     else()
         message(FATAL_ERROR "Unknown invalid fixture: ${case_name}")
     endif()
@@ -523,8 +476,8 @@ function(create_invalid_archive platform case_name output_variable)
         add_placeholder("${_package_root}" "overlay_captures.json")
     elseif(case_name STREQUAL "extra-top-level-path")
         add_placeholder("${_package_root}" "unexpected/marker.txt")
-    elseif(case_name STREQUAL "missing-toolchain-script")
-        file(REMOVE "${_package_root}/overlay_toolchain/compile_overlays.py")
+    elseif(case_name STREQUAL "obsolete-overlay-toolchain")
+        add_placeholder("${_package_root}" "overlay_toolchain/compile_overlays.py")
     elseif(NOT case_name STREQUAL "truncated-archive")
         message(FATAL_ERROR "Unknown invalid fixture: ${case_name}")
     endif()
@@ -618,7 +571,7 @@ set(INVALID_CASES
     save-artifact
     disc-artifact
     capture-artifact
-    missing-toolchain-script
+    obsolete-overlay-toolchain
     extra-top-level-path)
 
 set(INVALID_ARCHIVES)

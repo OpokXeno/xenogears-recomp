@@ -89,7 +89,9 @@ podman run --rm --userns=keep-id \
         # Bullseye has no libdecor development package. A Wayland SDL build
         # would therefore create undecorated desktop windows; use XWayland,
         # which is available on supported desktops and Steam Deck.
-        PSX_SDL_WAYLAND=OFF ./build.sh "$XGR_RUNTIME_BUILD_DIR" Release
+        XG_RENDER_NATIVE=ON PSX_SDL_WAYLAND=OFF \
+            ./build.sh "$XGR_RUNTIME_BUILD_DIR" Release
+        python3 tools/verify_native_release.py --build-dir "$XGR_RUNTIME_BUILD_DIR"
         pkg=dist/XenogearsRecomp-linux-x86_64
         rm -rf "$pkg"
         mkdir -p "$pkg"
@@ -101,30 +103,6 @@ podman run --rm --userns=keep-id \
         mkdir -p "$pkg/mods"
         cp -r "$XGR_RUNTIME_BUILD_DIR/mods/packages" "$pkg/mods/"
         rm -f "$pkg/assets/img/boxart.tga"
-        toolchain_tmp=/tmp/xgr-overlay-toolchain
-        rm -rf "$toolchain_tmp"
-        mkdir -p "$toolchain_tmp"
-        python_archive=cpython-3.11.9+20240726-x86_64-unknown-linux-gnu-install_only.tar.gz
-        curl -fL --retry 5 --retry-all-errors --retry-delay 2 \
-            "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-install_only.tar.gz" \
-            -o "$toolchain_tmp/$python_archive"
-        echo "f6e955dc9ddfcad74e77abe6f439dac48ebca14b101ed7c85a5bf3206ed2c53d  $toolchain_tmp/$python_archive" | sha256sum -c -
-        tar -C "$toolchain_tmp" -xzf "$toolchain_tmp/$python_archive"
-        curl -fL --retry 5 --retry-all-errors --retry-delay 2 \
-            "https://download.savannah.gnu.org/releases/tinycc/tcc-0.9.27.tar.bz2" \
-            -o "$toolchain_tmp/tcc-0.9.27.tar.bz2"
-        echo "de23af78fca90ce32dff2dd45b3432b2334740bb9bb7b05bf60fdbfc396ceb9c  $toolchain_tmp/tcc-0.9.27.tar.bz2" | sha256sum -c -
-        tar -C "$toolchain_tmp" -xjf "$toolchain_tmp/tcc-0.9.27.tar.bz2"
-        pushd "$toolchain_tmp/tcc-0.9.27" >/dev/null
-        ./configure --prefix="$toolchain_tmp/tcc-install"
-        popd >/dev/null
-        # Overlay builds never use the TCC -b bounds checker. Omitting bcheck.o
-        # also keeps 0.9.27 buildable after glibc removed __malloc_hook.
-        make -C "$toolchain_tmp/tcc-0.9.27" BCHECK_O= -j"$(nproc)"
-        make -C "$toolchain_tmp/tcc-0.9.27" BCHECK_O= install
-        bash ci/stage-overlay-toolchain.sh linux "$pkg/overlay_toolchain" \
-            "$PSX_RECOMPILER_BUILD/psxrecomp-game" "$toolchain_tmp/python" \
-            "$toolchain_tmp/tcc-install" "$toolchain_tmp/tcc-0.9.27/COPYING"
         tar -C dist -czf XenogearsRecomp-linux-x86_64.tar.gz XenogearsRecomp-linux-x86_64
         bash ci/check-linux-glibc.sh "$pkg/XenogearsRecomp" GLIBC_2.31
         rm -f game/slus_006.64 game/disc1.cue game/disc1.bin game/disc1.iso \

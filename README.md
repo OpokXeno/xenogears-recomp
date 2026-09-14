@@ -42,7 +42,7 @@ integrity-pinned SDL3 release and links it into the runtime.
 **Alpha.** What works today, and what doesn't:
 
 - ✅ **Boots and plays** — BIOS boot → game handoff, title screen, intro FMV, and the opening gameplay all run with rendering, audio, input, and memory-card saves
-- ✅ **Overlay pipeline** — field/battle/worldmap overlays capture in the interpreter and compile to native code in the background
+- ✅ **AOT overlay pipeline** — supported disc overlays are authenticated and compiled into the executable during the build
 - ⚠️ **Not validated end-to-end** — no complete playthrough has been done; treat every area past the opening as unverified
 - 🐛 **Known issues**:
   - Most of the enhancements are untested or not yet fully polished, so expect some bugs if you use them.
@@ -96,7 +96,10 @@ XenogearsRecomp/
         └── SCPH1001.BIN          # Retail BIOS — your local dump, required to build
 ```
 
-You need both the `.cue` and its `.bin` tracks together. The disc and BIOS paths are configured at runtime through the launcher GUI.
+Keep the `.cue` and its referenced `.bin` tracks together. The build also accepts
+`game/disc1.bin` directly. For a different image location, use
+`XG_DISC=/path/to/disc.cue ./build.sh` or the PowerShell `-DiscImage` option.
+The disc and BIOS paths used to play are configured through the launcher GUI.
 
 > The `disc` and `bios_path` fields in `game.toml` can be set as a fallback, but are optional. The launcher prompts for the disc on first run and uses OpenBIOS unless you select the matching retail BIOS in Settings.
 
@@ -128,8 +131,9 @@ generator:
 This will:
 1. Build the recompiler (`psxrecomp-game`)
 2. Generate both BIOS backends: OpenBIOS from the tracked redistributable image and retail SCPH1001 from your local `psxrecomp/bios/SCPH1001.BIN`
-3. Recompile the game EXE to C (if `game/slus_006.64` is present)
-4. Build the runtime → `build/XenogearsRecomp` with Ninja/single-config generators, or `build/<BuildType>/XenogearsRecomp.exe` with Visual Studio
+3. Recompile the game EXE to C
+4. Extract and authenticate the supported overlays from Disc 1, then compile their AOT code
+5. Link the game, BIOS backends, and AOT overlays into the runtime → `build/XenogearsRecomp` with Ninja/single-config generators, or `build/<BuildType>/XenogearsRecomp.exe` with Visual Studio
 
 The source build needs the local retail BIOS to generate the compiled SCPH1001 backend, even though runtime use of that backend is optional. The build stages only the redistributable OpenBIOS image and `OpenBIOS.LICENSE`; it does not package `SCPH1001.BIN`.
 
@@ -182,20 +186,20 @@ If you only need to regenerate the game C source (after changing game config or 
 
 ```sh
 # Linux / macOS
-./psxrecomp/recompiler/build/psxrecomp-game --config game.toml
+./psxrecomp/recompiler/build/psxrecomp-game --config game.toml --source-observation-plan native_renderer/xg_render_resident_plan.txt
 
 # Windows with Ninja/single-config
-.\psxrecomp\recompiler\build\psxrecomp-game.exe --config game.toml
+.\psxrecomp\recompiler\build\psxrecomp-game.exe --config game.toml --source-observation-plan native_renderer/xg_render_resident_plan.txt
 
 # Windows with Visual Studio multi-config (replace Release as needed)
-.\psxrecomp\recompiler\build\Release\psxrecomp-game.exe --config game.toml
+.\psxrecomp\recompiler\build\Release\psxrecomp-game.exe --config game.toml --source-observation-plan native_renderer/xg_render_resident_plan.txt
 ```
 
 Or use the regen script:
 
 ```sh
-# Linux / macOS (from tools/, requires recompiler built)
-psxrecomp/recompiler/build/psxrecomp-game --config game.toml
+# Linux / macOS (from the project root, requires recompiler built)
+psxrecomp/recompiler/build/psxrecomp-game --config game.toml --source-observation-plan native_renderer/xg_render_resident_plan.txt
 
 # Windows
 .\regen.ps1
@@ -282,17 +286,18 @@ XenogearsRecomp/
 1. **Recompilation:** `psxrecomp-game` reads the game EXE (`slus_006.64`) and translates MIPS R3000A instructions into C code, guided by seed addresses and annotations.
 2. **Runtime build:** The generated C is compiled with a PS1 hardware simulation runtime (GPU, SPU, CD-ROM, DMA, timers, interrupt controller, GTE, SIO, memory cards) and linked into a native executable.
 3. **Native rendering:** Authenticated game render producers feed the game-specific renderer for field, world, model, sprite, effects, water and shadow paths. Identity-bound manifests and source observations gate every cutover; unsupported work stays on the original PS1 GPU path.
-4. **Execution:** Both BIOS backends compile into the executable. OpenBIOS is the default; a selected matching retail `SCPH1001.BIN` backend can be used instead. The active BIOS boots as native code — no emulation, no interpreter on the hot path. Game code that was statically recompiled runs as native functions. Disc-streamed overlays are captured at runtime and compiled to native code on demand.
+4. **Execution:** Both BIOS backends compile into the executable. OpenBIOS is the default; a selected matching retail `SCPH1001.BIN` backend can be used instead. Game code and supported overlays execute as statically compiled native functions. When the game loads an overlay from disc, its identity selects the corresponding linked AOT code.
 
 ---
 
-## Performance and overlay compilation
+## AOT overlay compilation
 
 Overlays are chunks of code the game streams off the disc at runtime. Xenogears is heavily overlay-driven (field, battle, worldmap are all separate overlay modules).
 
-- **First playthrough:** Overlays you encounter start in the interpreter (fast enough to be playable) while being captured.
-- **Subsequent runs:** Captured overlays compile to native code in the background — the more you play, the faster it gets.
-- **Cache persistence:** Once compiled, overlays are cached and reused. No re-compilation needed across sessions.
+- **Build time:** The recompiler and host C/C++ compiler generate and link the supported overlay identities from the local Disc 1 image.
+- **Play time:** The executable already contains that code, including on the first launch. No background compilation or cache warm-up is needed.
+- **Coverage:** `overlay_cache = false` disables the dynamic overlay path. An AOT coverage miss is an error to report, not a request to install a compiler.
+
 
 ---
 

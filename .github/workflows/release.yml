@@ -62,10 +62,14 @@ jobs:
           for t in cmake git podman python3; do
             command -v "$t" >/dev/null || { echo "::error::missing host tool: $t — see docs/self-hosted-runner.md"; exit 1; }
           done
+          python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else "Python 3.11 or newer is required")'
           podman info >/dev/null
 
       - name: Test release archive verifier
         run: cmake -DPROJECT_ROOT="$PWD" -DTEST_WORK_DIR="$RUNNER_TEMP/xgr-release-verifier-tests-linux" -P cmake/tests/test_verify_release_archive.cmake
+
+      - name: Test Native build verifier
+        run: python3 -m unittest discover -s tools -p test_verify_native_release.py
 
       - name: Build and package Linux release with glibc 2.31
         run: bash ci/build-linux-release.sh "$XGR_ASSETS_DIR"
@@ -103,13 +107,16 @@ jobs:
       - name: Check host dependencies
         run: |
           set -e
-          for t in cmake ninja git curl python3 tar unzip; do
+          for t in cmake ninja git curl python3 tar; do
             command -v "$t" >/dev/null || { echo "::error::missing host tool: $t — see docs/self-hosted-runner.md"; exit 1; }
           done
           python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else "Python 3.11 or newer is required")'
 
       - name: Test release archive verifier
         run: cmake -DPROJECT_ROOT="$PWD" -DTEST_WORK_DIR="$RUNNER_TEMP/xgr-release-verifier-tests-windows" -P cmake/tests/test_verify_release_archive.cmake
+
+      - name: Test Native build verifier
+        run: python3 -m unittest discover -s tools -p test_verify_native_release.py
 
       - name: Stage private build inputs from local disk (never uploaded)
         run: |
@@ -122,10 +129,13 @@ jobs:
             [ -f "$XGR_DISC_DIR/disc1.bin" ] || { echo "::error::$XGR_DISC_DIR/disc1.bin missing for disc1.cue — see docs/self-hosted-runner.md"; exit 1; }
             install -Dm644 "$XGR_DISC_DIR/disc1.cue" game/disc1.cue
             install -Dm644 "$XGR_DISC_DIR/disc1.bin" game/disc1.bin
+            echo "XGR_DISC_IMAGE=$PWD/game/disc1.cue" >> "$GITHUB_ENV"
           elif [ -f "$XGR_DISC_DIR/disc1.bin" ]; then
             install -Dm644 "$XGR_DISC_DIR/disc1.bin" game/disc1.bin
+            echo "XGR_DISC_IMAGE=$PWD/game/disc1.bin" >> "$GITHUB_ENV"
           elif [ -f "$XGR_DISC_DIR/disc1.iso" ]; then
             install -Dm644 "$XGR_DISC_DIR/disc1.iso" game/disc1.iso
+            echo "XGR_DISC_IMAGE=$PWD/game/disc1.iso" >> "$GITHUB_ENV"
           else
             echo "::error::Xenogears Disc 1 missing in $XGR_DISC_DIR — see docs/self-hosted-runner.md"
             exit 1
@@ -151,10 +161,11 @@ jobs:
           cmake --build psxrecomp/recompiler/build -j "$(nproc)"
 
       - name: Game codegen from the local EXE
-        run: ./psxrecomp/recompiler/build/psxrecomp-game --config game.toml \
-          --source-observation-plan native_renderer/xg_render_resident_plan.txt \
-          --game-identity-sha256 "$XGR_GAME_IDENTITY_SHA256" \
-          --manifest-digest-sha256 "$XGR_MANIFEST_IDENTITY_SHA256"
+        run: |
+          ./psxrecomp/recompiler/build/psxrecomp-game --config game.toml \
+            --source-observation-plan native_renderer/xg_render_resident_plan.txt \
+            --game-identity-sha256 "$XGR_GAME_IDENTITY_SHA256" \
+            --manifest-digest-sha256 "$XGR_MANIFEST_IDENTITY_SHA256"
 
       - name: Regenerate OpenBIOS and SCPH1001 C
         run: |
@@ -192,53 +203,28 @@ jobs:
           cmake -S . -B build-win -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-windows-x86_64-llvm-mingw.cmake \
             -DCMAKE_BUILD_TYPE=Release \
+            -DXG_RENDER_NATIVE=ON \
+            -DXG_RENDER_VALIDATE_OVERLAYS=OFF \
+            -DXG_DISC_IMAGE="$XGR_DISC_IMAGE" \
+            -DXG_RECOMPILER_EXECUTABLE="$PWD/psxrecomp/recompiler/build/psxrecomp-game" \
+            -DPSX_SDL_BACKEND=SDL3 \
+            -DPSX_DEBUG_TOOLS=OFF \
+            -DPSX_DEBUG_OVERLAY=OFF \
             -DBUILD_TESTING=OFF
-          cmake --build build-win -j "$(nproc)"
+          cmake --build build-win --target psx-runtime -j "$(nproc)"
 
-      - name: Build overlay recompiler for Windows
-        run: |
-          cmake -S psxrecomp/recompiler -B psxrecomp/recompiler/build-win -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/toolchain-windows-x86_64-llvm-mingw.cmake" \
-            -DCMAKE_BUILD_TYPE=Release \
-            "-DCMAKE_EXE_LINKER_FLAGS=-static -static-libgcc -static-libstdc++" \
-            -DPSX_GAME_EXTRA_IDENTITY_SHA256="$XGR_GAME_IDENTITY_SHA256" \
-            -DPSX_GAME_MANIFEST_DIGEST_SHA256="$XGR_MANIFEST_IDENTITY_SHA256"
-          cmake --build psxrecomp/recompiler/build-win --target psxrecomp-game -j "$(nproc)"
-
-      - name: Provision embedded Python and TinyCC
-        run: |
-          set -e
-          root="$XGR_DEPS_DIR/overlay-toolchain"
-          mkdir -p "$root"
-          py_archive=cpython-3.11.9+20240726-x86_64-pc-windows-msvc-shared-install_only.tar.gz
-          if [ ! -f "$root/python/python.exe" ]; then
-            curl -fL "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-pc-windows-msvc-shared-install_only.tar.gz" -o "$root/$py_archive"
-            echo "f694be48bdfec1dace6d69a19906b6083f4dd7c7c61f1138ba520e433e5598f8  $root/$py_archive" | sha256sum -c -
-            tar -C "$root" -xzf "$root/$py_archive"
-          fi
-          if [ ! -f "$root/tcc/tcc.exe" ]; then
-            curl -fL "https://download.savannah.gnu.org/releases/tinycc/tcc-0.9.27-win64-bin.zip" -o "$root/tcc.zip"
-            echo "34a721949a2583fdff725312da092fa0f5f1f284b702e6f811c6954714faabb2  $root/tcc.zip" | sha256sum -c -
-            unzip -q "$root/tcc.zip" -d "$root"
-          fi
-          if [ ! -f "$root/tcc-source/COPYING" ]; then
-            curl -fL "https://download.savannah.gnu.org/releases/tinycc/tcc-0.9.27.tar.bz2" -o "$root/tcc-source.tar.bz2"
-            echo "de23af78fca90ce32dff2dd45b3432b2334740bb9bb7b05bf60fdbfc396ceb9c  $root/tcc-source.tar.bz2" | sha256sum -c -
-            mkdir -p "$root/tcc-source"
-            tar -C "$root/tcc-source" --strip-components=1 -xjf "$root/tcc-source.tar.bz2"
-          fi
+      - name: Verify Native build before packaging
+        run: python3 tools/verify_native_release.py --build-dir build-win
 
       - name: Verify exe imports only system DLLs
         run: |
-          for exe in build-win/XenogearsRecomp.exe psxrecomp/recompiler/build-win/psxrecomp-game.exe; do
-            imports="$("$LLVM_MINGW_ROOT/bin/x86_64-w64-mingw32-objdump" -p "$exe" | grep 'DLL Name' | sort -u)"
-            echo "$exe"
-            echo "$imports"
-            if echo "$imports" | grep -qiE 'SDL2|libgcc|libstdc|libc\+\+|libunwind|libwinpthread'; then
-              echo "::error::$exe is not self-contained (non-system DLL import found)"
-              exit 1
-            fi
-          done
+          exe=build-win/XenogearsRecomp.exe
+          imports="$("$LLVM_MINGW_ROOT/bin/x86_64-w64-mingw32-objdump" -p "$exe" | grep 'DLL Name' | sort -u)"
+          echo "$imports"
+          if echo "$imports" | grep -qiE 'SDL2|SDL3|libgcc|libstdc|libc\+\+|libunwind|libwinpthread'; then
+            echo "::error::$exe is not self-contained (non-system DLL import found)"
+            exit 1
+          fi
 
       - name: Package archive
         run: |
@@ -258,11 +244,6 @@ jobs:
           # built-in fallback; users can drop their own next to the exe).
           cp -r build-win/assets "$pkg/assets"
           rm -f "$pkg/assets/img/boxart.tga"
-          bash ci/stage-overlay-toolchain.sh windows "$pkg/overlay_toolchain" \
-            psxrecomp/recompiler/build-win/psxrecomp-game.exe \
-            "$XGR_DEPS_DIR/overlay-toolchain/python" \
-            "$XGR_DEPS_DIR/overlay-toolchain/tcc" \
-            "$XGR_DEPS_DIR/overlay-toolchain/tcc-source/COPYING"
           cmake -E chdir dist cmake -E tar cf ../XenogearsRecomp-windows-x86_64.zip --format=zip XenogearsRecomp-windows-x86_64
           cmake -DPROJECT_ROOT="$PWD" \
             -DARCHIVE="$PWD/XenogearsRecomp-windows-x86_64.zip" \

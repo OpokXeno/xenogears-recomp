@@ -150,7 +150,6 @@ set(_required_archive_entries
     "${PACKAGE_ROOT}/bios/openbios.bin"
     "${PACKAGE_ROOT}/mods"
     "${PACKAGE_ROOT}/mods/packages"
-    "${PACKAGE_ROOT}/overlay_toolchain"
     "${PACKAGE_ROOT}/game.toml"
     "${PACKAGE_ROOT}/LICENSE"
     "${PACKAGE_ROOT}/MODS.md"
@@ -175,7 +174,7 @@ foreach(_entry IN LISTS _archive_entries)
     if(_is_banned)
         message(FATAL_ERROR "Archive contains a prohibited release artifact: ${_entry}")
     endif()
-    if(_relative_entry MATCHES "^(assets|overlay_toolchain)/")
+    if(_relative_entry MATCHES "^assets/")
         continue()
     endif()
     list(FIND _required_archive_entries "${_normalized_entry}" _known_entry_index)
@@ -251,7 +250,6 @@ set(_required_top_level
     assets
     bios
     mods
-    overlay_toolchain
     game.toml
     LICENSE
     MODS.md
@@ -285,9 +283,6 @@ endif()
 if(NOT IS_DIRECTORY "${_package_directory}/mods")
     fail("Archive mods path is not a directory")
 endif()
-if(NOT IS_DIRECTORY "${_package_directory}/overlay_toolchain")
-    fail("Archive overlay_toolchain path is not a directory")
-endif()
 
 file(GLOB_RECURSE _canonical_mod_entries
     RELATIVE "${BUILTIN_MODS_CATALOG}"
@@ -319,38 +314,6 @@ foreach(_entry IN LISTS _canonical_mod_entries)
     file(SHA256 "${_package_directory}/mods/${_entry}" _bundled_mod_hash)
     if(NOT _bundled_mod_hash STREQUAL _canonical_mod_hash)
         fail("Bundled built-in mod file does not match the canonical catalog: ${_entry}")
-    endif()
-endforeach()
-
-set(_required_toolchain_files
-    compile_overlays.py
-    native_render_manifest_model.py
-    native_render_overlay_codegen.py
-    native_render_overlay_ranges.py
-    native_render_runtime_variant_model.py
-    native_renderer/xg_render_overlay_ranges.toml
-    native_renderer/xg_render_runtime_variants.toml
-    include/overlay_api.h
-    include/overlay_codegen_hash.h
-    licenses/PYTHON-LICENSE.txt
-    licenses/TCC-COPYING.txt)
-if(PLATFORM STREQUAL "linux")
-    list(APPEND _required_toolchain_files
-        psxrecomp-game
-        python/bin/python3
-        tcc/tcc
-        tcc/tcc.real)
-else()
-    list(APPEND _required_toolchain_files
-        psxrecomp-game.exe
-        python/python.exe
-        tcc/tcc.exe)
-endif()
-foreach(_toolchain_file IN LISTS _required_toolchain_files)
-    set(_toolchain_path
-        "${_package_directory}/overlay_toolchain/${_toolchain_file}")
-    if(NOT EXISTS "${_toolchain_path}" OR IS_DIRECTORY "${_toolchain_path}")
-        fail("Archive is missing required overlay toolchain file: ${_toolchain_file}")
     endif()
 endforeach()
 

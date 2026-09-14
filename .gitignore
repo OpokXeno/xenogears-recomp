@@ -117,6 +117,8 @@ tools/*
 !tools/native_render_replays/field_baseline.toml
 !tools/native_render_replays/field_clean_boot.toml
 !tools/run_with_source_observation_plan.py
+!tools/verify_native_release.py
+!tools/test_verify_native_release.py
 !tools/validate_overlay_annotations.py
 !tools/census_disc_overlays.py
 !tools/test_census_disc_overlays.py
