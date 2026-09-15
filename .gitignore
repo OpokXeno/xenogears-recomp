@@ -67,6 +67,8 @@ Thumbs.db
 # ---- Local test/build artifacts ----------------------------------------------
 Testing/
 *.pst
+# Local one-shot savestate migration marker
+/.pst_bios_isolated
 
 # ---- Code intelligence index --------------------
 .codegraph/

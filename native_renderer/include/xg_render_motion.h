@@ -154,6 +154,10 @@ typedef struct XgRenderMotionEvaluation {
     double alpha;
     XgRenderMotionTransform phase;
     XgRenderMotionTransform endpoints[2];
+    /* Coherent Native camera/model basis. Canonical matrices above keep the
+     * source GTE anchors; Native endpoints and phases share this precise basis. */
+    XgRenderMotionTransform native_phase;
+    XgRenderMotionTransform native_current;
     XgHost3dProjection source_projection[2][XG_RENDER_MOTION_NODE_CAPACITY];
 } XgRenderMotionEvaluation;
 
@@ -194,7 +198,9 @@ bool xg_render_motion_watch(XgRenderMotionRef ref, uint32_t address, uint32_t si
 void xg_render_motion_invalidate_range(uint32_t address, uint32_t size);
 void xg_render_motion_reset(void);
 /* Called after authenticated command resolution, before source-commit append.
- * An absent/incompatible binding leaves ordinary endpoint rendering unchanged. */
+ * A valid binding refines Native XY using fractional LOCAL-to-view projection;
+ * canonical guest XY remains unchanged. An absent/incompatible binding leaves
+ * ordinary endpoint rendering unchanged. */
 bool xg_render_motion_bind_command(uint32_t command_id, struct XgRenderNativeOperation *operation);
 /* Consumer: evaluate ONCE per (previous,current,alpha), share across all draws.
  * Incompatible lifecycle/hierarchy selects current without interpolation. */
@@ -205,8 +211,10 @@ bool xg_render_motion_evaluate(XgRenderMotionRef previous, XgRenderMotionRef cur
  * share the result, including aliases in different polygons. Both alpha 0 and 1
  * are evaluated; ENDPOINT is only an incompatible/unpaired lifecycle.
  * screen_delta contains canonical pixel displacements from B plus phase depth;
- * native_delta contains the separate subpixel GTE displacements. Add each to
- * its CURRENT semantic plane so target relocation/viewport offsets stay intact. */
+ * native_delta contains the separate continuous subpixel displacements. Add each to
+ * its CURRENT semantic plane so target relocation/viewport offsets stay intact.
+ * Nonpositive phase depth uses GTE SZ/divide saturation, as at the endpoints;
+ * it is not a geometric near-plane rejection of the bound model. */
 XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluation *evaluation,
                                                       const XgRenderMotionDrawBinding *binding,
                                                       double screen_delta[2][3][3],
