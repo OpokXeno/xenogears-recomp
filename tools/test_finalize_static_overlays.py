@@ -237,18 +237,23 @@ void fixture_native(CPUState *cpu) {
 void fixture_overlap_a(CPUState *cpu) { (void)cpu; native_calls++; }
 void fixture_overlap_b(CPUState *cpu) { (void)cpu; native_calls++; }
 int psx_overlay_dispatch(CPUState *cpu, uint32_t addr);
+int psx_overlay_static_can_dispatch(uint32_t addr);
 
 static void reset_counts(void) {
     note_calls = native_calls = sequence = note_sequence = native_sequence = 0;
 }
 int main(void) {
     CPUState cpu = {0};
+    if (!psx_overlay_static_can_dispatch(UINT32_C(0xA0010000)) ||
+        note_calls != 0 || native_calls != 0)
+        return 6;
     if (!psx_overlay_dispatch(&cpu, UINT32_C(0xA0010000)) ||
         note_calls != 1 || native_calls != 1 ||
         note_sequence == 0 || note_sequence >= native_sequence)
         return 1;
     reset_counts();
     code_ok = 0;
+    if (psx_overlay_static_can_dispatch(UINT32_C(0x80010000))) return 7;
     if (psx_overlay_dispatch(&cpu, UINT32_C(0x80010000)) ||
         note_calls != 0 || native_calls != 0)
         return 2;
@@ -259,11 +264,13 @@ int main(void) {
     reset_counts();
     note_ok = 1;
     identity_ok = 0;
+    if (psx_overlay_static_can_dispatch(UINT32_C(0x80010000))) return 8;
     if (psx_overlay_dispatch(&cpu, UINT32_C(0x80010000)) ||
         note_calls != 0 || native_calls != 0)
         return 4;
     identity_ok = 1;
     reset_counts();
+    if (psx_overlay_static_can_dispatch(UINT32_C(0x80010010))) return 9;
     if (psx_overlay_dispatch(&cpu, UINT32_C(0x80010010)) ||
         note_calls != 0 || native_calls != 0)
         return 5;

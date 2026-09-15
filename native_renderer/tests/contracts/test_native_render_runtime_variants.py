@@ -243,8 +243,8 @@ class NativeRenderRuntimeVariantsTests(unittest.TestCase):
             REPOSITORY / "psxrecomp" / "runtime" / "codegen_hash_sources.cmake"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("#define PSX_OVERLAY_ABI_VERSION 25", overlay_api)
-        self.assertIn("#define PSX_OVERLAY_CODEGEN_VER 18", overlay_api)
+        self.assertIn("#define PSX_OVERLAY_ABI_VERSION 26", overlay_api)
+        self.assertIn("#define PSX_OVERLAY_CODEGEN_VER 19", overlay_api)
         self.assertIn("recompiler/src/code_generator.cpp", hash_sources)
         self.assertIn("recompiler/include/code_generator.h", hash_sources)
         self.assertIn("runtime/include/overlay_api.h", hash_sources)

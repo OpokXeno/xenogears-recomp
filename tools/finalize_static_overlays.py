@@ -321,6 +321,7 @@ def _dispatch_shard_source(index: int, variants: list[dict]) -> str:
                 "                psx_ov_static_variant_misses++;",
                 "            }",
             ]
+        lines.append("            if (!cpu) return selected != 0u;  /* read-only probe */")
         lines.append("            switch (selected) {")
         for selection, variant in enumerate(address_variants, 1):
             artifact = (variant["artifact_base"], variant["artifact_size"])
@@ -601,6 +602,10 @@ def generate_dispatch_shards(
     lines += [
         "    psx_ov_static_address_misses++;",
         "    return 0;",
+        "}",
+        "",
+        "int psx_overlay_static_can_dispatch(uint32_t addr) {",
+        "    return psx_overlay_dispatch(NULL, addr);",
         "}",
         "",
     ]
