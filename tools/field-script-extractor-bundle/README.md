@@ -1,7 +1,8 @@
-# Xenogears Field Script Extractor
+# Xenogears Field Script Tools
 
-Self-contained Python 3.11+ tool for extracting Field VM scripts from one or
-more retail Xenogears discs. It uses only the Python standard library.
+Self-contained Python 3.11+ tools for extracting, decompiling, recompiling and
+repacking Field VM scripts from retail Xenogears discs. They use only the Python
+standard library.
 
 ## Usage
 
@@ -29,6 +30,7 @@ extracted-field-scripts/
   catalog/disc-01/field-0000_<hash>/
     scripts.bin
     script.xgs
+    script.xga
     bytecode.bin
     variable-types.bin
     metadata.json
@@ -49,6 +51,60 @@ global names come from the Field documentation; other names combine the
 variable's observed role with the surrounding actor, movement, dialogue,
 camera, or other subsystem operations.
 
+`script.xga` is lossless assembly containing complete instruction encodings,
+symbolic references, all routine rows, the bitmap and byte-exact data. Both
+source formats are self-contained. XGA preserves exact bytes; XGS may normalize
+verified, behavior-neutral instruction encoding variants for readability.
+
+## Compile And Repack
+
+From this bundle directory:
+
+```bash
+python3 tools/field_script.py decompile /path/to/scripts.bin \
+  --field 7 --xgs script.xgs --xga script.xga
+
+# Edit script.xgs, then compile its semantic statements:
+python3 tools/field_script.py compile script.xgs \
+  --output scripts.modified.bin --xga script.modified.xga --map script.map.json
+
+# Assembly can also be edited and built directly:
+python3 tools/field_script.py assemble script.modified.xga \
+  --output scripts.assembled.bin
+
+python3 tools/field_script.py repack field.bin \
+  --scripts scripts.modified.bin --output field.modified.bin
+```
+
+The `.xgs` is standalone: compilation needs no original binary or per-script
+metadata file. Each entity contains its events and `code`; shared instructions
+appear under `shared_code`. Original byte traces and event comments are retained.
+Behavior descriptions are not emitted.
+
+The linker recalculates positions, routine entries, jumps, calls and script-data
+references. Comments are informational and ignored by compilation. VM variable bindings and
+preserved data remain explicit because they have runtime meaning.
+For fixed-address assertions in the low-level representation, use
+`assemble --layout exact`. The optional link map reports final placement.
+
+`field_script.py override` creates a `.psxmod` source package from a stock disc
+and compiled ScriptsFile using the port's existing indexed-file replacement
+mechanism. See [`docs/RECOMPILER_USAGE.md`](docs/RECOMPILER_USAGE.md) for the full
+editing and runtime workflow. Regenerate older extractions before compiling;
+there is one current source format, with no compatibility layer.
+
+Regenerate all catalog `.xgs` files from the extracted assets, checking each
+compiled result against its original (including verified neutral encodings):
+
+```bash
+python3 tools/field_script.py regenerate extracted-field-scripts
+```
+
+For focused maintenance of generated sources without full compilation, use
+`--comments-only`, `--layout-only` or `--simplify-raw`. Full regeneration
+overwrites the generated catalog source. Normal `compile` processes one file;
+the corpus-wide `verify` commands below are separate, potentially lengthy tests.
+
 ## Documentation
 
 - [`docs/FORMAT_AND_CONCEPTS.md`](docs/FORMAT_AND_CONCEPTS.md) explains the
@@ -64,9 +120,12 @@ camera, or other subsystem operations.
   primary and extended operations under `actor`, `movement`, `world`, `camera`,
   `dialogue`, `audio`, `visual`, `battle`, `inventory`, `input`, `state`,
   `flow`, and `event`.
-- [`docs/RECOMPILER_DESIGN.md`](docs/RECOMPILER_DESIGN.md) specifies a proposed
-  reversible `script.xgs` to `script.xga` to `scripts.bin` compiler and Field
-  resource repacking pipeline.
+- [`docs/RECOMPILER_DESIGN.md`](docs/RECOMPILER_DESIGN.md) describes the
+  implemented standalone compiler, relocation, validation and binary guarantees.
+- [`docs/RECOMPILER_USAGE.md`](docs/RECOMPILER_USAGE.md) documents compilation,
+  assembly syntax, larger edits, repacking and runtime override packages.
+- [`docs/RELOCATION_EVIDENCE.md`](docs/RELOCATION_EVIDENCE.md) records executable
+  evidence and the scope of full-corpus and focused checks.
 
 Each entity contains its event bindings followed by code owned exclusively by
 that entity. Blocks reached by multiple entities, plus validated orphan event
@@ -77,9 +136,9 @@ routine lengths.
 Control flow is followed from every stored routine entry and through computed
 `A6` jump tables. Unreferenced regions are rendered as inferred orphan events
 only when a linear decode has aligned branch targets or ends exactly at a
-terminal instruction. Everything else remains a typed data region. Every
-instruction and data line retains its source offset and bytes, while operation
-fields with no proven semantic schema remain explicit positional values.
+terminal instruction. Everything else remains preserved data. Instructions
+retain original-PC/byte trace comments and event aliases, while operation
+fields with no proven semantic schema remain explicit positional bytes.
 Decoding conflicts remain diagnostics, so readability never depends on silently
 discarding source bytes or inventing routine boundaries.
 
@@ -92,7 +151,7 @@ total_coverage_percent = 100.0
 
 The out-of-band arrival table is rendered separately from executable events.
 Other bytes inside the shared bytecode area that are not VM instructions appear
-under `non_instruction_regions` and remain byte-exact. They are distinguished as
+under `data` and remain byte-exact. The analysis report distinguishes them as
 zero padding, short separator/padding bytes, embedded table-or-payload data, or
 an unreferenced code candidate when most of the region decodes as instructions
 but lacks sufficient control-flow evidence for promotion to code. This is not a
@@ -134,3 +193,25 @@ solely from the Field documentation with:
 python3 tools/build_opcode_table.py
 python3 tools/build_dsl_documentation.py
 ```
+
+## Compiler Validation
+
+```bash
+python3 -m pytest tests -q
+python3 tools/field_script.py verify extracted-field-scripts
+python3 tools/field_script.py verify extracted-field-scripts --repack
+python3 tools/field_script.py verify extracted-field-scripts --repack --resize
+```
+
+The corpus check compares exact XGA reconstruction, XGS reconstruction with only
+verified neutral instruction-bit differences, and LZSS compression. `--repack`
+uses the original disc paths in the manifest to rebuild Field containers.
+The corpus has 729 unique assets: 4,453,533 ScriptsFile bytes, including 3,198,265
+bytecode bytes. These checks are not run by a normal single-file compilation.
+
+The resize stress test inserts a NOP before every instruction in every resource,
+checks every original non-address operand and relocated symbolic reference,
+assembles the linked IR again, and optionally repacks the modified containers.
+Recorded implementation runs passed all 729 cases and produced 5,126,213 total
+resized ScriptsFile bytes. See the evidence guide for validation scope; this is
+not a claim that every later presentation change reran the complete corpus.

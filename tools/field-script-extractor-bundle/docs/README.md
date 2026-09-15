@@ -1,6 +1,7 @@
 # Field Script DSL Documentation
 
-Recommended reading order:
+For editing, start with [`RECOMPILER_USAGE.md`](RECOMPILER_USAGE.md). For format
+details, the recommended reading order is:
 
 1. [`FORMAT_AND_CONCEPTS.md`](FORMAT_AND_CONCEPTS.md): physical structure,
    entities, events, actors, state, shared code, and coverage.
@@ -11,8 +12,12 @@ Recommended reading order:
    `battle`, `inventory`, `input`, `state`, `flow`, and `event`.
 4. [`OPERATION_CATALOG.md`](OPERATION_CATALOG.md): comprehensive reference for
    the 256 primary and 227 extended opcodes.
-5. [`RECOMPILER_DESIGN.md`](RECOMPILER_DESIGN.md): proposed reversible
-   `script.xgs` to `script.xga` to `scripts.bin` compiler and repacking pipeline.
+5. [`RECOMPILER_DESIGN.md`](RECOMPILER_DESIGN.md): implemented compiler,
+   relocating linker, repacking pipeline and design decisions.
+6. [`RECOMPILER_USAGE.md`](RECOMPILER_USAGE.md): editing, compilation, assembly,
+   repacking, runtime overrides and corpus validation.
+7. [`RELOCATION_EVIDENCE.md`](RELOCATION_EVIDENCE.md): executable-level reference
+   evidence, generated routing code and whole-corpus resize proofs.
 
 The complete catalog is generated. The other guides explain modeling decisions
 and must be updated manually when the DSL changes.
@@ -22,12 +27,16 @@ and must be updated manually when the DSL changes.
 | Question | Source |
 |---|---|
 | What bytes a map contains | `scripts.bin` and `bytecode.bin` |
-| Where each instruction came from | `// PC: bytes` comment in `script.xgs` |
-| Which entries an entity stores | `metadata.json` and the `events` block |
+| How an instruction is encoded | Shared operand form and source statement; explicit raw form when needed |
+| Where an instruction is placed | Relocating link map / linked XGA |
+| What its original bytes were | Informational `// PC: bytes` trace and original binary |
+| Which entries an entity stores | Editable `events` block; original entries are recorded in extraction metadata |
+| Which VM slots variables use | `state` bindings and the compiler's allocation report |
 | What a DSL construct means | `DSL_REFERENCE.md` |
 | What a namespace represents | `OBJECTS_AND_NAMESPACES.md` |
 | Which opcodes exist | `OPERATION_CATALOG.md` and `field_opcode_table.json` |
-| Which regions were not verified as code | `non_instruction_regions` and the coverage report |
+| Which bytes were not verified as code | `data` and the coverage report |
+
 
 ## Regeneration
 

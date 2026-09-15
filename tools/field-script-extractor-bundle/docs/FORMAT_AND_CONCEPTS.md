@@ -29,8 +29,7 @@ field N {
   arrivals { ... }
   entities { ... }
   shared_code { ... }
-  non_instruction_regions { ... }
-  diagnostics { ... }
+  data { ... }
 }
 ```
 
@@ -43,15 +42,19 @@ and the resource's SHA-256 preserve that physical identity.
 ### `state`
 
 Declares only the variables observed in the recovered instructions. A variable
-occupies 16 bits. Its offset is a byte offset, not an element index.
+occupies 16 bits. Its `at` binding is a byte offset in VM memory, not a bytecode
+address or element index. Optional `unsigned slots[...]` declarations preserve
+unsigned slots without named symbols. The compiler reconstructs the bitmap and
+bytecode size from the source; no original file or sidecar is required.
 
 ```text
 state {
   persistent {
-    signed story_progress @offset(0x0000);
+    signed story_progress at 0x0000;
   }
   scene {
-    unsigned entity_4_interaction_movement_sequence_gate @offset(0x0412);
+    unsigned entity_4_interaction_movement_sequence_gate at 0x0412;
+    new signed interaction_count;
   }
 }
 ```
@@ -68,6 +71,11 @@ does with the recoverable context: entity, event type, and nearby subsystem. A
 contextual name describes the use observed in that map, not an original name
 from the game.
 
+Keep existing bindings when editing code. A `new` scene variable receives a
+free slot after the compiler reserves declared and possible operand references.
+Allocation is reported in the link map. Persistent memory has game-wide meaning
+and needs an explicit or documented binding; it is not an automatic local pool.
+
 ### `arrivals`
 
 This is an optional table located at the beginning of the bytecode area, before
@@ -75,8 +83,7 @@ VM execution. Each record contains an X/Z position, walkmesh, and camera and
 actor directions.
 
 ```text
-arrivals @source(0x0000..0x000F) {
-  marker: 255;
+arrivals {
   arrival 0 { x: 0, z: -2833, walkmesh: 0, camera: restore, actor: restore }
 }
 ```
@@ -84,6 +91,9 @@ arrivals @source(0x0000..0x000F) {
 The persistent variable `map_entry_point` selects the record. The table does
 not include its own element count, so the extractor extends it only to a
 boundary justified by alignment and the code that follows.
+The compiler supplies the `FF` marker and places the table at the bytecode
+start. Arrival indices must be consecutive from zero. An uninterpreted arrival
+payload may instead appear as a named `arrivals` object under `data`.
 
 ### `entities`
 
@@ -110,6 +120,9 @@ entity 3 {
 
 The `code` block contains instructions reachable exclusively by that entity.
 Events appear together, and their entries are visually separated.
+Entity IDs are consecutive from zero. New entities and event bindings can be
+added in source; graphics, placement and initialization still need to make sense
+for the game and its resources.
 
 ### Entity, Actor, And Player
 
@@ -124,7 +137,7 @@ These concepts are not equivalent:
 | Controlled actor | The only actor that receives physical player control |
 | Followed actor | Actor followed by the camera; it may differ from the controlled actor |
 
-`actor.bind_playable_character(character: N)` prepares an entity as a candidate
+`actor.bind_playable_character(N)` prepares an entity as a candidate
 for a playable character. If the character is not in the party, it may remain
 as a disabled placeholder. If it is in slot 1 or 2, it is a companion. Only
 slot 0 normally becomes the controlled and followed actor.
@@ -149,6 +162,9 @@ engine:
 An event has no stored length. Two events may share an entry, jump to the same
 block, or call code from another area. The arrow indicates an entry point, not
 the beginning of an isolated function with an inferred end.
+The compiler supplies a stop-only implementation for unassigned slots. To add a
+binding inside an existing `routine[N..M]` range, split that range first: a slot
+cannot be bound twice. The 32-slot table is an engine format limit.
 
 ### `shared_code`
 
@@ -158,9 +174,10 @@ calls, jumps, and aliases.
 
 An orphan block is promoted to code only when linear decoding terminates
 consistently and its control-flow targets fall on instruction boundaries. The
-absence of an entry point remains indicated in a comment.
+classification is retained in the analysis report. Event comments are emitted
+where there are stored entry aliases.
 
-### `non_instruction_regions`
+### `data`
 
 These regions are physically within the shared area, but have not been
 classified as executable instructions:
@@ -176,11 +193,25 @@ The `arrivals` table also counts as data for coverage, but is shown in its
 semantic section and is not duplicated here. All uninterpreted bytes are
 preserved in hexadecimal to allow reconstruction and review.
 
-### `diagnostics`
+```text
+data {
+  D_0100 {
+    L_0100:
+    bytes "00 FF 12 34";
+  }
+}
+```
+
+Named data objects keep their bytes together. They are not per-entity code
+containers, and their names do not impose an absolute address. Symbolic labels
+and aliases let script-data reads follow them when the linker moves them.
+
+### Diagnostic Comments And Reports
 
 Records conflicts that must not be hidden: targets that enter in the middle of
 an instruction, truncated instructions, or jumps outside the bytecode. A
-diagnostic is not resolved by inventing bytes or boundaries.
+diagnostic is not resolved by inventing bytes or boundaries. XGS emits these as
+`// Diagnostic: ...` comments; there is no executable `diagnostics` section.
 
 ## 3. Ownership And Shared Flow
 
@@ -193,7 +224,7 @@ each entity:
 3. If it has no entry but passes conservative validation, it appears as an
    orphan event in `shared_code`.
 4. If it cannot be verified as code, it remains in
-   `non_instruction_regions`.
+    `data`.
 
 This organization improves readability without duplicating instructions or
 altering the original graph.
@@ -202,13 +233,16 @@ altering the original graph.
 
 Semantic values are shown in decimal. Hexadecimal is retained for:
 
-- `@offset(...)` offsets and `@source(...)` ranges.
-- `L_XXXX` labels, which represent bytecode PCs.
+- Existing VM variable bindings (`at 0x040A`).
+- Generated `L_XXXX` label names, originally chosen from source PCs.
 - Original-byte comments.
 - Raw contents of uninterpreted regions.
 
 This separation allows `flow.sleep(30)` to be read as a normal operation while
-its exact bytes can still be located through the source comment.
+its original encoding remains available in comments. Label names and comments
+are not address assertions. The linker computes final positions and exposes
+them in the optional map and XGA output. XGA carries low-level address/encoding
+directives for inspection and exact assembly; XGS does not need those directives.
 
 ## 5. Coverage
 

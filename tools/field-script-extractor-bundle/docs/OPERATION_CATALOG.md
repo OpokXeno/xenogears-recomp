@@ -13,7 +13,7 @@ identities. Arguments emitted in `script.xgs` are displayed in decimal.
 | Object | Operations | Responsibility |
 |---|---:|---|
 | [`actor`](#actor) | 104 | Entities, characters, party members, sprites, and actor control. |
-| [`movement`](#movement) | 66 | Position, rotation, walkmesh, movement, and collision. |
+| [`movement`](#movement) | 67 | Position, rotation, walkmesh, movement, and collision. |
 | [`world`](#world) | 21 | Maps, encounters, triggers, transitions, and scene state. |
 | [`camera`](#camera) | 48 | Camera position, projection, tracking, and view geometry. |
 | [`dialogue`](#dialogue) | 13 | Text, portraits, windows, and dialogue choices. |
@@ -23,7 +23,7 @@ identities. Arguments emitted in `script.xgs` are displayed in decimal.
 | [`inventory`](#inventory) | 19 | Inventory, items, currency, and menus. |
 | [`input`](#input) | 7 | Button state and accumulated input history. |
 | [`state`](#state) | 31 | Script-variable reads, writes, arithmetic, and bit operations. |
-| [`flow`](#flow) | 41 | Jumps, calls, waits, yields, returns, and termination. |
+| [`flow`](#flow) | 40 | Jumps, calls, waits, yields, returns, and termination. |
 | [`event`](#event) | 72 | Operations that do not belong exclusively to another subsystem. |
 
 ## `actor`
@@ -34,7 +34,7 @@ Entities, characters, party members, sprites, and actor control.
 |---|---:|---|---|---|---|
 | `0B` | 3 | `actor.initialize_npc_actor(...)` | `0x800A1624` | `InitializeNpcActor` | initializes the current NPC from a selected field graphic, synchronizes placement, enables updates and visibility, and advances three bytes. |
 | `0C` | 1 | `actor.process_player_control_if_owned_preserve_ip()` | `0x8009F5A8` | `UpdatePlayerCharacterPreserveIP` | runs the player-control update and restores the caller's VM instruction pointer afterward. |
-| `16` | 3 | `actor.bind_playable_character(character: value)` | `0x800A08B8` | `InitializePlayableActor` | initializes a playable-character actor, updates player and party mappings, selects party or replacement graphics, applies entry placement, and handles missing-party fallback. |
+| `16` | 3 | `actor.bind_playable_character(value)` | `0x800A08B8` | `InitializePlayableActor` | initializes a playable-character actor, updates player and party mappings, selects party or replacement graphics, applies entry placement, and handles missing-party fallback. |
 | `1E` | 1 | `actor.reset_actor_elevation_tracking(...)` | `0x8009E208` | `ResetActorElevationTracking` | clears the actor elevation offset, anchors elevation to the current Y position, and enables elevation updates. |
 | `1F` | 2 | `actor.set_actor_low_flags_from_packed_byte(...)` | `0x8009E1A0` | `SetActorLowFlagsFromPackedByte` | replaces low actor flags from a packed byte. |
 | `20` | 3 | `actor.set_current_actor_flags(...)` | `0x8009E10C` | `SetCurrentActorFlags` | decodes a script mask into current-actor flags. |
@@ -51,7 +51,7 @@ Entities, characters, party members, sprites, and actor control.
 | `30` | 3 | `actor.write_party_leader_character_id(...) -> state` | `0x80099F48` | `WritePartyLeaderCharacterID` | writes leader ID. |
 | `52` | 2 | `actor.follow_actor(...)` | `0x800980FC` | `FollowActor` | continues planar walking toward a selected actor until contact range is reached. |
 | `53` | 4 | `actor.follow_actor_with_step_limit(...)` | `0x80098038` | `FollowActorWithStepLimit` | continues planar walking toward a selected actor until contact range or the scripted step limit is reached. |
-| `5C` | 3 | `actor.bind_party_slot(slot: value)` | `0x800A0228` | `InitializePartySlotActor` | binds the current actor to a selected party slot, restores its saved map placement when applicable, initializes its sprite, and hides unavailable or off-map members. |
+| `5C` | 3 | `actor.bind_party_slot(value)` | `0x800A0228` | `InitializePartySlotActor` | binds the current actor to a selected party slot, restores its saved map placement when applicable, initializes its sprite, and hides unavailable or off-map members. |
 | `6B` | 3 | `actor.rotate_actor_clockwise(...)` | `0x8009AB5C` | `RotateActorClockwise` | rotates actor clockwise. |
 | `6C` | 3 | `actor.rotate_actor_counter_clockwise(...)` | `0x8009ABAC` | `RotateActorCounterClockwise` | rotates actor counter-clockwise. |
 | `6F` | 2 | `actor.face_actor(...)` | `0x8009A2A8` | `FaceActor` | turns the current actor toward the selected actor when that actor is valid. |
@@ -60,13 +60,13 @@ Entities, characters, party members, sprites, and actor control.
 | `7C` | 4 | `actor.increase_party_mp(...)` | `0x80096F18` | `IncreasePartyMp` | increases party MP. |
 | `7D` | 4 | `actor.decrease_party_mp(...)` | `0x80097010` | `DecreasePartyMp` | decreases party MP. |
 | `7E` | 4 | `actor.increase_party_hp(...)` | `0x80097108` | `IncreasePartyHp` | increases HP for each valid party member selected by the script mask, caps each result at maximum HP, and advances four bytes. |
-| `89` | 6 | `actor.check_actor_distance_or_goto(label)` | `0x80095E48` | `CheckActorDistance` | tests actor distance. |
-| `8A` | 4 | `actor.check_actor_on_screen_or_goto(label)` | `0x80095C00` | `CheckActorOnScreen` | tests actor screen visibility. |
-| `91` | 4 | `actor.check_party_member_or_goto(label)` | `0x800964B0` | `CheckPartyMember` | tests party membership. |
+| `89` | 6 | `actor.check_actor_distance(..., label)` | `0x80095E48` | `CheckActorDistance` | tests actor distance. |
+| `8A` | 4 | `actor.check_actor_on_screen(..., label)` | `0x80095C00` | `CheckActorOnScreen` | tests actor screen visibility. |
+| `91` | 4 | `actor.check_party_member(..., label)` | `0x800964B0` | `CheckPartyMember` | tests party membership. |
 | `92` | 1 | `actor.initialize_actor_scripts(...)` | `0x800A19B0` | `InitializeActorScripts` | resets all actor script slots. |
 | `93` | 3 | `actor.add_current_actor_to_mecha_list(...)` | `0x800A1364` | `AddCurrentActorToMechaList` | initializes the current actor's base graphic, synchronizes its transform, assigns a mecha-list slot and model identifier, and increments the mecha count. |
 | `A7` | 1 | `actor.process_player_control_if_owned()` | `0x8009F5F4` | `UpdatePlayerCharacter` | processes player movement eligibility, idle detection, directional input, movement triggers, and facing before advancing one byte. |
-| `B9` | 4 | `actor.check_available_party_member_or_goto(label)` | `0x80096534` | `CheckAvailablePartyMember` | advances four bytes when the requested character is available, otherwise branches to the encoded destination. |
+| `B9` | 4 | `actor.check_available_party_member(..., label)` | `0x80096534` | `CheckAvailablePartyMember` | advances four bytes when the requested character is available, otherwise branches to the encoded destination. |
 | `BA` | 2 | `actor.add_available_party_member(...)` | `0x800965A8` | `AddAvailablePartyMember` | sets the requested character's availability bit and advances two bytes. |
 | `BC` | 1 | `actor.initialize_actor_sprite(...)` | `0x800A0D3C` | `InitializeActorSprite` | creates and initializes actor sprite state. |
 | `C4` | 2 | `actor.rotate_actor_and_set_state_flag(...)` | `0x80093E30` | `RotateActorAndSetStateFlag` | rotates an actor over 30 steps and sets its state flag. |
@@ -75,7 +75,7 @@ Entities, characters, party members, sprites, and actor control.
 | `E0` | 7 | `actor.set_selected_actor_blend_parameters(...)` | `0x80091E98` | `SetSelectedActorBlendParameters` | resolves an actor and, when valid, replaces its rendering blend bits and accompanying rendering value before advancing seven bytes. |
 | `F8` | 4 | `actor.update_current_actor_flag_quarter(...)` | `0x8008E59C` | `UpdateCurrentActorFlagQuarter` | sets or clears the selected lower or upper 16-bit quarter of either current actor flag group and advances four bytes. |
 | `F9` | 2 | `actor.set_parent_actor(...)` | `0x8008DE64` | `SetParentActor` | assigns an actor parent. |
-| `FE 02` | 5 | `actor.field_actor_inner_proximity_predicate_or_goto(label)` | `0x80095B3C` | `FieldActorInnerProximityPredicate` | checks the near-screen actor range. |
+| `FE 02` | 5 | `actor.field_actor_inner_proximity_predicate(..., label)` | `0x80095B3C` | `FieldActorInnerProximityPredicate` | checks the near-screen actor range. |
 | `FE 03` | 4 | `actor.set_current_actor_uniform_scale(...)` | `0x8008D0F4` | `SetCurrentActorUniformScale` | sets uniform actor scale, applies a three-quarter sprite scale, refreshes rotation, and advances three bytes. |
 | `FE 04` | 4 | `actor.set_current_actor_sprite_geometry_scale(...)` | `0x8008D26C` | `SetCurrentActorSpriteGeometryScale` | doubles the supplied value into the current actor's sprite geometry scale and advances three bytes. |
 | `FE 07` | 3 | `actor.set_current_actor_flag400_from_mode(...)` | `0x8008D604` | `SetCurrentActorFlag400FromMode` | clears actor flag 0x400 for mode zero, sets it for mode one, and advances two bytes. |
@@ -94,10 +94,10 @@ Entities, characters, party members, sprites, and actor control.
 | `FE 29` | 4 | `actor.write_current_actor_flags2(...) -> state` | `0x8008E518` | `WriteCurrentActorFlags2` | writes current actor flag word 2 to the indexed script variable and advances three bytes. |
 | `FE 2A` | 4 | `actor.write_current_actor_flags3(...) -> state` | `0x8008E544` | `WriteCurrentActorFlags3` | writes current actor flag word 3 to the indexed script variable and advances three bytes. |
 | `FE 2B` | 4 | `actor.write_current_actor_flags4(...) -> state` | `0x8008E570` | `WriteCurrentActorFlags4` | writes current actor flag word 4 to the indexed script variable and advances three bytes. |
-| `FE 2C` | 4 | `actor.write_actor_flags1(...) -> state` | `0x8008DEBC` | `WriteActorFlags1` | writes actor flag group 1. |
-| `FE 2D` | 4 | `actor.write_actor_flags2(...) -> state` | `0x8008DF44` | `WriteActorFlags2` | writes actor flag group 2. |
-| `FE 2E` | 4 | `actor.write_actor_flags3(...) -> state` | `0x8008DFCC` | `WriteActorFlags3` | writes actor flag group 3. |
-| `FE 2F` | 4 | `actor.write_actor_flags4(...) -> state` | `0x8008E054` | `WriteActorFlags4` | writes actor flag group 4. |
+| `FE 2C` | 4 | `actor.write_actor_flags1(...)` | `0x8008DEBC` | `WriteActorFlags1` | writes actor flag group 1. |
+| `FE 2D` | 4 | `actor.write_actor_flags2(...)` | `0x8008DF44` | `WriteActorFlags2` | writes actor flag group 2. |
+| `FE 2E` | 4 | `actor.write_actor_flags3(...)` | `0x8008DFCC` | `WriteActorFlags3` | writes actor flag group 3. |
+| `FE 2F` | 4 | `actor.write_actor_flags4(...)` | `0x8008E054` | `WriteActorFlags4` | writes actor flag group 4. |
 | `FE 38` | 6 | `actor.write_actor_distance(...) -> state` | `0x8008E1B4` | `WriteActorDistance` | resolves two actor selectors, computes their planar distance from fixed-point X/Z positions, writes zero if either actor is absent, and stores the result in the selected script variable. |
 | `FE 39` | 4 | `actor.set_actor_animation_offset_scale(...)` | `0x8008D230` | `SetActorAnimationOffsetScale` | sets the global multiplier used to convert animation displacement samples into planar actor offsets and advances three bytes. |
 | `FE 3A` | 4 | `actor.set_party_frame_mask(...)` | `0x8008CED0` | `SetPartyFrameMask` | resolves a character selector and sets that character's bit in the party frame mask. |
@@ -172,6 +172,7 @@ Position, rotation, walkmesh, movement, and collision.
 | `58` | 4 | `movement.set_current_actor_axis_rotation(...)` | `0x80094918` | `SetCurrentActorAxisRotation` | assigns one current-actor axis. |
 | `59` | 1 | `movement.random_turn_with_special_direction(...)` | `0x8009F4CC` | `RandomTurnWithSpecialDirection` | handles signed random turns. |
 | `5A` | 1 | `movement.reset_actor_movement_state(...)` | `0x8009524C` | `ResetActorMovementState` | clears current movement state, marks movement inactive, yields, and advances one byte. |
+| `5B` | 1 | `movement.park_actor_movement_update()` | `0x80095284` | `ParkActorMovementUpdate` | clears movement vectors and render offsets, marks movement and rotation inactive, and yields without advancing, so repeated selection parks the invocation on this opcode without releasing its slot. |
 | `5F` | 2 | `movement.set_immediate_actor_cardinal_direction(...)` | `0x8009AD6C` | `SetImmediateActorCardinalDirection` | rotates the current actor to the immediate world-relative cardinal direction. |
 | `67` | 4 | `movement.set_actor_direction(...)` | `0x8009ABFC` | `SetActorDirection` | sets actor direction. |
 | `69` | 3 | `movement.set_cur_actor_rotation(...)` | `0x8009AC7C` | `SetCurActorRotation` | sets current rotation. |
@@ -193,8 +194,8 @@ Position, rotation, walkmesh, movement, and collision.
 | `EB` | 20 | `movement.compute_orbit_point_from_coordinates(...) -> state` | `0x800910C0` | `ComputeOrbitPointFromCoordinates` | builds a camera-scale-adjusted orbit point around explicit coordinates from yaw, pitch, and magnitude inputs, writes its X, Z, and Y coordinates, and advances twenty bytes. |
 | `F6` | 2 | `movement.configure_actor_rotation_lock_mode(...)` | `0x8008E8C8` | `ConfigureActorRotationLockMode` | clears rotation locking and residual motion for mode zero, locks and snapshots rotation for mode one, enables deferred motion cleanup for mode two, and advances two bytes. |
 | `FA` | 5 | `movement.adjust_actor_axis_rotation(...)` | `0x800947B0` | `AdjustActorAxisRotation` | adjusts a selected actor rotation axis. |
-| `FE 05` | 7 | `movement.check_actor_walkmesh_id_or_goto(label)` | `0x80095CC4` | `CheckActorWalkmeshId` | advances six bytes when the selected actor uses the requested walkmesh, otherwise branches to the encoded destination. |
-| `FE 06` | 7 | `movement.check_actor_walkmesh_material_or_goto(label)` | `0x80095D6C` | `CheckActorWalkmeshMaterial` | advances six bytes when the selected actor's current triangle has the requested material byte, otherwise branches to the encoded destination. |
+| `FE 05` | 7 | `movement.check_actor_walkmesh_id(..., label)` | `0x80095CC4` | `CheckActorWalkmeshId` | advances six bytes when the selected actor uses the requested walkmesh, otherwise branches to the encoded destination. |
+| `FE 06` | 7 | `movement.check_actor_walkmesh_material(..., label)` | `0x80095D6C` | `CheckActorWalkmeshMaterial` | advances six bytes when the selected actor's current triangle has the requested material byte, otherwise branches to the encoded destination. |
 | `FE 16` | 2 | `movement.free_movement_bounding_zone(...)` | `0x8008C7D8` | `FreeMovementBoundingZone` | releases the current actor's allocated movement-boundary vertices and clears their ownership flag. |
 | `FE 19` | 3 | `movement.remove_party_character(...)` | `0x8008C334` | `RemovePartyCharacter` | removes a resolved party member, compacts party resources and slot metadata, and reactivates shifted actors. |
 | `FE 1C` | 9 | `movement.set_actor_position3d_immediate(...)` | `0x80098A7C` | `SetActorPosition3DImmediate` | places the current actor at scripted XYZ coordinates and synchronizes its rendered and physical positions. |
@@ -310,7 +311,7 @@ Text, portraits, windows, and dialogue choices.
 | `F4` | 2 | `dialogue.close_dialogue_or_reset_window_config(...)` | `0x8009BE9C` | `CloseDialogueOrResetWindowConfig` | control value zero requests closure of the actor's owned dialogue, while a nonzero value clears configured width, height, forced position, and window flags. |
 | `F5` | 4 | `dialogue.open_centered_dialogue_mode3(...)` | `0x8009C12C` | `OpenCenteredDialogueMode3` | opens the selected dialogue block in centered mode 3 using the trailing control byte. |
 | `FC` | 5 | `dialogue.open_dialogue_at_actor_with_copied_portrait(...)` | `0x8009BF8C` | `OpenDialogueAtActorWithCopiedPortrait` | resolves the selected actor, copies its portrait ID into the current actor, and opens the current actor's mode-zero dialogue anchored to the selected actor; an invalid selector skips six bytes and deferred creation retries. |
-| `FE 0D` | 4 | `dialogue.set_portrait(character: value)` | `0x8008CF9C` | `SetDialogPortraitCharacter` | resolves a character selector and stores it as the current actor's dialog portrait identifier. |
+| `FE 0D` | 4 | `dialogue.set_portrait(value)` | `0x8008CF9C` | `SetDialogPortraitCharacter` | resolves a character selector and stores it as the current actor's dialog portrait identifier. |
 | `FE CF` | 6 | `dialogue.open_menu_mode1_with_field_context(...) -> state` | `0x80093888` | `OpenMenuMode1WithFieldContext` | disables field controls, saves field and direction state, installs the requested field and variable 2 value, queues menu mode 1, yields, and advances five bytes. |
 
 ## `audio`
@@ -402,10 +403,10 @@ Inventory, items, currency, and menus.
 | Opcode | Bytes | DSL form | Handler | Original function | Behavior |
 |---|---:|---|---|---|---|
 | `34` | 5 | `inventory.write_inventory_object_quantity(...) -> state` | `0x80096214` | `WriteInventoryObjectQuantity` | writes the encoded object's quantity to the requested script variable, using zero when the object is absent, and advances five bytes. |
-| `8B` | 5 | `inventory.check_inventory_object_or_goto(label)` | `0x800962C0` | `CheckInventoryObject` | advances five bytes when the encoded object is present, otherwise branches to the encoded destination. |
+| `8B` | 5 | `inventory.check_inventory_object(..., label)` | `0x800962C0` | `CheckInventoryObject` | advances five bytes when the encoded object is present, otherwise branches to the encoded destination. |
 | `8C` | 3 | `inventory.add_inventory_object(...)` | `0x8009631C` | `AddInventoryObject` | adds one unit of the encoded object and advances three bytes. |
 | `8D` | 3 | `inventory.remove_inventory_object(...)` | `0x8009640C` | `RemoveInventoryObject` | decrements an encoded object's quantity, clears its identifier when the quantity reaches zero, and advances three bytes. |
-| `8E` | 7 | `inventory.check_gold_amount_or_goto(label)` | `0x80095F24` | `CheckGoldAmount` | tests the current gold amount. |
+| `8E` | 7 | `inventory.check_gold_amount(..., label)` | `0x80095F24` | `CheckGoldAmount` | tests the current gold amount. |
 | `8F` | 3 | `inventory.increase_gold(...)` | `0x80095FB8` | `IncreaseGold` | increases party gold. |
 | `90` | 3 | `inventory.decrease_gold(...)` | `0x8009601C` | `DecreaseGold` | decreases party gold. |
 | `FE 4F` | 2 | `inventory.enable_field_menu(...)` | `0x80093BB0` | `EnableFieldMenu` | allows the player to open the normal Field menu. |
@@ -431,8 +432,8 @@ Button state and accumulated input history.
 | `32` | 5 | `if ((input.accumulated & mask) == 0) goto label` | `0x800961C8` | `CheckAccumulatedInputMask` | advances five bytes when the evaluated mask intersects accumulated controller input, otherwise branches to the encoded destination. |
 | `33` | 1 | `input.accumulated = 0` | `0x800961F0` | `ResetAccumulatedInput` | clears the accumulated controller-input mask and advances one byte. |
 | `D5` | 3 | `input.set_controller_btn_mask(...)` | `0x80092628` | `SetControllerBtnMask` | sets controller mask. |
-| `E2` | 5 | `input.check_current_input_exact_or_goto(label)` | `0x80096150` | `CheckCurrentInputExact` | conditionally branches on exact current input. |
-| `E3` | 5 | `input.check_accumulated_input_exact_or_goto(label)` | `0x80096178` | `CheckAccumulatedInputExact` | conditionally branches on exact accumulated input. |
+| `E2` | 5 | `input.check_current_input_exact(..., label)` | `0x80096150` | `CheckCurrentInputExact` | conditionally branches on exact current input. |
+| `E3` | 5 | `input.check_accumulated_input_exact(..., label)` | `0x80096178` | `CheckAccumulatedInputExact` | conditionally branches on exact accumulated input. |
 | `FE 6C` | 2 | `input.clear_controller_enable_flag(...)` | `0x8008A5A0` | `ClearControllerEnableFlag` | clears the controller enable byte when the operand is zero, then advances one byte. |
 
 ## `state`
@@ -457,10 +458,10 @@ Script-variable reads, writes, arithmetic, and bit operations.
 | `42` | 5 | `state >>= value` | `0x8009D260` | `RShiftVariable` | shifts a variable right. |
 | `43` | 3 | `state.rand_variable(...) -> state` | `0x8009D198` | `RandVariable` | writes a random variable. |
 | `48` | 7 | `state.write_script_u8_to_variable(...) -> state` | `0x80093CD0` | `WriteScriptU8ToVariable` | writes a script byte to a variable. |
-| `49` | 8 | `state.write_script_s16_to_variable(...) -> state` | `0x80093D48` | `WriteScriptS16ToVariable` | writes a script halfword to a variable. |
-| `84` | 5 | `state.check_scenario_flags_less_than_or_goto(label)` | `0x80096644` | `CheckScenarioFlagsLessThan` | compares scenario flags. |
-| `85` | 5 | `state.check_scenario_flags_greater_than_or_goto(label)` | `0x800966B4` | `CheckScenarioFlagsGreaterThan` | compares scenario flags. |
-| `86` | 5 | `state.check_scenario_flags_equal_or_goto(label)` | `0x80096724` | `CheckScenarioFlagsEqual` | compares scenario flags. |
+| `49` | 8 | `state.read_script_u16(base, index) / state.read_script_s16(base, index) -> state` | `0x80093D48` | `WriteScriptS16ToVariable` | writes a script halfword to a variable. |
+| `84` | 5 | `state.check_scenario_flags_less_than(..., label)` | `0x80096644` | `CheckScenarioFlagsLessThan` | compares scenario flags. |
+| `85` | 5 | `state.check_scenario_flags_greater_than(..., label)` | `0x800966B4` | `CheckScenarioFlagsGreaterThan` | compares scenario flags. |
+| `86` | 5 | `state.check_scenario_flags_equal(..., label)` | `0x80096724` | `CheckScenarioFlagsEqual` | compares scenario flags. |
 | `87` | 3 | `state.set_scenario_flags(...) -> state` | `0x80096790` | `SetScenarioFlags` | writes scenario flags. |
 | `88` | 3 | `state.get_scenario_flags(...) -> state` | `0x800967E8` | `GetScenarioFlags` | reads scenario flags. |
 | `A8` | 5 | `state.mul_variable_with_rand(...) -> state` | `0x8009D1F0` | `MulVariableWithRand` | multiplies by random. |
@@ -490,29 +491,28 @@ Jumps, calls, waits, yields, returns, and termination.
 | `0D` | 1 | `return` | `0x800A18B8` | `Return` | pops the Field script call stack. |
 | `13` | 1 | `nop` | `0x800A2FC0` | `Nop` | Field script no-op handler. |
 | `26` | 3 | `flow.sleep(duration)` | `0x8009DD34` | `Sleep` | initializes the current slot's byte timer from the evaluated operand, yields on every dispatch, and advances after N+1 scheduler selections for timer value N. |
-| `5B` | 1 | `stall_forever` | `0x80095284` | `ParkActorMovementUpdate` | clears movement vectors and render offsets, marks movement and rotation inactive, and yields without advancing, so repeated selection parks the invocation on this opcode without releasing its slot. |
 | `5E` | 1 | `flow.wait_for_animation_completion(...)` | `0x8009A1AC` | `WaitForAnimationCompletion` | stalls until the actor animation completion latch is set, then removes the forced animation and advances. |
 | `78` | 4 | `flow.wait_for_archive_file(...)` | `0x800973A4` | `WaitForArchiveFile` | requests or waits for the selected archive file. |
 | `9C` | 1 | `flow.wait_for_owned_text_box(...) -> state` | `0x8009BB0C` | `WaitForOwnedTextBox` | waits for the actor's owned text box, conditionally requests its closure, and copies the confirmed choice line to VM variable 0x14 after the slot is released. |
 | `A2` | 2 | `flow.wait_for_camera_animation_mask(...)` | `0x8009A58C` | `WaitForCameraAnimationMask` | advances only after every camera animation flag selected by the immediate mask has cleared. |
-| `A6` | 3 | `flow.dispatch_triplet_table(index: value)` | `0x80097410` | `SkipScriptTriplets` | advances by three plus three times the evaluated signed count. |
+| `A6` | 3 | `flow.dispatch_triplet_table(value, [case -> target, ...]) / flow.skip_triplets_to(target)` | `0x80097410` | `SkipScriptTriplets` | advances by three plus three times the evaluated signed count. |
 | `B2` | 2 | `flow.yield_until_camera_animation_mask_clears(...)` | `0x8009A5E0` | `YieldUntilCameraAnimationMaskClears` | yields script execution while any camera animation flag selected by the immediate mask remains set. |
 | `C3` | 1 | `flow.yield_current_cycle(...)` | `0x800972F4` | `YieldCurrentCycle` | requests a VM yield and advances one byte. |
 | `C6` | 1 | `flow.yield32(...)` | `0x800A1E9C` | `Yield32` | adds 32 instructions to the VM budget and yields. |
 | `D1` | stall | `stall_forever` | `0x8009CF70` | `ImmediateNoop` | returns immediately without changing script or field state. |
 | `E4` | stall | `stall_forever` | `0x80091AD4` | `OpcodeE4NoOp` | returns immediately without changing state or advancing script execution. |
 | `EF` | 3 | `flow.wait_for_camera_movement(...)` | `0x8008FA38` | `WaitForCameraMovement` | waits for camera movement. |
-| `FB` | 5 | `flow.jump_if_indexed_bit_clear_or_goto(label)` | `0x8008D780` | `JumpIfIndexedBitClear` | conditionally branches on an indexed bit. |
+| `FB` | 5 | `flow.jump_if_indexed_bit_clear(..., label)` | `0x8008D780` | `JumpIfIndexedBitClear` | conditionally branches on an indexed bit. |
 | `FD` | 1 | `nop` | `0x800A2FC0` | `Nop` | Field script no-op handler. |
 | `FF` | 1 | `nop` | `0x800A2FC0` | `Nop` | Field script no-op handler. |
-| `FE 30` | 6 | `flow.jump_unless_current_actor_flags1_set_or_goto(label)` | `0x8008E3E8` | `JumpUnlessCurrentActorFlags1Set` | branches to the encoded destination when the requested mask does not intersect current actor flag word 1, otherwise advances five bytes. |
-| `FE 31` | 6 | `flow.jump_unless_current_actor_flags2_set_or_goto(label)` | `0x8008E414` | `JumpUnlessCurrentActorFlags2Set` | branches to the encoded destination when the requested mask does not intersect current actor flag word 2, otherwise advances five bytes. |
-| `FE 32` | 6 | `flow.jump_unless_current_actor_flags3_set_or_goto(label)` | `0x8008E440` | `JumpUnlessCurrentActorFlags3Set` | branches to the encoded destination when the requested mask does not intersect current actor flag word 3, otherwise advances five bytes. |
-| `FE 33` | 6 | `flow.jump_unless_current_actor_flags4_set_or_goto(label)` | `0x8008E46C` | `JumpUnlessCurrentActorFlags4Set` | branches to the encoded destination when the requested mask does not intersect current actor flag word 4, otherwise advances five bytes. |
-| `FE 34` | 7 | `flow.jump_unless_target_actor_flags1_set_or_goto(label)` | `0x8008E298` | `JumpUnlessTargetActorFlags1Set` | branches to the encoded destination when the requested mask does not intersect target actor flag word 1, otherwise advances six bytes. |
-| `FE 35` | 7 | `flow.jump_unless_target_actor_flags2_set_or_goto(label)` | `0x8008E2EC` | `JumpUnlessTargetActorFlags2Set` | branches to the encoded destination when the requested mask does not intersect target actor flag word 2, otherwise advances six bytes. |
-| `FE 36` | 7 | `flow.jump_unless_target_actor_flags3_set_or_goto(label)` | `0x8008E340` | `JumpUnlessTargetActorFlags3Set` | branches to the encoded destination when the requested mask does not intersect target actor flag word 3, otherwise advances six bytes. |
-| `FE 37` | 7 | `flow.jump_unless_target_actor_flags4_set_or_goto(label)` | `0x8008E394` | `JumpUnlessTargetActorFlags4Set` | branches to the encoded destination when the requested mask does not intersect target actor flag word 4, otherwise advances six bytes. |
+| `FE 30` | 6 | `flow.jump_unless_current_actor_flags1_set(..., label)` | `0x8008E3E8` | `JumpUnlessCurrentActorFlags1Set` | branches to the encoded destination when the requested mask does not intersect current actor flag word 1, otherwise advances five bytes. |
+| `FE 31` | 6 | `flow.jump_unless_current_actor_flags2_set(..., label)` | `0x8008E414` | `JumpUnlessCurrentActorFlags2Set` | branches to the encoded destination when the requested mask does not intersect current actor flag word 2, otherwise advances five bytes. |
+| `FE 32` | 6 | `flow.jump_unless_current_actor_flags3_set(..., label)` | `0x8008E440` | `JumpUnlessCurrentActorFlags3Set` | branches to the encoded destination when the requested mask does not intersect current actor flag word 3, otherwise advances five bytes. |
+| `FE 33` | 6 | `flow.jump_unless_current_actor_flags4_set(..., label)` | `0x8008E46C` | `JumpUnlessCurrentActorFlags4Set` | branches to the encoded destination when the requested mask does not intersect current actor flag word 4, otherwise advances five bytes. |
+| `FE 34` | 7 | `flow.jump_unless_target_actor_flags1_set(..., label)` | `0x8008E298` | `JumpUnlessTargetActorFlags1Set` | branches to the encoded destination when the requested mask does not intersect target actor flag word 1, otherwise advances six bytes. |
+| `FE 35` | 7 | `flow.jump_unless_target_actor_flags2_set(..., label)` | `0x8008E2EC` | `JumpUnlessTargetActorFlags2Set` | branches to the encoded destination when the requested mask does not intersect target actor flag word 2, otherwise advances six bytes. |
+| `FE 36` | 7 | `flow.jump_unless_target_actor_flags3_set(..., label)` | `0x8008E340` | `JumpUnlessTargetActorFlags3Set` | branches to the encoded destination when the requested mask does not intersect target actor flag word 3, otherwise advances six bytes. |
+| `FE 37` | 7 | `flow.jump_unless_target_actor_flags4_set(..., label)` | `0x8008E394` | `JumpUnlessTargetActorFlags4Set` | branches to the encoded destination when the requested mask does not intersect target actor flag word 4, otherwise advances six bytes. |
 | `FE 61` | 2 | `flow.wait_for2d_presentation_ready(...)` | `0x8008E9F8` | `WaitFor2DPresentationReady` | rewinds while presentation readiness is clear, otherwise clears readiness and advances one byte, yielding after every check. |
 | `FE 64` | 4 | `flow.wait_for_sound_channel_mask_clear(...)` | `0x8008F5E4` | `WaitForSoundChannelMaskClear` | rewinds while any selected sound channel remains active, otherwise advances three bytes, yielding after every check. |
 | `FE 7F` | 2 | `flow.wait_for_video_playback(...)` | `0x8008A244` | `WaitForVideoPlayback` | yields and repeats while video playback remains active, advances when playback finishes, and stops the current VM cycle. |

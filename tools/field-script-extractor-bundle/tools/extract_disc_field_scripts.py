@@ -15,9 +15,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from decompile_field_scripts import render_high_level_script
-
-
 SCHEMA = "xenogears-disc-field-scripts/v1"
 FAT_LBA = 0x18
 FAT_SECTORS = 0x10
@@ -485,6 +482,9 @@ def _relative_symlink(source: Path, destination: Path) -> None:
 
 
 def build_catalog(output: Path, resources: list[dict], payloads: dict[str, bytes]) -> dict:
+    from compile_field_scripts import disassemble
+    from editable_field_scripts import render_source
+
     catalog_root = output / "catalog"
     if catalog_root.exists():
         shutil.rmtree(catalog_root)
@@ -493,6 +493,7 @@ def build_catalog(output: Path, resources: list[dict], payloads: dict[str, bytes
         digest = resource["sha256"]
         payload = payloads[digest]
         metadata = resource["metadata"]
+        assembly = disassemble(payload).text().encode("utf-8")
         for occurrence in resource["occurrences"]:
             relative = (
                 Path("catalog")
@@ -507,12 +508,13 @@ def build_catalog(output: Path, resources: list[dict], payloads: dict[str, bytes
             write_if_changed(
                 destination / "variable-types.bin", payload[:SCRIPT_BITMAP_SIZE]
             )
-            readable_script, _ = render_high_level_script(
+            readable_script, _ = render_source(
                 occurrence["field_id"], payload, metadata
             )
             write_if_changed(
                 destination / "script.xgs", readable_script.encode("utf-8")
             )
+            write_if_changed(destination / "script.xga", assembly)
             write_if_changed(destination / "sources.json", _json_bytes(occurrence))
             catalog_records.append(
                 {
@@ -521,6 +523,7 @@ def build_catalog(output: Path, resources: list[dict], payloads: dict[str, bytes
                     "sha256": digest,
                     "path": relative.as_posix(),
                     "script_path": (relative / "script.xgs").as_posix(),
+                    "assembly_path": (relative / "script.xga").as_posix(),
                     "routine_row_count": metadata["routine_row_count"],
                     "bytecode_size": metadata["bytecode_size"],
                     "instruction_count": metadata["readable_script"]["instruction_count"],
@@ -543,6 +546,8 @@ def extract_field_scripts(
     output: Path,
     selected_fields: set[int] | None = None,
 ) -> dict:
+    from editable_field_scripts import render_source
+
     disc_paths = list(discs)
     if not disc_paths:
         raise ValueError("at least one disc is required")
@@ -586,7 +591,7 @@ def extract_field_scripts(
         payload = item["payload"]
         metadata = dict(item["metadata"])
         first_field_id = item["occurrences"][0]["field_id"]
-        _, readable_report = render_high_level_script(first_field_id, payload, metadata)
+        _, readable_report = render_source(first_field_id, payload, metadata)
         metadata["readable_script"] = readable_report
         asset_relative = Path("assets") / f"{digest}.scripts.bin"
         metadata_relative = Path("metadata") / f"{digest}.json"

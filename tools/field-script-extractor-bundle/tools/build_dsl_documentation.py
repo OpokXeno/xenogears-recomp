@@ -68,7 +68,7 @@ SPECIAL_FORMS = {
     "P:13": ("flow", "nop"),
     "P:14": ("world", "world.encounters.enabled = false"),
     "P:15": ("world", "world.encounters.enabled = true"),
-    "P:16": ("actor", "actor.bind_playable_character(character: value)"),
+    "P:16": ("actor", "actor.bind_playable_character(value)"),
     "P:22": ("actor", "actor.self.visible = true"),
     "P:23": ("actor", "actor.self.visible = false"),
     "P:24": ("actor", "actor.visible = true"),
@@ -85,9 +85,10 @@ SPECIAL_FORMS = {
     "P:3D": ("state", "state--"),
     "P:41": ("state", "state <<= value"),
     "P:42": ("state", "state >>= value"),
-    "P:5B": ("flow", "stall_forever"),
-    "P:5C": ("actor", "actor.bind_party_slot(slot: value)"),
-    "P:A6": ("flow", "flow.dispatch_triplet_table(index: value)"),
+    "P:49": ("state", "state.read_script_u16(base, index) / state.read_script_s16(base, index) -> state"),
+    "P:5B": ("movement", "movement.park_actor_movement_update()"),
+    "P:5C": ("actor", "actor.bind_party_slot(value)"),
+    "P:A6": ("flow", "flow.dispatch_triplet_table(value, [case -> target, ...]) / flow.skip_triplets_to(target)"),
     "P:A7": ("actor", "actor.process_player_control_if_owned()"),
     "P:C9": ("world", "if (!inside_trigger_2d(...)) goto label"),
     "P:CB": ("world", "if (!inside_trigger_3d(...)) goto label"),
@@ -99,7 +100,7 @@ SPECIAL_FORMS = {
     "P:FF": ("flow", "nop"),
     "E:0A": ("state", "state |= (1 << bit)"),
     "E:0B": ("state", "state &= ~(1 << bit)"),
-    "E:0D": ("dialogue", "dialogue.set_portrait(character: value)"),
+    "E:0D": ("dialogue", "dialogue.set_portrait(value)"),
 }
 
 STATE_OPERATORS = {
@@ -131,9 +132,9 @@ def operation_form(opcode: int, subopcode: int | None, record: dict) -> tuple[st
     if key in CONDITIONAL_OUTPUT_VARIABLES:
         return operation_namespace(record["name"]), f"{dsl_name}(...) -> state in read mode"
     if subopcode is not None and subopcode in EXTENDED_CONDITIONAL_BRANCHES:
-        return operation_namespace(record["name"]), f"{dsl_name}_or_goto(label)"
+        return operation_namespace(record["name"]), f"{dsl_name}(..., label)"
     if subopcode is None and opcode in PRIMARY_CONDITIONAL_BRANCHES:
-        return operation_namespace(record["name"]), f"{dsl_name}_or_goto(label)"
+        return operation_namespace(record["name"]), f"{dsl_name}(..., label)"
     return operation_namespace(record["name"]), f"{dsl_name}(...)"
 
 

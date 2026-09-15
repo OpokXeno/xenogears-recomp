@@ -1,258 +1,179 @@
 # Field Script Recompiler Design
 
-## 1. Status
+## 1. Implemented Architecture
 
-This document proposes a compiler and repacking pipeline for editable Xenogears
-Field scripts. It describes intended work; the current bundle extracts and
-decompiles scripts but does not yet compile modified `script.xgs` files.
-
-The opcode inventory itself is complete: the dispatcher contains 256 primary
-opcodes and 227 extended opcodes, all of which have a known identity, encoded
-size, handler address, and behavior summary. This does not mean that every
-opcode has a complete reversible operand schema. Some instructions still render
-unclassified operands as positional decimal values.
-
-## 2. Proposed Pipeline
+The toolchain separates editable source, lossless assembly and game injection:
 
 ```text
-editable script.xgs
-        |
-        v
-lossless script.xga
-        |
-        v
-scripts.bin
-        |
-        +--> LZSS-compressed section 5
-        +--> rebuilt Field container
-        +--> runtime override or rebuilt disc image
+script.xgs -> symbolic IR -> scripts.bin -> compressed Field section 5
+                    |                              |
+                    +-> script.xga / link map       +-> runtime override
 ```
 
-The two source representations serve different purposes:
+XGS is standalone. Compilation never matches source lines to an old binary or
+looks up original instruction positions in a sidecar. The linker assigns current
+addresses from the parsed program. Entity event bindings and entity-owned code
+are displayed together; shared code is emitted once.
 
-| Representation | Purpose |
+| Module | Responsibility |
 |---|---|
-| `script.xgs` | Semantic, readable source organized around entities, events, state, and subsystem operations |
-| `script.xga` | Lossless Field VM assembly with explicit opcodes, operands, labels, data, and layout constraints |
-| `scripts.bin` | Binary `ScriptsFile` consumed by the Field runtime |
+| `decompile_field_scripts.py` | Bytecode analysis, symbols, ownership and low-level rendering helpers |
+| `editable_field_scripts.py` | Standalone XGS rendering/parsing, entity grouping, variables and event defaults |
+| `field_instruction_codec.py` | Shared operand forms, encoding and verified encoding equivalences |
+| `compile_field_scripts.py` | Assembly IR, XGA parser/serializer and ScriptsFile construction |
+| `field_linker.py` | Placement, fixups, fallthroughs and generated routing code |
+| `repack_field_scripts.py` | LZSS, section replacement and indexed-file override packages |
+| `field_script.py` | CLI, regeneration and regression checks |
 
-`script.xga` may initially be an internal compiler IR, but exposing it as text
-would make round-trip failures, unsupported semantic forms, and binary patches
-substantially easier to inspect.
+All runtime tooling uses Python 3.11+ and the standard library. See
+[`RECOMPILER_USAGE.md`](RECOMPILER_USAGE.md) for commands and editing examples.
 
-## 3. Why A Lossless Assembly Layer Is Necessary
+## 2. Source Information Versus Provenance
 
-The current DSL prioritizes analysis and readability:
+The source retains information with actual VM meaning:
 
-- Code is grouped by owning entity rather than emitted strictly in physical
-  bytecode order.
-- Shared blocks are emitted once under `shared_code`.
-- Labels represent absolute offsets in the original shared bytecode.
-- Instructions without a complete operand schema retain positional values.
-- Source comments retain the original PC and bytes.
-- Non-instruction regions preserve bytes that coexist with executable code.
+- Variable types and explicit bindings to existing VM slots.
+- Entity IDs, 32-slot routine tables and symbolic entry labels.
+- Operation operands and control-flow destinations.
+- Arrival records, preserved data and explicit symbolic data references.
 
-Consequently, concatenating the textual entity blocks cannot reproduce the
-original bytecode. A linker must choose a physical block order and repair all
-routine entries, jumps, calls, computed tables, and fallthrough edges.
+New scene variables can request allocation with `new`. Unnamed unsigned slots
+are represented by `unsigned slots[...]`, preserving bitmap meaning without
+embedding a historical bitmap blob in the source.
 
-Raw source comments are enough to reconstruct an unchanged instruction, but
-they are not an acceptable long-term encoding rule for edited semantic source.
-The assembly layer provides an explicit fallback that remains compilable even
-before an opcode receives a richer semantic operand schema.
+Historical PCs and bytes are comments (`// PC: bytes`), as are original event
+aliases (`// event: ...`). They are useful for inspection but ignored by the
+compiler. Handler descriptions stay in the operation catalog.
 
-## 4. Required `script.xga` Properties
+The extraction manifest and JSON reports describe the input assets and disc
+routes. They are inputs to regeneration/corpus verification, not compilation.
 
-The lossless representation must support:
+## 3. Semantic Encoding And Exact Assembly
 
-- All 256 primary and 227 extended opcodes.
-- Explicit encoded operands and control bytes.
-- Symbolic labels for jumps, calls, routine entries, and computed jump tables.
-- All 32 routine entries for every entity, including aliases.
-- The optional arrival table.
-- The `0x80`-byte variable signedness bitmap.
-- Arbitrary byte-exact data regions and padding.
-- Mode-dependent instruction sizes.
-- An explicit raw-instruction form for any operand schema not yet classified.
-- Source offset assertions for byte-exact round-trip mode.
+The front end re-encodes each statement using shared `InstructionForm` and
+`Operand` schemas. These cover encoded bytes/words, signed immediates, variable
+references, tagged evaluated operands, masked operands, actor selectors, packed
+bit/routine fields and address references. Typed destinations are checked,
+including fixed implicit VM outputs.
 
-Representative syntax could be:
+The encoded instruction is decoded and rendered again to check that it represents
+the requested form and has a valid size. Unclassified fields remain explicit
+bytes rather than being guessed from an operation name or a trailing `80`.
+
+XGS prioritizes readable semantics over irrelevant encoding differences. For
+opcodes `35`, `38`, `39`, `3A`, `3B`, `3E`, `3F`, `40`, `DE` and `DF`, executable
+inspection confirms that only bit `0x40` of the control byte is read by the
+shared source-operand helper. Canonicalizing other bits is permitted. The opcode,
+destination, source value/reference and immediate-versus-variable selection
+must still match. This exemption is never applied to arbitrary data bytes.
+
+For example, both `35 3A 04 01 00 40` and `35 3A 04 01 00 C0` express assignment
+of immediate `1` to VM slot `0x043A`; both are rendered as an assignment, not raw
+instructions. Likewise, `38 10 04 12 04 00` is a variable-to-variable addition.
+
+Other distinctions are preserved where meaningful: `49` exposes unsigned versus
+signed reads as `state.read_script_u16` / `state.read_script_s16`; `5B` is
+`movement.park_actor_movement_update()`, not an interchangeable inert stall.
+An encoding without a verified semantic equivalent remains an explicit raw
+operation. Address-bearing raw forms include symbolic target arguments.
+
+XGA is the byte-exact representation. It contains the full bitmap, routine rows,
+instruction encodings, data and optional original address assertions. Exact
+assembly is an XGA mode; ordinary XGS compilation is always symbolic.
+
+## 4. Entities, Variables And Validation
+
+Entity IDs are contiguous from zero. Each entity has 32 routine slots; the
+engine-assigned roles occupy 0–3. Unbound slots receive a generated empty event.
+Aliases are preserved rather than expanded into duplicate bodies.
+
+Existing variables retain their VM bindings. New scene variables are allocated
+after reserving declared slots and possible direct/packed variable references
+in the source, including opaque operands. Temporary analysis addresses are never
+emitted. Persistent storage requires an explicit or documented engine binding.
+
+Validation rejects unknown syntax, duplicate symbols/bindings, unresolved
+references, invalid selectors, unencodable values, exhausted variable space,
+conflicting fixups and missing continuations. Diagnostics include source lines
+where applicable. This is structural and encoding validation, not proof that
+an authored event has the intended gameplay or valid external resource IDs.
+
+## 5. Placement And Control Flow
+
+The parser builds internal fragments from labels and source continuations.
+Grouped sources use deterministic symbol-based ordering; label names are never
+interpreted as mandatory addresses. Within each fragment, instruction order is
+preserved. Renaming or inserting code does not require editing historical PCs.
+
+The linker resolves routine rows, primary/extended branches, calls and the
+script-data bases of `48`/`49`. Their evaluated byte index is a value, not a
+pointer. Symbolic aliases may describe byte-relative locations inside data.
+
+`fallthrough label;` expresses a continuation independently of presentation
+order. It disappears when physically adjacent, or becomes a jump. The linker
+does not silently discard an authored wait or duplicate shared event bodies.
+
+XGS computed dispatch explicitly names its case slots and targets. The compiler
+creates the fixed three-byte jumps, while case bodies can grow separately. The
+low-level XGA linker also supports enlarging existing triplet bodies via veneers.
+A fixed `skip_triplets_to` resolves to an immediate A6 count or an equivalent
+absolute jump, accounting for the VM's 16-bit PC arithmetic.
+
+Some handlers have hardcoded relative alternatives. XGS exposes these with
+`otherwise goto`. `9A` can complete at `PC+3` or `PC+6`; `D4`/`FC` can complete at
+`PC+5` or `PC+6`. Routing code preserves the requested paths when edits change
+their relative distance. For the one-byte-separated dialogue entries:
 
 ```text
-.variables "variable-types.bin"
-
-.entity 42 {
-    initialize = door_initialize
-    update     = door_update
-    interact   = door_interact
-    contact    = door_contact
-    routine[4..31] = null_event
-}
-
-door_initialize:
-    op BC
-    op 19 s16(0), s16(-48), control(0xC0)
-    jump door_update
-
-door_contact:
-    branch_input_held mask(0x0040), door_no_contact
-    call door_hit
-    stop
-
-.data preserved_payload {
-    bytes 00 FF 12 34
-}
+PC+5: 01 01 HH LL     -> jump HH01
+PC+6:    01 HH LL     -> jump LLHH
 ```
 
-The exact grammar should be chosen only after an encoder schema can represent
-every instruction in the retail corpus. The example illustrates requirements,
-not a finalized syntax.
+Aligned islands route to the real continuations without scratch variables or
+call-stack changes. A decompiled `landing(normal, alternate)` data object
+expresses these constraints symbolically; the linker derives alignment rather
+than requiring saved addresses. Consistent overlapping fixups are supported,
+including forward alignment dependencies.
 
-## 5. Compiler Stages
+Generated routing jumps consume VM dispatches. They are visible in XGA and the
+link report. One-byte FE no-ops are replaced by an equivalent primary no-op if
+an insertion would otherwise change the meaning of their lookahead.
 
-### 5.1 Parse And Validate `script.xgs`
+The retail VM has a 65,536-byte code address space. Overflow is reported, never
+truncated. XGA exact mode separately checks fixed positions and full coverage.
 
-The front end should parse declarations, entities, event bindings, labels,
-assignments, subsystem operations, raw fallbacks, and preserved data. It must
-reject duplicate symbols, unresolved labels, invalid actor selectors, and
-values that cannot fit their encoded fields.
-
-### 5.2 Lower Semantic Operations
-
-Each semantic operation lowers to one Field VM instruction or an explicitly
-documented instruction sequence. Initially, only one-to-one lowering should be
-allowed. This preserves scheduler and yield behavior and avoids silently
-changing VM timing.
-
-Lowering must distinguish:
-
-- Immediate values from variable references.
-- Encoded variable destinations from fixed implicit VM destinations.
-- Read-modify-write operands from returned results.
-- Actor, party, character, item, map, and dialogue identifiers.
-- Control bits that select immediate or variable interpretation.
-- Mode bytes that change behavior or instruction size.
-
-Unsupported semantic forms should produce an error, not an approximate opcode.
-
-### 5.3 Link Shared Bytecode
-
-The linker assigns physical offsets to code and data blocks. It then resolves:
-
-- Entity routine-row entries.
-- Relative and absolute control-flow targets used by the Field VM.
-- Calls and conditional calls.
-- `A6` computed jump-table triplets.
-- Fallthrough adjacency requirements.
-- Arrival-table boundaries.
-
-Two link modes are useful:
-
-| Mode | Behavior |
-|---|---|
-| Exact | Honors original offsets and fails when an edit changes the required layout |
-| Relocating | Reorders or moves blocks and rewrites every supported reference |
-
-Exact mode should be implemented first because it provides the strongest
-round-trip oracle and has fewer ways to alter control flow accidentally.
-
-### 5.4 Encode Instructions
-
-The encoder converts typed operands into bytes and validates instruction size.
-For every instruction, decoding the emitted bytes must recover the same opcode,
-mode, operands, destinations, and control-flow targets.
-
-### 5.5 Build `scripts.bin`
-
-The compiler reconstructs the complete `ScriptsFile`:
+## 6. Binary Construction And Repacking
 
 ```text
 0x0000  variable signedness bitmap       0x80 bytes
-0x0080  entity/routine-row count          u32
-0x0084  routine rows                      count * 0x40 bytes
-...     shared bytecode                   remaining bytes
+0x0080  routine-row count                u32
+0x0084  32-entry routine rows            count * 0x40 bytes
+...     shared code and data
 ```
 
-Each routine row contains 32 little-endian `u16` bytecode offsets. Entries may
-alias and must not be expanded into independent routine bodies.
+The builder validates the result with the extractor's structural parser.
+Compression uses distances 1–4095, lengths 3–18 and complete eight-token groups.
+Matches can be split into literals to preserve the exact expanded payload. If
+necessary, at most seven zero trailer bytes are included in the expanded size;
+the strict compression API instead rejects such padding.
 
-### 5.6 Repack The Field Resource
+The repacker replaces section 5, updates its size and section 6–8 offsets,
+preserves other payloads, and checks extraction of the result. Routine-row counts
+may change independently of placement-record counts. The override command uses
+the port's existing format-6 indexed-file handler and authenticated stock files.
 
-Binary compilation and game injection should remain separate operations. The
-repacker must:
+## 7. Verification Scope
 
-1. Compress the rebuilt `ScriptsFile` using the game's LZSS format.
-2. Replace section 5 of the Field container.
-3. Recalculate section offsets and declared expanded sizes.
-4. Rebuild the container when the compressed section changes size.
-5. Install the result through a runtime override or update the disc filesystem
-   and affected extents.
+- XGA round trips compare complete files byte-for-byte.
+- XGS reconstruction compares complete files, permitting only the verified
+  instruction-bit normalizations from section 3.
+- LZSS and repacking checks compare the compiled payload plus any accounted-for
+  compression trailer.
+- Tests cover edits, new variables/events, label resolution, data reads, triplet
+  tables, alternate paths, alignment, raw operands, CLI workflows and comments.
 
-A runtime resource override is preferable during development because it avoids
-rebuilding a complete disc image after every script edit.
-
-## 6. Round-Trip Requirements
-
-The first milestone is byte-exact assembly, independent of semantic editing:
-
-```text
-assemble(disassemble(scripts.bin)) == scripts.bin
-```
-
-This invariant must hold for all 729 unique retail `ScriptsFile` resources.
-Validation must compare the complete file, not only executable instructions:
-
-- Variable bitmap.
-- Entity count and every routine offset.
-- Arrival records.
-- Instructions.
-- Embedded tables and payloads.
-- Padding and other non-instruction regions.
-
-The existing corpus provides 3,198,265 classified bytecode bytes for this test,
-including 3,160,739 instruction bytes and 37,526 preserved data bytes.
-
-The second milestone is semantic stability:
-
-```text
-xgs -> xga -> scripts.bin -> xgs
-```
-
-The regenerated DSL need not be textually identical, but its entities, event
-bindings, state references, operations, outputs, control flow, and preserved
-data must be equivalent.
-
-## 7. Incremental Implementation Plan
-
-1. Define a typed opcode schema shared by decoder and encoder.
-2. Emit lossless `script.xga` from every retail resource.
-3. Implement exact-layout assembly and prove byte equality across the corpus.
-4. Add the `ScriptsFile` builder and structural validation.
-5. Lower the already specialized `script.xgs` forms into assembly.
-6. Add operand schemas for remaining positional operations.
-7. Implement relocating linkage after every control-flow reference is modeled.
-8. Add LZSS compression and Field-container replacement.
-9. Add a runtime override workflow for rapid testing.
-
-Suggested command boundaries are:
-
-```text
-field-script decompile scripts.bin --xgs script.xgs --xga script.xga
-field-script assemble script.xga --output scripts.bin
-field-script compile script.xgs --output scripts.bin
-field-script repack field.bin --scripts scripts.bin --output field.modified.bin
-```
-
-## 8. Safety Rules
-
-- Never infer an encoding from an operation name alone.
-- Never discard bytes that are not proven to be instructions.
-- Never duplicate shared code merely because multiple entities reach it.
-- Never change a wait, yield, or scheduler interaction during semantic lowering.
-- Reject overflowing offsets instead of truncating them to `u16`.
-- Reject a growing exact-layout block rather than overwriting adjacent data.
-- Preserve a raw assembly escape hatch until every semantic operand schema is
-  independently verified.
-
-These constraints make the assembler useful before the high-level compiler is
-complete and prevent readable source from hiding binary incompatibilities.
+`verify --resize --repack` is an explicit whole-corpus regression, not part of
+normal compilation. Recorded full-corpus runs and executable evidence are in
+[`RELOCATION_EVIDENCE.md`](RELOCATION_EVIDENCE.md). Later targeted checks should
+not be presented as a rerun of that exhaustive suite. Gameplay behavior still
+needs to be tested after installing an authored modification.

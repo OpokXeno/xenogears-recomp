@@ -27,8 +27,8 @@ Representative operations:
 
 ```text
 actor.initialize_npc_actor(...);
-actor.bind_playable_character(character: 3);
-actor.bind_party_slot(slot: 1);
+actor.bind_playable_character(3);
+actor.bind_party_slot(1);
 actor.self.visible = false;
 actor.face_actor(12);
 actor.process_player_control_if_owned();
@@ -83,7 +83,7 @@ movement.set_walkmesh_at_current_position(...);
 
 A movement operation may start an action and finish immediately, continue for
 several frames, or block the invocation until the destination is reached. The
-behavior comment distinguishes these cases.
+behavior description in the operation catalog distinguishes these cases.
 
 `movement` does not determine by itself who receives input. The `actor`
 namespace generates control intent, and the common pipeline subsequently
@@ -165,7 +165,7 @@ Typical state:
 Representative operations:
 
 ```text
-dialogue.set_portrait(character: 3);
+dialogue.set_portrait(3);
 dialogue.open_actor_dialogue_mode0(...);
 flow.wait_for_owned_text_box();
 actor.self.dialogue_enabled = true;
@@ -334,7 +334,7 @@ event.set_screen_geometry(...);
 ```
 
 The fact that a function appears under `event` does not mean that it is unknown.
-Its name and comment may be fully documented; the namespace only indicates that
+Its name and catalog description may be fully documented; the namespace only indicates that
 it does not fit exclusively within another readability object.
 
 ## Common Relationships
@@ -345,7 +345,7 @@ it does not fit exclusively within another readability object.
 actor.face_actor(12);
 actor.self.dialogue_enabled = false;
 dialogue.open_actor_dialogue_mode0(3, 0, 0);
-flow.wait_for_owned_text_box();
+flow.wait_for_owned_text_box() -> (persistent.dialogue_choice_line);
 actor.self.dialogue_enabled = true;
 ```
 
@@ -369,7 +369,7 @@ flow.wait_for_camera_movement(...);
 ### Party Character
 
 ```text
-actor.bind_playable_character(character: 3);
+actor.bind_playable_character(3);
 actor.process_player_control_if_owned();
 ```
 
