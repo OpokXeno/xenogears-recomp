@@ -136,8 +136,8 @@ tools/sprite-extractor-bundle/extracted-sprites
 tools/image-extractor-bundle/extracted-images
 !tools/model-extractor-bundle
 tools/model-extractor-bundle/extracted-models
-!tools/field-script-extractor-bundle
-tools/field-script-extractor-bundle/extracted-field-scripts
+!tools/field-script-tools-bundle
+tools/field-script-tools-bundle/extracted-field-scripts
 !tools/finalize_static_overlays.py
 !tools/test_finalize_static_overlays.py
 !tools/run_with_job_pool.py
