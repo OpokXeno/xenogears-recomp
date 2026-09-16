@@ -490,7 +490,7 @@ def build_catalog(output: Path, resources: list[dict], payloads: dict[str, bytes
         shutil.rmtree(catalog_root)
     catalog_records = []
     for resource in resources:
-        digest = resource["sha256"]
+        digest = resource.get("sha1", resource.get("sha256"))
         payload = payloads[digest]
         metadata = resource["metadata"]
         assembly = disassemble(payload).text().encode("utf-8")
@@ -520,7 +520,7 @@ def build_catalog(output: Path, resources: list[dict], payloads: dict[str, bytes
                 {
                     "disc_index": occurrence["disc_index"],
                     "field_id": occurrence["field_id"],
-                    "sha256": digest,
+                    "sha1": digest,
                     "path": relative.as_posix(),
                     "script_path": (relative / "script.xgs").as_posix(),
                     "assembly_path": (relative / "script.xga").as_posix(),
@@ -531,7 +531,7 @@ def build_catalog(output: Path, resources: list[dict], payloads: dict[str, bytes
                     "total_coverage_percent": metadata["readable_script"]["total_coverage_percent"],
                 }
             )
-    catalog_records.sort(key=lambda item: (item["disc_index"], item["field_id"], item["sha256"]))
+    catalog_records.sort(key=lambda item: (item["disc_index"], item["field_id"], item.get("sha1", item.get("sha256"))))
     catalog = {
         "schema": SCHEMA,
         "field_occurrence_count": len(catalog_records),
@@ -561,7 +561,7 @@ def extract_field_scripts(
         disc_record, found = scan_disc(path, disc_index, selected_fields)
         disc_records.append(disc_record)
         for payload, metadata, occurrence in found:
-            digest = hashlib.sha256(payload).hexdigest()
+            digest = hashlib.sha1(payload).hexdigest()
             if digest not in unique:
                 unique[digest] = {
                     "payload": payload,
@@ -590,20 +590,24 @@ def extract_field_scripts(
     for digest, item in sorted(unique.items()):
         payload = item["payload"]
         metadata = dict(item["metadata"])
-        first_field_id = item["occurrences"][0]["field_id"]
-        _, readable_report = render_source(first_field_id, payload, metadata)
-        metadata["readable_script"] = readable_report
-        asset_relative = Path("assets") / f"{digest}.scripts.bin"
-        metadata_relative = Path("metadata") / f"{digest}.json"
-        write_if_changed(output / asset_relative, payload)
-        write_if_changed(output / metadata_relative, _json_bytes(metadata))
         occurrences = sorted(
             item["occurrences"],
             key=lambda value: (value["disc_index"], value["field_id"], value["fat_index"]),
         )
+        first = occurrences[0]
+        first_field_id = first["field_id"]
+        first_fat_index = first["fat_index"]
+        _, readable_report = render_source(first_field_id, payload, metadata)
+        metadata["readable_script"] = readable_report
+        stem = f"{first_fat_index}_scripts_{digest}"
+        asset_relative = Path("assets") / f"{stem}.bin"
+        metadata_relative = Path("metadata") / f"{stem}.json"
+        write_if_changed(output / asset_relative, payload)
+        write_if_changed(output / metadata_relative, _json_bytes(metadata))
         resources.append(
             {
-                "sha256": digest,
+                "sha1": digest,
+                "fat_index": first_fat_index,
                 "size": len(payload),
                 "asset_path": asset_relative.as_posix(),
                 "metadata_path": metadata_relative.as_posix(),

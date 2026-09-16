@@ -24,8 +24,8 @@ Field IDs.
 ```text
 extracted-field-scripts/
   manifest.json
-  assets/<scripts-file-sha256>.scripts.bin
-  metadata/<scripts-file-sha256>.json
+  assets/<fat-index>_scripts_<scripts-file-sha1>.bin
+  metadata/<fat-index>_scripts_<scripts-file-sha1>.json
   catalog/catalog.json
   catalog/disc-01/field-0000_<hash>/
     scripts.bin

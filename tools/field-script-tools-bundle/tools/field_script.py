@@ -16,6 +16,20 @@ from extract_disc_field_scripts import parse_scripts_file, write_if_changed
 from repack_field_scripts import lzss_compress, read_field_container, repack_container, write_override
 
 
+def _resource_digest(resource: dict) -> tuple[str, object]:
+    """Return (expected_hex_digest, hashlib_constructor).
+
+    New corpora store ``sha1``; pre-change corpora stored ``sha256``.
+    """
+    if "sha1" in resource:
+        return resource["sha1"], hashlib.sha1
+    return resource["sha256"], hashlib.sha256
+
+
+def _catalog_digest(entry: dict) -> str:
+    return entry.get("sha1", entry.get("sha256"))
+
+
 def verify_corpus(root: Path, *, repack: bool = False, resize: bool = False) -> dict:
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     count = total = bytecode_bytes = 0
@@ -26,7 +40,8 @@ def verify_corpus(root: Path, *, repack: bool = False, resize: bool = False) -> 
         path = root / resource["asset_path"]
         try:
             scripts = path.read_bytes()
-            if hashlib.sha256(scripts).hexdigest() != resource["sha256"]:
+            expected, hasher = _resource_digest(resource)
+            if hasher(scripts).hexdigest() != expected:
                 raise ValueError("asset does not match its manifest digest")
             metadata = parse_scripts_file(scripts)
             occurrence = resource["occurrences"][0]
@@ -128,8 +143,8 @@ def regenerate_xgs(root: Path, *, comments_only: bool = False, layout_only: bool
         path = (root / resource["asset_path"]).resolve()
         path.relative_to(root)
         payload = path.read_bytes()
-        digest = resource["sha256"]
-        if hashlib.sha256(payload).hexdigest() != digest:
+        digest, hasher = _resource_digest(resource)
+        if hasher(payload).hexdigest() != digest:
             raise ValueError(f"{path.name}: asset does not match its manifest digest")
         assets[digest] = (payload, parse_scripts_file(payload))
     destinations = set()
@@ -139,13 +154,13 @@ def regenerate_xgs(root: Path, *, comments_only: bool = False, layout_only: bool
         destination.relative_to(catalog_root)
         if destination.suffix != ".xgs" or destination in destinations:
             raise ValueError(f"invalid or duplicate catalog script path: {entry['script_path']}")
-        if entry["sha256"] not in assets:
+        if _catalog_digest(entry) not in assets:
             raise ValueError(f"missing manifest asset for {entry['script_path']}")
         destinations.add(destination)
         work.append((entry, destination))
     resources = set()
     for entry, destination in work:
-        scripts, metadata = assets[entry["sha256"]]
+        scripts, metadata = assets[_catalog_digest(entry)]
         if layout_only:
             text = group_source_by_entity(destination.read_text(encoding="utf-8"), scripts)
         elif comments_only or simplify_raw:
@@ -158,7 +173,7 @@ def regenerate_xgs(root: Path, *, comments_only: bool = False, layout_only: bool
         write_if_changed(destination, content)
         if destination.read_bytes() != content:
             raise ValueError(f"{destination}: regenerated source write verification failed")
-        resources.add(entry["sha256"])
+        resources.add(_catalog_digest(entry))
     return {"regenerated_xgs": len(work), "verified_scripts": 0 if comments_only or layout_only or simplify_raw else len(work), "unique_resources": len(resources), **({"comments_only": True} if comments_only else {}), **({"layout_only": True} if layout_only else {}), **({"simplify_raw": True} if simplify_raw else {})}
 
 
