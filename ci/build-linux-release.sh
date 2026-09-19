@@ -99,9 +99,12 @@ podman run --rm --userns=keep-id \
         cp game.toml LICENSE README.md MODS.md MOD_AUTHORING.md "$pkg/"
         cp -r "$XGR_RUNTIME_BUILD_DIR/bios" "$pkg/bios"
         cp -r "$XGR_RUNTIME_BUILD_DIR/assets" "$pkg/assets"
-        test -d "$XGR_RUNTIME_BUILD_DIR/mods/packages"
+        [[ -d "$XGR_RUNTIME_BUILD_DIR/mods/bundled" ]] || {
+            echo "missing staged mod catalog: $XGR_RUNTIME_BUILD_DIR/mods/bundled" >&2
+            exit 1
+        }
         mkdir -p "$pkg/mods"
-        cp -r "$XGR_RUNTIME_BUILD_DIR/mods/packages" "$pkg/mods/"
+        cp -r "$XGR_RUNTIME_BUILD_DIR/mods/bundled" "$pkg/mods/"
         rm -f "$pkg/assets/img/boxart.tga"
         tar -C dist -czf XenogearsRecomp-linux-x86_64.tar.gz XenogearsRecomp-linux-x86_64
         bash ci/check-linux-glibc.sh "$pkg/XenogearsRecomp" GLIBC_2.31

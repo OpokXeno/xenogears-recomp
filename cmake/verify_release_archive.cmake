@@ -16,11 +16,11 @@ endif()
 set(OPENBIOS_IMAGE "${PROJECT_ROOT}/psxrecomp/bios/openbios.bin")
 set(OPENBIOS_LICENSE "${PROJECT_ROOT}/psxrecomp/bios/OpenBIOS.LICENSE")
 set(OPENBIOS_PROFILE "${PROJECT_ROOT}/psxrecomp/bios/OpenBIOS.toml")
-set(BUILTIN_MODS_CATALOG "${PROJECT_ROOT}/psxrecomp/mods/builtin")
+set(BUILTIN_MODS_CATALOG "${PROJECT_ROOT}/psxrecomp/mods/builtin/packages")
 set(REQUIRED_BUILTIN_MOD_MANIFESTS
-    packages/psx.enhancement.cd-speed/1.0.0/manifest.toml
-    packages/psx.enhancement.fast-loading/1.0.0/manifest.toml
-    packages/psx.enhancement.pgxp/1.0.0/manifest.toml)
+    psx.enhancement.cd-speed/1.0.0/manifest.toml
+    psx.enhancement.fast-loading/1.0.0/manifest.toml
+    psx.enhancement.pgxp/1.0.0/manifest.toml)
 foreach(_required_path IN ITEMS
         "${OPENBIOS_IMAGE}"
         "${OPENBIOS_LICENSE}"
@@ -149,7 +149,7 @@ set(_required_archive_entries
     "${PACKAGE_ROOT}/bios/OpenBIOS.LICENSE"
     "${PACKAGE_ROOT}/bios/openbios.bin"
     "${PACKAGE_ROOT}/mods"
-    "${PACKAGE_ROOT}/mods/packages"
+    "${PACKAGE_ROOT}/mods/bundled"
     "${PACKAGE_ROOT}/game.toml"
     "${PACKAGE_ROOT}/LICENSE"
     "${PACKAGE_ROOT}/MODS.md"
@@ -167,7 +167,7 @@ foreach(_entry IN LISTS _archive_entries)
     endif()
     # Package payloads may use otherwise prohibited extensions. The extracted
     # catalog is compared byte-for-byte with the canonical built-in tree below.
-    if(_relative_entry MATCHES "^mods/packages(/|$)")
+    if(_relative_entry MATCHES "^mods/bundled(/|$)")
         continue()
     endif()
     is_banned_path("${_relative_entry}" _is_banned)
@@ -289,9 +289,9 @@ file(GLOB_RECURSE _canonical_mod_entries
     LIST_DIRECTORIES TRUE
     "${BUILTIN_MODS_CATALOG}/*")
 file(GLOB_RECURSE _bundled_mod_entries
-    RELATIVE "${_package_directory}/mods"
+    RELATIVE "${_package_directory}/mods/bundled"
     LIST_DIRECTORIES TRUE
-    "${_package_directory}/mods/*")
+    "${_package_directory}/mods/bundled/*")
 list(SORT _canonical_mod_entries)
 list(SORT _bundled_mod_entries)
 if(NOT "${_bundled_mod_entries}" STREQUAL "${_canonical_mod_entries}")
@@ -301,8 +301,8 @@ if(NOT "${_bundled_mod_entries}" STREQUAL "${_canonical_mod_entries}")
         "Actual: ${_bundled_mod_entries}")
 endif()
 foreach(_manifest IN LISTS REQUIRED_BUILTIN_MOD_MANIFESTS)
-    if(NOT EXISTS "${_package_directory}/mods/${_manifest}"
-            OR IS_DIRECTORY "${_package_directory}/mods/${_manifest}")
+    if(NOT EXISTS "${_package_directory}/mods/bundled/${_manifest}"
+            OR IS_DIRECTORY "${_package_directory}/mods/bundled/${_manifest}")
         fail("Archive is missing required built-in mod manifest: ${_manifest}")
     endif()
 endforeach()
@@ -311,7 +311,7 @@ foreach(_entry IN LISTS _canonical_mod_entries)
         continue()
     endif()
     file(SHA256 "${BUILTIN_MODS_CATALOG}/${_entry}" _canonical_mod_hash)
-    file(SHA256 "${_package_directory}/mods/${_entry}" _bundled_mod_hash)
+    file(SHA256 "${_package_directory}/mods/bundled/${_entry}" _bundled_mod_hash)
     if(NOT _bundled_mod_hash STREQUAL _canonical_mod_hash)
         fail("Bundled built-in mod file does not match the canonical catalog: ${_entry}")
     endif()
