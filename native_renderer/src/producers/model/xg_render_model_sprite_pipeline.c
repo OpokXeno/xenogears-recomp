@@ -39,6 +39,7 @@ enum {
 typedef struct ModelContext {
     XgHost3dProjection projection;
     XgRenderMotionRef motion;
+    XgRenderMotionRef projection_motion;
     uint32_t motion_part;
     uint32_t instance_address;
     uint32_t model_address;
@@ -182,6 +183,14 @@ typedef struct SpriteState {
 static ModelFt4State model_ft4;
 static ModelFt3State model_ft3;
 static SpriteState sprite_ft4;
+static struct {
+    XgRenderTemporalSample *samples;
+    XgRenderTemporalCommandBinding *bindings;
+    uint32_t sample_capacity, binding_capacity, vertex_count, binding_count;
+    uint64_t geometry_digest;
+    bool complete;
+} model_coverage;
+static struct { uint64_t published, rejected; } model_coverage_diagnostics;
 static GearHelperMode1Proof gear_helper_mode1_proof;
 
 typedef struct XgRenderModelSpriteStageRequest {
@@ -885,6 +894,99 @@ void xg_render_model_sprite_pipeline_observe_ft3_template(
         cpu != NULL ? cpu->gpr[4] : 0u, render_mode, services);
 }
 
+static bool publish_model_motion(CPUState *cpu, ModelContext *context,
+        const XgRenderModelSpritePipelineServices *services,
+        const XgRenderMotionSource *source, XgRenderMotionPose *pose, uint32_t owner) {
+    const uint32_t vertices = cpu->read_half(context->model_address + 2);
+    const uint32_t groups = cpu->read_half(context->model_address + 6);
+    uint32_t end = context->topology_base;
+    if (!vertices || groups > 256 ||
+        !services->lifecycle->guest_data_range_is_valid(context->vertex_base, vertices * 8, 4,
+                                                        false))
+        return false;
+    for (uint32_t i = 0; i < groups; ++i) {
+        if (!services->lifecycle->guest_data_range_is_valid(end, 4, 2, false))
+            return false;
+        const uint32_t bytes = 4u + cpu->read_half(end + 2) * 8u;
+        if (end > UINT32_MAX - bytes ||
+            !services->lifecycle->guest_data_range_is_valid(end, bytes, 2, false))
+            return false;
+        end += bytes;
+    }
+    const uint32_t key[4] = {context->model_address, context->vertex_base, context->topology_base,
+                             vertices};
+    pose->geometry_id = xg_render_resource_digest(key, sizeof(key));
+    pose->geometry_generation = 1;
+    pose->screen_offset[0] = context->projection.screen_offset_x / 65536.0;
+    pose->screen_offset[1] = context->projection.screen_offset_y / 65536.0;
+    pose->projection_distance = context->projection.projection_distance;
+    if (pose->discontinuity)
+        xg_render_motion_note(XG_MOTION_TRANSLATION_STAGE_DISCRETE, owner);
+    if (!xg_render_motion_publish(source, pose, &context->motion))
+        return false;
+    const uint32_t addresses[4] = {owner, context->model_address, context->vertex_base,
+                                   context->topology_base};
+    const uint32_t sizes[4] = {4, 0x38, vertices * 8, end - context->topology_base};
+    for (unsigned i = 0; i < 4; ++i) {
+        if (!sizes[i])
+            continue;
+        if (!xg_render_motion_watch(context->motion, addresses[i], sizes[i]))
+            return false;
+        watch_resource(services, addresses[i], sizes[i]);
+    }
+    return true;
+}
+
+/* Resident actors can draw a 3D model (for example a treasure chest) instead
+ * of sprite quads. Their wrapper composes the shared Field camera with a
+ * LOCAL matrix at actor_data + 0xc, rounding the result back to GTE integers.
+ * Recover that same authored pose before composition loses its fractions. */
+static bool capture_resident_field_motion(CPUState *cpu, ModelContext *context,
+        const XgRenderModelSpritePipelineServices *services) {
+    XgRenderMotionSource source;
+    XgRenderMotionPose pose = {0};
+    XgHost3dMatrix camera, field_camera, local, combined;
+    if (!context->resident_dispatch ||
+        !physical_address_equals(cpu->gpr[31], UINT32_C(0x800257dc)) ||
+        !services || !services->motion_source || !services->lifecycle ||
+        !services->lifecycle->guest_data_range_is_valid ||
+        !services->motion_source(UINT32_C(0x80075b44), &source)) return false;
+    const uint32_t actor = context->instance_address;
+    if (!services->lifecycle->guest_data_range_is_valid(actor, 0x44, 4, false) ||
+        (cpu->read_byte(actor + 0x3f) & 1u)) return false;
+    const uint32_t data = cpu->read_word(actor + 0x20);
+    if (!services->lifecycle->guest_data_range_is_valid(data, 0x38, 4, false) ||
+        !services->lifecycle->guest_data_range_is_valid(context->model_address, 0x38, 4, false) ||
+        !physical_address_equals(cpu->read_word(data + 0x34), context->model_address) ||
+        !xg_render_runtime_capture_matrix(cpu, data + 0xc, &local) ||
+        !xg_render_runtime_capture_matrix(cpu, 0x8004fbb8u, &camera) ||
+        !xg_render_runtime_capture_matrix(cpu, 0x800afa64u, &field_camera)) return false;
+    /* Use Field placement authority only while this resident invocation uses
+     * its camera, and only after proving the captured GTE matrix exactly. */
+    if (memcmp(camera.rotation, field_camera.rotation, sizeof(camera.rotation)) ||
+        memcmp(camera.translation, field_camera.translation, sizeof(camera.translation)) ||
+        !xg_host_3d_comp_matrix(&camera, &local, &combined) ||
+        memcmp(combined.rotation, context->projection.rotation, sizeof(combined.rotation)) ||
+        memcmp(combined.translation, context->projection.translation, sizeof(combined.translation)))
+        return false;
+    for (unsigned axis = 0; axis < 3; ++axis)
+        local.translation[axis] = xg_render_motion_s16_translation(local.translation[axis]);
+    if (!xg_render_motion_camera_from_view(&camera, &pose.camera) ||
+        !xg_render_motion_decompose(&local, &pose.nodes[0].local)) return false;
+    pose.node_count = 1;
+    pose.translation_stage = XG_RENDER_MOTION_TRANSLATION_FIELD;
+    pose.entity_id = UINT64_C(0x53504d4400000000) | (actor & 0x1fffffffu);
+    pose.camera_id = UINT64_C(0x4649454c800afa64);
+    pose.geometry_scale = 1;
+    pose.nodes[0].id = actor & 0x1fffffffu;
+    pose.nodes[0].parent = -1;
+    pose.nodes[0].translation_s16 = 1;
+    pose.nodes[0].source_matrix_valid = 1;
+    pose.nodes[0].source_model_to_view = combined;
+    context->motion_part = 0;
+    return publish_model_motion(cpu, context, services, &source, &pose, actor + 0x20);
+}
+
 static bool capture_field_motion(CPUState *cpu, ModelContext *context,
                                  const XgRenderModelSpritePipelineServices *services) {
     XgRenderMotionSource source;
@@ -908,7 +1010,7 @@ static bool capture_field_motion(CPUState *cpu, ModelContext *context,
         !services->lifecycle->guest_data_range_is_valid(context->model_address, 0x38, 4, false))
         return false;
     const uint32_t flags = cpu->read_half(record + 0x58);
-    if ((flags & (0x60u | 3u | 0x2000u)) || cpu->read_word(record) != cpu->gpr[16]) {
+    if ((flags & (0x60u | 3u)) || cpu->read_word(record) != cpu->gpr[16]) {
         xg_render_motion_note(XG_MOTION_FIELD_UNSUPPORTED,record);
         return false;
     }
@@ -1005,48 +1107,19 @@ static bool capture_field_motion(CPUState *cpu, ModelContext *context,
         xg_render_motion_note(XG_MOTION_FIELD_MATRIX_REJECT,record);
         return false;
     }
-    const uint32_t vertices = cpu->read_half(context->model_address + 2);
-    const uint32_t groups = cpu->read_half(context->model_address + 6);
-    uint32_t end = context->topology_base;
-    if (!vertices || groups > 256 ||
-        !services->lifecycle->guest_data_range_is_valid(context->vertex_base, vertices * 8, 4,
-                                                        false))
-        return false;
-    for (uint32_t i = 0; i < groups; ++i) {
-        if (!services->lifecycle->guest_data_range_is_valid(end, 4, 2, false))
-            return false;
-        const uint32_t bytes = 4u + cpu->read_half(end + 2) * 8u;
-        if (end > UINT32_MAX - bytes ||
-            !services->lifecycle->guest_data_range_is_valid(end, bytes, 2, false))
-            return false;
-        end += bytes;
-    }
-    const uint32_t key[4] = {context->model_address, context->vertex_base, context->topology_base,
-                             vertices};
     pose.entity_id = UINT64_C(0x4649454c00000000) | (record & 0x1fffffffu);
-    pose.geometry_id = xg_render_resource_digest(key, sizeof(key));
-    pose.geometry_generation = 1;
     pose.camera_id = depth == 1 ? UINT64_C(0x4649454c800afc30) : UINT64_C(0x4649454c800afa64);
     pose.geometry_scale = 1;
     context->motion_part = depth - 1;
     pose.nodes[context->motion_part].source_model_to_view = combined;
     pose.nodes[context->motion_part].source_matrix_valid = 1;
-    pose.screen_offset[0] = context->projection.screen_offset_x / 65536.0;
-    pose.screen_offset[1] = context->projection.screen_offset_y / 65536.0;
-    pose.projection_distance = context->projection.projection_distance;
-    if (pose.discontinuity)
-        xg_render_motion_note(XG_MOTION_TRANSLATION_STAGE_DISCRETE,record);
-    if (!xg_render_motion_publish(&source, &pose, &context->motion))
-        return false;
-    const uint32_t addresses[4] = {record, context->model_address, context->vertex_base,
-                                   context->topology_base};
-    const uint32_t sizes[4] = {4, 0x38, vertices * 8, end - context->topology_base};
-    for (unsigned i = 0; i < 4; ++i) {
-        if (!sizes[i])
-            continue;
-        if (!xg_render_motion_watch(context->motion, addresses[i], sizes[i]))
-            return false;
-        watch_resource(services, addresses[i], sizes[i]);
+    if (!publish_model_motion(cpu, context, services, &source, &pose, record)) return false;
+    if (flags & 0x2000u) {
+        /* The callback has already deformed the current LOCAL vertices. Share
+         * the terrain's precise camera/model transform, but keep vertex-sample
+         * interpolation: rigid pose interpolation would freeze the deformation. */
+        context->projection_motion = context->motion;
+        context->motion = (XgRenderMotionRef){0};
     }
     return true;
 }
@@ -1073,16 +1146,16 @@ static bool bind_model_motion(uint32_t packet, const XgHost3dVector *vertices,
             (triangle ? 1u : 0u));
 }
 
-static bool capture_model_motion_geometry(uint32_t packet, uint32_t descriptor,
+static bool capture_model_geometry(uint32_t packet, uint32_t descriptor,
         uint32_t family, const XgHost3dVector vertices[4], const uint32_t indices[4]) {
     const ModelContext *context = &model_ft4.context;
-    const XgRenderMotionPose *pose;
+    const XgRenderMotionPose *pose = NULL;
     XgHost3dProject4Input input = {.projection = context->projection};
     XgHost3dRotTransPers4Output output;
     GpuRenderSemantic semantic = {0};
     const uint8_t split[2][3] = {{0, 1, 2}, {2, 1, 3}};
     const uint32_t corners = family & 8u ? 4u : 3u;
-    if (!xg_render_motion_view(context->motion, &pose)) return false;
+    if (context->motion.handle.resource_id && !xg_render_motion_view(context->motion, &pose)) return false;
     memcpy(input.vertices, vertices, sizeof(input.vertices));
     if (corners == 3u) input.vertices[3] = input.vertices[2];
     if (!xg_host_3d_rot_trans_pers4(&input, &output)) return false;
@@ -1091,7 +1164,8 @@ static bool capture_model_motion_geometry(uint32_t packet, uint32_t descriptor,
         ? GPU_RENDER_SHADING_GOURAUD : GPU_RENDER_SHADING_FLAT;
     semantic.triangle_count = corners - 2u;
     const uint32_t producer = context->instance_address & 0x1fffffffu;
-    xg_render_semantic_set_interpolation_identity(&semantic, pose->continuity_generation,
+    xg_render_semantic_set_interpolation_identity(&semantic,
+        pose ? pose->continuity_generation : xg_render_submission_temporal_scene(),
         producer, (descriptor & 0x1fffffffu) |
             ((uint32_t)(context->dispatch_mode & 7u) << 29u) | (corners == 3u));
     for (uint32_t t = 0; t < semantic.triangle_count; ++t) {
@@ -1106,6 +1180,10 @@ static bool capture_model_motion_geometry(uint32_t packet, uint32_t descriptor,
             target->native_view_x = source->native_view_x_16_16;
             target->native_view_y = source->native_view_y_16_16;
             target->native_view_position = source->native_view_position;
+            if (context->projection_motion.handle.resource_id && target->native_view_position &&
+                !xg_render_motion_refine_native_vertex(context->projection_motion,
+                    context->motion_part, &vertices[corner],
+                    &target->native_view_x, &target->native_view_y)) return false;
             target->projective_view_x = source->projective_view_x;
             target->projective_view_y = source->projective_view_y;
             target->projective_view_z = source->projective_view_z;
@@ -1118,29 +1196,55 @@ static bool capture_model_motion_geometry(uint32_t packet, uint32_t descriptor,
             target->interpolation_group_id = producer;
             target->interpolation_vertex_id = indices[corner];
             target->interpolation_vertex_identity_valid = 1u;
+            if (!pose && indices[corner] < model_coverage.vertex_count)
+                model_coverage.samples[indices[corner]] = (XgRenderTemporalSample){producer, *target};
         }
     }
     /* As in the resident Battle model capture, this binds geometry to an output
      * slot; acceptance checks exact GTE XY and takes final material/OT order from
      * the actual draw. A culled slot does not publish a polygon. */
-    return xg_render_submission_stage_exact((GpuRenderTransactionId){0},
-        (packet & 0x1fffffffu) + 4u, &semantic) == GUEST_RENDER_TRANSACTION_OK;
+    if (xg_render_submission_stage_exact((GpuRenderTransactionId){0},
+        (packet & 0x1fffffffu) + 4u, &semantic) != GUEST_RENDER_TRANSACTION_OK) return false;
+    if (!pose) {
+        XgRenderTemporalCommandBinding *bindings = xg_render_array_reserve(model_coverage.bindings,
+            sizeof(*bindings), &model_coverage.binding_capacity, model_coverage.binding_count + 1u,
+            XG_RENDER_TEMPORAL_SAMPLE_CAPACITY);
+        if (!bindings) return false;
+        model_coverage.bindings = bindings;
+        bindings[model_coverage.binding_count++] = (XgRenderTemporalCommandBinding){
+            (packet & 0x1fffffffu) + 4u, producer};
+    }
+    return true;
 }
 
 /* Capture every family's geometry at the authenticated model entry, including
  * FT3/FT4. Later observers may have lost initializer templates after a module
  * transition, or be absent altogether for the Gear helper's relit dispatch. */
-static void capture_motion_bindings(CPUState *cpu,
+static void capture_model_geometry_bindings(CPUState *cpu,
                                     const XgRenderModelSpritePipelineServices *services) {
     ModelContext *context = &model_ft4.context;
     uint32_t topology = context->topology_base, attribute = context->material_base;
     uint32_t packet = context->packet_base;
     uint16_t tpage = context->tpage, clut = context->clut;
-    if (!context->motion.handle.resource_id || !services || !services->lifecycle ||
+    if (!services || !services->lifecycle ||
         !services->lifecycle->guest_data_range_is_valid)
         return;
     const uint32_t count = cpu->read_half(context->model_address + 6);
     const uint32_t vertex_count = cpu->read_half(context->model_address + 2);
+    model_coverage.complete = false;
+    model_coverage.binding_count = model_coverage.vertex_count = 0u;
+    if (!context->motion.handle.resource_id) {
+        XgRenderTemporalSample *samples = xg_render_array_reserve(model_coverage.samples,
+            sizeof(*samples), &model_coverage.sample_capacity, vertex_count,
+            XG_RENDER_TEMPORAL_SAMPLE_CAPACITY);
+        if (!samples) goto fail;
+        model_coverage.samples = samples;
+        model_coverage.vertex_count = vertex_count;
+        memset(samples, 0, vertex_count * sizeof(*samples));
+        const uint32_t key[] = {context->model_address, context->vertex_base,
+                               context->topology_base, vertex_count};
+        model_coverage.geometry_digest = xg_render_resource_digest(key, sizeof(key));
+    }
     uint32_t packet_bytes = cpu->read_word(context->model_address + 0x34);
     if (!services->lifecycle->guest_data_range_is_valid(packet, packet_bytes, 4, false))
         goto fail;
@@ -1148,6 +1252,10 @@ static void capture_motion_bindings(CPUState *cpu,
         if (!services->lifecycle->guest_data_range_is_valid(topology, 4, 2, false))
             goto fail;
         const uint32_t family = cpu->read_byte(topology), n = cpu->read_half(topology + 2);
+        if (!context->motion.handle.resource_id) {
+            const uint64_t key[] = {model_coverage.geometry_digest, family, n};
+            model_coverage.geometry_digest = xg_render_resource_digest(key, sizeof(key));
+        }
         XgModelPrimitiveLayout layout;
         if (!xg_model_primitive_layout(family, &layout) ||
             n > packet_bytes / layout.packet_size ||
@@ -1179,9 +1287,15 @@ static void capture_motion_bindings(CPUState *cpu,
                         GUEST_RENDER_RENDER_NATIVE, services->repository) : NULL;
             const uint32_t descriptor =
                 material && material->descriptor_address ? material->descriptor_address : attribute;
-            if (!bind_model_motion(packet, vertices, indices, size, descriptor, size == 3u))
+            if (!context->motion.handle.resource_id) {
+                const uint64_t key[] = {model_coverage.geometry_digest,
+                    indices[0], indices[1], indices[2], size == 4u ? indices[3] : 0u};
+                model_coverage.geometry_digest = xg_render_resource_digest(key, sizeof(key));
+            }
+            if (context->motion.handle.resource_id &&
+                !bind_model_motion(packet, vertices, indices, size, descriptor, size == 3u))
                 goto fail;
-            if (!capture_model_motion_geometry(packet, descriptor, family, vertices, indices))
+            if (!capture_model_geometry(packet, descriptor, family, vertices, indices))
                 goto fail;
             packet += layout.packet_size;
             packet_bytes -= layout.packet_size;
@@ -1189,6 +1303,7 @@ static void capture_motion_bindings(CPUState *cpu,
         }
         topology += 4 + n * 8;
     }
+    model_coverage.complete = !context->motion.handle.resource_id;
     return;
 fail:
     if (context->caller_contract == XG_RENDER_MODEL_DISPATCH_CALLER_GEAR_HELPER) {
@@ -1213,6 +1328,7 @@ void xg_render_model_sprite_pipeline_model_begin(
     const bool caller_authenticated = model_dispatch_caller_contract_matches(
         cpu, cpu != NULL ? cpu->gpr[31] : 0u, &caller_contract,
         &caller_window_start, &matrix_stack_offset);
+    model_coverage.complete = false;
 
     if (render_mode != GUEST_RENDER_RENDER_SHADOW &&
         render_mode != GUEST_RENDER_RENDER_NATIVE) {
@@ -1263,8 +1379,7 @@ void xg_render_model_sprite_pipeline_model_begin(
     }
     if (cpu->gpr[7] != XG_MODEL_FT4_RAW_DISPATCH_AVERAGE &&
         cpu->gpr[7] != XG_MODEL_FT4_RAW_DISPATCH_FARTHEST &&
-        (cpu->gpr[7] != XG_MODEL_FT4_RAW_DISPATCH_RELIT ||
-         caller_contract != XG_RENDER_MODEL_DISPATCH_CALLER_GEAR_HELPER)) {
+        cpu->gpr[7] != XG_MODEL_FT4_RAW_DISPATCH_RELIT) {
         ++model_ft4.snapshot.dispatch_mode_reject_count;
         return;
     }
@@ -1330,11 +1445,15 @@ void xg_render_model_sprite_pipeline_model_begin(
         if (caller_contract == XG_RENDER_MODEL_DISPATCH_CALLER_GEAR_HELPER) {
             if (!xg_render_gear_motion_bind(cpu,&context.motion,&context.motion_part))
                 context.motion=(XgRenderMotionRef){0};
-        } else if (!capture_field_motion(cpu,&context,services))
+        } else if (!(context.resident_dispatch
+                ? capture_resident_field_motion(cpu, &context, services)
+                : capture_field_motion(cpu, &context, services)))
             context.motion=(XgRenderMotionRef){0};
     }
     model_ft4.context = context;
-    capture_motion_bindings(cpu,services);
+    /* Endpoint geometry is independent of rigid-pose eligibility. In particular
+     * lit Field props and billboard/deformable models still need subpixel XY. */
+    if (render_mode == GUEST_RENDER_RENDER_NATIVE) capture_model_geometry_bindings(cpu,services);
 }
 
 static bool apply_ft4_material(
@@ -1573,6 +1692,15 @@ static bool prepare_model_ft4(
                 }
                 bind_model_motion(record->packet_address, source.vertices,
                     record->source_vertex_indices, 4, record->attribute_address, false);
+                if (context->projection_motion.handle.resource_id)
+                    for (uint32_t t = 0; t < 2u; ++t)
+                        for (uint32_t v = 0; v < 3u; ++v) {
+                            XgRenderIrVertex *target = &record->native.primitive.triangles[t].vertices[v];
+                            if (target->native_view_position &&
+                                !xg_render_motion_refine_native_vertex(context->projection_motion,
+                                    context->motion_part, &source.vertices[split[t][v]],
+                                    &target->native_view_x, &target->native_view_y)) return false;
+                        }
                 for (uint32_t triangle = 0u; triangle < 2u; ++triangle) {
                     for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
                         XgRenderIrVertex *destination =
@@ -1862,28 +1990,16 @@ static bool publish_pose_endpoint(const XgRenderIrNativePrimitive *primitive,
     uint32_t command_id, uint32_t producer_id, uint32_t primitive_id,
     XgRenderMotionRef motion) {
     if (!xg_render_submission_native_work_mode()) return true;
-    if (motion.handle.resource_id != 0u) {
-        GpuRenderSemantic semantic;
-        const XgRenderMotionPose *pose;
-        if (!xg_render_motion_view(motion, &pose) ||
-            xg_render_backend_translate_primitive(primitive, &semantic) !=
-                XG_RENDER_BACKEND_OK)
-            return false;
-        /* Pose continuity is not the submission service's interpolation epoch. */
-        xg_render_semantic_set_interpolation_identity(
-            &semantic, pose->continuity_generation, producer_id, primitive_id);
-        return xg_render_submission_stage_exact(
-            (GpuRenderTransactionId){0}, command_id, &semantic) ==
-            GUEST_RENDER_TRANSACTION_OK;
-    }
-    return xg_render_submission_pre_scene_stage(&(XgRenderPreScenePrimitive){
-        .primitive = *primitive,
-        .packet_address = command_id - 4u,
-        .source_primitive_index = command_id,
-        .interpolation_producer_id = producer_id,
-        .interpolation_primitive_id = primitive_id,
-        .interpolation_identity_valid = producer_id != 0u,
-    });
+    GpuRenderSemantic semantic;
+    const XgRenderMotionPose *pose = NULL;
+    if ((motion.handle.resource_id && !xg_render_motion_view(motion, &pose)) ||
+        xg_render_backend_translate_primitive(primitive, &semantic) != XG_RENDER_BACKEND_OK) return false;
+    /* Preserve source vertex IDs for unposed meshes too. The pre-scene bridge
+     * assigns corner IDs when consumed, which discards their shared topology. */
+    xg_render_semantic_set_interpolation_identity(&semantic,
+        pose ? pose->continuity_generation : xg_render_submission_temporal_scene(), producer_id, primitive_id);
+    return xg_render_submission_stage_exact((GpuRenderTransactionId){0}, command_id, &semantic) ==
+        GUEST_RENDER_TRANSACTION_OK;
 }
 
 static bool publish_model_endpoint(const XgRenderIrNativePrimitive *primitive,
@@ -2328,6 +2444,14 @@ static bool prepare_model_ft3(
                 }
                 bind_model_motion(packet, vertices, record->source_vertex_indices,
                     3, record->attribute_address, true);
+                if (context->projection_motion.handle.resource_id)
+                    for (uint32_t v = 0; v < 3u; ++v) {
+                        XgRenderIrVertex *target = &record->primitive.triangles[0].vertices[v];
+                        if (target->native_view_position &&
+                            !xg_render_motion_refine_native_vertex(context->projection_motion,
+                                context->motion_part, &vertices[v],
+                                &target->native_view_x, &target->native_view_y)) return false;
+                    }
                 for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
                     XgRenderIrVertex *destination =
                         &record->primitive.triangles[0].vertices[vertex];
@@ -2766,8 +2890,9 @@ void xg_render_model_sprite_pipeline_model_ft3_seam(
         CPUState *cpu, GuestRenderRenderMode render_mode,
         const XgRenderModelSpritePipelineServices *services) {
     if (model_ft3.snapshot.blocked || !model_ft4.context.valid) return;
-    if (model_ft4.context.caller_contract ==
-            XG_RENDER_MODEL_DISPATCH_CALLER_GEAR_HELPER)
+    /* Relit geometry is captured at the common model entry. Its final lighting
+     * is taken from the consumed packet, not from the raw FT3 seam's material. */
+    if (model_ft4.context.dispatch_mode == XG_MODEL_FT4_RAW_DISPATCH_RELIT)
         return;
     if (render_mode == GUEST_RENDER_RENDER_NATIVE) {
         if (!stage_model_ft3(cpu, render_mode, services)) {
@@ -2781,16 +2906,41 @@ void xg_render_model_sprite_pipeline_model_ft3_seam(
     }
 }
 
+static void publish_model_coverage(void) {
+    if (model_coverage.complete && model_ft4.context.valid &&
+        !model_ft4.snapshot.pending && !model_ft3.snapshot.pending) {
+        const uint32_t producer = model_ft4.context.instance_address & 0x1fffffffu;
+        uint32_t count = 0;
+        for (uint32_t i = 0; i < model_coverage.vertex_count; ++i)
+            if (model_coverage.samples[i].component_id)
+                model_coverage.samples[count++] = model_coverage.samples[i];
+        const XgRenderTemporalComponent component = {producer, model_coverage.geometry_digest,
+            xg_render_submission_temporal_scene(), producer};
+        /* Full source topology, including culled faces, supplies the old vertex
+         * when visibility changes. It adds metadata, not hidden draw calls. */
+        if (xg_render_submission_publish_temporal_coverage(producer, &component, 1u,
+            model_coverage.samples, count, model_coverage.bindings, model_coverage.binding_count))
+            ++model_coverage_diagnostics.published;
+        else ++model_coverage_diagnostics.rejected;
+    }
+    model_coverage.complete = false;
+}
+
 void xg_render_model_sprite_pipeline_model_finish(
         CPUState *cpu, GuestRenderRenderMode render_mode,
         const XgRenderModelSpritePipelineServices *services) {
     finish_model_ft4(cpu, render_mode, services);
     finish_model_ft3(cpu, render_mode, services);
+    /* At 8002c86c, s3 is the remaining-group counter after JALR's delay
+     * slot. -1 is the last group. Field calls this dispatcher directly;
+     * the 800257dc wrapper-end seam does not run for those invocations. */
+    if (cpu && cpu->gpr[19] == UINT32_MAX) publish_model_coverage();
 }
 
 void xg_render_model_sprite_pipeline_model_end(void) {
     if (model_ft4.snapshot.pending) block_model_ft4(74u);
     if (model_ft3.snapshot.pending) block_model_ft3(74u);
+    publish_model_coverage();
     if (!model_ft4.snapshot.pending && !model_ft3.snapshot.pending)
         model_ft4.context = (ModelContext){0};
 }
@@ -3572,6 +3722,9 @@ void xg_render_model_sprite_pipeline_reset(
     gear_helper_mode1_proof = (GearHelperMode1Proof){0};
     free(model_ft4.records);
     free(model_ft3.records);
+    free(model_coverage.samples);
+    free(model_coverage.bindings);
+    memset(&model_coverage, 0, sizeof(model_coverage));
     model_ft4 = (ModelFt4State){0};
     model_ft3 = (ModelFt3State){0};
     sprite_ft4 = (SpriteState){0};

@@ -44,6 +44,9 @@ add_library(xg_host_3d STATIC src/core/xg_host_3d.c)
 target_include_directories(xg_host_3d PUBLIC include PRIVATE
     "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
 target_compile_features(xg_host_3d PUBLIC c_std_11)
+if(NOT MSVC)
+    target_link_libraries(xg_host_3d PUBLIC m)
+endif()
 
 add_library(xg_native_view STATIC src/core/xg_native_view.c)
 target_include_directories(xg_native_view PUBLIC include)
@@ -881,6 +884,11 @@ if(BUILD_TESTING)
     target_link_libraries(test_xg_render_display_options PRIVATE
         xg_semantic_presentation)
     add_test(NAME xg_render_display_options COMMAND test_xg_render_display_options)
+
+    add_executable(test_xg_render_native_work
+        tests/infrastructure/test_xg_render_native_work.c)
+    target_link_libraries(test_xg_render_native_work PRIVATE xg_semantic_presentation)
+    add_test(NAME xg_render_native_work COMMAND test_xg_render_native_work)
 
     add_executable(test_xg_render_ui_source_commit
         tests/infrastructure/test_xg_render_ui_source_commit.c)

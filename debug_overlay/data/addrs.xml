@@ -127,45 +127,81 @@
         evidence="KernelMenuMain and the SLUS table pointer at 0x8001808C"
         desc="Native XENOGEARS Kernel MENU main function."/>
 
-  <!-- ======================= teleport mechanism (LIVE-VERIFIED 2026-07-24) ======================= -->
-  <!-- Full recipe, user-confirmed on a real Lahan(1) -> Blackmoon(22) transition:
-       write all seven in one batch; the fieldEntryPoint poll (0x800784A0) fires
-       loadNewField((fieldMapNumber&0xFFF)*2, 0) next frame and runs the full
-       completion sequence (bundle apply + var init + actor reset + script restart
-       + texture/stream re-init). fieldID becomes the target when the load engages
-       (D_8004F330 == target*2). Do NOT write fieldID directly (cosmetic mirror;
-       corrupts texture streaming). Do NOT call loadNewField from the debug poll
-       (incremental, not reentrant -> crash). Do NOT loop the arm write after
-       D_8004F330 engages (would re-arm forever). -->
+  <!-- ======================= teleport mechanism ======================= -->
+  <!-- Recipe (mirrors the game's own scripted transitions: opcode 0x98
+       FieldScriptChangeFieldWhenReady 0x800932D0 and the door-walk path
+       through 0x80092894 — both do: save current field+dirs via 0x80092F44,
+       clear DAT_800adbec, write var[2] via FUN_800a3074, write 0x8004F34C):
+       write entry to the ACTIVE VM mirror 0x800C3A68+2 AND the persistent
+       0x8006EF66, write target id to 0x8004F34C, clear 0x800ADBEC last as
+       the commit. The fieldEntryPoint poll (0x800784A0 in RunFieldCoordinator
+       0x80077E88) fires loadNewField((id&0xFFF)*2, 0) next frame and runs the
+       full completion sequence. Entry MUST go to the active mirror:
+       playable-actor init reads it via FUN_800a3018(2), and the persist step
+       (0x800A30FC, active -> persistent) runs before the transition, so a
+       persistent-only write is clobbered with the stale value (wrong spawn,
+       often a black screen). Do NOT write fieldID directly. Do NOT call
+       loadNewField from the debug poll (incremental, not reentrant).
+       NEVER write: 0x800ADB64 (MENU request slot, idle 0xFF — writing 0
+       queued a bogus Normal-Menu on every teleport), 0x8006EF82/84/86
+       (script vars 15-17, not a position), 0x800ADBC4 (party-skin load
+       state — refuse while != 0xFF instead), 0x8004F308/0x800ADB90
+       (music/anim gates — the poll retries them itself; zeroing fakes
+       readiness). Guard: overlay signature 0x8006FAF0 == 4.
+       Outside field there is no poll, so teleport stages a boot-to-field
+       instead: persistent fieldID (0x8006F94E) + entry (0x8006EF66) are
+       written at a safe vblank edge and the server yanks to MainLoop(1)
+       via CommitGameStateTransition — same mechanism as the Kernel Menu
+       transition (current module abandoned without teardown). -->
   <addr name="fieldMapNumber" value="0x8004F34C" type="u32" size="4" status="verified"
-        verifiedBy="live-experiment" date="2026-07-24"
-        evidence="write target id here; poll computes (id&amp;0xFFF)*2 as bundle file index. Confirmed: intro writer sw 4; gear-state reads &amp;0xFFF"
+        verifiedBy="ghidra-static+live-experiment" date="2026-09-17"
+        evidence="poll 0x800784E4 masks (id&amp;0xFFF)*2 as bundle file index; 0x98 path writes it (field_module.exe 0x800933AC); confirmed: intro writer sw 4; gear-state reads &amp;0xFFF"
         desc="TELEPORT TARGET. The map-change request channel."/>
 
+  <addr name="activeFieldVars" value="0x800C3A68" type="u16" size="2048" count="1024" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-17"
+        evidence="FUN_800a3018/800a3074 read/write DAT_800c3a68; init 0x800705DC copies persistent gameState+0x1930 (512 u16) in, zeroes scratch 512; persist 0x800A30FC copies 512 back out"
+        desc="TELEPORT ENTRY (active mirror). Write entry point to +2 (var[1]); handlers read this copy, persist clobbers a persistent-only write."/>
+
+  <addr name="overlaySignature" value="0x8006FAF0" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static+live" date="2026-09-18"
+        evidence="field/world/battle/battling overlays all load at 0x8006FAF0 (header_size=0); first word 4=Field 5=Worldmap 6=Battle — same ground truth as the renderer's semantic-module detection in main.cpp, confirmed live across sustained sessions"
+        desc="TELEPORT GUARD. Field module resident iff first word == 4."/>
+
+  <addr name="residentLoadedModule" value="0x800592C0" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-18"
+        evidence="SLUS FUN_800199CC sets it to the loaded overlay id on every module load (-1 while loading); BUT it belongs to the developer debug menu state machine and reads a constant 0xFFFFFFFF during normal retail play in this runtime — NOT a usable teleport guard, kept for documentation only"
+        desc="DEV-MENU ONLY. Do not use as a module signal; use overlaySignature."/>
+
   <addr name="teleportGate1" value="0x800ADBEC" type="u32" size="4" status="verified"
-        verifiedBy="live-experiment" date="2026-07-24"
-        evidence="poll gate at 0x80078498: must be 0; idle is 0xFFFFFFFF and BLOCKS the poll if not cleared. The door handler clears it (sw zero,-9236(0x800B))"
-        desc="RECIPE: write 0."/>
+        verifiedBy="ghidra-static+live-experiment" date="2026-09-17"
+        evidence="poll gate at 0x80078498: must be 0; init 0x800705DC sets 0xFFFFFFFF; 0x98 path + door path clear it (sw zero) as the commit; the door handler clears it (sw zero,-9236(0x800B))"
+        desc="RECIPE: write 0 LAST (commit). Poll consumes target+entry together."/>
 
-  <addr name="fieldChangePrevented" value="0x800ADB64" type="u32" size="4" status="verified"
-        verifiedBy="live-experiment" date="2026-07-24"
-        evidence="idle 0xFF/-1; must be exactly 0 to arm (reference: door opcode clears it)"
-        desc="RECIPE: write 0."/>
+  <addr name="partyLoadState" value="0x800ADBC4" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-17"
+        evidence="field party staging: loading char 0x800ADBC8, dest slot 0x800ADBCC, temp alloc 0x800ADBC0, load state 0x800ADBC4 with 0xFF idle (init 0x800705DC); NOT a teleport arm — read-only busy check (refuse while != 0xFF)"
+        desc="BUSY CHECK (read-only): refuse teleport while != 0xFF (party streaming)."/>
 
-  <addr name="teleportArm" value="0x800ADBC4" type="u32" size="4" status="verified"
-        verifiedBy="live-experiment" date="2026-07-24"
-        evidence="poll gate at 0x800784BC: must equal s3 (0xFF, set at 0x80078170); idle is already 0xFF in free-roam"
-        desc="RECIPE: write 0xFF (usually already 0xFF in free-roam; write defensively)."/>
+  <addr name="menuRequest" value="0x800ADB64" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-17"
+        evidence="menu opcodes write it (FE 58 writes 3 at 0x80093824); consumed/reset to 0xFF by FieldLoadAndOpenMenu 0x800799D4 (writes at 0x8007A404); idle is 0xFF (init 0x800705DC)"
+        desc="BUSY CHECK (read-only): refuse teleport while != 0xFF (menu staged). NEVER write 0 (queues bogus menu mode 0)."/>
+
+  <addr name="fadeGate" value="0x800B2118" type="u16" size="2" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-17"
+        evidence="poll gate at 0x80078518: halfword must be 0; written by fade/transition impls 0x80071DCC/0x80071E58/0x8007DA44"
+        desc="BUSY CHECK (read-only): refuse teleport while != 0 (fade/transition running)."/>
 
   <addr name="teleportGateMusic" value="0x8004F308" type="u32" size="4" status="verified"
-        verifiedBy="live-experiment" date="2026-07-24"
-        evidence="poll gate at 0x800784A8: must be 0 (usually already 0)"
-        desc="RECIPE: write 0 defensively."/>
+        verifiedBy="ghidra-static+live-experiment" date="2026-09-17"
+        evidence="poll gate at 0x800784A8: must be 0 (usually already 0); -1 means music load pending (0x98 path refuses on -1)"
+        desc="READ-ONLY: never write (poll retries it); zeroing while busy fakes readiness."/>
 
   <addr name="teleportGateAnim" value="0x800ADB90" type="u32" size="4" status="verified"
-        verifiedBy="live-experiment" date="2026-07-24"
+        verifiedBy="ghidra-static+live-experiment" date="2026-09-17"
         evidence="poll gate at 0x800784D0: must be 0 (usually already 0)"
-        desc="RECIPE: write 0 defensively."/>
+        desc="READ-ONLY: never write (poll retries it); zeroing while busy fakes readiness."/>
 
   <addr name="loadNewFieldFn" value="0x8001B484" type="code" size="0" status="verified"
         verifiedBy="ghidra-static+live" date="2026-07-24"

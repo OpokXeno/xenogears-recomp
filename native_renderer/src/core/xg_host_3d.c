@@ -3,6 +3,7 @@
 #include "psx_render_nclip.h"
 
 #include <limits.h>
+#include <math.h>
 #include <stddef.h>
 #include <string.h>
 
@@ -487,6 +488,32 @@ int xg_host_3d_scale_matrix(XgHost3dMatrix *matrix,
     return 1;
 }
 
+int xg_host_3d_native_project(const XgHost3dProjection *projection,
+                             const XgHost3dVector *vertex,
+                             int32_t *out_x, int32_t *out_y) {
+    if (!native_view_enabled || !projection || !vertex || !out_x || !out_y) return 0;
+    double view[3], xy[2];
+    for (unsigned r = 0; r < 3; ++r) {
+        const int64_t raw = (int64_t)projection->translation[r] * 4096 +
+            (int64_t)projection->rotation[r][0] * vertex->x +
+            (int64_t)projection->rotation[r][1] * vertex->y +
+            (int64_t)projection->rotation[r][2] * vertex->z;
+        view[r] = raw / 4096.0;
+        if (view[r] < -2147483648.0 || view[r] >= 2147483648.0)
+            view[r] -= floor((view[r] + 2147483648.0) / 4294967296.0) * 4294967296.0;
+    }
+    const double q = view[2] <= 0 ? 131071.0 / 65536.0 :
+        fmin(projection->projection_distance / fmin(view[2], 65535.0), 131071.0 / 65536.0);
+    xy[0] = (double)projection->screen_offset_x + native_view_center_offset_x_16_16 +
+        fmax(-32768.0, fmin(view[0], 32767.0)) * q * 65536.0;
+    xy[1] = projection->screen_offset_y +
+        fmax(-32768.0, fmin(view[1], 32767.0)) * q * 65536.0;
+    for (unsigned a = 0; a < 2; ++a)
+        if (!isfinite(xy[a]) || xy[a] < INT32_MIN || xy[a] > INT32_MAX) return 0;
+    *out_x = (int32_t)llround(xy[0]); *out_y = (int32_t)llround(xy[1]);
+    return 1;
+}
+
 static void project_vertex(XgHost3dMathState *state,
                            const XgHost3dVector *vertex, int set_depth_cue,
                            XgHost3dProjectedVertex *output) {
@@ -531,13 +558,12 @@ static void project_vertex(XgHost3dMathState *state,
         mac[1] >= -0x8000 && mac[1] <= 0x7fff &&
         mac[2] > 0 && mac[2] <= 0xffff &&
         (uint32_t)mac[2] * 2u > projection->projection_distance;
-    if (native_view_enabled &&
-        x_16_16 + native_view_center_offset_x_16_16 >= INT32_MIN &&
-        x_16_16 + native_view_center_offset_x_16_16 <= INT32_MAX &&
-        y_16_16 >= INT32_MIN && y_16_16 <= INT32_MAX) {
-        output->native_view_x_16_16 = (int32_t)(
-            x_16_16 + native_view_center_offset_x_16_16);
-        output->native_view_y_16_16 = (int32_t)y_16_16;
+    /* Native presentation must retain the fractional transform and depth, not
+     * merely the fractional screen result of an already rounded GTE projection.
+     * Do this for every producer, including sprites and projected overlays.
+     * The canonical GTE results, flags and depth FIFO above remain unchanged. */
+    if (xg_host_3d_native_project(projection, vertex,
+            &output->native_view_x_16_16, &output->native_view_y_16_16)) {
         output->native_view_position = 1u;
         output->projective_native_offset_x_16_16 =
             native_view_center_offset_x_16_16;

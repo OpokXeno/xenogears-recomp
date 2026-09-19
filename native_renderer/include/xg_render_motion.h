@@ -92,6 +92,13 @@ typedef struct XgRenderMotionRef {
     uint64_t digest;
 } XgRenderMotionRef;
 
+/* Guest-owner endpoint refinement, independent of rigid temporal eligibility.
+ * Apply the owned pose to a current LOCAL vertex while preserving viewport
+ * offsets in its continuous source-projected Native Q16 position. Deforming
+ * models can use this without binding their vertices to a rigid motion curve. */
+bool xg_render_motion_refine_native_vertex(XgRenderMotionRef ref, uint32_t part,
+    const XgHost3dVector *local, int32_t *native_x, int32_t *native_y);
+
 typedef enum XgRenderMotionTranslationStage {
     XG_RENDER_MOTION_TRANSLATION_AFFINE = 0,
     /* camera * s16(parent accumulated) * s16(leaf local). */

@@ -1,8 +1,10 @@
 #include "xg_render_native_work.h"
 #include "xg_render_semantic_presentation.h"
 #include "xg_render_submission.h"
+#include "gpu_primitive_reject.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 #define NATIVE_WORK_UPLOAD_CAPACITY 32u
 /* One device-stream ID, not an authenticated game artifact identity. */
@@ -142,10 +144,46 @@ bool xg_render_native_work_operation(const XgRenderNativeOperation *operation,
 bool xg_render_native_work_draw(const GpuRenderSemantic *semantic,
                                 uint64_t guest_cycle) {
     XgRenderNativeOperation operation = {.kind = XG_RENDER_NATIVE_OPERATION_DRAW};
-    if (semantic == NULL) return false;
+    if (semantic == NULL ||
+        semantic->triangle_count > GPU_RENDER_SEMANTIC_TRIANGLE_CAPACITY ||
+        (semantic->topology == GPU_RENDER_SEMANTIC_TRIANGLES &&
+         semantic->triangle_count == 0u)) return false;
     operation.semantic = *semantic;
     (void)xg_render_motion_bind_command(semantic->submission_command_id, &operation);
     (void)xg_render_submission_temporal_binding(semantic, &operation.temporal);
+    /* Match GP0 size rejection using the original integer screen coordinates,
+     * before Native projection, widescreen expansion or temporal interpolation.
+     * Bind the complete packet first, then compact each accepted triangle with
+     * its LOCAL motion data: a quad can have only one rejected half. */
+    if (semantic->topology == GPU_RENDER_SEMANTIC_TRIANGLES) {
+        uint32_t accepted = 0u;
+        for (uint32_t t = 0u; t < semantic->triangle_count; ++t) {
+            int32_t x[3], y[3];
+            for (uint32_t v = 0u; v < 3u; ++v) {
+                x[v] = semantic->triangles[t].vertices[v].x / INT32_C(65536);
+                y[v] = semantic->triangles[t].vertices[v].y / INT32_C(65536);
+            }
+            if (psx_gpu_triangle_oversize(x, y, 0, 1, 2)) continue;
+            if (accepted != t) {
+                operation.semantic.triangles[accepted] = operation.semantic.triangles[t];
+                if (operation.motion.motion.handle.resource_id) {
+                    memcpy(operation.motion.local[accepted], operation.motion.local[t],
+                           sizeof(operation.motion.local[accepted]));
+                    memcpy(operation.motion.vertex_ids[accepted], operation.motion.vertex_ids[t],
+                           sizeof(operation.motion.vertex_ids[accepted]));
+                }
+            }
+            ++accepted;
+        }
+        if (accepted == 0u) return lane_ready(NULL);
+        operation.semantic.triangle_count = (uint8_t)accepted;
+        if (operation.motion.motion.handle.resource_id)
+            operation.motion.triangle_count = accepted;
+        for (uint32_t t = 0u; t < accepted; ++t) {
+            operation.semantic.triangles[t].split_index = (uint8_t)t;
+            operation.semantic.triangles[t].split_count = (uint8_t)accepted;
+        }
+    }
     return append_operation(&operation, guest_cycle);
 }
 

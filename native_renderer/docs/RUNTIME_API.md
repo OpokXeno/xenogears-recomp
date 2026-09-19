@@ -96,8 +96,8 @@ intermediate images plus the authored 1/1 endpoint. The presenter requires a
 matching retained logical base and epoch/scene/layout; otherwise it uses 1/1.
 Generated phases are not a count of actual presentations or successful swaps.
 
-At scales above 1, the native GPU service rasterizes the complete ordered journal
-into scaled storage while canonical CPU device/reference state stays 1x.
+At every supported scale, the native GPU service rasterizes the complete ordered
+journal into endpoint storage while canonical CPU device/reference state stays 1x.
 `GlRendererNativeEndpointMetadata.width/height` are guest dimensions;
 `storage_width/storage_height` describe actual pixels. Scales 1..8 are supported;
 

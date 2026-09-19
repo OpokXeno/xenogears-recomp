@@ -21,12 +21,16 @@
   </region>
 
   <region name="Teleport / module system">
-    <watch name="fieldMapNumber"      addr="0x8004F34C" type="u32"    size="4"    note="map-change request (write target id to teleport)"/>
-    <watch name="teleportGate1"       addr="0x800ADBEC" type="u32"    size="4"    note="poll gate: write 0 to arm"/>
-    <watch name="fieldChangePrevented" addr="0x800ADB64" type="u32"   size="4"    note="write 0 to arm (idle 0xFF)"/>
-    <watch name="teleportArm"         addr="0x800ADBC4" type="u32"    size="4"    note="poll gate: must be 0xFF"/>
-    <watch name="teleportGateMusic"   addr="0x8004F308" type="u32"    size="4"    note="poll gate: must be 0"/>
-    <watch name="teleportGateAnim"    addr="0x800ADB90" type="u32"    size="4"    note="poll gate: must be 0"/>
+    <watch name="fieldMapNumber"      addr="0x8004F34C" type="u32"    size="4"    note="map-change request (write target id, then clear gate1 last)"/>
+    <watch name="teleportGate1"       addr="0x800ADBEC" type="u32"    size="4"    note="poll gate: write 0 LAST to arm (idle 0xFFFFFFFF)"/>
+    <watch name="activeEntryPoint"    addr="0x800C3A6A" type="u16"    size="2"    note="ACTIVE entry mirror var[1]: write entry here AND 0x8006EF66"/>
+    <watch name="overlaySignature"    addr="0x8006FAF0" type="u32"    size="4"    note="resident overlay first word: 4=Field 5=World 6=Battle (teleport guard)"/>
+    <watch name="loadedModule"        addr="0x800592C0" type="u32"    size="4"    note="DEV-MENU ONLY: constant 0xFFFFFFFF in retail play, not a guard"/>
+    <watch name="partyLoadState"      addr="0x800ADBC4" type="u32"    size="4"    note="READ-ONLY busy check: 0xFF=idle, refuse teleport otherwise"/>
+    <watch name="menuRequest"         addr="0x800ADB64" type="u32"    size="4"    note="READ-ONLY busy check: 0xFF=idle; NEVER write (menu request slot)"/>
+    <watch name="fadeGate"            addr="0x800B2118" type="u16"    size="2"    note="READ-ONLY busy check: 0=idle, refuse teleport otherwise"/>
+    <watch name="teleportGateMusic"   addr="0x8004F308" type="u32"    size="4"    note="poll gate: must be 0 (read-only, poll retries)"/>
+    <watch name="teleportGateAnim"    addr="0x800ADB90" type="u32"    size="4"    note="poll gate: must be 0 (read-only, poll retries)"/>
     <watch name="moduleRequested"     addr="0x80018088" type="u32"    size="4"    note="module id requested via module_switch"/>
     <watch name="loadFileIndex"       addr="0x8004F330" type="u32"    size="4"    note="bundle file index while loading (-1 idle)"/>
     <watch name="loadFileArg"         addr="0x8004F334" type="u32"    size="4"    note="loadNewField arg1 (-1 idle)"/>
@@ -40,7 +44,7 @@
     <watch name="actorArrayPtr"       addr="0x800AFB10" type="ptr"     size="4"   note="field actor array pointer"/>
     <watch name="actorArrayCount"     addr="0x800AFB0C" type="u32"     size="4"   note="field actor array count/size"/>
     <watch name="playerControlledActor" addr="0x800B226C" type="s32"   size="4"   note="index of player actor"/>
-    <watch name="fieldContextPtr"     addr="0x800B0078" type="ptr"     size="4"   note="field script context (script PC at +0xCC)"/>
+    <watch name="fieldContextPtr"     addr="0x800B0078" type="ptr"     size="4"    note="TRANSIENT scheduler current-actor ptr (rewritten every dispatch; NOT a module signal)"/>
     <watch name="menuDisabled"        addr="0x800B21D0" type="u8"      size="1"   note="g_menuDisabled"/>
   </region>
 

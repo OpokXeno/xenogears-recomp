@@ -755,8 +755,7 @@ static void project_continuous_view(const double input[3], const double offset[2
 }
 
 static void project_source_vertex(const XgHost3dProjection *source,
-        const XgHost3dVector *vertex, double screen[2], double subpixel_gte[2],
-        double precise[2]) {
+        const XgHost3dVector *vertex, double screen[2], double precise[2]) {
     int64_t mac[3];
     double view[3];
     for (unsigned r = 0; r < 3; ++r) {
@@ -774,20 +773,57 @@ static void project_source_vertex(const XgHost3dProjection *source,
                                   source->screen_offset_y / 65536.0};
         project_continuous_view(view, offset, source->projection_distance, precise);
     }
-    if (screen || subpixel_gte) {
+    if (screen) {
         const uint16_t depth = mac[2] < 0 ? 0 : mac[2] > 65535 ? 65535 : (uint16_t)mac[2];
         const int32_t q = psx_gte_divide(source->projection_distance, depth, NULL);
         for (unsigned axis = 0; axis < 2; ++axis) {
             const int64_t ir = mac[axis] < -32768 ? -32768 : mac[axis] > 32767 ? 32767 : mac[axis];
             const int64_t xy = (axis ? source->screen_offset_y : source->screen_offset_x) + ir * q;
-            if (screen) screen[axis] = fmax(-1024.0, fmin(1023.0, floor(xy / 65536.0)));
-            if (subpixel_gte) {
-                const uint32_t low = (uint32_t)xy;
-                subpixel_gte[axis] = (low < UINT32_C(0x80000000) ? (int64_t)low :
-                    (int64_t)low - INT64_C(4294967296)) / 65536.0;
-            }
+            screen[axis] = fmax(-1024.0, fmin(1023.0, floor(xy / 65536.0)));
         }
     }
+}
+
+static bool refine_native_vertex(const XgHost3dProjection *projection,
+        const XgRenderMotionTransform *transform, uint32_t part,
+        const XgHost3dVector *local, int32_t xy[2]) {
+    double source_xy[2], precise[2], view[3];
+    project_source_vertex(projection, local, NULL, source_xy);
+    const double (*m)[4] = transform->model_to_view[part];
+    for (unsigned r = 0; r < 3; ++r)
+        view[r] = m[r][0]*local->x + m[r][1]*local->y + m[r][2]*local->z + m[r][3];
+    project_continuous_view(view, transform->screen_offset,
+                            transform->projection_distance, precise);
+    int32_t result[2];
+    for (unsigned axis = 0; axis < 2; ++axis) {
+        const double value = xy[axis] + (precise[axis] - source_xy[axis]) * 65536.0;
+        if (!isfinite(value) || value < INT32_MIN || value > INT32_MAX) return false;
+        result[axis] = (int32_t)llround(value);
+    }
+    memcpy(xy, result, sizeof(result));
+    return true;
+}
+
+bool xg_render_motion_refine_native_vertex(XgRenderMotionRef ref, uint32_t part,
+        const XgHost3dVector *local, int32_t *native_x, int32_t *native_y) {
+    const XgRenderMotionPose *pose;
+    if (!local || !native_x || !native_y || !xg_render_motion_view(ref, &pose) ||
+        part >= pose->node_count || !pose->nodes[part].source_matrix_valid ||
+        !native_pose_uses_trs(pose)) return false;
+    const XgRenderMotionTransform *transform = native_pose_transform(ref, pose);
+    if (!transform) return false;
+    const XgHost3dMatrix *matrix = &pose->nodes[part].source_model_to_view;
+    XgHost3dProjection projection = {0};
+    memcpy(projection.rotation, matrix->rotation, sizeof(matrix->rotation));
+    memcpy(projection.translation, matrix->translation, sizeof(matrix->translation));
+    projection.screen_offset_x = (int32_t)(pose->screen_offset[0] * 65536.0);
+    projection.screen_offset_y = (int32_t)(pose->screen_offset[1] * 65536.0);
+    projection.projection_distance = (uint16_t)pose->projection_distance;
+    int32_t xy[2] = {*native_x, *native_y};
+    if (!refine_native_vertex(&projection, transform, part, local, xy)) return false;
+    *native_x = xy[0];
+    *native_y = xy[1];
+    return true;
 }
 
 bool xg_render_motion_bind_command(uint32_t command_id, XgRenderNativeOperation *op) {
@@ -859,10 +895,12 @@ bool xg_render_motion_bind_command(uint32_t command_id, XgRenderNativeOperation 
                 }
             }
         }
-        /* A fractional screen XY alone still contains the GTE's integer MAC/SZ
-         * stair steps. Refine only the presentation coordinates, from the owned
-         * LOCAL geometry and camera/model pose. The delta preserves authored
-         * viewport/billboard offsets; canonical XY and guest execution stay exact.
+        /* The shared projector already preserves fractional MAC/SZ. Refine its
+         * source-matrix projection to the owned LOCAL geometry and camera/model
+         * pose, using that same continuous projection as the baseline. Subtracting
+         * the integer GTE result here would apply the precision correction twice.
+         * The delta preserves authored viewport/billboard offsets; canonical XY
+         * and guest execution stay exact.
          * Stage the complete binding before changing any existing Native vertex. */
         int32_t native_xy[2][3][2];
         for (uint32_t t = 0u; t < c->binding.triangle_count; ++t)
@@ -870,27 +908,12 @@ bool xg_render_motion_bind_command(uint32_t command_id, XgRenderNativeOperation 
                 const GpuRenderSemanticVertex *vertex = &op->semantic.triangles[t].vertices[v];
                 native_xy[t][v][0] = vertex->native_view_x;
                 native_xy[t][v][1] = vertex->native_view_y;
-                if (!vertex->native_view_position) continue;
-                double quantized[2], precise[2];
-                project_source_vertex(&projection, &c->binding.local[t][v],
-                                      NULL, quantized, native_transform ? NULL : precise);
-                if (native_transform) {
-                    const XgHost3dVector *local = &c->binding.local[t][v];
-                    const double (*m)[4] = native_transform->model_to_view[c->binding.motion_part_index];
-                    double view[3];
-                    for (unsigned r = 0u; r < 3u; ++r)
-                        view[r] = m[r][0]*local->x + m[r][1]*local->y + m[r][2]*local->z + m[r][3];
-                    project_continuous_view(view, native_transform->screen_offset,
-                                            native_transform->projection_distance, precise);
-                }
-                for (unsigned axis = 0u; axis < 2u; ++axis) {
-                    const double value = native_xy[t][v][axis] +
-                        (precise[axis] - quantized[axis]) * 65536.0;
-                    if (!isfinite(value) || value < INT32_MIN || value > INT32_MAX) {
-                        xg_render_motion_note(XG_MOTION_BIND_GEOMETRY_UNSUPPORTED, command_id);
-                        return false;
-                    }
-                    native_xy[t][v][axis] = (int32_t)llround(value);
+                if (!vertex->native_view_position || !native_transform) continue;
+                if (!refine_native_vertex(&projection, native_transform,
+                        c->binding.motion_part_index, &c->binding.local[t][v],
+                        native_xy[t][v])) {
+                    xg_render_motion_note(XG_MOTION_BIND_GEOMETRY_UNSUPPORTED, command_id);
+                    return false;
                 }
             }
         for (uint32_t t = 0u; t < c->binding.triangle_count; ++t)
@@ -1190,7 +1213,7 @@ XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluat
             double anchors[2][2];
             for (unsigned endpoint = 0; endpoint < 2; ++endpoint) {
                 const XgHost3dProjection *source = &e->source_projection[endpoint][b->motion_part_index];
-                project_source_vertex(source, p, anchors[endpoint], NULL, NULL);
+                project_source_vertex(source, p, anchors[endpoint], NULL);
             }
             for (unsigned axis = 0; axis < 2; ++axis) {
                 const double a = anchors[0][axis], c = anchors[1][axis];

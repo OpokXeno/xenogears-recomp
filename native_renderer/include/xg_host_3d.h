@@ -11,6 +11,11 @@ int xg_host_3d_rtps(const XgHost3dProjection *projection,
                     const XgHost3dVector *vertex,
                     XgHost3dProjectedVertex *output,
                     uint32_t *flags);
+/* Presentation-only projection from authenticated LOCAL geometry. Also used by
+ * RTPS Native metadata; retains fractional MAC/SZ and H/Z until Q16 conversion. */
+int xg_host_3d_native_project(const XgHost3dProjection *projection,
+                             const XgHost3dVector *vertex,
+                             int32_t *out_x, int32_t *out_y);
 /* Source culling follows Native Q16 geometry when present; otherwise it uses
  * the canonical signed screen-area result. Reads the first three vertices. */
 int32_t xg_host_3d_nclip(const XgHost3dProjectedVertex *vertices);
