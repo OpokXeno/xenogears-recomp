@@ -56,6 +56,9 @@ static void include_anchor_index(AnchorScanRange *ranges, uint32_t producer, uin
 }
 static uint32_t ft3_source_count;
 static uint32_t ft4_source_count;
+/* All entries below this cursor are occupied. Invalidations lower the cursor;
+ * insertion can then reuse the first hole without rescanning large records. */
+static uint32_t ft4_first_free;
 static XgRenderAddressLookupSlot ft3_source_lookup[
     XG_RENDER_LOOKUP_WORD_CAPACITY];
 static XgRenderAddressLookupSlot ft4_source_lookup[
@@ -173,11 +176,11 @@ static XgRenderModelFt4SourceRecord *ft4_source_upsert(uint32_t source_id) {
         ft4_sources[indexed].semantic_ready = false;
         return &ft4_sources[indexed];
     }
-    for (uint32_t index = 0u; index < ft4_source_count; ++index) {
-        if (!ft4_sources[index].valid) {
-            ft4_sources[index].semantic_ready = false;
-            return &ft4_sources[index];
-        }
+    while (ft4_first_free < ft4_source_count && ft4_sources[ft4_first_free].valid)
+        ++ft4_first_free;
+    if (ft4_first_free < ft4_source_count) {
+        ft4_sources[ft4_first_free].semantic_ready = false;
+        return &ft4_sources[ft4_first_free];
     }
     if (ft4_source_count == XG_RENDER_LOOKUP_WORD_CAPACITY) return NULL;
     uint32_t *keys = xg_render_array_reserve(ft4_source_producers, sizeof(*keys),
@@ -525,8 +528,10 @@ bool xg_render_model_repository_store_ft4_sources(
     for (; reserved < count; ++reserved) {
         XgRenderModelFt4SourceRecord *target = ft4_source_upsert(records[reserved].source_id);
         if (target == NULL) {
-            for (uint32_t rollback = 0u; rollback < reserved; ++rollback)
+            for (uint32_t rollback = 0u; rollback < reserved; ++rollback) {
                 ft4_sources[targets[rollback]].valid = false;
+                if (targets[rollback] < ft4_first_free) ft4_first_free = targets[rollback];
+            }
             free(targets);
             return false;
         }
@@ -590,6 +595,7 @@ void xg_render_model_repository_clear_ft3_sources(
 }
 
 void xg_render_model_repository_clear_ft4_sources(void) {
+    ft4_first_free = 0u;
     if(ft4_source_count) {
         ft4_source_count = 0u;
         memset(ft4_anchor_ranges, 0, sizeof(ft4_anchor_ranges));
@@ -617,6 +623,7 @@ void xg_render_model_repository_retain_resident_sources(
         ++retained;
     }
     ft4_source_count = retained;
+    ft4_first_free = retained;
     xg_render_lookup_reset(ft4_source_lookup, &ft4_source_lookup_epoch);
     for (uint32_t index = 0u; index < retained; ++index) {
         xg_render_lookup_put(
@@ -973,6 +980,7 @@ void xg_render_model_repository_invalidate_overlapping(
         if (index != UINT32_MAX && ranges_overlap(
                 ft4_sources[index].source_id, 0x24u, address, size)) {
             ft4_sources[index].valid = false;
+            if (index < ft4_first_free) ft4_first_free = index;
             xg_render_lookup_remove(
                 ft4_source_lookup, ft4_source_lookup_epoch,
                 ft4_sources[index].source_id, index);

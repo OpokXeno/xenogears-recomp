@@ -152,7 +152,22 @@ uint64_t xg_render_resource_digest(const void *bytes, size_t byte_count) {
     uint64_t hash = UINT64_C(1469598103934665603);
     size_t index;
     if (bytes == NULL && byte_count != 0u) return 0u;
-    for (index = 0; index < byte_count; index++) {
+    /* Poses and descriptors contain long zero-filled unused tails. Eight zero
+     * bytes are exactly eight FNV multiplications, without the serial byte
+     * dependency. memcpy keeps this valid for unaligned resource storage. */
+    for (index = 0; byte_count - index >= sizeof(uint64_t); index += sizeof(uint64_t)) {
+        uint64_t word;
+        memcpy(&word, source + index, sizeof(word));
+        if (word == 0u) {
+            hash *= UINT64_C(0x1efac7090aef4a21);
+        } else {
+            for (size_t byte = 0; byte < sizeof(word); ++byte) {
+                hash ^= source[index + byte];
+                hash *= UINT64_C(1099511628211);
+            }
+        }
+    }
+    for (; index < byte_count; index++) {
         hash ^= source[index];
         hash *= UINT64_C(1099511628211);
     }

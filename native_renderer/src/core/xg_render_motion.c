@@ -506,18 +506,27 @@ bool xg_render_motion_publish(const XgRenderMotionSource *source, const XgRender
     return true;
 }
 
-bool xg_render_motion_binding_valid(const XgRenderMotionDrawBinding *b) {
+static bool motion_binding_pose(const XgRenderMotionDrawBinding *b,
+                                const XgRenderMotionPose **out_pose) {
     const XgRenderMotionPose *pose;
+    *out_pose = NULL;
     if (b == NULL)
         return false;
     if (!b->motion.handle.resource_id)
         return !b->motion.handle.generation && !b->motion.digest && !b->triangle_count &&
                !b->motion_part_index;
-    return b->triangle_count > 0 && b->triangle_count <= 2 &&
-           xg_render_motion_view(b->motion, &pose) && b->motion_part_index < pose->node_count &&
-           pose->nodes[b->motion_part_index].source_matrix_valid &&
-           (pose->translation_stage != XG_RENDER_MOTION_TRANSLATION_WORLD ||
-            b->motion_part_index + 1 == pose->node_count);
+    if (!(b->triangle_count > 0 && b->triangle_count <= 2 &&
+          xg_render_motion_view(b->motion, &pose) && b->motion_part_index < pose->node_count &&
+          pose->nodes[b->motion_part_index].source_matrix_valid &&
+          (pose->translation_stage != XG_RENDER_MOTION_TRANSLATION_WORLD ||
+           b->motion_part_index + 1 == pose->node_count))) return false;
+    *out_pose = pose;
+    return true;
+}
+
+bool xg_render_motion_binding_valid(const XgRenderMotionDrawBinding *b) {
+    const XgRenderMotionPose *pose;
+    return motion_binding_pose(b, &pose);
 }
 
 bool xg_render_motion_register_command(uint32_t command_id,
@@ -542,8 +551,9 @@ bool xg_render_motion_register_command(uint32_t command_id,
     }
     if (binding == NULL && slot == NULL)
         return true;
+    const XgRenderMotionPose *pose = NULL;
     if (binding != NULL &&
-        (!binding->motion.handle.resource_id || !xg_render_motion_binding_valid(binding)))
+        (!binding->motion.handle.resource_id || !motion_binding_pose(binding, &pose)))
         return false;
     if (slot == NULL)
         slot = empty;
@@ -558,11 +568,8 @@ bool xg_render_motion_register_command(uint32_t command_id,
         return false;
     clear_command(slot);
     if (binding != NULL) {
-        const XgRenderMotionPose *pose;
-        if (!xg_render_motion_view(binding->motion, &pose)) {
-            (void)xg_render_resource_release(binding->motion.handle);
-            return false;
-        }
+        /* The acquired immutable snapshot retains the pose validated above,
+         * including when clear_command retired this slot's previous binding. */
         *slot = (MotionCommand){.binding = *binding,
                                 .continuity_generation = pose->continuity_generation,
                                 .command_id = command_id,
@@ -849,7 +856,8 @@ bool xg_render_motion_bind_command(uint32_t command_id, XgRenderNativeOperation 
             xg_render_motion_note(XG_MOTION_BIND_IDENTITY_REJECT, command_id);
             return false;
         }
-        if (!xg_render_motion_binding_valid(&c->binding)) {
+        const XgRenderMotionPose *pose;
+        if (!motion_binding_pose(&c->binding, &pose) || !pose) {
             xg_render_motion_note(XG_MOTION_BIND_RESOURCE_REJECT, command_id);
             return false;
         }
@@ -858,8 +866,6 @@ bool xg_render_motion_bind_command(uint32_t command_id, XgRenderNativeOperation 
          * subpixel faces splits duplicate source vertices during motion. Recover
          * the Native view from the authenticated local geometry, never screen XY.
          * This runs on the guest owner, where the Native-view configuration lives. */
-        const XgRenderMotionPose *pose;
-        if (!xg_render_motion_view(c->binding.motion, &pose)) return false;
         const XgHost3dMatrix *matrix =
             &pose->nodes[c->binding.motion_part_index].source_model_to_view;
         XgHost3dProjection projection = {0};

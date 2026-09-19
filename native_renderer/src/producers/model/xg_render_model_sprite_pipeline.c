@@ -191,6 +191,15 @@ static struct {
     bool complete;
 } model_coverage;
 static struct { uint64_t published, rejected; } model_coverage_diagnostics;
+/* Guest-owned scratch, invalidated at every model capture. Shared mesh vertices
+ * have the same projection throughout that capture, including deformed locals;
+ * no camera, pose or vertex result survives into the next invocation. */
+#define MODEL_PROJECTION_CACHE_CAPACITY 256u
+static struct {
+    uint32_t vertex_ids[MODEL_PROJECTION_CACHE_CAPACITY];
+    XgHost3dVector locals[MODEL_PROJECTION_CACHE_CAPACITY];
+    XgHost3dProjectedVertex projected[MODEL_PROJECTION_CACHE_CAPACITY];
+} model_projection_cache;
 static GearHelperMode1Proof gear_helper_mode1_proof;
 
 typedef struct XgRenderModelSpriteStageRequest {
@@ -1150,15 +1159,30 @@ static bool capture_model_geometry(uint32_t packet, uint32_t descriptor,
         uint32_t family, const XgHost3dVector vertices[4], const uint32_t indices[4]) {
     const ModelContext *context = &model_ft4.context;
     const XgRenderMotionPose *pose = NULL;
-    XgHost3dProject4Input input = {.projection = context->projection};
-    XgHost3dRotTransPers4Output output;
+    XgHost3dProjectedVertex projected[4];
     GpuRenderSemantic semantic = {0};
     const uint8_t split[2][3] = {{0, 1, 2}, {2, 1, 3}};
     const uint32_t corners = family & 8u ? 4u : 3u;
     if (context->motion.handle.resource_id && !xg_render_motion_view(context->motion, &pose)) return false;
-    memcpy(input.vertices, vertices, sizeof(input.vertices));
-    if (corners == 3u) input.vertices[3] = input.vertices[2];
-    if (!xg_host_3d_rot_trans_pers4(&input, &output)) return false;
+    for (uint32_t corner = 0; corner < corners; ++corner) {
+        const uint32_t slot = indices[corner] % MODEL_PROJECTION_CACHE_CAPACITY;
+        if (model_projection_cache.vertex_ids[slot] != indices[corner] + 1u ||
+            memcmp(&model_projection_cache.locals[slot], &vertices[corner], sizeof(vertices[corner]))) {
+            XgHost3dProjectedVertex result;
+            uint32_t flags;
+            /* Capture consumes vertex coordinates only, not RTPT's accumulated
+             * flags/depth FIFO. A scalar RTPS gives the identical vertex. */
+            if (!xg_host_3d_rtps(&context->projection, &vertices[corner], &result, &flags)) return false;
+            if (context->projection_motion.handle.resource_id && result.native_view_position &&
+                !xg_render_motion_refine_native_vertex(context->projection_motion,
+                    context->motion_part, &vertices[corner],
+                    &result.native_view_x_16_16, &result.native_view_y_16_16)) return false;
+            model_projection_cache.projected[slot] = result;
+            model_projection_cache.locals[slot] = vertices[corner];
+            model_projection_cache.vertex_ids[slot] = indices[corner] + 1u;
+        }
+        projected[corner] = model_projection_cache.projected[slot];
+    }
     semantic.material.textured = (family & 1u) != 0u || family == 16u;
     semantic.material.shading = family & 2u
         ? GPU_RENDER_SHADING_GOURAUD : GPU_RENDER_SHADING_FLAT;
@@ -1173,17 +1197,13 @@ static bool capture_model_geometry(uint32_t packet, uint32_t descriptor,
         semantic.triangles[t].split_count = (uint8_t)semantic.triangle_count;
         for (uint32_t v = 0; v < 3u; ++v) {
             const uint32_t corner = split[t][v];
-            const XgHost3dProjectedVertex *source = &output.vertices[corner];
+            const XgHost3dProjectedVertex *source = &projected[corner];
             GpuRenderSemanticVertex *target = &semantic.triangles[t].vertices[v];
             target->x = (int32_t)source->x * 65536;
             target->y = (int32_t)source->y * 65536;
             target->native_view_x = source->native_view_x_16_16;
             target->native_view_y = source->native_view_y_16_16;
             target->native_view_position = source->native_view_position;
-            if (context->projection_motion.handle.resource_id && target->native_view_position &&
-                !xg_render_motion_refine_native_vertex(context->projection_motion,
-                    context->motion_part, &vertices[corner],
-                    &target->native_view_x, &target->native_view_y)) return false;
             target->projective_view_x = source->projective_view_x;
             target->projective_view_y = source->projective_view_y;
             target->projective_view_z = source->projective_view_z;
@@ -1231,6 +1251,7 @@ static void capture_model_geometry_bindings(CPUState *cpu,
         return;
     const uint32_t count = cpu->read_half(context->model_address + 6);
     const uint32_t vertex_count = cpu->read_half(context->model_address + 2);
+    memset(model_projection_cache.vertex_ids, 0, sizeof(model_projection_cache.vertex_ids));
     model_coverage.complete = false;
     model_coverage.binding_count = model_coverage.vertex_count = 0u;
     if (!context->motion.handle.resource_id) {
