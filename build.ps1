@@ -22,6 +22,7 @@
     .\build.ps1
     .\build.ps1 -BuildDir build-dbg -BuildType Debug
     .\build.ps1 -Generator "Visual Studio 17 2022"
+    $env:CC = "clang-cl"; $env:CXX = "clang-cl"; .\build.ps1
 .NOTES
     Environment overrides:
       PSX_RECOMPILER_BUILD: recompiler build directory (default: psxrecomp/recompiler/build).
@@ -30,7 +31,8 @@
       PSX_RECOMPILER_BUILD also accepts absolute or root-relative paths.
     Prerequisites:
       - CMake 3.20+
-      - Visual Studio 2022 (with C++ tools) or MinGW/MSYS2
+      - Visual Studio 2022 (with C++ tools; add the C++ Clang Compiler for
+        Windows component to use clang-cl) or MinGW/MSYS2
       - SDL3 3.4+ development library (vcpkg, MSYS2, or manually)
       - Python 3.11+
       - For source builds, place your legally obtained PlayStation BIOS dump at .\psxrecomp\bios\SCPH1001.BIN
@@ -204,6 +206,12 @@ if (-not $PYTHON) {
 }
 if (-not $PYTHON) {
     throw "Python 3.11 or newer is required"
+}
+
+# clang-cl needs the Visual Studio developer environment (Windows SDK, rc.exe),
+# which the cl.exe/gcc/clang checks below would otherwise skip.
+if (($env:CC -like "*clang-cl*") -or ($env:CXX -like "*clang-cl*")) {
+    Initialize-MSVCEnvironment
 }
 
 # --- Auto-detect generator and initialize an explicit Ninja toolchain ---
