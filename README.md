@@ -24,7 +24,7 @@ No retail BIOS image, game disc image, or game assets are included in or distrib
 
 | Dependency | Linux | macOS | Windows |
 |---|---|---|---|
-| **C/C++ compiler** | GCC or Clang | Apple Clang (Xcode) | MSVC or MinGW |
+| **C/C++ compiler** | GCC or Clang | Apple Clang (Xcode) | clang-cl (recommended), MSVC, or MinGW |
 | **CMake** ≥ 3.20 | system package | Homebrew / MacPorts | [cmake.org](https://cmake.org) |
 | **Ninja** (recommended) | `apt install ninja-build` | `brew install ninja` | `winget install Ninja-build.Ninja` |
 | **pkg-config** | `apt install pkg-config` | `brew install pkg-config` | (not needed) |
@@ -163,6 +163,37 @@ binary is produced simply by choosing a debug `CMAKE_BUILD_TYPE`:
 # Windows (PowerShell)
 .\build.ps1 -BuildDir build-dbg -BuildType Debug
 ```
+
+#### 2.3.2 Windows: building with clang-cl (recommended)
+
+clang-cl is the Clang compiler that ships with Visual Studio. It builds this
+project without any source changes, and it is the toolchain we recommend on
+Windows.
+
+Install Visual Studio 2022 (or the Build Tools) with the **Desktop development
+with C++** workload and the **C++ Clang Compiler for Windows** component. Then,
+from a regular PowerShell session:
+
+```powershell
+$env:CC = "clang-cl"; $env:CXX = "clang-cl"
+.\build.ps1
+```
+
+When `CC` or `CXX` names clang-cl, `build.ps1` imports the Visual Studio
+developer environment and uses Ninja, so no special prompt is needed. Debug
+builds work the same way (`-BuildType Debug`). Ninja and CMake come with Visual
+Studio, so nothing else needs installing.
+
+A few things to watch for:
+
+- **Keep MSYS2 out of `PATH`.** If `C:\msys64\mingw64\bin` (or similar) is on
+  `PATH`, CMake's zlib lookup finds MSYS2's MinGW headers, and clang-cl cannot
+  compile against them. Remove it from `PATH` for the session, or build from a
+  shell that does not have it.
+- **Switching compilers.** The recompiler build directory
+  (`psxrecomp/recompiler/build`) remembers the generator it was first configured
+  with. If you built with another toolchain before, point `PSX_RECOMPILER_BUILD`
+  at a new directory, or delete the old one.
 
 #### 2.4 Run
 
