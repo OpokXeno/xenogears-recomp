@@ -36,6 +36,11 @@ if(MSVC)
         APPEND PROPERTY COMPILE_OPTIONS /experimental:c11atomics)
 endif()
 
+if(NOT MSVC)
+    include(CheckSymbolExists)
+    check_symbol_exists(timespec_get "time.h" XG_HAVE_TIMESPEC_GET)
+endif()
+
 add_library(xg_visual_state STATIC src/core/xg_visual_state.c)
 target_include_directories(xg_visual_state PUBLIC include)
 target_compile_features(xg_visual_state PUBLIC c_std_11)
@@ -223,6 +228,14 @@ target_compile_features(xg_semantic_presentation PUBLIC c_std_11)
 target_link_libraries(xg_semantic_presentation PUBLIC xg_host_3d)
 if(NOT MSVC)
     target_link_libraries(xg_semantic_presentation PUBLIC m)
+    if(NOT XG_HAVE_TIMESPEC_GET)
+        # Plain MinGW-w64 GCC (MSYS2 "mingw64", not "ucrt64") doesn't declare
+        # timespec_get()/TIME_UTC, which xg_threads.h and this library's own
+        # sources call directly. llvm-mingw (the project's CI toolchain) and
+        # MSVC both provide it via UCRT, so this is a no-op there.
+        target_compile_options(xg_semantic_presentation PRIVATE
+            -include "${CMAKE_CURRENT_SOURCE_DIR}/include/compat/portable_timespec.h")
+    endif()
 endif()
 
 add_library(xg_render_resident_capture STATIC
