@@ -34,7 +34,7 @@ static-inline no-op.
 | Party | party editor (kernel master slots) + unlock bitfield + roster viewer |
 | Gold & Vars | gold u32 and fieldVars[512] read/write |
 | Force Battle | best-effort battle trigger (encounter vars not fully mapped) |
-| Free Camera | camera eye/at SVECTOR writes |
+| Free Camera | Free camera movement in field, worldmap, battle and battling |
 | Event Jump | script event jump by id |
 
 All widget actions are also reachable over TCP as

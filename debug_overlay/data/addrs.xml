@@ -86,15 +86,160 @@
         evidence="field-module init: second matrix-init call at 0x800AF990+0xD4"
         desc="g_currentProjectionMatrix (field module)."/>
 
-  <addr name="cameraEye" value="0x800AF880" type="svector" size="8" status="verified"
+  <addr name="cameraEye" value="0x800AF880" type="u32" size="12" status="verified"
         verifiedBy="ghidra-static" date="2026-07-24"
-        evidence="WRITE in FUN_00021fe0 (field_module), READ at 0x5a0c"
-        desc="g_cameraEye (field module). Free-camera write target."/>
+        evidence="WRITE in FUN_00021fe0 (field_module), READ at 0x5a0c; FUN_80072D74 eases 0x800AF880/884/888 (32-bit fixed) toward desired 0x800AF8B0"
+        desc="g_cameraEye current eye (field module): 3 x u32 16.16 fixed at 0x800AF880/884/888. Free-camera write target (with desired)."/>
 
-  <addr name="cameraAt" value="0x800AF890" type="svector" size="8" status="verified"
+  <addr name="cameraAt" value="0x800AF890" type="u32" size="12" status="verified"
         verifiedBy="ghidra-static" date="2026-07-24"
         evidence="WRITE in FUN_00021c00 and at 0x21ef0 (field_module)"
-        desc="g_cameraAt (field module). Free-camera write target."/>
+        desc="g_cameraAt current target (field module): 3 x u32 16.16 fixed at 0x800AF890/894/898. Free-camera write target (with desired)."/>
+
+  <!-- Free-camera freeze state (field-overlay FUN_80073230 mode select +
+       FUN_80072D74 interpolation; see docs/xenogears/field/09-camera-control.md).
+       Mode 0 rebuilds desired from the tracked actor every frame; mode 1
+       (script) leaves desired alone; divisors 984/988 ease current toward
+       desired by (d-c)/divisor. Freeze = save all five, write mode=1,
+       divT=divE=1, lock|=0x8000, shake=0; restore on release. -->
+  <addr name="cameraDesEye" value="0x800AF8B0" type="u32" size="12" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_80073230 mode-1 path writes 0x800AF8B0 from 0x800AF964; FUN_80072D74 eases 0x800AF880 toward 0x800AF8B0 by (d-c)/divE"
+        desc="Desired eye (field module): 3 x u32 16.16 fixed. Free-camera write target (with current)."/>
+
+  <addr name="cameraDesAt" value="0x800AF8C0" type="u32" size="12" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_80073230 mode-1 path writes 0x800AF8C0 from 0x800AF940; FUN_80072D74 eases 0x800AF890 toward 0x800AF8C0 by (d-c)/divT"
+        desc="Desired target (field module): 3 x u32 16.16 fixed. Free-camera write target (with current)."/>
+
+  <addr name="cameraMode" value="0x800AF934" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_80073230 branches on 0x800AF934 (1=script, 2=reacquire, else follow); docs/xenogears/field/09-camera-control.md section 2"
+        desc="Camera mode (field module): 0=follow, 1=script, 2=reacquire. Free-camera freeze target (save/restore, force 1)."/>
+
+  <addr name="cameraDivT" value="0x800AF984" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_80072D74 divides (desired-current) by 0x800AF984 for target XYZ; mode-0 path drifts it toward 8"
+        desc="Target smoothing divisor (field module). Free-camera freeze target (save/restore, force 1)."/>
+
+  <addr name="cameraDivE" value="0x800AF988" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_80072D74 divides (desired-current) by 0x800AF988 for eye XYZ; mode-0 path drifts it toward 8"
+        desc="Eye smoothing divisor (field module). Free-camera freeze target (save/restore, force 1)."/>
+
+  <addr name="cameraLock" value="0x800AF9D8" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_80073230/manual-orbit path tests bit 0x8000 at 0x800AF9D8; docs/xenogears/field/09-camera-control.md section 6"
+        desc="Camera state flags (field module). Bit 0x8000 suppresses manual orbit. Free-camera freeze target (save/restore, OR the bit)."/>
+
+  <addr name="cameraShake" value="0x800AFA28" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_80072D74 zeroes shake offsets at 0x800AF8E0/E4/E8 then recomputes them while 0x800AFA28 != 0"
+        desc="Camera shake control (field module). Free-camera freeze target (save/restore, force 0)."/>
+
+  <!-- ======================= world orbit camera ======================= -->
+  <!-- Ordinary travel camera (world overlay FUN_80091c18 task + FUN_80097440
+       Euler builder + FUN_80096f18 vector derivation; renderer-side proof in
+       native_renderer CLOUD_* authenticated addresses). Absolute eye is never
+       stored: per frame the pipeline derives it from origin + yaw/pitch/dist
+       and builds the matrix at 0x8009C808. Free camera drives those three
+       inputs with slot 10 (the eye writer) suspended; slot 9 (target follow
+       + streaming) keeps running so flight stays inside streamed terrain. -->
+  <addr name="worldCamOrigin" value="0x8009BE28" type="u32" size="12" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_800914D0 publishes followed pos to 0x8009BE28/2C/30/34; native renderer authenticates 0x8009BE28/30 as CAMERA_ORIGIN_X/Z (12.12 fixed)"
+        desc="World camera origin/look target: 3 x u32 12.12 fixed X/Y/Z. Read-only anchor for the orbit camera."/>
+
+  <addr name="worldCamPitch" value="0x8009BD38" type="s16" size="2" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_80097440 builds rotation from 0x8009BD38/3A/3C; native renderer authenticates 0x8009BD38 as PITCH (u16 read)"
+        desc="World camera pitch (12-bit turn, signed). Free-camera orbit drive target."/>
+
+  <addr name="worldCamYaw" value="0x8009BD3A" type="u16" size="2" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_800914D0 chases 0x8009BD3A with 0xFFF wrap; native renderer authenticates 0x8009BD3A as YAW"
+        desc="World camera yaw (12-bit turn, 0-4095). Free-camera orbit drive target."/>
+
+  <addr name="worldCamDist" value="0x8009D3F0" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_80091c18 eases 0x8009D3F0 toward zoom-table 0x8009B214 entries (0x280000/370000/460000/550000 = 12.12); FUN_80096f18 derives eye from dist>>0xC"
+        desc="World camera distance (u32 12.12 fixed). Free-camera orbit drive target."/>
+
+  <addr name="worldCamTaskArray" value="0x8009BE24" type="ptr" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_80097800 dispatcher loads task array pointer from 0x8009BE24, slots 0x80 bytes, dispatch state at +0x00, active flag/fn at +0x1C; slot 9 ordinary fn FUN_800914D0, slot 10 ordinary fn FUN_80091C18"
+        desc="World task array pointer. Free-camera target: suspend slot 9 (save fn at +0x1C, write 0; slot-9 chase would fight the free origin), pin slot10 chase targets (+0x54/+0x58/+0x60) to the driven dist/pitch."/>
+
+  <addr name="worldCamMatrix" value="0x8009C808" type="matrix" size="32" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_80097440/FUN_80097244 build the view matrix at 0x8009C808 from yaw/pitch/eye; native renderer authenticates it as the shared camera input (GTE +Z-forward: row 2 = view forward)"
+        desc="World view matrix (3x3 s16 rotation + 3x s32 translation). Free-camera flight basis (read-only)."/>
+
+  <addr name="worldStreamX" value="0x8009BBB4" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_800914D0 accumulates followed-pos X deltas into 0x8009BBB4; ground dispatcher passes 0x8009BBB4 to WorldMapSetGridUpdateMask for streaming"
+        desc="World streaming accumulator X. Free-camera drag target: add the free-origin XZ deltas so terrain follows the camera."/>
+
+  <addr name="worldStreamZ" value="0x8009BBBC" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_800914D0 accumulates followed-pos Z deltas into 0x8009BBBC (see worldStreamX)"
+        desc="World streaming accumulator Z. Free-camera drag target (see worldStreamX)."/>
+
+  <!-- ======================= battle camera ======================= -->
+  <!-- Battle-overlay FUN_800BBAB8 (update) + FUN_800BC2F0 (mode set) +
+       annotations/overlays/battle/battle-overlay_annotations.csv.
+       Current eye/target 3 x s16; desired packs halves (word.lo<->c0,
+       word.hi<->c1, next.lo<->c2; next.hi preserved). Mode 4 + gate 5 is
+       BattleSetCameraMode(4): no desired recompute, no interpolation. -->
+  <addr name="battleCamEye" value="0x800D3354" type="s16" size="6" count="3" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_800BBAB8 eases 0x800D3354/56/58 toward desired 0x800D30A0 halves when gate==1; render consumes current"
+        desc="Battle camera current eye: 3 x s16. Free-camera write target (with desired)."/>
+
+  <addr name="battleCamAt" value="0x800D335C" type="s16" size="6" count="3" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_800BBAB8 eases 0x800D335C/5E/60 toward desired 0x800D30A8 halves when gate==1; render consumes current"
+        desc="Battle camera current target: 3 x s16. Free-camera write target (with desired)."/>
+
+  <addr name="battleCamDesEye" value="0x800D30A0" type="u32" size="8" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_800BBAB8 modes 1/2/3 recompute 0x800D30A0/A4; FUN_800BC2F0 mode 2 snapshots them to 0x8006F99C control state"
+        desc="Battle camera desired eye (packed halves). Free-camera write target (preserve high halves of +4 words)."/>
+
+  <addr name="battleCamDesAt" value="0x800D30A8" type="u32" size="8" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_800BBAB8 modes 1/2/3 recompute 0x800D30A8/AC; control-sprite tracks feed only the mode-2 input state, inert in mode 4"
+        desc="Battle camera desired target (packed halves). Free-camera write target (preserve high halves of +4 words)."/>
+
+  <addr name="battleCamMode" value="0x800C3CC0" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_800BBAB8 branches on 0x800C3CC0 (1=auto-frame, 2/3=control/event tracks); FUN_800BC2F0 writes it"
+        desc="Battle camera mode. Free-camera freeze target (save/restore, force 4)."/>
+
+  <addr name="battleCamGate" value="0x800C3CBC" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_800BBAB8 interpolates current toward desired only when 0x800C3CBC==1; FUN_800BC2F0 mode 4 writes 5"
+        desc="Battle camera interp gate. Free-camera freeze target (save/restore, force 5)."/>
+
+  <!-- ======================= battling camera ======================= -->
+  <!-- Battling FUN_8007099c (preset switch on u32 @0x80092904) +
+       FUN_80070808 (target interp) + docs/xenogears/battling/08 §8.
+       Presets 0-5 drive eye/target; any other preset falls through the
+       switch and writes nothing. Eye/target are plain s32 triples. -->
+  <addr name="battlingCamEye" value="0x8009871C" type="u32" size="12" count="3" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_8007099c preset 5 writes 0x8009871C/20/24; presets 3/4 ease it via FUN_800708c4; victory init 0x8007A768 writes it"
+        desc="Battling camera eye: 3 x u32 (s32 units). Free-camera write target."/>
+
+  <addr name="battlingCamAt" value="0x8009867C" type="u32" size="12" count="3" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_80070808 eases 0x8009867C/80/84 toward preset goals; FUN_800796B8 + FUN_80083738 publish the shared framing there"
+        desc="Battling camera target: 3 x u32 (s32 units). Free-camera write target."/>
+
+  <addr name="battlingCamPreset" value="0x80092904" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="per-frame caller (FUN_80072170 tail) loads 0x80092904 into FUN_8007099c; docs/xenogears/battling/08 §8 opcode 17 writes presets 0-5"
+        desc="Battling camera preset. Free-camera freeze target (save/restore, force 6 = switch no-op). Bout scope: victory/replay orbits write the eye directly."/>
 
   <addr name="actorArrayPtr" value="0x800AFB10" type="ptr" size="4" status="verified"
         verifiedBy="ghidra-static" date="2026-07-24"
