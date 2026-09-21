@@ -107,6 +107,10 @@ bool xg_render_presentation_host_time_until_pump(
 bool xg_render_presentation_host_time_until_present(
     XgRenderPresentationHost *host, uint64_t *out_nanoseconds);
 
+/* Owner-only, between pumps. Retargets the presenter tick cadence live. */
+bool xg_render_presentation_host_set_period(
+    XgRenderPresentationHost *host, uint64_t period_ns);
+
 /* Owner-only, between pumps. Pair a guest cycle with its signed wall-time offset
  * from now, without sharing the simulation clock's origin. Bind on a fresh epoch
  * or rate change; rebase also handles deliberate pauses/debt resets. This only

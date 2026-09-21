@@ -341,6 +341,18 @@ typedef struct XgRenderPresentationDiagnostics {
      * retirement may make this true again until cleanup completes.
      */
     bool batch_pending;
+    /* Phase-selection outcomes (read-only observability for tick-rate
+     * tuning): early-empty ticks sacrificed to protect a retained interval,
+     * whole selections via an already-passed deadline, intermediate phase
+     * selections, and the last selected phase index. */
+    uint64_t selection_guard_empties;
+    uint64_t selection_due_wholes;
+    uint64_t selection_phases;
+    uint64_t selection_last_phase;
+    /* Signed deadline-now at the last selection, in ms (negative = overdue).
+     * Distinguishes "published just past deadline" (small) from clock-domain
+     * skew (huge). */
+    int64_t selection_last_remaining_ms;
 } XgRenderPresentationDiagnostics;
 
 /*

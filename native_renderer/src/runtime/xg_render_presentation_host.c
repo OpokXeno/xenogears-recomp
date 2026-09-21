@@ -663,6 +663,34 @@ bool xg_render_presentation_host_time_until_present(
     return time_until_pump(host, out_nanoseconds, false);
 }
 
+/* Owner-only, between pumps. Retargets the presenter tick cadence live (the
+ * Toggles FPS selector): the next pump schedules against the new period, one
+ * phase-selected compose+swap per tick, so a shorter period multiplies output
+ * and a longer one divides it. No rebase: shortening fires the next tick
+ * immediately (responsive speed-up), lengthening simply waits out the longer
+ * period. Pumps already emit at most one present each, so no burst is
+ * possible in either direction. */
+bool xg_render_presentation_host_set_period(
+        XgRenderPresentationHost *host, uint64_t period_ns) {
+    if (host == NULL || period_ns == 0u) return false;
+    /* Owner-only, but explicitly ALLOWED while a pump is in flight: the
+     * debug overlay applies this from inside its tools window, which draws
+     * from within pre_swap — i.e. inside the pump's dynamic extent, where
+     * presenter_running is always true. A plain aligned u64 store takes
+     * effect on the next pump; the pump reads the period at well-defined
+     * points, so a mid-pump change cannot tear a tick. */
+    if (!caller_is_presenter_owner(host)) {
+        counter_increment(&host->presenter_owner_rejections);
+        return false;
+    }
+    if (atomic_load_explicit(&host->state, memory_order_acquire) !=
+            XG_RENDER_PRESENTATION_HOST_RUNNING ||
+        atomic_load_explicit(&host->stop_requested, memory_order_acquire))
+        return false;
+    host->presentation_period_ns = period_ns;
+    return true;
+}
+
 bool xg_render_presentation_host_sync_source_clock(
         XgRenderPresentationHost *host, uint64_t guest_cycle,
         int64_t guest_time_offset_ns, bool realtime, bool rebase) {

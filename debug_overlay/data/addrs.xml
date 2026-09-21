@@ -44,6 +44,26 @@
         evidence="battle setup FUN_801e5384: ANDed with partyMemberBitField"
         desc="gameState+0x1D32. Second party availability mask."/>
 
+  <!-- Party mirrors + change flag + exclusion (field-overlay FUN_8008bc80 /
+       FUN_8008bdd8 add-opcodes, FUN_8008c334 rotate opcode, SLUS
+       FUN_8001AD4C InitializeCharacterSkinSet; menu docs/xenogears/menu/08).
+       Every engine path keeps mirror[i] == slot[i]; the add-opcodes clear
+       the change flag on success; the menu refuses +0x2318-bit exchanges. -->
+  <addr name="partyMirror" value="0x8006FABC" type="u32" size="12" count="3" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="written per slot by FUN_8008a7dc stager, FUN_8001ad4c boot init and FUN_8008c334 rotate; read by FieldLoadAndOpenMenu 0x800799D4 and actor-switch helpers"
+        desc="Per-slot party mirrors (3 x u32). Free-party write target (with slots)."/>
+
+  <addr name="partyMount" value="0x8006F8E5" type="u8" size="3" count="3" status="verified"
+        verifiedBy="ghidra-static+docs" date="2026-09-21"
+        evidence="docs/xenogears/field/07 section 10 mount-state mapping (0 = on foot, 1 = mounted, per slot); battle loader takes the Gear placement path from it; worldmap FUN_80075d4c compares+counts it (never blind-write: breaks worldmap entry)"
+        desc="Per-slot mount bytes (gameState+0x22B1..B3). Battle selector write target (per user checkbox); party writer never touches."/>
+
+  <addr name="partyExclusion" value="0x8006F94C" type="u16" size="2" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="menu docs/xenogears/menu/08 section 9: independent 16-bit exchange-exclusion mask at game-state +0x2318"
+        desc="Story exchange-exclusion mask (gameState+0x2318). Read-only display for the party panel (excluded members risky)."/>
+
   <addr name="kernelPartySlots" value="0x80062590" type="u32" size="4" count="3" status="verified"
         verifiedBy="live-wtrace+readback" date="2026-07-25"
         evidence="kernel sync 0x800A3200 copies these u32s (low byte) into currentParty every frame; live write of slot0=2 persisted and gameState+vars followed"
@@ -63,6 +83,53 @@
         verifiedBy="ghidra-static" date="2026-07-24"
         evidence="battle setup FUN_801e5384: gearId*0xA4+0x8006DFAC"
         desc="gameState+0x978. 20 gear records of 0xA4 bytes."/>
+
+  <!-- ======================= explicit battle handoff ======================= -->
+  <!-- Field opcode 0x71 StartBattle (0x80093568) / FE 84 (0x800933f8):
+       stage a 32B formation record into the resident section-6 table,
+       forward the staged config, write index + request flag, then commit
+       the handoff triple LAST. The field coordinator consumes it like a
+       scripted explicit battle. Table installed per map at a static
+       address by InstallFieldScene (FUN_8007008c -> 0x800658dc). -->
+  <addr name="battleFormTable" value="0x800658DC" type="u8" size="512" count="16" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="InstallFieldScene FUN_8007008c(section,0x800658dc); encounter update FUN_80079288 reads weights at 0x80065ADC = table+0x200"
+        desc="Resident formation table: 16 x 32B records. Free-battle write target (custom record)."/>
+
+  <addr name="battleSelIndex" value="0x80059508" type="u8" size="1" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="written by FUN_80093568 (opcode 71), FUN_800933f8 (FE 84) and FUN_80079288 (random path)"
+        desc="Selected formation index 0-15. Explicit-battle handoff field."/>
+
+  <addr name="battleReqFlag" value="0x800594F8" type="u8" size="1" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="written 0 by FUN_80093568, FUN_800933f8 and FUN_80079288"
+        desc="Battle request flag (0 = requested). Explicit-battle handoff field."/>
+
+  <addr name="battleConfig" value="0x8005954C" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="FUN_80093568 + FUN_800933f8 copy 0x800B2356 here; staged by script opcode FUN_80087de0"
+        desc="Staged battle config (forwarded). Explicit-battle handoff field (forward current)."/>
+
+  <addr name="battleGateDC" value="0x800ADBDC" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="opcode 71 requires nonzero, writes 0 as commit; random path writes 0 on fire"
+        desc="Battle handoff gate 1. Explicit-battle commit (write 0 LAST with E0/88)."/>
+
+  <addr name="battleGateE0" value="0x800ADBE0" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="opcode 71 + FE 84 write 0 as commit (polled by the coordinator)"
+        desc="Battle handoff gate 2. Explicit-battle commit (write 0 LAST with DC/88)."/>
+
+  <addr name="battleGate88" value="0x800ADB88" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="opcode 71 + FE 84 write 1 as commit; init zeroes it; polled at 0x8008A248"
+        desc="Battle handoff armed flag. Explicit-battle commit (write 1 LAST); in-flight while set."/>
+
+  <addr name="battleGateE4" value="0x800ADBE4" type="u32" size="4" status="verified"
+        verifiedBy="ghidra-static" date="2026-09-21"
+        evidence="opcode 71 + FE 84 require nonzero (readiness gate)"
+        desc="Battle readiness gate. Never written (refuse while 0)."/>
 
   <!-- ======================= battle ======================= -->
   <addr name="battleEntities" value="0x800CCCE8" type="struct" size="368" count="11" status="verified"

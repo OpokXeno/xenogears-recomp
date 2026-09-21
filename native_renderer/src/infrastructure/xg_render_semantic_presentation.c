@@ -1724,6 +1724,7 @@ static XgRenderPresenterResult presenter_present(
         /* Missing/disabled phases select the authored whole immediately. The
          * reserved temporal budget must not become discrete input latency. */
         if (!hold && batch->phase_count != 0u && g_retained_batch != 0u && !due) {
+            g_diagnostics.selection_guard_empties++;
             batch->state = XG_RENDER_BATCH_PENDING;
             refresh_batch_pending_locked();
             state_unlock();
@@ -1731,6 +1732,15 @@ static XgRenderPresenterResult presenter_present(
             return XG_RENDER_PRESENTER_EMPTY;
         }
         selected_phase = phase > batch->phase_index ? phase : batch->phase_index;
+        g_diagnostics.selection_last_phase = selected_phase;
+        g_diagnostics.selection_last_remaining_ms =
+            deadline_ns >= now
+                ? (int64_t)((deadline_ns - now) / UINT64_C(1000000))
+                : -(int64_t)((now - deadline_ns) / UINT64_C(1000000));
+        if (due && selected_phase >= batch->phase_count)
+            g_diagnostics.selection_due_wholes++;
+        else if (selected_phase < batch->phase_count && selected_phase != 0u)
+            g_diagnostics.selection_phases++;
     } else {
         batch->phase_count = 0u;
     }

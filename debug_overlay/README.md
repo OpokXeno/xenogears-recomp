@@ -8,8 +8,6 @@ data staging for it.
 
 - **Ctrl+F3** toggles the overlay (consumed before the savestate hotkeys, so
   plain F3 = savestate load slot 2 keeps working).
-- While visible: game keyboard input is swallowed only when ImGui wants the
-  keyboard (`WantCaptureKeyboard`); hotkeys are never gated.
 - TCP equivalents: `overlay_state`, `overlay_toggle` (see
   `psxrecomp/TCP_COMMANDS.md`).
 
@@ -26,14 +24,14 @@ static-inline no-op.
 
 | Section | What it does |
 |---|---|
-| GPU state | live renderer/interp/widescreen state reads |
+| GPU state | live display/draw/aspect/present-rate/vblank reads |
 | RAM inspector | address read/watch over the address space |
 | Toggles | runtime enhancement toggles, launcher settings, Controller 1/2 routing, independent 8 MiB Developer Mode, and native Kernel Menu actions |
 | Rings | dump event/latency/starv ring buffers |
 | Map Teleport | field jump via the engine's own field-change poll recipe |
 | Party | party editor (kernel master slots) + unlock bitfield + roster viewer |
 | Gold & Vars | gold u32 and fieldVars[512] read/write |
-| Force Battle | best-effort battle trigger (encounter vars not fully mapped) |
+| Force Battle | explicit-battle selector: party + gears + levels, enemy search across all sets, arena picker, 8 lanes, fixed wild-standard record into slot 15 + opcode-71 handoff (snapshot + return) |
 | Free Camera | Free camera movement in field, worldmap, battle and battling |
 | Event Jump | script event jump by id |
 
@@ -63,6 +61,40 @@ Each table has a `*.schema.md` and `*.example.xml`. Loader:
   copy made by the kernel sync at `0x800A3200` — writes to it are silently
   reverted. Write the master; gameState and the var mirrors
   (`0x8006EFA2`) follow next frame.
+- **Party writes mirror the engine's own add-member path.** Every engine
+  path moves per-member 0x5000 resource buffers + mirrors (`0x8006FABC`)
+  + flags together with the slots (opcodes `FUN_8008bc80/8008bdd8/8008c334`,
+  boot `InitializeCharacterSkinSet` at `0x8001AD4C` which also compacts
+  `0xFF` holes and rebuilds skin buffers per entry). The panel therefore:
+  validates the whole formation (valid ids, no duplicates — the engine
+  validator `FUN_8008a790` rejects both, lookups poison on holes — `>=1`
+  member per the menu contract), packs left, ORs unlock bits into BOTH
+  masks (`0x8006F364`+`0x8006F366`, never clears), writes bitfields first,
+  then mirrors (`0x8006FABC`, kept `== slots` like every engine path) +
+  slots atomically, and only while the field module is resident with the
+  engine idle (skin streaming / menu / fade — same triple as teleport).
+  New members load fully on the next field change (teleport/door); the
+  leader/followers desync mid-field until then. Adding a member that fails
+  the pre-write availability AND forces `0x8006F364 = 0x07FF` (branch
+  uniformity: field scripts branch on raw unlock bits via
+  FieldScriptCheckAvailablePartyMember — verified live that story+Bart
+  crashes Lahan→worldmap while story-exact and full-unlock pass).
+  gameState+0x22B1 is deliberately NEVER written by the party writer:
+  those are per-slot mount bytes (docs/xenogears/field/07 §10: 0 = on
+  foot, 1 = mounted — worldmap's party reconcile compares+counts them,
+  and a blind clear breaks worldmap entry). The battle selector drives
+  them explicitly per Mounted checkbox, since the battle loader takes
+  the Gear placement path from them (a mounted slot needs a gear
+  assigned in the roster, else it warns).
+- **Level bytes are the number only.** Stats and unlocks are applied by
+  the level-up event (`BattleResultApplyLevelUps`, battle module only —
+  never called from the debug hook, same reentrancy rule as
+  `loadNewField`), so the panel writes level bytes plus direct roster
+  stats (engine caps) and offers EXP prime (`+0x44/+0x48` to 0): the next
+  real battle result then runs the authentic threshold loop (growth rolls
+  + unlock checks, docs/xenogears/battle/08). Nothing is fabricated.
+  Refusals carry codes (1 = not field, 2 = busy, -1 = bad id, -2 = empty,
+  -3 = duplicate) instead of corrupting RAM.
 - **Party writes must keep the unlock bitfield (`0x8006F364`) consistent.**
   The camp menu lists members from the bitfield, and a party member whose
   bit is clear crashes the next field load.
@@ -76,5 +108,4 @@ Each table has a `*.schema.md` and `*.example.xml`. Loader:
 
 ## Known Issues
 
-- **Teleporting** and **event jumps** can occasionally cause a bug in the music, resulting in incorrect music or sounds playing.
-- **Party** changes can cause a crash.
+- **Party** formation writes are refused (never applied half-way) outside field, while busy, or with invalid/duplicate/empty shapes; new members load fully on the next field change.
