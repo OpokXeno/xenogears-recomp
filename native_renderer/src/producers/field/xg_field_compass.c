@@ -283,6 +283,8 @@ bool xg_field_compass_cutover(
         return fail_compass(services, 5u);
     xg_render_primitive_apply_projected_quad_positions(
         &primitive, render_vertices);
+    xg_render_primitive_apply_projective_payload(
+        &primitive, render_vertices);
 
     packet_tag = cpu->read_word(packet_address);
     previous_head = cpu->read_word(ot_address);

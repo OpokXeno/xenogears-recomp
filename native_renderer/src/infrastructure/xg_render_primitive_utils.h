@@ -12,6 +12,20 @@
 void xg_render_primitive_apply_projected_quad_positions(
     XgRenderIrNativePrimitive *primitive,
     const XgHost3dProjectedVertex projected[4]);
+/* Copies the full projective payload (view x/y/z, screen and native offsets,
+ * projection distance, position flag) from a projected quad onto an IR
+ * primitive built from the same quad, enabling perspective-correct texture
+ * sampling in the native draw. Fail-closed: when any of the four projected
+ * vertices is not a valid projective position (flag clear, view z <= 0,
+ * distance == 0), every vertex is left affine (position clear, zero payload)
+ * so the rasterizer keeps the PSX-faithful affine path and per-triangle
+ * projective uniformity holds. Screen positions, native-view positions and
+ * temporal depth are untouched; pair with
+ * xg_render_primitive_apply_projected_quad_positions. Only quad primitives
+ * (two triangles) are updated; any other triangle count is left unchanged. */
+void xg_render_primitive_apply_projective_payload(
+    XgRenderIrNativePrimitive *primitive,
+    const XgHost3dProjectedVertex projected[4]);
 void xg_render_semantic_set_interpolation_identity(
     GpuRenderSemantic *semantic, uint64_t scene_id,
     uint32_t producer_id, uint32_t primitive_id);

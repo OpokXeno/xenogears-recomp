@@ -701,9 +701,12 @@ bool xg_field_zoom_cutover(
                 &candidate, &records[index].primitive) !=
                 XG_FIELD_CHARACTER_ADAPTER_OK)
             return xg_field_zoom_reject(55u, services);
-        if (project)
+        if (project) {
             xg_render_primitive_apply_projected_quad_positions(
                 &records[index].primitive, output.vertices);
+            xg_render_primitive_apply_projective_payload(
+                &records[index].primitive, output.vertices);
+        }
         records[index].packet_address = UINT32_C(0x800b1274) +
             index * 0x50u + buffer_index * 0x28u;
         records[index].draw_mode_address = UINT32_C(0x800b11ac) +

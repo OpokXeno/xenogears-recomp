@@ -35,6 +35,67 @@ void xg_render_primitive_apply_projected_quad_positions(
     }
 }
 
+void xg_render_primitive_apply_projective_payload(
+        XgRenderIrNativePrimitive *primitive,
+        const XgHost3dProjectedVertex projected[4]) {
+    static const uint8_t split[2][3] = {{0u, 1u, 2u}, {2u, 1u, 3u}};
+    bool all_projective = true;
+
+    /* The native draw requires per-triangle projective uniformity and a
+     * positive view z for the perspective divide (q = 1/z). A partially
+     * projected quad can never satisfy that contract, so the decision is
+     * all-or-nothing at the quad level: either every vertex carries the
+     * payload or every vertex stays affine. */
+    if (primitive == NULL || projected == NULL ||
+        primitive->triangle_count != 2u)
+        return;
+    for (uint32_t index = 0u; index < 4u; ++index) {
+        if (projected[index].projective_position == 0u ||
+            projected[index].projective_view_z <= 0 ||
+            projected[index].projective_distance == 0u) {
+            all_projective = false;
+            break;
+        }
+    }
+    for (uint32_t triangle = 0u; triangle < 2u; ++triangle) {
+        for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
+            const uint32_t source_index = split[triangle][vertex];
+            XgRenderIrVertex *target =
+                &primitive->triangles[triangle].vertices[vertex];
+
+            if (!all_projective) {
+                target->projective_view_x = 0;
+                target->projective_view_y = 0;
+                target->projective_view_z = 0;
+                target->projective_offset_x = 0;
+                target->projective_offset_y = 0;
+                target->projective_native_offset_x = 0;
+                target->projective_native_offset_y = 0;
+                target->projective_distance = 0u;
+                target->projective_position = false;
+                continue;
+            }
+            target->projective_view_x =
+                projected[source_index].projective_view_x;
+            target->projective_view_y =
+                projected[source_index].projective_view_y;
+            target->projective_view_z =
+                projected[source_index].projective_view_z;
+            target->projective_offset_x =
+                projected[source_index].projective_offset_x_16_16;
+            target->projective_offset_y =
+                projected[source_index].projective_offset_y_16_16;
+            target->projective_native_offset_x =
+                projected[source_index].projective_native_offset_x_16_16;
+            target->projective_native_offset_y =
+                projected[source_index].projective_native_offset_y_16_16;
+            target->projective_distance =
+                projected[source_index].projective_distance;
+            target->projective_position = true;
+        }
+    }
+}
+
 void xg_render_semantic_set_interpolation_identity(
         GpuRenderSemantic *semantic, uint64_t scene_id,
         uint32_t producer_id, uint32_t primitive_id) {

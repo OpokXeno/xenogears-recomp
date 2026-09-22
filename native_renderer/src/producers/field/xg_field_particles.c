@@ -393,6 +393,8 @@ bool xg_field_particles_cutover(
         return reject_particle(services, 45u);
     xg_render_primitive_apply_projected_quad_positions(
         &primitive, output.vertices);
+    xg_render_primitive_apply_projective_payload(
+        &primitive, output.vertices);
 
     ordering_shift = cpu->read_word(UINT32_C(0x80050100)) & 31u;
     shifted_depth = (uint32_t)output.ordering_depth >> ordering_shift;
