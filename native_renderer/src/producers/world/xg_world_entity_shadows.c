@@ -261,6 +261,29 @@ XgWorldEntityShadowsResult xg_world_entity_shadows_build(
     projection.projection.screen_offset_x = source->screen_offset_x;
     projection.projection.screen_offset_y = source->screen_offset_y;
     projection.projection.projection_distance = source->projection_distance;
+    {
+      /* Present in the floor(camera) frame terrain uses, keeping the
+       * fixed-point height and skipping the per-frame translation floor. */
+      const int32_t relative_x_fixed =
+          wrap_i32((uint32_t)((int32_t)entry->pending.x * 0x1000) -
+                   (uint32_t)source->camera_origin_x_fixed);
+      const int32_t relative_z_fixed =
+          wrap_i32((uint32_t)source->camera_origin_z_fixed -
+                   (uint32_t)((int32_t)entry->pending.z * 0x1000));
+      const double point[3] = {
+        ((double)relative_x_fixed +
+         (source->camera_origin_x_fixed & 0xfff)) / 4096.0,
+        entry->terrain_height_fixed / 4096.0,
+        ((double)relative_z_fixed -
+         (source->camera_origin_z_fixed & 0xfff)) / 4096.0,
+      };
+      double native_translation[3];
+
+      xg_host_3d_native_transform_point(&source->camera, point,
+                                        native_translation);
+      xg_host_3d_set_native_transform(&projection.projection, NULL,
+                                      native_translation);
+    }
     if (!xg_host_3d_rot_trans_pers4(&projection, &projected))
       return XG_WORLD_ENTITY_SHADOWS_BUILD_FAILED;
 

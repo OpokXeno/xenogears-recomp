@@ -208,6 +208,17 @@ XgWorldDecorationsResult xg_world_decorations_build_with_temporal(
         input.projection.projection_distance = source->projection_distance;
         input.projection.depth_cue_a = source->depth_cue_a;
         input.projection.depth_cue_b = source->depth_cue_b;
+        {
+            /* Present without the per-frame flooring of the camera-relative
+             * translation, which terrain (unfloored camera) never sees. */
+            const double point[3] = { relative.x, relative.y, relative.z };
+            double translation[3];
+
+            xg_host_3d_native_transform_point(&source->camera_matrix, point,
+                                              translation);
+            xg_host_3d_set_native_transform(&input.projection, NULL,
+                                            translation);
+        }
         if (!xg_host_3d_rot_trans_pers4(&input, &output))
             return XG_WORLD_DECORATIONS_BUILD_FAILED;
 

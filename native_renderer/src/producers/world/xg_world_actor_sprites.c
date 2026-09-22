@@ -174,6 +174,8 @@ static XgWorldActorSpritesResult adapt_actor_unchecked(
     XgHost3dLongVector transformed;
     XgHost3dLongVector shadow_scale;
     XgHost3dProjectedVertex depth_vertex;
+    double native_point[3];
+    double native_translation[3];
     uint32_t flags;
     int32_t relative_x;
     int32_t relative_z;
@@ -220,6 +222,18 @@ static XgWorldActorSpritesResult adapt_actor_unchecked(
     body.translation[2] = transformed.z;
     projection_from_matrix(&source->camera_projection, &body,
                            &adapted.body_projection);
+    native_point[0] = adapted.actor_position.x +
+        actor->native_offset_16_16[0] / 65536.0;
+    native_point[1] = adapted.actor_position.y +
+        actor->native_offset_16_16[1] / 65536.0;
+    native_point[2] = adapted.actor_position.z +
+        actor->native_offset_16_16[2] / 65536.0;
+    xg_host_3d_native_transform_point(&camera, native_point,
+                                      native_translation);
+    native_translation[0] += (double)body.translation[0] - transformed.x;
+    native_translation[1] += (double)body.translation[1] - transformed.y;
+    xg_host_3d_set_native_transform(&adapted.body_projection, NULL,
+                                    native_translation);
 
     shadow = camera;
     shadow_scale = (XgHost3dLongVector){
@@ -237,6 +251,11 @@ static XgWorldActorSpritesResult adapt_actor_unchecked(
     shadow.translation[2] = transformed.z;
     projection_from_matrix(&source->camera_projection, &shadow,
                            &adapted.shadow_projection);
+    native_point[1] = position.y;
+    xg_host_3d_native_transform_point(&camera, native_point,
+                                      native_translation);
+    xg_host_3d_set_native_transform(&adapted.shadow_projection, NULL,
+                                    native_translation);
     adapted.accepted = true;
     *out_actor = adapted;
     return XG_WORLD_ACTOR_SPRITES_OK;
@@ -354,6 +373,15 @@ static XgWorldActorSpritesResult body_projection_for_descriptor(
     projection->translation[1] = add_i32_wrap(
         projection->translation[1],
         actor->parts[descriptor->part].offset_y);
+    if (projection->native_transform_valid) {
+        double native_translation[3];
+
+        memcpy(native_translation, projection->native_translation,
+               sizeof(native_translation));
+        native_translation[0] += actor->parts[descriptor->part].offset_x;
+        native_translation[1] += actor->parts[descriptor->part].offset_y;
+        xg_host_3d_set_native_transform(projection, NULL, native_translation);
+    }
     return XG_WORLD_ACTOR_SPRITES_OK;
 }
 

@@ -25,6 +25,13 @@ static int32_t negate_i32(int32_t value) {
     return wrap_i32(0u - (uint32_t)value);
 }
 
+static int16_t wrap_i16(int32_t value) {
+    const uint16_t low = (uint16_t)(uint32_t)value;
+
+    if (low <= INT16_MAX) return (int16_t)low;
+    return (int16_t)(-1 - (int32_t)(UINT16_MAX - low));
+}
+
 static int32_t shift_right_12_floor(int32_t value) {
     if (value >= 0) return value / 4096;
     return (int32_t)(-((-(int64_t)value + 4095) / 4096));
@@ -186,6 +193,26 @@ XgWorldModelsResult xg_world_models_build(
             return XG_WORLD_MODELS_BUILD_FAILED;
 
         set_projection(source, &output->object_to_view, &output->projection);
+        {
+            /* The composed GTE matrix floors the camera-relative translation
+             * and every rotation entry, so its error changes as the camera
+             * moves. Present through the unfloored composition, in the same
+             * floor(camera) frame the terrain uses. */
+            const double relative[3] = {
+                wrap_i16(transform.translation[0]),
+                wrap_i16(transform.translation[1]),
+                wrap_i16(transform.translation[2]),
+            };
+            double rotation[3][3];
+            double translation[3];
+
+            xg_host_3d_native_compose_rotation(&source->camera_matrix,
+                                               &transform, rotation);
+            xg_host_3d_native_transform_point(&source->camera_matrix,
+                                              relative, translation);
+            xg_host_3d_set_native_transform(&output->projection, rotation,
+                                            translation);
+        }
         if (!xg_host_3d_rtps(&output->projection, &origin,
                              &projected_origin, &flags))
             return XG_WORLD_MODELS_BUILD_FAILED;

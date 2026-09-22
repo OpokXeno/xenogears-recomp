@@ -494,11 +494,23 @@ int xg_host_3d_native_project(const XgHost3dProjection *projection,
     if (!native_view_enabled || !projection || !vertex || !out_x || !out_y) return 0;
     double view[3], xy[2];
     for (unsigned r = 0; r < 3; ++r) {
-        const int64_t raw = (int64_t)projection->translation[r] * 4096 +
-            (int64_t)projection->rotation[r][0] * vertex->x +
-            (int64_t)projection->rotation[r][1] * vertex->y +
-            (int64_t)projection->rotation[r][2] * vertex->z;
-        view[r] = raw / 4096.0;
+        if (projection->native_transform_valid) {
+            /* The GTE floors every composed rotation entry and view
+             * translation. A per-frame camera composition therefore moves
+             * each object by a different fraction of a unit than terrain
+             * projected through the unfloored camera: visible wobble. */
+            const double (*m)[3] = projection->native_rotation;
+            view[r] = projection->native_translation[r] +
+                (m[r][0] * vertex->x + m[r][1] * vertex->y +
+                 m[r][2] * vertex->z) / 4096.0;
+        } else {
+            const int64_t raw = (int64_t)projection->translation[r] * 4096 +
+                (int64_t)projection->rotation[r][0] * vertex->x +
+                (int64_t)projection->rotation[r][1] * vertex->y +
+                (int64_t)projection->rotation[r][2] * vertex->z;
+            view[r] = raw / 4096.0;
+        }
+        if (!isfinite(view[r])) return 0;
         if (view[r] < -2147483648.0 || view[r] >= 2147483648.0)
             view[r] -= floor((view[r] + 2147483648.0) / 4294967296.0) * 4294967296.0;
     }
@@ -512,6 +524,48 @@ int xg_host_3d_native_project(const XgHost3dProjection *projection,
         if (!isfinite(xy[a]) || xy[a] < INT32_MIN || xy[a] > INT32_MAX) return 0;
     *out_x = (int32_t)llround(xy[0]); *out_y = (int32_t)llround(xy[1]);
     return 1;
+}
+
+void xg_host_3d_native_transform_point(const XgHost3dMatrix *matrix,
+                                       const double point[3],
+                                       double out[3]) {
+    double result[3];
+
+    if (matrix == NULL || point == NULL || out == NULL) return;
+    for (unsigned r = 0; r < 3; ++r)
+        result[r] = matrix->translation[r] +
+            (matrix->rotation[r][0] * point[0] +
+             matrix->rotation[r][1] * point[1] +
+             matrix->rotation[r][2] * point[2]) / 4096.0;
+    memcpy(out, result, sizeof(result));
+}
+
+void xg_host_3d_native_compose_rotation(const XgHost3dMatrix *left,
+                                        const XgHost3dMatrix *right,
+                                        double out[3][3]) {
+    double result[3][3];
+
+    if (left == NULL || right == NULL || out == NULL) return;
+    for (unsigned r = 0; r < 3; ++r)
+        for (unsigned c = 0; c < 3; ++c)
+            result[r][c] = (left->rotation[r][0] * right->rotation[0][c] +
+                            left->rotation[r][1] * right->rotation[1][c] +
+                            left->rotation[r][2] * right->rotation[2][c]) /
+                           4096.0;
+    memcpy(out, result, sizeof(result));
+}
+
+void xg_host_3d_set_native_transform(XgHost3dProjection *projection,
+                                     const double rotation[3][3],
+                                     const double translation[3]) {
+    if (projection == NULL || translation == NULL) return;
+    for (unsigned r = 0; r < 3; ++r) {
+        for (unsigned c = 0; c < 3; ++c)
+            projection->native_rotation[r][c] = rotation != NULL
+                ? rotation[r][c] : projection->rotation[r][c];
+        projection->native_translation[r] = translation[r];
+    }
+    projection->native_transform_valid = 1u;
 }
 
 static void project_vertex(XgHost3dMathState *state,

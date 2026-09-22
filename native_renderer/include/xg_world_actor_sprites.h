@@ -81,6 +81,10 @@ typedef struct XgWorldActorSpritePartTransform {
 
 typedef struct XgWorldActorSpriteActorSource {
     int32_t position[3];
+    /* Presentation-only sub-unit part of the camera-relative LOCAL input
+     * (x, y, and the negated z the GTE receives), in 1/65536 units on top of
+     * the integer actor_position. Zero reproduces the canonical input. */
+    int32_t native_offset_16_16[3];
     XgHost3dMatrix resolved_sprite_matrix;
     XgWorldActorSpritePartTransform
         parts[XG_WORLD_ACTOR_SPRITES_PART_CAPACITY];

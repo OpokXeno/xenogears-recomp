@@ -35,6 +35,12 @@ typedef struct XgHost3dProjection {
     int16_t depth_cue_a;
     int32_t depth_cue_b;
     int16_t average_z_scale4;
+    /* Optional presentation-only object-to-view transform without the GTE's
+     * per-stage flooring: rotation in 4.12 units, translation in view units.
+     * Only the Native projection reads it; canonical GTE results never do. */
+    uint8_t native_transform_valid;
+    double native_rotation[3][3];
+    double native_translation[3];
 } XgHost3dProjection;
 
 typedef struct XgHost3dProject4Input {

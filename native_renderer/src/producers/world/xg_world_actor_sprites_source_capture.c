@@ -12,6 +12,8 @@ enum {
     ACTOR_CONTEXT_OT_OFFSET = 0x70,
     ACTOR_CAMERA_MATRIX = 0x8004fbb8u,
     ACTOR_CONTEXT = 0x8009be3cu,
+    ACTOR_WORLD_CAMERA_X = 0x8009be28u,
+    ACTOR_WORLD_CAMERA_Z = 0x8009be30u,
     ACTOR_TRIG_TABLE = 0x800523f0u,
 };
 
@@ -437,6 +439,31 @@ XgWorldActorSpritesNativeResult xg_world_actor_sprites_native_prepare(
     actor.position[1] = (int32_t)low_s16(half) * 4096;
     READ_U16(request->actor_address + 10u, &half);
     actor.position[2] = -(int32_t)low_s16(half) * 4096;
+    {
+        /* The world object pass (0x80085d2c) stores (object - camera) << 4
+         * as 16.16 words, and the resident draw keeps only the high halves.
+         * Terrain and models are relative to floor(camera), so re-add the
+         * camera's 12-bit fraction to share their frame exactly. */
+        uint16_t fraction[3];
+        uint32_t camera_x;
+        uint32_t camera_z;
+
+        if (!authorize_range(reader, XG_WORLD_ACTOR_SPRITES_SOURCE_GLOBAL,
+                             ACTOR_WORLD_CAMERA_X,
+                             ACTOR_WORLD_CAMERA_Z + 4u - ACTOR_WORLD_CAMERA_X,
+                             4u))
+            return XG_WORLD_ACTOR_SPRITES_NATIVE_FORBIDDEN_RANGE;
+        READ_U16(request->actor_address + 0u, &fraction[0]);
+        READ_U16(request->actor_address + 4u, &fraction[1]);
+        READ_U16(request->actor_address + 8u, &fraction[2]);
+        READ_U32(ACTOR_WORLD_CAMERA_X, &camera_x);
+        READ_U32(ACTOR_WORLD_CAMERA_Z, &camera_z);
+        actor.native_offset_16_16[0] =
+            (int32_t)fraction[0] + (int32_t)((camera_x & 0xfffu) << 4u);
+        actor.native_offset_16_16[1] = (int32_t)fraction[1];
+        actor.native_offset_16_16[2] =
+            (int32_t)fraction[2] - (int32_t)((camera_z & 0xfffu) << 4u);
+    }
     READ_U16(request->actor_address + 0x84u, &half);
     actor.shadow_y = low_s16(half);
 

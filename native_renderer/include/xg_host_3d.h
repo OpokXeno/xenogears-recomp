@@ -16,6 +16,20 @@ int xg_host_3d_rtps(const XgHost3dProjection *projection,
 int xg_host_3d_native_project(const XgHost3dProjection *projection,
                              const XgHost3dVector *vertex,
                              int32_t *out_x, int32_t *out_y);
+/* Continuous matrix * point: translation + rotation * point / 4096, with no
+ * MAC flooring. The point may carry a sub-unit source position. */
+void xg_host_3d_native_transform_point(const XgHost3dMatrix *matrix,
+                                       const double point[3],
+                                       double out[3]);
+/* Continuous left * right rotation in 4.12 units, with no IR flooring. */
+void xg_host_3d_native_compose_rotation(const XgHost3dMatrix *left,
+                                        const XgHost3dMatrix *right,
+                                        double out[3][3]);
+/* Installs the presentation transform read by xg_host_3d_native_project.
+ * A NULL rotation keeps the canonical integer rotation of the projection. */
+void xg_host_3d_set_native_transform(XgHost3dProjection *projection,
+                                     const double rotation[3][3],
+                                     const double translation[3]);
 /* Source culling follows Native Q16 geometry when present; otherwise it uses
  * the canonical signed screen-area result. Reads the first three vertices. */
 int32_t xg_host_3d_nclip(const XgHost3dProjectedVertex *vertices);
