@@ -1,8 +1,7 @@
 # Creating mods for XenogearsRecomp
 
 This guide explains how to turn a Xenogears change into a safe, configurable
-`.psxmod` package. It targets **Xenogears (USA, Disc 1), SLUS-00664** and the
-mod manager shipped with XenogearsRecomp.
+`.psxmod` package. It targets **Xenogears (USA) and the mod manager shipped with XenogearsRecomp.
 
 For the player-facing workflow, see [`MODS.md`](MODS.md). For the framework's
 complete normative schema, see

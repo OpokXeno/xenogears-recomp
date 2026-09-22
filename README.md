@@ -1,6 +1,6 @@
 # XenogearsRecomp
 
-**Static recompilation of *Xenogears* (USA, Disc 1) for the PlayStation 1.**
+**Static recompilation of *Xenogears* (USA) for the PlayStation 1.**
 
 Built on [PSXRecomp](https://github.com/mstan/psxrecomp) — a MIPS R3000A → C → native x64 static recompilation framework. Both the OpenBIOS and retail `SCPH1001.BIN` BIOS backends are recompiled alongside the game executable, producing a single binary that runs without an emulator.
 
@@ -12,7 +12,7 @@ Built on [PSXRecomp](https://github.com/mstan/psxrecomp) — a MIPS R3000A → C
 
 To run a release of XenogearsRecomp, you need your own legally obtained copy of:
 
-- **Xenogears (USA, Disc 1)** — disc image (`.cue` + `.bin` preferred)
+- **Xenogears (USA)** — Disc 1 and Disc 2 disc images (`.cue` + `.bin` preferred)
 
 The separate game EXE (`SLUS-006.64`) is required only for source generation; it is not needed to run a release.
 
@@ -46,7 +46,6 @@ integrity-pinned SDL3 release and links it into the runtime.
 - ⚠️ **Not validated end-to-end** — no complete playthrough has been done; treat every area past the opening as unverified
 - 🐛 **Known issues**:
   - Most of the enhancements are untested or not yet fully polished, so expect some bugs if you use them.
-- **Scope:** USA Disc 1 (`SLUS-00664`) only — Disc 2 and other regions are untested
 
 ---
 
@@ -56,13 +55,17 @@ integrity-pinned SDL3 release and links it into the runtime.
 
 Grab the x86-64 archive for your platform from [Releases](https://github.com/OpokXeno/xenogears-recomp/releases), extract it, and run the executable. A launcher window opens.
 
-1. **Set the game disc** — on first launch, select your legally obtained *Xenogears* (USA, Disc 1) disc image. Click **Change Disc** on the main screen and pick your `.cue` file. The launcher verifies the ISO9660 header, region, and serial.
+1. **Set the game discs** — on first launch, locate your legally obtained *Xenogears* (USA) disc images. Choose **Disc 1** in **Disc Selection** and browse for its `.cue` file, then do the same for **Disc 2**. Each image is recognized by its own serial, so it always lands on the right disc, and both locations are remembered. The launcher verifies the ISO9660 header, region, and serial.
 2. **Optional: select a retail BIOS** — OpenBIOS runs by default. To use the retail backend, select your legally obtained matching `SCPH1001.BIN` (a 512 KB file dumped from your own console) via Settings → System → Browse.
 3. Optionally adjust renderer, supersampling, screen look, widescreen, and controller settings, then press **Launch**. Your choices are remembered.
 
 **Accepted disc formats:** `.cue` + `.bin` and `.chd`. If the header or game ID
-does not match SLUS-00664, the launcher warns and tries to run the image
-anyway.
+does not match a Xenogears (USA) disc, the launcher warns and tries to run the
+image anyway.
+
+**Changing discs:** Play boots whichever disc is selected in **Disc Selection**.
+When the game asks for Disc 2, save, quit, select **Disc 2** in the launcher
+and continue from your save. Savestates are kept per disc.
 
 Official Linux and Windows releases are 64-bit x86-64 builds with SDL3 linked
 statically; no separate SDL installation is required.
@@ -96,7 +99,8 @@ XenogearsRecomp/
         └── SCPH1001.BIN          # Retail BIOS — your local dump, required to build
 ```
 
-Keep the `.cue` and its referenced `.bin` tracks together. The build also accepts
+Only Disc 1 is needed to build: both discs boot the same program, so one build
+plays Disc 1 and Disc 2. Keep the `.cue` and its referenced `.bin` tracks together. The build also accepts
 `game/disc1.bin` directly. For a different image location, use
 `XG_DISC=/path/to/disc.cue ./build.sh` or the PowerShell `-DiscImage` option.
 The disc and BIOS paths used to play are configured through the launcher GUI.
@@ -205,7 +209,7 @@ A few things to watch for:
 .\build\Release\XenogearsRecomp.exe
 ```
 
-**First launch** — the integrated launcher GUI will open. Pick your disc image (`.cue`) from the main screen (Change Disc button), then press **Launch**. OpenBIOS runs by default. To use the retail backend, select your matching `SCPH1001.BIN` in the Settings → System panel (Browse button). Choices are saved to `settings.toml` next to the executable.
+**First launch** — the integrated launcher GUI will open. Locate both disc images (`.cue`) from the main screen: choose each disc in **Disc Selection** and browse for it, then press **Launch**. OpenBIOS runs by default. To use the retail backend, select your matching `SCPH1001.BIN` in the Settings → System panel (Browse button). Choices are saved to `settings.toml` next to the executable.
 
 **Subsequent launches** — settings are loaded from `settings.toml`. Skip the launcher GUI with `--no-launcher` or `PSX_NO_LAUNCHER=1`.
 
@@ -325,7 +329,7 @@ XenogearsRecomp/
 
 Overlays are chunks of code the game streams off the disc at runtime. Xenogears is heavily overlay-driven (field, battle, worldmap are all separate overlay modules).
 
-- **Build time:** The recompiler and host C/C++ compiler generate and link the supported overlay identities from the local Disc 1 image.
+- **Build time:** The recompiler and host C/C++ compiler generate and link the supported overlay identities from the local Disc 1 image. Disc 2 carries the same overlay images, so the same code serves both discs.
 - **Play time:** The executable already contains that code, including on the first launch. No background compilation or cache warm-up is needed.
 - **Coverage:** `overlay_cache = false` disables the dynamic overlay path. An AOT coverage miss is an error to report, not a request to install a compiler.
 

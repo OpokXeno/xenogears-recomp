@@ -27,6 +27,7 @@ static-inline no-op.
 | GPU state | live display/draw/aspect/present-rate/vblank reads |
 | RAM inspector | address read/watch over the address space |
 | Toggles | runtime enhancement toggles, launcher settings, Controller 1/2 routing, independent 8 MiB Developer Mode, and native Kernel Menu actions |
+| Disc | multi-disc hot swap: the disc in the drive, each disc's located image, and **Insert Disc N** (timed lid open/close with the new image; mods re-resolved, savestates scoped per disc; refused in netplay). TCP: `overlay_widget_action` `disc_swap` with the disc number |
 | Rings | dump event/latency/starv ring buffers |
 | Map Teleport | field jump via the engine's own field-change poll recipe |
 | Party | party editor (kernel master slots) + unlock bitfield + roster viewer |
