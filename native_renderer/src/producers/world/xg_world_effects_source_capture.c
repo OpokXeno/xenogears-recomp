@@ -44,7 +44,8 @@ static bool particle_offset_is_allowed(uint32_t address, uint32_t base,
     if (width == 2u)
         return field == 2u || field == 6u || field == 0x48u;
     return field == 8u || field == 0x0cu || field == 0x10u ||
-           field == 0x38u || field == 0x40u || field == 0x44u;
+           field == 0x18u || field == 0x38u || field == 0x40u ||
+           field == 0x44u;
 }
 
 static bool u16_read_is_allowed(const EffectsCaptureAccess *access,
@@ -257,6 +258,7 @@ XgWorldEffectsCaptureResult xg_world_effects_source_capture(
         particle->position[1] = (int32_t)word;
         READ_U32(base + 0x10u, &word);
         particle->position[2] = (int32_t)word;
+        READ_U32(base + 0x18u, &particle->age);
         READ_U32(base + 0x38u, &word);
         particle->scale_x = (uint16_t)word;
         particle->scale_y = (uint16_t)(word >> 16u);

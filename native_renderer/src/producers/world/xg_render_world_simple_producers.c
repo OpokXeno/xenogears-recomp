@@ -1327,6 +1327,50 @@ static uint32_t capture_horizon(
     return 0u;
 }
 
+/* World effect slots are recycled: a smoke puff that dies respawns at the
+ * emitter in the same slot. The slot alone would make the interpolator slide
+ * the new puff from the old one's position, so a respawn (the guest lifetime
+ * counter restarting) starts a new interpolation identity. */
+static uint32_t effects_particle_age[XG_WORLD_EFFECTS_SOURCE_CAPACITY];
+static uint8_t effects_particle_generation[XG_WORLD_EFFECTS_SOURCE_CAPACITY];
+static bool effects_particle_seen[XG_WORLD_EFFECTS_SOURCE_CAPACITY];
+
+static void effects_track_particles(const XgWorldEffectsSource *source) {
+    for (uint32_t index = 0u; index < XG_WORLD_EFFECTS_SOURCE_CAPACITY;
+         ++index) {
+        const XgWorldEffectsParticleSource *particle =
+            &source->particles[index];
+
+        if (!particle->active) {
+            if (effects_particle_seen[index])
+                ++effects_particle_generation[index];
+            effects_particle_seen[index] = false;
+            continue;
+        }
+        if (effects_particle_seen[index] &&
+            particle->age < effects_particle_age[index])
+            ++effects_particle_generation[index];
+        effects_particle_age[index] = particle->age;
+        effects_particle_seen[index] = true;
+    }
+}
+
+/* The interpolator groups unbound geometry into meshes by producer and never
+ * moves half a mesh. With one producer for every particle, a single respawn
+ * made the whole effect discrete for that frame. Each slot is an independent
+ * billboard, so give each its own producer identity (0xC... is outside every
+ * RAM-address identity used by other producers). */
+static uint32_t effects_interpolation_producer(uint32_t source_index) {
+    return UINT32_C(0xc0890000) | (source_index & UINT32_C(0xffff));
+}
+
+static uint32_t effects_interpolation_id(uint32_t source_index) {
+    return source_index < XG_WORLD_EFFECTS_SOURCE_CAPACITY
+        ? source_index |
+              ((uint32_t)effects_particle_generation[source_index] << 8u)
+        : source_index;
+}
+
 static uint32_t capture_effects(
         CPUState *cpu, XgWorldEffectsCapture *capture,
         XgWorldEffectsRecord records[XG_WORLD_EFFECTS_SOURCE_CAPACITY],
@@ -2183,6 +2227,7 @@ bool xg_render_world_effects_cutover(
         capture_effects(cpu, &capture, records, &count, temporal_records,
                         &temporal_count, services) != 0u)
         return false;
+    effects_track_particles(&capture.source);
     buffer_index = cpu->read_word(BUFFER_INDEX);
     if (buffer_index >= 2u) return false;
     packet_cursor = cpu->read_word(PACKET_BASES + buffer_index * 4u);
@@ -2221,8 +2266,10 @@ bool xg_render_world_effects_cutover(
     for (uint32_t index = 0u; index < count; ++index) {
         if (!services->stage_native(
                 &records[index].primitive, packet_addresses[index],
-                UINT32_C(0x60000000) | records[index].source_index,
-                UINT32_C(0x80089c78), records[index].source_index)) {
+                UINT32_C(0x60000000) |
+                    effects_interpolation_id(records[index].source_index),
+                effects_interpolation_producer(records[index].source_index),
+                effects_interpolation_id(records[index].source_index))) {
             services->abort_submission();
             return false;
         }
@@ -2244,8 +2291,9 @@ bool xg_render_world_effects_cutover(
         };
 
         if (!services->stage_temporal(
-                &record->primitive, UINT32_C(0x80089c78),
-                record->source_index, &policy)) {
+                &record->primitive,
+                effects_interpolation_producer(record->source_index),
+                effects_interpolation_id(record->source_index), &policy)) {
             services->abort_submission();
             return false;
         }

@@ -45,6 +45,8 @@ typedef struct XgWorldEffectsParticleSource {
     uint8_t blue;
     bool rotate;
     bool active;
+    /* Guest lifetime counter (+0x18); it restarts when the slot respawns. */
+    uint32_t age;
 } XgWorldEffectsParticleSource;
 
 typedef struct XgWorldEffectsSource {

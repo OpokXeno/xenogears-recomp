@@ -162,6 +162,21 @@ XgWorldEffectsResult xg_world_effects_build_with_temporal(
         projection.projection.screen_offset_y = source->screen_offset_y;
         projection.projection.projection_distance =
             source->projection_distance;
+        {
+            /* Keep the particle's 12-bit sub-unit position and skip the
+             * per-frame flooring of the camera-relative translation. */
+            const double point[3] = {
+                position.x + (particle->position[0] & 0xfff) / 4096.0,
+                position.y + (particle->position[1] & 0xfff) / 4096.0,
+                position.z - (particle->position[2] & 0xfff) / 4096.0,
+            };
+            double translation[3];
+
+            xg_host_3d_native_transform_point(&source->camera, point,
+                                              translation);
+            xg_host_3d_set_native_transform(&projection.projection, NULL,
+                                            translation);
+        }
         if (!xg_host_3d_rot_trans_pers4(&projection, &projected))
             return XG_WORLD_EFFECTS_BUILD_FAILED;
         for (vertex = 0u; vertex < XG_HOST_3D_VERTEX_COUNT; ++vertex) {
@@ -188,9 +203,11 @@ XgWorldEffectsResult xg_world_effects_build_with_temporal(
                 .green = particle->green,
                 .blue = particle->blue,
             };
+            /* Keep the projective payload: interpolated phases follow the
+             * same perspective curve as the terrain and models the particle
+             * belongs to, instead of a straight screen-space line. */
             xg_render_quad_set_projected_position(
                 &quad.vertices[vertex], &projected.vertices[vertex]);
-            quad.vertices[vertex].projective_position = false;
             candidate.uv[vertex] = uv;
         }
         if (xg_render_quad_build_primitive(&quad, &candidate.primitive) !=

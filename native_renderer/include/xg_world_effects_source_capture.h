@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 enum {
-    XG_WORLD_EFFECTS_MAX_AUTHENTICATED_READS = 2681,
+    XG_WORLD_EFFECTS_MAX_AUTHENTICATED_READS = 2937,
 };
 
 typedef bool (*XgWorldEffectsReadU16)(void *context, uint32_t address,
