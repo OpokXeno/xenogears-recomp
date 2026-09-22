@@ -1,9 +1,9 @@
-# Xenogears (USA) — Disc 1 game config
+# Xenogears (USA) game config
 # Bootstrapped by psxrecomp-toml for slus_006.64, then hand-completed.
 # Field names follow psxrecomp/docs/config_schema.md (pinned commit 678c71f).
 
 [game]
-name = "Xenogears (USA, Disc 1)"
+name = "Xenogears (USA)"
 id = "SLUS-00664"
 exe = "./game/slus_006.64"
 load_address = "0x80010000"
@@ -14,6 +14,8 @@ stack_base = "0x801FFFF0"
 # and CDDA audio. The launcher will prompt for this on first run; set here as
 # a fallback default. Uncomment and set to your rip's path:
 # disc = "./game/Xenogears Disc 1.cue"
+
+disc_serials = ["SLUS-00664", "SLUS-00669"]
 
 [recompiler]
 seeds = "seeds/slus_00664_seeds.txt"
