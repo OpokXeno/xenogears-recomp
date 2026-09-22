@@ -1246,9 +1246,8 @@ XgRenderModelReplayResult xg_render_model_repository_resolve_ft3(
         GuestRenderRenderMode render_mode, GpuRenderSemantic *out_semantic,
         const XgRenderModelRepositoryServices *services) {
     const uint64_t command_id = context != NULL ? context->command_id : 0u;
-    XgRenderModelFt3SourceRecord *record = NULL;
-    bool invalid_record = false;
-    uint32_t lookup_key;
+    XgRenderModelFt3SourceRecord *record;
+    uint32_t indexed;
 
     if (out_semantic == NULL || context == NULL || command_id > UINT32_MAX ||
         render_mode != GUEST_RENDER_RENDER_NATIVE ||
@@ -1256,31 +1255,14 @@ XgRenderModelReplayResult xg_render_model_repository_resolve_ft3(
         context->word_count != 7u ||
         !xg_render_model_repository_ft3_writer_is_authorized(context))
         return XG_RENDER_MODEL_REPLAY_NOT_APPLICABLE;
-    if (xg_render_lookup_key((uint32_t)command_id, &lookup_key)) {
-        const uint32_t indexed = xg_render_lookup_find(
-            ft3_source_lookup, ft3_source_lookup_epoch,
-            (uint32_t)command_id, ft3_source_count);
-        if (indexed != UINT32_MAX) record = &ft3_sources[indexed];
-    }
-    if (record == NULL) {
-        for (uint32_t slot = 0u; slot < ft3_source_count; ++slot) {
-            if (!physical_address_equals(
-                    ft3_sources[slot].source_id, (uint32_t)command_id))
-                continue;
-            if (!ft3_sources[slot].valid) {
-                invalid_record = true;
-                continue;
-            }
-            record = &ft3_sources[slot];
-            xg_render_lookup_put(
-                ft3_source_lookup, ft3_source_lookup_epoch,
-                record->source_id, slot);
-            break;
-        }
-        if (record == NULL)
-            return invalid_record ? XG_RENDER_MODEL_REPLAY_LOOKUP_INVALID :
-                XG_RENDER_MODEL_REPLAY_LOOKUP_ABSENT;
-    }
+    /* The address lookup is maintained on every store, removal and
+     * compaction, so it is exact. Unowned packets (world terrain misses run
+     * through here every frame) must not fall back to a linear table scan. */
+    indexed = xg_render_lookup_find(
+        ft3_source_lookup, ft3_source_lookup_epoch,
+        (uint32_t)command_id, ft3_source_count);
+    if (indexed == UINT32_MAX) return XG_RENDER_MODEL_REPLAY_LOOKUP_ABSENT;
+    record = &ft3_sources[indexed];
     if (!record->valid || !record->geometry_ready ||
         !physical_address_equals(record->source_id, (uint32_t)command_id))
         return XG_RENDER_MODEL_REPLAY_RECORD_REJECTED;
