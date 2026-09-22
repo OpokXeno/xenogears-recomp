@@ -1,4 +1,5 @@
 #include "xg_world_models_native.h"
+#include "psx_render_nclip.h"
 
 #include <limits.h>
 #include <stddef.h>
@@ -1022,6 +1023,25 @@ static int32_t normal_clip(
     return xg_host_3d_nclip(vertices);
 }
 
+/* NCLIP the resident handlers branch on. In Native render mode the runtime
+ * replaces their MAC0 with the sign of its GTE provenance: the 16.16 screen
+ * accumulator OFX + IR * (H / SZ), not the fractional Native view. */
+static int32_t guest_normal_clip(
+    const XgHost3dProjectedVertex vertices[XG_HOST_3D_VERTEX_COUNT]) {
+    XgHost3dProjectedVertex canonical[3];
+    int32_t x[3];
+    int32_t y[3];
+
+    for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
+        canonical[vertex] = vertices[vertex];
+        canonical[vertex].native_view_position = 0u;
+        x[vertex] = vertices[vertex].x_16_16;
+        y[vertex] = vertices[vertex].y_16_16;
+    }
+    return psx_render_nclip(xg_host_3d_nclip(canonical), x, y);
+}
+
+
 static uint32_t packed_xy(const XgHost3dProjectedVertex *vertex) {
     return (uint16_t)vertex->x | ((uint32_t)(uint16_t)vertex->y << 16u);
 }
@@ -1371,11 +1391,11 @@ static int32_t rotated_mac(const int16_t matrix[3][3], uint32_t row,
     return (int32_t)shift_right_floor_i64(value, 12u);
 }
 
-XgWorldModelsNativeResult xg_world_models_native_build_primitive(
+static XgWorldModelsNativeResult build_primitive_pass(
     XgWorldModelsNativePreparation *preparation,
     uint64_t authentication_generation,
     const XgWorldModelsNativePrimitiveSource *source,
-    XgWorldModelsNativePrimitiveOutput *out_primitive) {
+    XgWorldModelsNativePrimitiveOutput *out_primitive, bool guest_clip) {
     XgWorldModelsNativePrimitiveOutput output = {0};
     XgHost3dProject4Input input = {0};
     XgHost3dRotAverage4Output projected;
@@ -1455,7 +1475,8 @@ XgWorldModelsNativeResult xg_world_models_native_build_primitive(
         return XG_WORLD_MODELS_NATIVE_BUILD_FAILED;
     memcpy(output.vertices, projected.vertices, sizeof(output.vertices));
     output.projection_flags = projected.projection_flags;
-    output.nclip = normal_clip(output.vertices);
+    output.nclip = guest_clip ? guest_normal_clip(output.vertices)
+                              : normal_clip(output.vertices);
     build_semantic_primitive(
         source, &output, source->vertex_count, colors, uv);
     mode = source->dispatch_mode;
@@ -1667,6 +1688,55 @@ XgWorldModelsNativeResult xg_world_models_native_build_primitive(
         source, &output, guest_passed_screen_cull,
         guest_right_edge_write);
     *out_primitive = output;
+    return XG_WORLD_MODELS_NATIVE_OK;
+}
+
+XgWorldModelsNativeResult xg_world_models_native_build_primitive(
+    XgWorldModelsNativePreparation *preparation,
+    uint64_t authentication_generation,
+    const XgWorldModelsNativePrimitiveSource *source,
+    XgWorldModelsNativePrimitiveOutput *out_primitive) {
+    XgWorldModelsNativePrimitiveOutput guest;
+    XgWorldModelsNativeResult result;
+    uint32_t mask;
+
+    result = build_primitive_pass(preparation, authentication_generation,
+                                  source, out_primitive, false);
+    if (result != XG_WORLD_MODELS_NATIVE_OK) return result;
+    out_primitive->guest_ordering_bucket = out_primitive->ordering_bucket;
+    if ((out_primitive->nclip > 0) ==
+        (guest_normal_clip(out_primitive->vertices) > 0))
+        return XG_WORLD_MODELS_NATIVE_OK;
+
+    /* The Native view decides from its own geometry, but the resident
+     * handlers branch on the runtime's GTE-provenance NCLIP. When the signs
+     * disagree on a near-degenerate face, the Native view keeps its decision,
+     * geometry and ordering, and every prediction of the handlers' packet,
+     * OT and counter writes comes from a guest pass; otherwise the commit
+     * rejects the frame and the models drop to GP0 for the scene. */
+    result = build_primitive_pass(preparation, authentication_generation,
+                                  source, &guest, true);
+    if (result != XG_WORLD_MODELS_NATIVE_OK) {
+        memset(out_primitive, 0, sizeof(*out_primitive));
+        return result;
+    }
+    out_primitive->counter_incremented = guest.counter_incremented;
+    out_primitive->guest_ordering_table_written =
+        guest.guest_ordering_table_written;
+    out_primitive->guest_ordering_bucket = guest.ordering_bucket;
+    out_primitive->packet_cursor_masked = guest.packet_cursor_masked;
+    out_primitive->guest_packet_word_write_mask =
+        guest.guest_packet_word_write_mask;
+    for (uint32_t word = 0u; word < source->packet_word_count; ++word) {
+        if ((guest.guest_packet_word_write_mask & (UINT32_C(1) << word)) != 0u)
+            out_primitive->packet_words[word] = guest.packet_words[word];
+    }
+    mask = out_primitive->packet_word_write_mask |
+        guest.guest_packet_word_write_mask;
+    if (!out_primitive->accepted &&
+        !out_primitive->guest_ordering_table_written)
+        mask &= ~UINT32_C(1);
+    out_primitive->packet_word_write_mask = mask;
     return XG_WORLD_MODELS_NATIVE_OK;
 }
 

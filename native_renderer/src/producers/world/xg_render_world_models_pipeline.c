@@ -97,6 +97,13 @@ typedef struct XgRenderWorldModelsNativeState {
 
 static XgRenderWorldModelsNativeState native_state;
 static PsxXgRenderWorldNativeSnapshot snapshot;
+/* Debugger-visible detail of the most recent commit verification mismatch. */
+static volatile uint32_t commit_mismatch_actual;
+static volatile uint32_t commit_mismatch_expected;
+static volatile uint32_t commit_mismatch_primitive;
+static volatile uint32_t commit_first_mismatch_detail;
+static volatile uint32_t commit_first_mismatch_actual;
+static volatile uint32_t commit_first_mismatch_expected;
 
 static bool services_valid(
         const XgRenderWorldModelsPipelineServices *services) {
@@ -339,6 +346,9 @@ static void record_failure(
         PsxXgRenderWorldNativeFailureStage stage, uint32_t detail,
         uint32_t anchor_count) {
     if (snapshot.native_failure_count == 0u) {
+        commit_first_mismatch_detail = detail;
+        commit_first_mismatch_actual = commit_mismatch_actual;
+        commit_first_mismatch_expected = commit_mismatch_expected;
         snapshot.first_failure_stage = (uint32_t)stage;
         snapshot.first_failure_detail = detail;
         snapshot.first_anchor_count = anchor_count;
@@ -782,7 +792,7 @@ bool xg_render_world_models_prepare(
                 ++accepted_count;
             }
             if (output->guest_ordering_table_written) {
-                const uint32_t bucket = output->ordering_bucket;
+                const uint32_t bucket = output->guest_ordering_bucket;
                 const uint32_t ot_address =
                     dispatch->call.ordering_table_address + bucket * 4u;
 
@@ -859,7 +869,7 @@ bool xg_render_world_models_prepare(
         if (output->guest_ordering_table_written) {
             const XgWorldModelsNativeDispatch *dispatch =
                 &workspace->dispatches[source->dispatch_index];
-            const uint32_t bucket = output->ordering_bucket;
+            const uint32_t bucket = output->guest_ordering_bucket;
             const uint32_t previous_head = workspace->ot_heads[bucket];
 
             output->packet_words[0] =
@@ -902,7 +912,8 @@ static bool publish_model_coverage(XgRenderWorldModelsNativeState *workspace, ui
     XgRenderTemporalComponent components[XG_RENDER_WORLD_MODEL_RECORD_CAPACITY] = {{0}};
     uint32_t component_indices[XG_RENDER_WORLD_MODEL_RECORD_CAPACITY];
     XgRenderTemporalSample *samples = calloc(anchor_count ? anchor_count : 1u, sizeof(*samples));
-    XgRenderTemporalCommandBinding *bindings = calloc(workspace->accepted_count ? workspace->accepted_count : 1u,
+    const uint32_t binding_capacity = workspace->preparation.primitive_count;
+    XgRenderTemporalCommandBinding *bindings = calloc(binding_capacity ? binding_capacity : 1u,
                                                       sizeof(*bindings));
     uint32_t component_count = 0, sample_count = 0, binding_count = 0;
     bool ok = false;
@@ -941,10 +952,15 @@ static bool publish_model_coverage(XgRenderWorldModelsNativeState *workspace, ui
             components[component_indices[instance]].component_id, *v};
     }
     for (uint32_t i = 0; i < workspace->preparation.primitive_count; ++i) {
-        if (!workspace->outputs[i].accepted) continue;
+        /* Bind every primitive finalize stages, including a guest-OT-only
+         * face whose Native and GTE NCLIP signs disagree. An unbound draw
+         * conflicts with its entity's component and drops the whole model
+         * out of the motion curve for that frame. */
+        if (!workspace->outputs[i].accepted &&
+            !workspace->outputs[i].guest_ordering_table_written) continue;
         const XgWorldModelsNativePrimitiveSource *s = &workspace->primitives[i];
         if (s->source_index >= count || component_indices[s->source_index] == UINT32_MAX ||
-            binding_count >= workspace->accepted_count) goto done;
+            binding_count >= binding_capacity) goto done;
         bindings[binding_count++] = (XgRenderTemporalCommandBinding){
             s->packet_address + 4u, components[component_indices[s->source_index]].component_id};
     }
@@ -990,39 +1006,47 @@ bool xg_render_world_models_commit(
             cpu->read_word(cpu->gpr[29] + 0x38u), expected->continuation_pc))
         goto fail;
     failure_detail = 9u;
-    if (cpu->read_word(XG_WORLD_MODELS_SCALE_X_SCRATCH) !=
-            expected->entry_side_effects.scratch_scale[0] ||
-        cpu->read_word(XG_WORLD_MODELS_SCALE_Y_SCRATCH) !=
-            expected->entry_side_effects.scratch_scale[1] ||
-        cpu->read_word(XG_WORLD_MODELS_SCALE_Z_SCRATCH) !=
-            expected->entry_side_effects.scratch_scale[2] ||
-        cpu->read_half(XG_WORLD_MODELS_COARSE_ORIGIN_SCRATCH) !=
-            (uint16_t)expected->entry_side_effects.coarse_origin[0] ||
-        cpu->read_half(XG_WORLD_MODELS_COARSE_ORIGIN_SCRATCH + 2u) !=
-            (uint16_t)expected->entry_side_effects.coarse_origin[1] ||
-        cpu->read_half(XG_WORLD_MODELS_COARSE_ORIGIN_SCRATCH + 4u) !=
-            (uint16_t)expected->entry_side_effects.coarse_origin[2] ||
-        cpu->read_word(XG_WORLD_MODELS_RESIDENT_CULL_MODE_GLOBAL) !=
-            expected->entry_side_effects.resident_cull_mode ||
-        cpu->read_word(XG_WORLD_MODELS_RESIDENT_VERTEX_TOTAL_GLOBAL) !=
-            expected->resident_vertex_total ||
-        cpu->read_word(XG_WORLD_MODELS_RESIDENT_EMITTED_COUNT_GLOBAL) !=
-            expected->resident_emitted_count)
-        goto fail;
+#define COMMIT_EXPECT(code, actual, wanted)                                    \
+    do {                                                                       \
+        const uint32_t commit_actual = (uint32_t)(actual);                    \
+        const uint32_t commit_wanted = (uint32_t)(wanted);                    \
+        if (commit_actual != commit_wanted) {                                  \
+            failure_detail = (code);                                           \
+            commit_mismatch_actual = commit_actual;                            \
+            commit_mismatch_expected = commit_wanted;                          \
+            goto fail;                                                         \
+        }                                                                      \
+    } while (0)
+    for (uint32_t axis = 0u; axis < 3u; ++axis) {
+        COMMIT_EXPECT(0x0900u + axis,
+            cpu->read_word(XG_WORLD_MODELS_SCALE_X_SCRATCH + axis * 4u),
+            expected->entry_side_effects.scratch_scale[axis]);
+        COMMIT_EXPECT(0x0910u + axis,
+            cpu->read_half(XG_WORLD_MODELS_COARSE_ORIGIN_SCRATCH + axis * 2u),
+            (uint16_t)expected->entry_side_effects.coarse_origin[axis]);
+    }
+    COMMIT_EXPECT(0x0920u,
+        cpu->read_word(XG_WORLD_MODELS_RESIDENT_CULL_MODE_GLOBAL),
+        expected->entry_side_effects.resident_cull_mode);
+    COMMIT_EXPECT(0x0921u,
+        cpu->read_word(XG_WORLD_MODELS_RESIDENT_VERTEX_TOTAL_GLOBAL),
+        expected->resident_vertex_total);
+    COMMIT_EXPECT(0x0922u,
+        cpu->read_word(XG_WORLD_MODELS_RESIDENT_EMITTED_COUNT_GLOBAL),
+        expected->resident_emitted_count);
 
     for (uint32_t index = 0u;
          index < preparation->transform_node_count; ++index) {
         const XgWorldModelsNodeSideEffect *effect =
             &workspace->node_side_effects[index];
 
-        for (uint32_t component = 0u; component < 3u; ++component) {
-            if (cpu->read_word(
+        for (uint32_t component = 0u; component < 3u; ++component)
+            COMMIT_EXPECT(0x10000u + index * 4u + component,
+                cpu->read_word(
                     effect->guest_address +
                         XG_WORLD_MODELS_NODE_WRITEBACK_X_OFFSET +
-                        component * 4u) !=
-                (uint32_t)effect->translation[component])
-                goto fail;
-        }
+                        component * 4u),
+                (uint32_t)effect->translation[component]);
     }
     for (uint32_t primitive_index = 0u;
          primitive_index < preparation->primitive_count; ++primitive_index) {
@@ -1035,8 +1059,10 @@ bool xg_render_world_models_commit(
 
         if (template_entry == NULL || !template_entry->active ||
             template_entry->owner_cpu != cpu ||
-            template_entry->resource_epoch != source->resource_epoch)
+            template_entry->resource_epoch != source->resource_epoch) {
+            failure_detail = 0x20000u + primitive_index;
             goto fail;
+        }
         for (uint32_t word = 0u;
              word < source->packet_word_count; ++word) {
             const uint32_t expected_word =
@@ -1045,31 +1071,39 @@ bool xg_render_world_models_commit(
                     ? output->packet_words[word]
                     : template_entry->words[word];
 
-            if (cpu->read_word(source->packet_address + word * 4u) !=
-                expected_word)
-                goto fail;
+            commit_mismatch_primitive = primitive_index;
+            COMMIT_EXPECT(0x100000u + primitive_index * 16u + word,
+                cpu->read_word(source->packet_address + word * 4u),
+                expected_word);
         }
     }
     for (uint32_t index = 0u; index < XG_WORLD_MODELS_OT_BUCKET_COUNT; ++index) {
-        if (workspace->ot_touched[index] &&
-            cpu->read_word(expected->resident_ot_base + index * 4u) !=
-                workspace->ot_heads[index])
-            goto fail;
+        if (workspace->ot_touched[index])
+            COMMIT_EXPECT(0x30000u + index,
+                cpu->read_word(expected->resident_ot_base + index * 4u),
+                workspace->ot_heads[index]);
     }
-    if (expected->resident_dispatch_globals_written &&
-        (cpu->read_word(XG_WORLD_MODELS_RESIDENT_PACKET_CURSOR_GLOBAL) !=
-             expected->resident_packet_cursor ||
-         cpu->read_word(XG_WORLD_MODELS_RESIDENT_GROUP_CURSOR_GLOBAL) !=
-             expected->resident_group_cursor ||
-         cpu->read_word(XG_WORLD_MODELS_RESIDENT_MODEL_0C_GLOBAL) !=
-             expected->resident_model_0c ||
-         cpu->read_word(XG_WORLD_MODELS_RESIDENT_VERTEX_BASE_GLOBAL) !=
-             expected->resident_vertex_base ||
-         cpu->read_word(XG_WORLD_MODELS_RESIDENT_OT_BASE_GLOBAL) !=
-             expected->resident_ot_base ||
-         cpu->read_word(XG_WORLD_MODELS_RESIDENT_MODEL_18_GLOBAL) !=
-             expected->resident_model_18))
-        goto fail;
+    if (expected->resident_dispatch_globals_written) {
+        COMMIT_EXPECT(0x0930u,
+            cpu->read_word(XG_WORLD_MODELS_RESIDENT_PACKET_CURSOR_GLOBAL),
+            expected->resident_packet_cursor);
+        COMMIT_EXPECT(0x0931u,
+            cpu->read_word(XG_WORLD_MODELS_RESIDENT_GROUP_CURSOR_GLOBAL),
+            expected->resident_group_cursor);
+        COMMIT_EXPECT(0x0932u,
+            cpu->read_word(XG_WORLD_MODELS_RESIDENT_MODEL_0C_GLOBAL),
+            expected->resident_model_0c);
+        COMMIT_EXPECT(0x0933u,
+            cpu->read_word(XG_WORLD_MODELS_RESIDENT_VERTEX_BASE_GLOBAL),
+            expected->resident_vertex_base);
+        COMMIT_EXPECT(0x0934u,
+            cpu->read_word(XG_WORLD_MODELS_RESIDENT_OT_BASE_GLOBAL),
+            expected->resident_ot_base);
+        COMMIT_EXPECT(0x0935u,
+            cpu->read_word(XG_WORLD_MODELS_RESIDENT_MODEL_18_GLOBAL),
+            expected->resident_model_18);
+    }
+#undef COMMIT_EXPECT
 
     if (!collect_interpolation_anchors(
             workspace, services->interpolation_scene_generation(),

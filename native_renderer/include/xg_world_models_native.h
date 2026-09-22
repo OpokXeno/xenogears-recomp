@@ -216,6 +216,9 @@ typedef struct XgWorldModelsNativePrimitiveOutput {
     uint32_t projection_flags;
     uint32_t ordering_depth;
     uint32_t ordering_bucket;
+    /* OT bucket the resident handler links; differs from ordering_bucket
+     * only when the Native and hardware NCLIP signs disagree. */
+    uint32_t guest_ordering_bucket;
     uint32_t packet_address;
     uint8_t packet_word_count;
     bool passed_screen_cull;
