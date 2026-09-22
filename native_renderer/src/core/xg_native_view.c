@@ -17,21 +17,24 @@ bool xg_native_view_configure(XgNativeView *view, bool enabled,
     if (!enabled) return true;
     if (aspect_num == 0u || aspect_den == 0u || canonical_width == 0u ||
         canonical_height == 0u ||
-        (uint32_t)aspect_num * canonical_height <=
+        (uint32_t)aspect_num * canonical_height <
             (uint32_t)aspect_den * canonical_width)
         return false;
     surface_width = ((uint64_t)canonical_height * aspect_num +
                      aspect_den / 2u) / aspect_den;
     /* Native and legacy wide surfaces share one integer raster geometry. Keep
      * the reveal symmetric so changing producers cannot move the scene by a
-     * fractional host pixel. */
+     * fractional host pixel. The canonical aspect is accepted as the degenerate
+     * case: the presentation surface keeps the canonical width, so the
+     * source-space subpixel projection is available at 4:3 too, with no reveal
+     * margins to center. */
     if (((surface_width - canonical_width) & 1u) != 0u) --surface_width;
-    if (surface_width <= canonical_width ||
+    if (surface_width < canonical_width ||
         surface_width > (uint64_t)UINT32_MAX >> 16u)
         return false;
     center_offset = (surface_width - canonical_width) / 2u;
     right_margin = surface_width - canonical_width - center_offset;
-    if (center_offset == 0u || center_offset > (uint64_t)INT32_MAX >> 16u ||
+    if (center_offset > (uint64_t)INT32_MAX >> 16u ||
         right_margin > UINT32_MAX)
         return false;
     view->aspect_num = aspect_num;
