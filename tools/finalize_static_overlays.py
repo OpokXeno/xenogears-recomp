@@ -188,8 +188,17 @@ def _normalized_variants(variants: list[dict]) -> list[dict]:
         if key in seen:
             continue
         seen.add(key)
+        image_ranges = tuple(
+            (int(lo) & 0x1FFFFFFF, int(length))
+            for lo, length in variant.get("image_ranges", ())
+        )
+        image_code_sha256 = str(variant.get("image_code_sha256", "")).lower()
+        if image_ranges and re.fullmatch(r"[0-9a-f]{64}", image_code_sha256) is None:
+            raise ValueError("static overlay variant has an invalid image code identity")
         unique.append({
             **variant,
+            "image_ranges": image_ranges,
+            "image_code_sha256": image_code_sha256,
             "addr": int(variant["addr"]),
             "code_sha256": code_sha256,
             "ranges": ranges,
@@ -243,6 +252,37 @@ def _dispatch_shard_source(index: int, variants: list[dict]) -> str:
         for artifact_index, artifact in enumerate(artifact_ranges)
     }
     artifact_identities = sorted({variant["artifact_sha256"] for variant in variants})
+    # Two images can carry a byte-identical function at the same address (the
+    # 0x801FC000 helper shared by several battle effect overlays). Its code
+    # identity then matches every one of them and reads as ambiguous, so such
+    # variants also require their whole image's code ranges to match.
+    shared_code = set()
+    for address_variants in by_address.values():
+        images_by_code: dict[tuple, set] = {}
+        for variant in address_variants:
+            images_by_code.setdefault(
+                (variant["ranges"], variant["code_sha256"]), set()
+            ).add((variant["image_ranges"], variant["image_code_sha256"]))
+        for code_identity, image_identities in images_by_code.items():
+            if len(image_identities) > 1:
+                shared_code.add((address_variants[0]["addr"], code_identity))
+    image_identities = sorted({
+        (variant["image_ranges"], variant["image_code_sha256"])
+        for variant in variants
+        if (variant["addr"], (variant["ranges"], variant["code_sha256"]))
+        in shared_code
+    })
+    for image_ranges, _digest in image_identities:
+        if not image_ranges:
+            raise ValueError("shared static overlay code has no image identity")
+    image_range_symbols = {
+        identity: f"psx_ov_dispatch_{index:02d}_image_ranges_{image_index:04d}"
+        for image_index, identity in enumerate(image_identities)
+    }
+    image_identity_symbols = {
+        identity: f"psx_ov_dispatch_{index:02d}_image_sha256_{image_index:04d}"
+        for image_index, identity in enumerate(image_identities)
+    }
     artifact_identity_symbols = {
         identity: f"psx_ov_dispatch_{index:02d}_artifact_sha256_{identity_index:04d}"
         for identity_index, identity in enumerate(artifact_identities)
@@ -292,6 +332,23 @@ def _dispatch_shard_source(index: int, variants: list[dict]) -> str:
             f"static const uint8_t {artifact_identity_symbols[identity]}[32] = "
             "{ " + initializer + " };"
         )
+    for identity in image_identities:
+        flat = [
+            value
+            for lo, length in identity[0]
+            for value in (f"0x{lo:08X}u", f"0x{length:X}u")
+        ]
+        lines.append(
+            f"static const uint32_t {image_range_symbols[identity]}[] = "
+            "{ " + ", ".join(flat) + " };"
+        )
+        initializer = ", ".join(
+            f"0x{value:02x}u" for value in bytes.fromhex(identity[1])
+        )
+        lines.append(
+            f"static const uint8_t {image_identity_symbols[identity]}[32] = "
+            "{ " + initializer + " };"
+        )
     lines += [
         "",
         f"int psx_overlay_dispatch_shard_{index:02d}(CPUState *cpu, uint32_t key,",
@@ -306,12 +363,23 @@ def _dispatch_shard_source(index: int, variants: list[dict]) -> str:
         ]
         for selection, variant in enumerate(address_variants, 1):
             code_identity = (variant["ranges"], variant["code_sha256"])
+            image_check = ""
+            if (address, code_identity) in shared_code:
+                image_identity = (
+                    variant["image_ranges"], variant["image_code_sha256"]
+                )
+                image_check = (
+                    " &&\n                psx_overlay_static_code_matches("
+                    f"{image_range_symbols[image_identity]}, "
+                    f"{len(image_identity[0])}u, "
+                    f"{image_identity_symbols[image_identity]})"
+                )
             lines += [
                 "            psx_ov_static_checks++;",
                 "            if (psx_overlay_static_code_matches("
                 f"{range_symbols[variant['ranges']]}, "
                 f"{len(variant['ranges'])}u, "
-                f"{code_identity_symbols[code_identity]})) {{",
+                f"{code_identity_symbols[code_identity]}){image_check}) {{",
                 "                if (selected != 0u) {",
                 "                    psx_ov_static_variant_misses++;",
                 "                    return 0;",
@@ -816,6 +884,8 @@ def aggregate(args: argparse.Namespace) -> None:
                 "artifact_sha256": image["artifact_sha256"],
                 "capability_id": image["capability_id"],
                 "authority_provenance": image["authority_provenance"],
+                "image_ranges": image["ranges"],
+                "image_code_sha256": image["code_sha256"],
             })
     images = [unit["image"] for unit in units]
     dispatch, dispatch_shards = generate_dispatch_shards(
