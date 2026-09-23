@@ -74,6 +74,36 @@ static bool normalized_ranges_overlap(
         left_begin < right_end && right_begin < left_end;
 }
 
+/* Conservative union of every template's watched ranges (physical space).
+ * Resource-mutation invalidation runs on every watched guest store, so a store
+ * outside it skips the per-template scan. It only grows between rebuilds;
+ * removal leaves it wide. A null descriptor still watches [0, 0x1c), tracked
+ * apart so it cannot pin the lower bound to zero. */
+static uint64_t template_bounds_begin = UINT64_MAX;
+static uint64_t template_bounds_end;
+static bool template_bounds_null_descriptor;
+
+static void template_bounds_reset(void) {
+    template_bounds_begin = UINT64_MAX;
+    template_bounds_end = 0u;
+    template_bounds_null_descriptor = false;
+}
+
+static void template_bounds_add_range(uint32_t start, uint32_t size) {
+    const uint64_t begin = start & UINT32_C(0x1fffffff);
+
+    if (begin < template_bounds_begin) template_bounds_begin = begin;
+    if (begin + size > template_bounds_end) template_bounds_end = begin + size;
+}
+
+static void template_bounds_add(const XgRenderFieldSpriteRecord *record) {
+    template_bounds_add_range(record->packet_address + 4u, 0x24u);
+    if ((record->descriptor_address & UINT32_C(0x1fffffff)) == 0u)
+        template_bounds_null_descriptor = true;
+    else
+        template_bounds_add_range(record->descriptor_address, 0x1cu);
+}
+
 static PsxXgRenderSpriteFt4ShadowSnapshot *snapshot(
         const XgRenderFieldSpriteServices *services) {
     (void)services;
@@ -99,6 +129,7 @@ void xg_render_field_sprite_clear_templates(
 
     xy_override.active = false;
     template_count = 0u;
+    template_bounds_reset();
     xg_render_lookup_reset(template_lookup, &template_lookup_epoch);
     if (telemetry != NULL) telemetry->field_builder_template_count = 0u;
 }
@@ -140,6 +171,7 @@ static bool capture_template(
 
     if (record == NULL) return false;
     target = find_template(record->packet_address);
+    template_bounds_add(record);
     if (target != NULL) {
         *target = *record;
         target->semantic_ready = false;
@@ -246,10 +278,12 @@ void xg_render_field_sprite_retain_resident(
         ++retained_count;
     }
     template_count = retained_count;
+    template_bounds_reset();
     xg_render_lookup_reset(template_lookup, &template_lookup_epoch);
     for (uint32_t index = 0u; index < retained_count; ++index) {
         const XgRenderFieldSpriteRecord *record = &templates[index];
 
+        template_bounds_add(record);
         xg_render_lookup_put(
             template_lookup, template_lookup_epoch,
             record->packet_address, index);
@@ -263,6 +297,13 @@ void xg_render_field_sprite_retain_resident(
 
 void xg_render_field_sprite_invalidate_overlapping(
         uint32_t address, uint32_t size) {
+    const uint64_t begin = address & UINT32_C(0x1fffffff);
+    const uint64_t end = begin + size;
+
+    if (template_count == 0u || size == 0u) return;
+    if ((begin >= template_bounds_end || end <= template_bounds_begin) &&
+        !(template_bounds_null_descriptor && begin < 0x1cu))
+        return;
     for (uint32_t index = 0u; index < template_count; ++index) {
         XgRenderFieldSpriteRecord *record = &templates[index];
 
@@ -1055,6 +1096,7 @@ void xg_render_field_sprite_reset(void) {
     free(builder.records);
     builder = (XgRenderFieldSpriteBuilder){0};
     template_count = 0u;
+    template_bounds_reset();
     xy_override.active = false;
     xg_render_lookup_reset(template_lookup, &template_lookup_epoch);
     xg_render_field_sprite_diagnostics_reset();
