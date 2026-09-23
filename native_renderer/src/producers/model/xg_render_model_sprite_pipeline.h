@@ -107,6 +107,8 @@ void xg_render_model_sprite_pipeline_ft4_snapshot(
     PsxXgRenderModelFt4ShadowSnapshot *out_snapshot);
 void xg_render_model_sprite_pipeline_ft3_snapshot(
     PsxXgRenderModelFt3ShadowSnapshot *out_snapshot);
+size_t xg_render_model_sprite_pipeline_cards(
+    PsxXgRenderSpriteCardDiagnostic *out, size_t capacity);
 void xg_render_model_sprite_pipeline_sprite_snapshot(
     PsxXgRenderSpriteFt4ShadowSnapshot *out_snapshot);
 void xg_render_model_sprite_pipeline_reset(

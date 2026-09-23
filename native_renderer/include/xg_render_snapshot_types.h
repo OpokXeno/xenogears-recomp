@@ -445,6 +445,15 @@ typedef struct PsxXgRenderSpriteFt4ShadowSnapshot {
     bool field_builder_blocked;
 } PsxXgRenderSpriteFt4ShadowSnapshot;
 
+/* One staged Field actor card piece (native_sprite_cards TCP diagnostic):
+ * its two triangles' canonical positions and UVs, Q16.16. */
+typedef struct PsxXgRenderSpriteCardDiagnostic {
+    uint32_t sequence;
+    uint32_t sprite_address;
+    uint32_t descriptor_address;
+    int32_t x[6], y[6], u[6], v[6];
+} PsxXgRenderSpriteCardDiagnostic;
+
 typedef struct PsxXgRenderFieldPolylineSnapshot {
     uint64_t begin_count;
     uint64_t invocation_count;

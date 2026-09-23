@@ -103,6 +103,9 @@ void psx_xg_render_auth_model_ft3_shadow_snapshot(
     PsxXgRenderModelFt3ShadowSnapshot *out_snapshot);
 void psx_xg_render_auth_sprite_ft4_shadow_snapshot(
     PsxXgRenderSpriteFt4ShadowSnapshot *out_snapshot);
+/* Last staged Field actor card pieces, oldest first. Returns the count. */
+size_t psx_xg_render_auth_sprite_cards(
+    PsxXgRenderSpriteCardDiagnostic *out, size_t capacity);
 void psx_xg_render_auth_field_polyline_snapshot(
     PsxXgRenderFieldPolylineSnapshot *out_snapshot);
 void psx_xg_render_auth_world_horizon_shadow_snapshot(

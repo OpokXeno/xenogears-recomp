@@ -201,6 +201,8 @@ void xg_render_runtime_composition_model_ft4_shadow_snapshot(
     PsxXgRenderModelFt4ShadowSnapshot *out_snapshot);
 void xg_render_runtime_composition_model_ft3_shadow_snapshot(
     PsxXgRenderModelFt3ShadowSnapshot *out_snapshot);
+size_t xg_render_runtime_composition_sprite_cards(
+    PsxXgRenderSpriteCardDiagnostic *out, size_t capacity);
 void xg_render_runtime_composition_sprite_ft4_shadow_snapshot(
     PsxXgRenderSpriteFt4ShadowSnapshot *out_snapshot);
 void xg_render_runtime_composition_field_polyline_snapshot(

@@ -3159,6 +3159,11 @@ void xg_render_runtime_composition_model_ft3_shadow_snapshot(
     xg_render_model_sprite_pipeline_ft3_snapshot(out_snapshot);
 }
 
+size_t xg_render_runtime_composition_sprite_cards(
+        PsxXgRenderSpriteCardDiagnostic *out, size_t capacity) {
+    return xg_render_model_sprite_pipeline_cards(out, capacity);
+}
+
 void xg_render_runtime_composition_sprite_ft4_shadow_snapshot(
         PsxXgRenderSpriteFt4ShadowSnapshot *out_snapshot) {
     xg_render_model_sprite_pipeline_sprite_snapshot(out_snapshot);

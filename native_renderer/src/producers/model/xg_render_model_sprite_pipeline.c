@@ -3414,6 +3414,40 @@ static bool prepare_sprite(CPUState *cpu,
     return true;
 }
 
+/* Diagnostics only: the last staged card pieces (native_sprite_cards). */
+enum { SPRITE_CARD_RING = 64u };
+static PsxXgRenderSpriteCardDiagnostic sprite_card_ring[SPRITE_CARD_RING];
+static uint32_t sprite_card_sequence;
+
+static void note_sprite_card(const XgRenderIrNativePrimitive *primitive) {
+    PsxXgRenderSpriteCardDiagnostic *card =
+        &sprite_card_ring[sprite_card_sequence % SPRITE_CARD_RING];
+    *card = (PsxXgRenderSpriteCardDiagnostic){
+        .sequence = ++sprite_card_sequence,
+        .sprite_address = sprite_ft4.sprite_address,
+        .descriptor_address = sprite_ft4.descriptor_address,
+    };
+    for (uint32_t t = 0u; t < 2u && t < primitive->triangle_count; ++t)
+        for (uint32_t v = 0u; v < 3u; ++v) {
+            const XgRenderIrVertex *vertex = &primitive->triangles[t].vertices[v];
+            card->x[t * 3u + v] = vertex->x;
+            card->y[t * 3u + v] = vertex->y;
+            card->u[t * 3u + v] = vertex->u;
+            card->v[t * 3u + v] = vertex->v;
+        }
+}
+
+size_t xg_render_model_sprite_pipeline_cards(
+        PsxXgRenderSpriteCardDiagnostic *out, size_t capacity) {
+    size_t count = sprite_card_sequence < SPRITE_CARD_RING
+        ? sprite_card_sequence : SPRITE_CARD_RING;
+    if (out == NULL) return 0u;
+    if (count > capacity) count = capacity;
+    for (size_t i = 0u; i < count; ++i)
+        out[i] = sprite_card_ring[(sprite_card_sequence - count + i) % SPRITE_CARD_RING];
+    return count;
+}
+
 static bool stage_sprite(
         CPUState *cpu, GuestRenderRenderMode render_mode,
         const XgRenderModelSpritePipelineServices *services) {
@@ -3447,6 +3481,7 @@ static bool stage_sprite(
     /* A character card is projected corner by corner (xg_sprite_ft4_build):
      * its view depth is real, so it hides behind nearer certified surfaces. */
     xg_render_depth_policy_stamp_primitive(&record->primitive, XG_RENDER_DEPTH_FAMILY_SPRITES);
+    note_sprite_card(&record->primitive);
     if (sprite_ft4.geometry_matches && sprite_ft4.motion_binding.motion.handle.resource_id)
         (void)xg_render_motion_register_command(record->packet_address + 4u,
             &sprite_ft4.motion_binding, record->interpolation_producer_id,

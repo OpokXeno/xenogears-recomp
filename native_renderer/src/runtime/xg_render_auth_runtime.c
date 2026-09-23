@@ -5260,6 +5260,11 @@ void psx_xg_render_auth_model_ft3_shadow_snapshot(
     xg_render_runtime_composition_model_ft3_shadow_snapshot(out_snapshot);
 }
 
+size_t psx_xg_render_auth_sprite_cards(
+        PsxXgRenderSpriteCardDiagnostic *out, size_t capacity) {
+    return xg_render_runtime_composition_sprite_cards(out, capacity);
+}
+
 void psx_xg_render_auth_sprite_ft4_shadow_snapshot(
         PsxXgRenderSpriteFt4ShadowSnapshot *out_snapshot) {
     xg_render_runtime_composition_sprite_ft4_shadow_snapshot(out_snapshot);
