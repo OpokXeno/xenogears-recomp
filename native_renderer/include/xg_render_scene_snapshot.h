@@ -195,6 +195,8 @@ typedef struct XgSemanticDrawRecord {
     uint8_t screen_space_2d;
     uint8_t native_view_effect;
     uint16_t native_view_effect_index;
+    /* Host HD texture replacement chosen for this draw (valid == 0: none). */
+    GpuRenderHdTexture hd_texture;
 } XgSemanticDrawRecord;
 
 typedef enum XgRenderNativeOperationKind {
@@ -229,6 +231,8 @@ typedef struct XgRenderNativeOperation {
     bool mask_set;
     bool mask_check;
     XgSemanticResourceRef upload;
+    /* DRAW only: host HD texture replacement decided at submission. */
+    GpuRenderHdTexture hd_texture;
 } XgRenderNativeOperation;
 
 typedef enum XgSemanticSurfaceEdgeKind {

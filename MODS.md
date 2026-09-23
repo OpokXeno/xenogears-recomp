@@ -38,6 +38,25 @@ Only install packages from authors you trust. The package loader validates the
 archive and does not allow a package to load arbitrary native libraries, but a
 mod can intentionally change game code, data, and assets.
 
+## Texture packs
+
+Texture packs made for RetroArch's Beetle PSX HW texture replacement work as
+they are, for example *Perfect ART Works*.
+
+1. Extract the pack anywhere. It contains a folder named like
+   `[your .cue or .m3u file name here]-texture-replacements`; you do not need
+   to rename it.
+2. In **Mods**, press **Add Texture Pack** and pick either that folder or the
+   folder that contains it.
+3. The pack appears under **Texture Packs**, enabled. Press **Launch**.
+
+The folder is referenced, not copied: keep it where it is, or add it again after
+moving it. **Remove from list** forgets a pack without touching its files. When
+several packs are enabled, the one listed first wins where two packs replace the
+same texture. Alternate images a pack ships in subfolders are not used; copy
+the ones you prefer over the defaults in the main folder, as the pack's own
+instructions describe.
+
 ## Included enhancements
 
 The release catalog includes these framework features. All are disabled by

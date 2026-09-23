@@ -41,6 +41,20 @@ void xg_render_native_work_snapshot(XgRenderNativeWorkSnapshot *out_snapshot);
  * cancellation; the caller must stop, not skip the rejected GPU operation. */
 bool xg_render_native_work_draw(const GpuRenderSemantic *semantic,
                                 uint64_t guest_cycle);
+/* Host HD texture replacement, owned by the Native work stream while it is
+ * enabled: the stream's own VRAM operations (UPLOAD/MOVE/CLEAR, never a
+ * RESTORE rebase) feed the upload tracker, and every DRAW operation carries
+ * the tracker's decision to the Native GPU. All callbacks run on the guest
+ * owner in stream order. Zero-init (the default) leaves every draw on guest
+ * VRAM. */
+typedef struct XgRenderNativeHdTextureHooks {
+    int (*resolve)(const GpuRenderSemantic *semantic, GpuRenderHdTexture *out);
+    void (*upload)(int x, int y, int w, int h, const uint16_t *pixels);
+    void (*copy)(int src_x, int src_y, int dst_x, int dst_y, int w, int h);
+    void (*fill)(int x, int y, int w, int h);
+} XgRenderNativeHdTextureHooks;
+void xg_render_native_work_set_hd_texture_hooks(
+    const XgRenderNativeHdTextureHooks *hooks);
 /* Guest-owner producer publication. Copies and retains metadata without emitting
  * an operation. out_coverage receives one caller retain; empty arrays are a valid
  * full-scope replacement, not permission to reuse last-seen geometry. */

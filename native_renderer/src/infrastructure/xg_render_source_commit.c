@@ -455,6 +455,7 @@ static uint64_t commit_digest(const XgRenderSourceSlot *slot) {
         HASH_FIELD(operation->kind);
         if (operation->kind == XG_RENDER_NATIVE_OPERATION_DRAW) {
             hash = hash_semantic(hash, &operation->semantic);
+            HASH_FIELD(operation->hd_texture);
             HASH_FIELD(operation->temporal.coverage.resource_id);
             HASH_FIELD(operation->temporal.coverage.generation);
             HASH_FIELD(operation->temporal.coverage.content_digest);
@@ -1859,6 +1860,7 @@ XgRenderSourceCommitResult xg_render_source_commit_append_native_operation(
             copy.semantic = operation->semantic;
             copy.motion = operation->motion;
             copy.temporal = operation->temporal;
+            copy.hd_texture = operation->hd_texture;
         } else {
             copy.dst_x = operation->dst_x;
             copy.dst_y = operation->dst_y;

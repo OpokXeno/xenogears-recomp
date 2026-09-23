@@ -141,6 +141,41 @@ bool xg_render_native_work_operation(const XgRenderNativeOperation *operation,
     return operation != NULL && append_operation(operation, guest_cycle);
 }
 
+static XgRenderNativeHdTextureHooks g_hd_texture;
+
+void xg_render_native_work_set_hd_texture_hooks(
+    const XgRenderNativeHdTextureHooks *hooks) {
+    if (hooks != NULL) g_hd_texture = *hooks;
+    else memset(&g_hd_texture, 0, sizeof(g_hd_texture));
+}
+
+/* The tracker follows this stream's VRAM writes in the order its DRAWs will
+ * sample them. A RESTORE is a rebase, not a game upload: the savestate layer
+ * restores the tracker's residency itself. */
+static void hd_texture_note_vram_event(const GpuVramEvent *event) {
+    switch (event->operation) {
+    case GPU_VRAM_EVENT_UPLOAD:
+        if (g_hd_texture.upload != NULL && event->pixels != NULL &&
+            event->pixel_count == (size_t)event->width * event->height)
+            g_hd_texture.upload(event->destination_x, event->destination_y,
+                                event->width, event->height, event->pixels);
+        break;
+    case GPU_VRAM_EVENT_MOVE:
+        if (g_hd_texture.copy != NULL)
+            g_hd_texture.copy(event->source_x, event->source_y,
+                              event->destination_x, event->destination_y,
+                              event->width, event->height);
+        break;
+    case GPU_VRAM_EVENT_CLEAR:
+        if (g_hd_texture.fill != NULL)
+            g_hd_texture.fill(event->destination_x, event->destination_y,
+                              event->width, event->height);
+        break;
+    default:
+        break;
+    }
+}
+
 bool xg_render_native_work_draw(const GpuRenderSemantic *semantic,
                                 uint64_t guest_cycle) {
     XgRenderNativeOperation operation = {.kind = XG_RENDER_NATIVE_OPERATION_DRAW};
@@ -149,6 +184,8 @@ bool xg_render_native_work_draw(const GpuRenderSemantic *semantic,
         (semantic->topology == GPU_RENDER_SEMANTIC_TRIANGLES &&
          semantic->triangle_count == 0u)) return false;
     operation.semantic = *semantic;
+    if (g_hd_texture.resolve != NULL)
+        (void)g_hd_texture.resolve(semantic, &operation.hd_texture);
     (void)xg_render_motion_bind_command(semantic->submission_command_id, &operation);
     (void)xg_render_submission_temporal_binding(semantic, &operation.temporal);
     /* Match GP0 size rejection using the original integer screen coordinates,
@@ -293,6 +330,7 @@ bool xg_render_native_work_vram_event(const GpuVramEvent *event,
     size_t pixel_count;
     bool success = false;
     if (event == NULL || !xg_render_native_work_enabled()) return false;
+    hd_texture_note_vram_event(event);
     switch (event->operation) {
     case GPU_VRAM_EVENT_READBACK:
     case GPU_VRAM_EVENT_RENDER_TARGET_WRITE:
