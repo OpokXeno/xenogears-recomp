@@ -6,6 +6,7 @@
 #include "xg_model_ft4_raw.h"
 #include "xg_render_gear_motion.h"
 #include "xg_render_backend.h"
+#include "xg_render_depth_policy.h"
 #include "xg_render_array.h"
 #include "xg_render_field_sprite.h"
 #include "xg_render_manifest_generated.h"
@@ -14,6 +15,7 @@
 #include "xg_render_battle_geometry.h"
 #include "xg_sprite_ft4.h"
 
+#include <math.h>
 #include <limits.h>
 #include <stddef.h>
 #include <string.h>
@@ -1176,7 +1178,8 @@ static bool capture_model_geometry(uint32_t packet, uint32_t descriptor,
             if (context->projection_motion.handle.resource_id && result.native_view_position &&
                 !xg_render_motion_refine_native_vertex(context->projection_motion,
                     context->motion_part, &vertices[corner],
-                    &result.native_view_x_16_16, &result.native_view_y_16_16)) return false;
+                    &result.native_view_x_16_16, &result.native_view_y_16_16,
+                    &result.native_view_depth_q12)) return false;
             model_projection_cache.projected[slot] = result;
             model_projection_cache.locals[slot] = vertices[corner];
             model_projection_cache.vertex_ids[slot] = indices[corner] + 1u;
@@ -1204,6 +1207,7 @@ static bool capture_model_geometry(uint32_t packet, uint32_t descriptor,
             target->native_view_x = source->native_view_x_16_16;
             target->native_view_y = source->native_view_y_16_16;
             target->native_view_position = source->native_view_position;
+            target->native_view_depth = source->native_view_depth_q12;
             target->projective_view_x = source->projective_view_x;
             target->projective_view_y = source->projective_view_y;
             target->projective_view_z = source->projective_view_z;
@@ -1223,6 +1227,7 @@ static bool capture_model_geometry(uint32_t packet, uint32_t descriptor,
     /* As in the resident Battle model capture, this binds geometry to an output
      * slot; acceptance checks exact GTE XY and takes final material/OT order from
      * the actual draw. A culled slot does not publish a polygon. */
+    xg_render_depth_policy_stamp_semantic(&semantic, XG_RENDER_DEPTH_FAMILY_FIELD_MODELS);
     if (xg_render_submission_stage_exact((GpuRenderTransactionId){0},
         (packet & 0x1fffffffu) + 4u, &semantic) != GUEST_RENDER_TRANSACTION_OK) return false;
     if (!pose) {
@@ -1720,7 +1725,8 @@ static bool prepare_model_ft4(
                             if (target->native_view_position &&
                                 !xg_render_motion_refine_native_vertex(context->projection_motion,
                                     context->motion_part, &source.vertices[split[t][v]],
-                                    &target->native_view_x, &target->native_view_y)) return false;
+                                    &target->native_view_x, &target->native_view_y,
+                                    &target->native_view_depth)) return false;
                         }
                 for (uint32_t triangle = 0u; triangle < 2u; ++triangle) {
                     for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
@@ -1736,6 +1742,8 @@ static bool prepare_model_ft4(
                             group_id != 0u;
                     }
                 }
+                xg_render_depth_policy_stamp_primitive(
+                    &record->native.primitive, XG_RENDER_DEPTH_FAMILY_FIELD_MODELS);
             }
             attribute_address += attribute_sizes[row];
         }
@@ -2308,6 +2316,8 @@ static bool build_ft3_record(
             record->vertices[vertex].native_view_y_16_16;
         destination->native_view_position =
             record->vertices[vertex].native_view_position != 0u;
+        destination->native_view_depth =
+            record->vertices[vertex].native_view_depth_q12;
         destination->projective_view_x =
             record->vertices[vertex].projective_view_x;
         destination->projective_view_y =
@@ -2471,7 +2481,8 @@ static bool prepare_model_ft3(
                         if (target->native_view_position &&
                             !xg_render_motion_refine_native_vertex(context->projection_motion,
                                 context->motion_part, &vertices[v],
-                                &target->native_view_x, &target->native_view_y)) return false;
+                                &target->native_view_x, &target->native_view_y,
+                                &target->native_view_depth)) return false;
                     }
                 for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
                     XgRenderIrVertex *destination =
@@ -2484,6 +2495,8 @@ static bool prepare_model_ft3(
                     destination->interpolation_vertex_identity_valid =
                         group_id != 0u;
                 }
+                xg_render_depth_policy_stamp_primitive(
+                    &record->primitive, XG_RENDER_DEPTH_FAMILY_FIELD_MODELS);
                 model_ft3.snapshot.last_nclip_positive_count +=
                     record->nclip_positive;
                 model_ft3.snapshot.last_guest_screen_accepted_count +=
@@ -3062,6 +3075,7 @@ void xg_render_model_sprite_pipeline_capture_ft3_link(
         destination->g = (uint8_t)(material_word >> 8u);
         destination->b = (uint8_t)(material_word >> 16u);
     }
+    xg_render_depth_policy_stamp_primitive(&primitive, XG_RENDER_DEPTH_FAMILY_FIELD_MODELS);
     const XgRenderModelFt3SourceRecord captured = {
         .primitive = primitive,
         .lifecycle = lifecycle,
@@ -3195,6 +3209,43 @@ void xg_render_model_sprite_pipeline_sprite_begin(
     sprite_ft4.snapshot.context_active = true;
 }
 
+/* Field actor cards are billboarded in view space around their feet (the node
+ * origin), so every corner has the feet's view Z and the top of the card leans
+ * back into whatever stands behind the character. For the host depth test they
+ * take the depth of an upright figure instead: a view-Y step up the card moves
+ * along the Field camera's world-up axis (-column 1), whose view Z per view Y
+ * is R[2][1] / R[1][1]. Zero (flat card) outside the Field actor renderer or
+ * for a camera looking almost straight down. */
+static double sprite_upright_depth_slope(CPUState *cpu) {
+    XgHost3dMatrix camera;
+    if ((sprite_ft4.snapshot.last_caller & 0x1fffffffu) != 0x7622cu ||
+        !xg_render_runtime_capture_matrix(cpu, 0x800afa64u, &camera)) return 0.0;
+    const double x = camera.rotation[0][1], y = camera.rotation[1][1], z = camera.rotation[2][1];
+    const double norm = sqrt(x * x + y * y + z * z);
+    return norm > 0.0 && y >= 0.25 * norm ? z / y : 0.0;
+}
+
+/* The same upright depth for the endpoint card (bound cards are re-derived
+ * from the motion pose, see XgRenderMotionPose.upright_depth_slope). */
+static void sprite_upright_depth(XgRenderIrNativePrimitive *primitive,
+        const XgHost3dProjection *projection, double slope) {
+    const double distance = projection->projection_distance;
+    if (slope == 0.0 || distance <= 0.0) return;
+    const double origin_y = projection->native_transform_valid
+        ? projection->native_translation[1] : projection->translation[1];
+    for (uint32_t t = 0u; t < primitive->triangle_count; ++t)
+        for (uint32_t v = 0u; v < 3u; ++v) {
+            XgRenderIrVertex *vertex = &primitive->triangles[t].vertices[v];
+            if (!vertex->native_view_position || vertex->native_view_depth <= 0) continue;
+            const double z = vertex->native_view_depth / 4096.0;
+            const double y = (vertex->native_view_y - (double)projection->screen_offset_y) /
+                65536.0 * z / distance;
+            const int32_t depth = xg_host_3d_native_depth_q12(z + slope * (y - origin_y),
+                (uint32_t)distance);
+            if (depth > 0) vertex->native_view_depth = depth;
+        }
+}
+
 static void capture_sprite_motion(CPUState *cpu, const XgSpriteFt4Source *sprite,
         const XgRenderModelSpritePipelineServices *services) {
     const uint32_t producer = sprite_ft4.sprite_address & 0x1fffffffu;
@@ -3225,6 +3276,7 @@ static void capture_sprite_motion(CPUState *cpu, const XgSpriteFt4Source *sprite
         pose.camera.rotation[3] = 1;
         pose.camera.scale[0] = pose.camera.scale[1] = pose.camera.scale[2] = 1;
         pose.geometry_scale = 1;
+        pose.upright_depth_slope = sprite_upright_depth_slope(cpu);
         pose.nodes[0].id = producer;
         pose.nodes[0].parent = -1;
         pose.nodes[0].source_matrix_valid = 1;
@@ -3348,6 +3400,8 @@ static bool prepare_sprite(CPUState *cpu,
         return false;
     if (xg_sprite_ft4_build(&source, &sprite_ft4.native) != XG_SPRITE_FT4_OK)
         return false;
+    sprite_upright_depth(&sprite_ft4.native.primitive, &source.projection,
+        sprite_upright_depth_slope(cpu));
     memcpy(sprite_ft4.uv, source.uv, sizeof(source.uv));
     sprite_ft4.packet_address = packet_address;
     sprite_ft4.descriptor_address = descriptor_address;
@@ -3390,6 +3444,9 @@ static bool stage_sprite(
         .payload_word_count = 9u,
         .interpolation_identity_valid = true,
     };
+    /* A character card is projected corner by corner (xg_sprite_ft4_build):
+     * its view depth is real, so it hides behind nearer certified surfaces. */
+    xg_render_depth_policy_stamp_primitive(&record->primitive, XG_RENDER_DEPTH_FAMILY_SPRITES);
     if (sprite_ft4.geometry_matches && sprite_ft4.motion_binding.motion.handle.resource_id)
         (void)xg_render_motion_register_command(record->packet_address + 4u,
             &sprite_ft4.motion_binding, record->interpolation_producer_id,

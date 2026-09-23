@@ -39,6 +39,9 @@ static MotionInstance *instances;
 static uint32_t instance_capacity;
 static MotionCommand *commands;
 static uint32_t command_capacity;
+/* Slots that are not empty (live or tombstone). Open-addressing probes stop
+ * only at an empty slot, so tombstones must not be allowed to fill the table. */
+static uint32_t command_used;
 static uint64_t *command_pages;
 static bool commands_dirty;
 static uint64_t serial;
@@ -81,6 +84,7 @@ static void watch_pages(uint32_t address, uint32_t size, bool add) {
 
 static void clear_command(MotionCommand *command) {
     commands_dirty = true;
+    if (!command->command_id) ++command_used;
     if(command->command_id&&command->command_id!=MOTION_TOMBSTONE) {
         const size_t index=(size_t)(command-commands);
         command_pages[(size_t)(command->command_id/4096u)*(command_capacity/64u)+index/64u]&=~(UINT64_C(1)<<(index%64u));
@@ -97,9 +101,8 @@ static bool ref_equal(XgRenderMotionRef a, XgRenderMotionRef b) {
            a.handle.generation == b.handle.generation && a.digest == b.digest;
 }
 
-static bool grow_commands(void) {
-    if (command_capacity == MOTION_COMMAND_MAXIMUM) return false;
-    const uint32_t capacity = command_capacity ? command_capacity * 2u : MOTION_INITIAL_COMMAND_CAPACITY;
+/* Rebuild the table at the given capacity, dropping tombstones. */
+static bool rehash_commands(uint32_t capacity) {
     MotionCommand *grown = calloc(capacity, sizeof(*grown));
     uint64_t *pages = calloc((size_t)512u * (capacity / 64u), sizeof(*pages));
     if (!grown || !pages) { free(grown); free(pages); return false; }
@@ -113,9 +116,17 @@ static bool grow_commands(void) {
         grown[slot] = *c;
         pages[(size_t)(c->command_id / 4096u) * (capacity / 64u) + slot / 64u] |= UINT64_C(1) << (slot % 64u);
     }
+    uint32_t live = 0u;
+    for (uint32_t i = 0u; i < capacity; ++i) live += grown[i].command_id != 0u;
     free(commands); free(command_pages);
     commands = grown; command_pages = pages; command_capacity = capacity;
+    command_used = live;
     return true;
+}
+
+static bool grow_commands(void) {
+    if (command_capacity == MOTION_COMMAND_MAXIMUM) return false;
+    return rehash_commands(command_capacity ? command_capacity * 2u : MOTION_INITIAL_COMMAND_CAPACITY);
 }
 
 static bool normalize(double q[4]) {
@@ -292,7 +303,8 @@ static bool pose_valid(const XgRenderMotionPose *p) {
         (unsigned)p->translation_stage > XG_RENDER_MOTION_TRANSLATION_WORLD ||
         !isfinite(p->projection_distance) || p->projection_distance <= 0 ||
         p->projection_distance > 65535 ||
-        !isfinite(p->geometry_scale) || p->geometry_scale <= 0)
+        !isfinite(p->geometry_scale) || p->geometry_scale <= 0 ||
+        !isfinite(p->upright_depth_slope) || fabs(p->upright_depth_slope) > 4.0)
         return false;
     if ((p->translation_stage == XG_RENDER_MOTION_TRANSLATION_WORLD) != (p->world_wrapped != 0))
         return false;
@@ -390,6 +402,7 @@ bool xg_render_motion_publish(const XgRenderMotionSource *source, const XgRender
     memcpy(pose.camera_origin, input->camera_origin, sizeof(pose.camera_origin));
     memcpy(pose.wrap_span, input->wrap_span, sizeof(pose.wrap_span));
     pose.geometry_scale = input->geometry_scale;
+    pose.upright_depth_slope = input->upright_depth_slope;
     if (pose.node_count > XG_RENDER_MOTION_NODE_CAPACITY)
         return false;
     for (uint32_t i = 0; i < pose.node_count; ++i) {
@@ -536,6 +549,14 @@ bool xg_render_motion_register_command(uint32_t command_id,
     if (!command_id || command_id > 0x1ffffcu || (command_id & 3u))
         return false;
     if (!command_capacity && (!binding || !grow_commands())) return binding == NULL;
+    /* Keep probes short: at 3/4 occupancy (tombstones included) rebuild, and
+     * grow only when live commands alone would still fill half the table. */
+    if (binding && (uint64_t)(command_used + 1u) * 4u > (uint64_t)command_capacity * 3u) {
+        const uint32_t live = motion_diagnostics.active_commands;
+        const uint32_t capacity = (uint64_t)live * 2u >= command_capacity &&
+            command_capacity < MOTION_COMMAND_MAXIMUM ? command_capacity * 2u : command_capacity;
+        if (!rehash_commands(capacity)) return false;
+    }
     const unsigned start = ((command_id >> 2) * 2654435761u) % command_capacity;
     MotionCommand *empty = NULL, *slot = NULL;
     for (unsigned i = 0; i < command_capacity; ++i) {
@@ -625,6 +646,7 @@ void xg_render_motion_reset(void) {
     xg_render_motion_forget_range(0, 0x200000u);
     free(commands); commands = NULL;
     free(command_pages); command_pages = NULL; command_capacity = 0u;
+    command_used = 0u;
     commands_dirty = false;
     for (unsigned i = 0; i < instance_capacity; ++i)
         release_instance(&instances[i]);
@@ -793,7 +815,7 @@ static void project_source_vertex(const XgHost3dProjection *source,
 
 static bool refine_native_vertex(const XgHost3dProjection *projection,
         const XgRenderMotionTransform *transform, uint32_t part,
-        const XgHost3dVector *local, int32_t xy[2]) {
+        const XgHost3dVector *local, int32_t xy[2], int32_t *depth_q12) {
     double source_xy[2], precise[2], view[3];
     project_source_vertex(projection, local, NULL, source_xy);
     const double (*m)[4] = transform->model_to_view[part];
@@ -808,11 +830,16 @@ static bool refine_native_vertex(const XgHost3dProjection *projection,
         result[axis] = (int32_t)llround(value);
     }
     memcpy(xy, result, sizeof(result));
+    /* Depth is absolute, not an offset delta: the refined view Z itself. */
+    if (depth_q12)
+        *depth_q12 = xg_host_3d_native_depth_q12(view[2] + transform->upright_depth_slope *
+            (view[1] - m[1][3]), (uint32_t)transform->projection_distance);
     return true;
 }
 
 bool xg_render_motion_refine_native_vertex(XgRenderMotionRef ref, uint32_t part,
-        const XgHost3dVector *local, int32_t *native_x, int32_t *native_y) {
+        const XgHost3dVector *local, int32_t *native_x, int32_t *native_y,
+        int32_t *native_depth_q12) {
     const XgRenderMotionPose *pose;
     if (!local || !native_x || !native_y || !xg_render_motion_view(ref, &pose) ||
         part >= pose->node_count || !pose->nodes[part].source_matrix_valid ||
@@ -827,7 +854,7 @@ bool xg_render_motion_refine_native_vertex(XgRenderMotionRef ref, uint32_t part,
     projection.screen_offset_y = (int32_t)(pose->screen_offset[1] * 65536.0);
     projection.projection_distance = (uint16_t)pose->projection_distance;
     int32_t xy[2] = {*native_x, *native_y};
-    if (!refine_native_vertex(&projection, transform, part, local, xy)) return false;
+    if (!refine_native_vertex(&projection, transform, part, local, xy, native_depth_q12)) return false;
     *native_x = xy[0];
     *native_y = xy[1];
     return true;
@@ -897,6 +924,7 @@ bool xg_render_motion_bind_command(uint32_t command_id, XgRenderNativeOperation 
                     vertex->y == (int32_t)projected->y * INT32_C(65536)) {
                     vertex->native_view_x = projected->native_view_x_16_16;
                     vertex->native_view_y = projected->native_view_y_16_16;
+                    vertex->native_view_depth = projected->native_view_depth_q12;
                     vertex->native_view_position = 1u;
                 }
             }
@@ -908,16 +936,17 @@ bool xg_render_motion_bind_command(uint32_t command_id, XgRenderNativeOperation 
          * The delta preserves authored viewport/billboard offsets; canonical XY
          * and guest execution stay exact.
          * Stage the complete binding before changing any existing Native vertex. */
-        int32_t native_xy[2][3][2];
+        int32_t native_xy[2][3][2], native_depth[2][3];
         for (uint32_t t = 0u; t < c->binding.triangle_count; ++t)
             for (uint32_t v = 0u; v < 3u; ++v) {
                 const GpuRenderSemanticVertex *vertex = &op->semantic.triangles[t].vertices[v];
                 native_xy[t][v][0] = vertex->native_view_x;
                 native_xy[t][v][1] = vertex->native_view_y;
+                native_depth[t][v] = vertex->native_view_depth;
                 if (!vertex->native_view_position || !native_transform) continue;
                 if (!refine_native_vertex(&projection, native_transform,
                         c->binding.motion_part_index, &c->binding.local[t][v],
-                        native_xy[t][v])) {
+                        native_xy[t][v], &native_depth[t][v])) {
                     xg_render_motion_note(XG_MOTION_BIND_GEOMETRY_UNSUPPORTED, command_id);
                     return false;
                 }
@@ -926,6 +955,7 @@ bool xg_render_motion_bind_command(uint32_t command_id, XgRenderNativeOperation 
             for (uint32_t v = 0u; v < 3u; ++v) {
                 op->semantic.triangles[t].vertices[v].native_view_x = native_xy[t][v][0];
                 op->semantic.triangles[t].vertices[v].native_view_y = native_xy[t][v][1];
+                op->semantic.triangles[t].vertices[v].native_view_depth = native_depth[t][v];
             }
         op->motion = c->binding;
         xg_render_motion_note(XG_MOTION_BOUND, command_id);
@@ -1049,6 +1079,8 @@ static bool evaluate_transform(const XgRenderMotionPose *a, const XgRenderMotion
             a->screen_offset[i] + alpha * (b->screen_offset[i] - a->screen_offset[i]);
     out->projection_distance =
         a->projection_distance + alpha * (b->projection_distance - a->projection_distance);
+    out->upright_depth_slope =
+        a->upright_depth_slope + alpha * (b->upright_depth_slope - a->upright_depth_slope);
     const bool gear = b->translation_stage == XG_RENDER_MOTION_TRANSLATION_GEAR;
     for (uint32_t i = 0; i < b->node_count; ++i) {
         const XgRenderMotionNode *n = &b->nodes[i];
@@ -1167,7 +1199,7 @@ bool xg_render_motion_evaluate(XgRenderMotionRef previous, XgRenderMotionRef cur
 XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluation *e,
                                                       const XgRenderMotionDrawBinding *b,
                                                       double screen_delta[2][3][3],
-                                                      double native_delta[2][3][2]) {
+                                                      double native_delta[2][3][3]) {
     if (e == NULL || b == NULL || screen_delta == NULL || native_delta == NULL ||
         !ref_equal(e->current, b->motion) ||
         b->motion_part_index >= e->node_count || b->triangle_count == 0 || b->triangle_count > 2)
@@ -1175,12 +1207,13 @@ XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluat
     if (!e->interpolated)
         return XG_RENDER_MOTION_ENDPOINT;
     double result[2][3][3] = {0};
-    double native_result[2][3][2] = {0};
+    double native_result[2][3][3] = {0};
     for (unsigned t = 0; t < b->triangle_count; ++t)
         for (unsigned v = 0; v < 3; ++v) {
             const XgHost3dVector *p = &b->local[t][v];
             double projected[3][2];
             double native_projected[2][2];
+            double native_z[2] = {0.0, 0.0};
             for (unsigned sample = 0; sample < 3; ++sample) {
                 const XgRenderMotionTransform *transform = sample < 2 ? &e->endpoints[sample] : &e->phase;
                 const double (*m)[4] = transform->model_to_view[b->motion_part_index];
@@ -1212,6 +1245,8 @@ XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluat
                     }
                     project_continuous_view(native_view, native_transform->screen_offset,
                                             native_transform->projection_distance, native_projected[sample-1u]);
+                    native_z[sample-1u] = native_view[2] + native_transform->upright_depth_slope *
+                        (native_view[1] - native_matrix[1][3]);
                 }
                 if (sample == 2)
                     result[t][v][2] = view[2];
@@ -1234,6 +1269,9 @@ XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluat
                  * would put the removed wobble back into alternate frames. */
                 native_result[t][v][axis] = native_projected[1][axis] - native_projected[0][axis];
             }
+            /* Depth in the same difference form: a static pose adds exactly 0
+             * to the endpoint's own unfloored depth. */
+            native_result[t][v][2] = native_z[1] - native_z[0];
         }
     memcpy(screen_delta, result, sizeof(result));
     memcpy(native_delta, native_result, sizeof(native_result));

@@ -59,6 +59,10 @@ typedef struct XgHost3dProjectedVertex {
     int32_t native_view_x_16_16;
     int32_t native_view_y_16_16;
     uint8_t native_view_position;
+    /* Unfloored view-space Z in Q12 (the GTE's pre-shift MAC3 domain) from the
+     * same presentation transform as native_view_x/y. Zero when absent or
+     * outside the projective range (z <= H/2 or z > 0xffff). */
+    int32_t native_view_depth_q12;
     int32_t projective_view_x;
     int32_t projective_view_y;
     int32_t projective_view_z;

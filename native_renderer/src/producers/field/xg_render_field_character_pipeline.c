@@ -8,6 +8,7 @@
 #include "xg_field_character_source_capture.h"
 #include "xg_field_render_services.h"
 #include "xg_render_backend.h"
+#include "xg_render_depth_policy.h"
 #include "xg_render_manifest_generated.h"
 #include "xg_render_primitive_utils.h"
 #include "xg_render_submission.h"
@@ -575,6 +576,8 @@ static void process_producer_family_candidate(
          * the projection is not uniformly valid the quad stays affine. */
         xg_render_primitive_apply_projective_payload(
             &primitive, candidate.source_derived.projection.vertices);
+        xg_render_depth_policy_stamp_primitive(
+            &primitive, XG_RENDER_DEPTH_FAMILY_FIELD_CHARACTER_SHADOW);
         if (xg_render_backend_translate_primitive(&primitive, &semantic) !=
             XG_RENDER_BACKEND_OK) {
             xg_render_field_character_reject(12u, services);

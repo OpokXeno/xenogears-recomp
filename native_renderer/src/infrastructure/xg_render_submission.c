@@ -719,6 +719,8 @@ bool xg_render_submission_materialize_semantic_draw(
     out_draw->screen_space_2d = semantic->screen_space_2d;
     out_draw->native_view_effect = semantic->native_view_effect;
     out_draw->native_view_effect_index = semantic->native_view_effect_index;
+    primitive->depth_policy = semantic->depth_policy;
+    primitive->depth_bias = semantic->depth_bias;
 #define COPY_MATERIAL(field)                                                   \
     primitive->material.field = semantic->material.field
     COPY_MATERIAL(tpage);
@@ -771,6 +773,7 @@ bool xg_render_submission_materialize_semantic_draw(
             COPY_VERTEX(native_view_x);
             COPY_VERTEX(native_view_y);
             COPY_VERTEX(native_view_position);
+            COPY_VERTEX(native_view_depth);
             COPY_VERTEX(projective_view_x);
             COPY_VERTEX(projective_view_y);
             COPY_VERTEX(projective_view_z);

@@ -1,5 +1,6 @@
 #include "xg_render_battle_fx.h"
 #include "cpu_state.h"
+#include "xg_render_depth_policy.h"
 
 #include <limits.h>
 #include <stdlib.h>
@@ -19,7 +20,9 @@ XgRenderBattleFxResult xg_render_battle_fx_capture_ripple(
         const XgRenderBattleFxOwnerIdentity *owner,
         const XgRenderBattleRippleCaptureServices *services) {
     XgRenderIrMaterialState draw_state;
-    XgHost3dProjection projection;
+    /* Zeroed: the GTE capture fills only the canonical fields, and a stale
+     * native_transform_valid would project every vertex through garbage. */
+    XgHost3dProjection projection = {0};
     XgRenderBattleRipplePrimitive *draws;
     uint32_t draw_count = 0u;
     uint32_t mesh, phase, amplitude, parity;
@@ -143,6 +146,7 @@ XgRenderBattleFxResult xg_render_battle_fx_capture_ripple(
         draw->primitive.material.semi_transparent = true;
         draw->primitive.triangle_count = 1u;
         draw->primitive.triangles[0].split_count = 1u;
+        xg_render_depth_policy_stamp_primitive(&draw->primitive, XG_RENDER_DEPTH_FAMILY_BATTLE_FX);
         for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
             const XgHost3dProjectedVertex *p = &projected.vertices[vertex];
             draw->primitive.triangles[0].vertices[vertex] = (XgRenderIrVertex){
@@ -162,6 +166,7 @@ XgRenderBattleFxResult xg_render_battle_fx_capture_ripple(
                 .native_view_x = p->native_view_x_16_16,
                 .native_view_y = p->native_view_y_16_16,
                 .native_view_position = p->native_view_position != 0u,
+                .native_view_depth = p->native_view_depth_q12,
             };
         }
         ++draw_count;

@@ -143,6 +143,8 @@ typedef struct XgRenderIrVertex {
     XgRenderIrFixed16_16 native_view_x;
     XgRenderIrFixed16_16 native_view_y;
     bool native_view_position;
+    /* Unfloored view-space Z in Q12; zero when absent. Host depth test only. */
+    int32_t native_view_depth;
     int32_t projective_view_x;
     int32_t projective_view_y;
     int32_t projective_view_z;
@@ -167,6 +169,10 @@ typedef struct XgRenderIrTriangle {
 
 typedef struct XgRenderIrNativePrimitive {
     XgRenderIrMaterialState material;
+    /* GpuRenderDepthPolicy and test bias shift, stamped from
+     * xg_render_depth_policy's table. */
+    uint8_t depth_policy;
+    uint8_t depth_bias;
     uint8_t triangle_count;
     XgRenderIrTriangle triangles[XG_RENDER_IR_TRIANGLE_CAPACITY];
 } XgRenderIrNativePrimitive;

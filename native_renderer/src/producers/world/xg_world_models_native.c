@@ -998,6 +998,7 @@ XgWorldModelsNativeResult xg_world_models_native_build_anchor_vertex(
         .native_view_x = projected.native_view_x_16_16,
         .native_view_y = projected.native_view_y_16_16,
         .native_view_position = projected.native_view_position != 0u,
+        .native_view_depth = projected.native_view_depth_q12,
         .projective_view_x = projected.projective_view_x,
         .projective_view_y = projected.projective_view_y,
         .projective_view_z = projected.projective_view_z,
@@ -1339,6 +1340,8 @@ static void build_semantic_primitive(
                     output->vertices[source_vertex].native_view_y_16_16,
                 .native_view_position =
                     output->vertices[source_vertex].native_view_position != 0u,
+                .native_view_depth =
+                    output->vertices[source_vertex].native_view_depth_q12,
                 .projective_view_x =
                     output->vertices[source_vertex].projective_view_x,
                 .projective_view_y =

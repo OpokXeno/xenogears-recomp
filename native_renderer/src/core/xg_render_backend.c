@@ -202,6 +202,7 @@ static bool copy_vertex(GpuRenderSemanticVertex *target_vertex,
             return false;
         target_vertex->native_view_position = 1u;
     }
+    target_vertex->native_view_depth = source_vertex->native_view_depth;
     target_vertex->interpolation_group_id =
         source_vertex->interpolation_group_id;
     target_vertex->interpolation_vertex_id =
@@ -286,6 +287,8 @@ static XgRenderBackendStatus translate_native_primitive(
     if (!copy_material(&out_semantic->material, &primitive->material))
         return XG_RENDER_BACKEND_UNSUPPORTED_MATERIAL;
     out_semantic->screen_space_2d = GPU_RENDER_SCREEN_SPACE_2D_NONE;
+    out_semantic->depth_policy = primitive->depth_policy;
+    out_semantic->depth_bias = primitive->depth_bias;
     out_semantic->triangle_count = primitive->triangle_count;
     for (triangle_index = 0u;
          triangle_index < primitive->triangle_count;

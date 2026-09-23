@@ -236,6 +236,7 @@ static void copy_interpolation_position(XgRenderIrVertex *destination,
     destination->native_view_x = source->native_view_x;
     destination->native_view_y = source->native_view_y;
     destination->native_view_position = source->native_view_position;
+    destination->native_view_depth = source->native_view_depth;
     destination->projective_view_x = source->projective_view_x;
     destination->projective_view_y = source->projective_view_y;
     destination->projective_view_z = source->projective_view_z;
@@ -457,6 +458,8 @@ static XgWorldTerrainWaterResult emit_cell(
                          output.vertices[vertex].native_view_y_16_16,
                      .native_view_position =
                           output.vertices[vertex].native_view_position != 0u,
+                    .native_view_depth =
+                        output.vertices[vertex].native_view_depth_q12,
                     .projective_view_x =
                         output.vertices[vertex].projective_view_x,
                     .projective_view_y =
@@ -602,6 +605,8 @@ static XgWorldTerrainWaterResult build_interpolation_anchors(
                             .native_view_y = projected->native_view_y_16_16,
                             .native_view_position =
                                 projected->native_view_position != 0u,
+                            .native_view_depth =
+                                projected->native_view_depth_q12,
                             .projective_view_x = projected->projective_view_x,
                             .projective_view_y = projected->projective_view_y,
                             .projective_view_z = projected->projective_view_z,
@@ -736,6 +741,8 @@ XgWorldTerrainWaterResult xg_world_terrain_water_append_temporal_tile_anchors(
                             .native_view_y = projected->native_view_y_16_16,
                             .native_view_position =
                                 projected->native_view_position != 0u,
+                            .native_view_depth =
+                                projected->native_view_depth_q12,
                             .projective_view_x = projected->projective_view_x,
                             .projective_view_y = projected->projective_view_y,
                             .projective_view_z = projected->projective_view_z,

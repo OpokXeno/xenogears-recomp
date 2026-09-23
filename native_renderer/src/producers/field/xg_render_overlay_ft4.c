@@ -9,6 +9,7 @@
 #include "xg_render_manifest_generated.h"
 #include "xg_render_submission.h"
 #include "xg_render_array.h"
+#include "xg_render_depth_policy.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -870,6 +871,7 @@ static void set_projected_position(
             target->native_view_x = source_vertex.native_view_x_16_16;
             target->native_view_y = source_vertex.native_view_y_16_16;
             target->native_view_position = source_vertex.native_view_position;
+            target->native_view_depth = source_vertex.native_view_depth_q12;
             target->projective_view_x = source_vertex.projective_view_x;
             target->projective_view_y = source_vertex.projective_view_y;
             target->projective_view_z = source_vertex.projective_view_z;
@@ -1019,6 +1021,9 @@ bool xg_render_overlay_ft4_observe_add_prim(
         ++snapshot->field_add_prim_count;
     snapshot->last_packet = xg_render_runtime_guest_address(cpu->gpr[5]);
     snapshot->last_ot = xg_render_runtime_guest_address(cpu->gpr[4]);
+    if (record->family == 3u || (record->family >= 6u && record->family <= 10u))
+        xg_render_depth_policy_stamp_primitive(
+            &record->primitive, XG_RENDER_DEPTH_FAMILY_FIELD_OVERLAY_PROJECTED);
     if (services->stage_primitive == NULL || !services->stage_primitive(
             &record->primitive, record->packet_address,
             record->source_primitive_index,

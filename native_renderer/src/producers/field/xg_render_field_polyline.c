@@ -201,6 +201,7 @@ static bool add_record(
             .native_view_x = output.vertices[vertex].native_view_x_16_16,
             .native_view_y = output.vertices[vertex].native_view_y_16_16,
             .native_view_position = output.vertices[vertex].native_view_position,
+            .native_view_depth = output.vertices[vertex].native_view_depth_q12,
             .projective_view_x = output.vertices[vertex].projective_view_x,
             .projective_view_y = output.vertices[vertex].projective_view_y,
             .projective_view_z = output.vertices[vertex].projective_view_z,
@@ -231,7 +232,9 @@ static bool begin(
         const XgRenderFieldPolylineServices *services) {
     static const uint32_t first_offsets[3] = {0x100u, 0x108u, 0x118u};
     static const uint32_t second_offsets[3] = {0x120u, 0x130u, 0x138u};
-    XgHost3dProjection projection;
+    /* Zeroed: the GTE capture fills only the canonical fields, and a stale
+     * native_transform_valid would project every vertex through garbage. */
+    XgHost3dProjection projection = {0};
     GpuDrawState draw = {0};
     uint32_t global;
     uint32_t field;

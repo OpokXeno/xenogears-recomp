@@ -38,6 +38,7 @@ void xg_render_quad_set_projected_position(
     out_vertex->native_view_x_16_16 = projected->native_view_x_16_16;
     out_vertex->native_view_y_16_16 = projected->native_view_y_16_16;
     out_vertex->native_view_position = projected->native_view_position != 0u;
+    out_vertex->native_view_depth_q12 = projected->native_view_depth_q12;
     out_vertex->projective_view_x = projected->projective_view_x;
     out_vertex->projective_view_y = projected->projective_view_y;
     out_vertex->projective_view_z = projected->projective_view_z;
@@ -96,6 +97,7 @@ XgRenderQuadBuilderResult xg_render_quad_build_primitive(
                     .native_view_y = source_vertex->native_view_y_16_16,
                     .native_view_position =
                         source_vertex->native_view_position,
+                    .native_view_depth = source_vertex->native_view_depth_q12,
                     .projective_view_x = source_vertex->projective_view_x,
                     .projective_view_y = source_vertex->projective_view_y,
                     .projective_view_z = source_vertex->projective_view_z,

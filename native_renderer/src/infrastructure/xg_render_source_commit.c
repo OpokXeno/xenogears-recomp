@@ -51,6 +51,60 @@ static uint64_t hash_bytes(uint64_t hash, const void *data, size_t size) {
     return hash;
 }
 
+/* Vertices dominate commit digests. Pack every field in declaration order
+ * (no padding bytes) and mix whole 64-bit words: the same fields, one multiply
+ * per 8 bytes instead of per byte. */
+static uint64_t hash_words(uint64_t hash, const uint8_t *bytes, size_t size) {
+    size_t index = 0u;
+    for (; index + 8u <= size; index += 8u) {
+        uint64_t word;
+        memcpy(&word, bytes + index, sizeof(word));
+        hash ^= word;
+        hash *= UINT64_C(1099511628211);
+        hash ^= hash >> 32u;
+    }
+    return hash_bytes(hash, bytes + index, size - index);
+}
+
+#define XG_HASH_PACK(vertex, field)                                            \
+    do {                                                                       \
+        memcpy(packed + used, &(vertex)->field, sizeof((vertex)->field));      \
+        used += sizeof((vertex)->field);                                       \
+    } while (0)
+#define XG_HASH_VERTEX_BODY(vertex)                                            \
+    uint8_t packed[192];                                                       \
+    size_t used = 0u;                                                          \
+    XG_HASH_PACK(vertex, x); \
+    XG_HASH_PACK(vertex, y); \
+    XG_HASH_PACK(vertex, u); \
+    XG_HASH_PACK(vertex, v); \
+    XG_HASH_PACK(vertex, r); \
+    XG_HASH_PACK(vertex, g); \
+    XG_HASH_PACK(vertex, b); \
+    XG_HASH_PACK(vertex, native_view_x); \
+    XG_HASH_PACK(vertex, native_view_y); \
+    XG_HASH_PACK(vertex, native_view_position); \
+    XG_HASH_PACK(vertex, native_view_depth); \
+    XG_HASH_PACK(vertex, projective_view_x); \
+    XG_HASH_PACK(vertex, projective_view_y); \
+    XG_HASH_PACK(vertex, projective_view_z); \
+    XG_HASH_PACK(vertex, projective_offset_x); \
+    XG_HASH_PACK(vertex, projective_offset_y); \
+    XG_HASH_PACK(vertex, projective_native_offset_x); \
+    XG_HASH_PACK(vertex, projective_native_offset_y); \
+    XG_HASH_PACK(vertex, projective_distance); \
+    XG_HASH_PACK(vertex, projective_position); \
+    XG_HASH_PACK(vertex, temporal_depth); \
+    XG_HASH_PACK(vertex, temporal_depth_valid); \
+    XG_HASH_PACK(vertex, interpolation_group_id); \
+    XG_HASH_PACK(vertex, interpolation_vertex_id); \
+    XG_HASH_PACK(vertex, interpolation_vertex_identity_valid); \
+    return hash_words(hash, packed, used)
+
+static uint64_t hash_ir_vertex(uint64_t hash, const XgRenderIrVertex *vertex) {
+    XG_HASH_VERTEX_BODY(vertex);
+}
+
 static uint64_t hash_primitive(uint64_t hash,
                                const XgRenderIrNativePrimitive *primitive) {
     const XgRenderIrMaterialState *material = &primitive->material;
@@ -81,6 +135,8 @@ static uint64_t hash_primitive(uint64_t hash,
     HASH_FIELD(material->dither);
     HASH_FIELD(material->mask_set);
     HASH_FIELD(material->mask_check);
+    HASH_FIELD(primitive->depth_policy);
+    HASH_FIELD(primitive->depth_bias);
     HASH_FIELD(primitive->triangle_count);
     for (triangle_index = 0; triangle_index < primitive->triangle_count;
          triangle_index++) {
@@ -91,30 +147,7 @@ static uint64_t hash_primitive(uint64_t hash,
         HASH_FIELD(triangle->split_count);
         for (vertex_index = 0; vertex_index < 3u; vertex_index++) {
             const XgRenderIrVertex *vertex = &triangle->vertices[vertex_index];
-            HASH_FIELD(vertex->x);
-            HASH_FIELD(vertex->y);
-            HASH_FIELD(vertex->u);
-            HASH_FIELD(vertex->v);
-            HASH_FIELD(vertex->r);
-            HASH_FIELD(vertex->g);
-            HASH_FIELD(vertex->b);
-            HASH_FIELD(vertex->native_view_x);
-            HASH_FIELD(vertex->native_view_y);
-            HASH_FIELD(vertex->native_view_position);
-            HASH_FIELD(vertex->projective_view_x);
-            HASH_FIELD(vertex->projective_view_y);
-            HASH_FIELD(vertex->projective_view_z);
-            HASH_FIELD(vertex->projective_offset_x);
-            HASH_FIELD(vertex->projective_offset_y);
-            HASH_FIELD(vertex->projective_native_offset_x);
-            HASH_FIELD(vertex->projective_native_offset_y);
-            HASH_FIELD(vertex->projective_distance);
-            HASH_FIELD(vertex->projective_position);
-            HASH_FIELD(vertex->temporal_depth);
-            HASH_FIELD(vertex->temporal_depth_valid);
-            HASH_FIELD(vertex->interpolation_group_id);
-            HASH_FIELD(vertex->interpolation_vertex_id);
-            HASH_FIELD(vertex->interpolation_vertex_identity_valid);
+            hash = hash_ir_vertex(hash, vertex);
         }
     }
 #undef HASH_FIELD
@@ -123,70 +156,54 @@ static uint64_t hash_primitive(uint64_t hash,
 
 static uint64_t hash_semantic_vertex(uint64_t hash,
                                      const GpuRenderSemanticVertex *vertex) {
-#define HASH_FIELD(field)                                                      \
-    hash = hash_bytes(hash, &vertex->field, sizeof(vertex->field))
-    HASH_FIELD(x);
-    HASH_FIELD(y);
-    HASH_FIELD(u);
-    HASH_FIELD(v);
-    HASH_FIELD(r);
-    HASH_FIELD(g);
-    HASH_FIELD(b);
-    HASH_FIELD(native_view_x);
-    HASH_FIELD(native_view_y);
-    HASH_FIELD(native_view_position);
-    HASH_FIELD(projective_view_x);
-    HASH_FIELD(projective_view_y);
-    HASH_FIELD(projective_view_z);
-    HASH_FIELD(projective_offset_x);
-    HASH_FIELD(projective_offset_y);
-    HASH_FIELD(projective_native_offset_x);
-    HASH_FIELD(projective_native_offset_y);
-    HASH_FIELD(projective_distance);
-    HASH_FIELD(projective_position);
-    HASH_FIELD(temporal_depth);
-    HASH_FIELD(temporal_depth_valid);
-    HASH_FIELD(interpolation_group_id);
-    HASH_FIELD(interpolation_vertex_id);
-    HASH_FIELD(interpolation_vertex_identity_valid);
-#undef HASH_FIELD
-    return hash;
+    XG_HASH_VERTEX_BODY(vertex);
 }
 
 static uint64_t hash_semantic(uint64_t hash,
                               const GpuRenderSemantic *semantic) {
     const GpuRenderMaterial *material = &semantic->material;
+    uint8_t packed[192];
+    size_t used = 0u;
+#define PACK_FIELD(value)                                                      \
+    do {                                                                       \
+        memcpy(packed + used, &(value), sizeof(value));                        \
+        used += sizeof(value);                                                 \
+    } while (0)
+    PACK_FIELD(material->tpage);
+    PACK_FIELD(material->texture_page_x);
+    PACK_FIELD(material->texture_page_y);
+    PACK_FIELD(material->clut_x);
+    PACK_FIELD(material->clut_y);
+    PACK_FIELD(material->draw_area_left);
+    PACK_FIELD(material->draw_area_top);
+    PACK_FIELD(material->draw_area_right);
+    PACK_FIELD(material->draw_area_bottom);
+    PACK_FIELD(material->draw_offset_x);
+    PACK_FIELD(material->draw_offset_y);
+    PACK_FIELD(material->texture_depth);
+    PACK_FIELD(material->texture_window_mask_x);
+    PACK_FIELD(material->texture_window_mask_y);
+    PACK_FIELD(material->texture_window_offset_x);
+    PACK_FIELD(material->texture_window_offset_y);
+    PACK_FIELD(material->shading);
+    PACK_FIELD(material->textured);
+    PACK_FIELD(material->raw_texture);
+    PACK_FIELD(material->semi_transparent);
+    PACK_FIELD(material->blend_mode);
+    PACK_FIELD(material->dither);
+    PACK_FIELD(material->mask_set);
+    PACK_FIELD(material->mask_check);
+    PACK_FIELD(semantic->topology);
+    PACK_FIELD(semantic->screen_space_2d);
+    PACK_FIELD(semantic->native_view_effect);
+    PACK_FIELD(semantic->native_view_effect_index);
+    PACK_FIELD(semantic->depth_policy);
+    PACK_FIELD(semantic->depth_bias);
+    PACK_FIELD(semantic->triangle_count);
+    PACK_FIELD(semantic->line_count);
+#undef PACK_FIELD
+    hash = hash_words(hash, packed, used);
 #define HASH_FIELD(value) hash = hash_bytes(hash, &(value), sizeof(value))
-    HASH_FIELD(material->tpage);
-    HASH_FIELD(material->texture_page_x);
-    HASH_FIELD(material->texture_page_y);
-    HASH_FIELD(material->clut_x);
-    HASH_FIELD(material->clut_y);
-    HASH_FIELD(material->draw_area_left);
-    HASH_FIELD(material->draw_area_top);
-    HASH_FIELD(material->draw_area_right);
-    HASH_FIELD(material->draw_area_bottom);
-    HASH_FIELD(material->draw_offset_x);
-    HASH_FIELD(material->draw_offset_y);
-    HASH_FIELD(material->texture_depth);
-    HASH_FIELD(material->texture_window_mask_x);
-    HASH_FIELD(material->texture_window_mask_y);
-    HASH_FIELD(material->texture_window_offset_x);
-    HASH_FIELD(material->texture_window_offset_y);
-    HASH_FIELD(material->shading);
-    HASH_FIELD(material->textured);
-    HASH_FIELD(material->raw_texture);
-    HASH_FIELD(material->semi_transparent);
-    HASH_FIELD(material->blend_mode);
-    HASH_FIELD(material->dither);
-    HASH_FIELD(material->mask_set);
-    HASH_FIELD(material->mask_check);
-    HASH_FIELD(semantic->topology);
-    HASH_FIELD(semantic->screen_space_2d);
-    HASH_FIELD(semantic->native_view_effect);
-    HASH_FIELD(semantic->native_view_effect_index);
-    HASH_FIELD(semantic->triangle_count);
-    HASH_FIELD(semantic->line_count);
     for (uint32_t index = 0u; index < semantic->triangle_count; ++index) {
         const GpuRenderSemanticTriangle *triangle = &semantic->triangles[index];
         HASH_FIELD(triangle->split_index);
@@ -321,6 +338,7 @@ bool xg_render_temporal_coverage_create(
         COPY(x); COPY(y);
         COPY(native_view_position);
         if (s->native_view_position) { COPY(native_view_x); COPY(native_view_y); }
+        COPY(native_view_depth);
         COPY(projective_position);
         if (s->projective_position) {
             COPY(projective_view_x); COPY(projective_view_y); COPY(projective_view_z);
@@ -410,6 +428,7 @@ static uint64_t commit_digest(const XgRenderSourceSlot *slot) {
         ? slot->header.display.render_scale : 1u;
     HASH_FIELD(render_scale);
     HASH_FIELD(slot->header.display.dithering_disabled);
+    HASH_FIELD(slot->header.display.native_depth_test);
     HASH_FIELD(slot->header.source_interval_vblanks);
     HASH_FIELD(slot->header.discontinuity);
     HASH_FIELD(slot->header.temporally_eligible);
@@ -869,6 +888,8 @@ static bool semantic_valid(const GpuRenderSemantic *semantic) {
         material->raw_texture > 1u || material->semi_transparent > 1u ||
         material->dither > 1u || material->mask_set > 1u ||
         material->mask_check > 1u ||
+        semantic->depth_policy > GPU_RENDER_DEPTH_TEST_WRITE ||
+        semantic->depth_bias > 16u ||
         semantic->interpolation_identity.valid > 1u)
         return false;
     if (semantic->topology == GPU_RENDER_SEMANTIC_LINES)

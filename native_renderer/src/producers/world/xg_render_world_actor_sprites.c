@@ -2,6 +2,7 @@
 
 #include "gpu.h"
 #include "xg_field_render_services.h"
+#include "xg_render_depth_policy.h"
 #include "xg_world_actor_sprites_source_capture.h"
 
 #include <string.h>
@@ -421,8 +422,13 @@ bool xg_render_world_actor_commit(
         if (record->descriptor_index > (UINT32_MAX - 1u) / 2u) goto fail;
         interpolation_primitive_id =
             record->descriptor_index * 2u + (uint32_t)record->family;
+        XgRenderIrNativePrimitive primitive = record->sprite.primitive;
+        xg_render_depth_policy_stamp_primitive(&primitive,
+            record->family == XG_WORLD_ACTOR_SPRITE_SHADOW
+                ? XG_RENDER_DEPTH_FAMILY_WORLD_ACTOR_SHADOW
+                : XG_RENDER_DEPTH_FAMILY_WORLD_ACTOR_SPRITES);
         if (!services->stage_native(
-                &record->sprite.primitive, record->packet_address,
+                &primitive, record->packet_address,
                 UINT32_C(0x67000000) |
                     ((record->packet_address & UINT32_C(0x001ffffc)) >> 2u),
                 preparation->actor_address & UINT32_C(0x1fffffff),

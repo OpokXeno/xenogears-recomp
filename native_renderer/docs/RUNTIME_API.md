@@ -185,6 +185,76 @@ The target aspect must be wider than the canonical aspect.
 A failed call leaves the native view disabled.
 It does not preserve the previous configuration.
 
+## Native depth test
+
+The per-pixel depth test is a host presentation feature. It is always on at startup. When it is off, the output is bit-identical to rendering without it.
+
+The runtime option is `gl_renderer_set_native_depth_test`. Only the debug overlay's *Toggles → Native depth test* and the debug server set it, and it is never saved. The option is captured into `XgSemanticDisplayState.native_depth_test`, so it is part of the commit hash, recipe equality and GPU plane freshness. It applies from the next Native work.
+
+### Classification
+
+`include/xg_render_depth_policy.h` holds the only producer classification table: a policy and a test bias per family. Each producer stamps its draws with `xg_render_depth_policy_stamp_primitive` or `xg_render_depth_policy_stamp_semantic`. The stamp travels as `depth_policy` and `depth_bias` on `GpuRenderSemantic` and `XgRenderIrNativePrimitive`. Guest packets always carry `GPU_RENDER_DEPTH_NONE`.
+
+| Policy | Bias | Families |
+|---|---|---|
+| `TEST_WRITE` | 0 | World models, field models (FT3/FT4), battle geometry, world terrain/water |
+| `TEST_WRITE` | 5 (~3 %) | World entity shadows, field character shadow, battle ripple FX, world actor sprites and their shadows, field/battle sprites |
+| `TEST_WRITE` | 6 (~1.6 %) | World decorations, world effects, field particles, field residual quads, field POLY_F4 sources, projected overlay FT4 families |
+| `NONE` | — | Clouds, horizon, sky, minimap, field prerendered backgrounds, zoom, compass, lines, resident UI and text |
+
+No family currently uses `TEST`. Billboards (character cards, world trees) write the depth of their projected card, so crossing cards can intersect. Blended texels never write, so semi-transparent shadows and effects keep only testing where they blend.
+
+The bias makes the tested key `D + (D >> bias)`, so the surface is taken about 2⁻ᵇⁱᵃˢ nearer. A shadow or a character card resting on a certified floor still passes where the two meet. The bias never changes a written key.
+
+The rasterizer then applies the draw's final geometry:
+
+- A triangle without view depth on all three vertices behaves as `NONE`. This covers the 2D quads of mixed producers (residual, F4).
+- Screen-space 2D draws, Native view effects and lines behave as `NONE`.
+- A triangle whose key gradient exceeds the fixed-point range (an edge-on sliver) behaves as `NONE`.
+
+### Depth values
+
+Vertices carry `native_view_depth`: the unfloored view-space Z in Q12, taken from the same presentation transform as `native_view_x/y`. The sources are `xg_host_3d_native_project`, motion-pose refinement, and phase evaluation.
+
+Field actor cards are billboarded in view space around the character's feet, so the whole card would sit at the feet's depth and its top would lean back into walls behind the character. Their corners instead take the depth of an upright figure: each view-Y step up the card adds the Field camera's view Z per view Y along world up (`R[2][1] / R[1][1]`). The motion pose carries the same slope (`upright_depth_slope`), so bound cards and their interpolated phases match. Positions are unchanged.
+
+The depth is clamped the way the projection saturates. Below about H/2, the vertex was placed as if at H/2 and keeps that depth. Above `0xffff` it is clamped too. Behind the camera there is no depth. When `native_view_depth` is absent, the integer GTE MAC3 is used as a fallback.
+
+Interpolated phases use a depth that matches their positions:
+
+- Unbound meshes interpolate `native_view_depth` with the same weight as their positions.
+- Bound models take the endpoint depth plus the Native view-Z displacement of the motion pose, so a static model keeps exactly its endpoint depth.
+
+### Key and plane
+
+The key is `D = 2^40 / z_q12`, which is affine in screen space. `0` means far.
+
+Each triangle gets one integer plane: `N0` (D in Q8 at an integer raster origin) and Q8 gradients `a`, `b` per logical pixel. The gradients are limited to 2²² in magnitude.
+
+Both rasterizers evaluate it with modular 32-bit arithmetic:
+
+- The CPU reference and the GPU at scale 1 produce identical keys.
+- At scale S the GPU produces the same key at the subpixel that coincides with the CPU sample, and it extends the plane exactly to the other subpixels.
+
+The plane passes through the fractional (Q16) Native vertex positions, and the key is sampled at the same point as colour and UV. Depth is therefore subpixel-precise at every render scale.
+
+### Rules
+
+Invariant: a texel holds the key of the certified opaque surface visible there, or far.
+
+| Fragment | Test | Key after it is written |
+|---|---|---|
+| Blended (semi-transparent texel or material) | as its draw | unchanged |
+| Unblended, `TEST_WRITE` | `D + (D >> bias) >= stored - (stored >> 10)` | `D` |
+| Unblended, `TEST` | same | far |
+| Unblended, `NONE` | none | far |
+| FILL/UPLOAD, partial copies, seeds, margins, recipe clears | none | far |
+| Full-row copy of a VIEW domain | none | the source row's keys |
+
+Ties within 2⁻¹⁰ resolve to the later draw, which is ordering-table order.
+
+The canonical VRAM raster (GPU plane 0) never has a depth plane. Guest-visible VRAM, packets, OT and counters are unchanged.
+
 ## Enable or disable cold hooks
 
 Use this function:

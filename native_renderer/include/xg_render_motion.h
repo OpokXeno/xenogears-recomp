@@ -97,7 +97,8 @@ typedef struct XgRenderMotionRef {
  * offsets in its continuous source-projected Native Q16 position. Deforming
  * models can use this without binding their vertices to a rigid motion curve. */
 bool xg_render_motion_refine_native_vertex(XgRenderMotionRef ref, uint32_t part,
-    const XgHost3dVector *local, int32_t *native_x, int32_t *native_y);
+    const XgHost3dVector *local, int32_t *native_x, int32_t *native_y,
+    int32_t *native_depth_q12);
 
 typedef enum XgRenderMotionTranslationStage {
     XG_RENDER_MOTION_TRANSLATION_AFFINE = 0,
@@ -136,6 +137,10 @@ typedef struct XgRenderMotionPose {
     double camera_origin[3];
     double wrap_span[3];
     double geometry_scale;
+    /* Host depth test only (never positions): view Z added per view-Y unit
+     * relative to a node's origin. A view-space billboard anchored at its feet
+     * then takes the depth of an upright figure; zero for real geometry. */
+    double upright_depth_slope;
     XgRenderMotionNode nodes[XG_RENDER_MOTION_NODE_CAPACITY];
 } XgRenderMotionPose;
 
@@ -151,6 +156,7 @@ typedef struct XgRenderMotionTransform {
     double camera[3][4];
     double screen_offset[2];
     double projection_distance;
+    double upright_depth_slope; /* XgRenderMotionPose.upright_depth_slope */
     double model_to_view[XG_RENDER_MOTION_NODE_CAPACITY][3][4];
 } XgRenderMotionTransform;
 
@@ -218,14 +224,15 @@ bool xg_render_motion_evaluate(XgRenderMotionRef previous, XgRenderMotionRef cur
  * share the result, including aliases in different polygons. Both alpha 0 and 1
  * are evaluated; ENDPOINT is only an incompatible/unpaired lifecycle.
  * screen_delta contains canonical pixel displacements from B plus phase depth;
- * native_delta contains the separate continuous subpixel displacements. Add each to
- * its CURRENT semantic plane so target relocation/viewport offsets stay intact.
+ * native_delta contains the separate continuous subpixel displacements, plus the
+ * view-Z displacement [2] of the same Native transforms (zero when static). Add
+ * each to its CURRENT semantic plane so target relocation/viewport offsets stay intact.
  * Nonpositive phase depth uses GTE SZ/divide saturation, as at the endpoints;
  * it is not a geometric near-plane rejection of the bound model. */
 XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluation *evaluation,
                                                       const XgRenderMotionDrawBinding *binding,
                                                       double screen_delta[2][3][3],
-                                                      double native_delta[2][3][2]);
+                                                      double native_delta[2][3][3]);
 
 #ifdef __cplusplus
 }

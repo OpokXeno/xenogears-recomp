@@ -1011,7 +1011,9 @@ bool xg_field_projected_cutover(
     XgHost3dLongVector direction;
     XgHost3dLongVector normalized;
     XgHost3dMatrix matrix;
-    XgHost3dProjection projection;
+    /* Zeroed: the GTE capture fills only the canonical fields, and a stale
+     * native_transform_valid would project every vertex through garbage. */
+    XgHost3dProjection projection = {0};
     XgHost3dVector point = { 0 };
     XgHost3dProjectedVertex first_projection;
     XgHost3dProjectedVertex second_projection;

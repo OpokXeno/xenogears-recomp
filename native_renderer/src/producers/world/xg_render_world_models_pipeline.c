@@ -2,6 +2,7 @@
 
 #include "gpu.h"
 #include "xg_render_backend.h"
+#include "xg_render_depth_policy.h"
 #include "xg_render_resource_watch.h"
 #include "xg_render_submission.h"
 #include "xg_render_primitive_utils.h"
@@ -220,17 +221,22 @@ static bool begin_submission(void *context) {
         workspace->services->begin_submission();
 }
 
-static bool stage_primitive(void *context, const XgRenderIrNativePrimitive *primitive,
+static bool stage_primitive(void *context, const XgRenderIrNativePrimitive *source_primitive,
                             uint32_t packet_address, uint32_t primitive_index) {
     const XgRenderWorldModelsNativeState *workspace = context;
     const XgWorldModelsNativePrimitiveSource *source;
+    XgRenderIrNativePrimitive stamped;
+    const XgRenderIrNativePrimitive *primitive = &stamped;
 
     if (workspace == NULL || workspace->services == NULL ||
         primitive_index >= workspace->preparation.primitive_count)
         return false;
     source = &workspace->primitives[primitive_index];
-    if (source->source_index > (UINT32_MAX - source->primitive_index) / 4096u)
+    if (source->source_index > (UINT32_MAX - source->primitive_index) / 4096u ||
+        source_primitive == NULL)
         return false;
+    stamped = *source_primitive;
+    xg_render_depth_policy_stamp_primitive(&stamped, XG_RENDER_DEPTH_FAMILY_WORLD_MODELS);
     if (workspace->motion_poses[source->source_index].handle.resource_id) {
         static const uint8_t split[2][3] = {{0, 1, 2}, {2, 1, 3}};
         XgRenderMotionDrawBinding binding = {

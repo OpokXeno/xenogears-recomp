@@ -31,6 +31,7 @@ typedef struct XgRenderQuadSourceVertex {
     int32_t native_view_x_16_16;
     int32_t native_view_y_16_16;
     bool native_view_position;
+    int32_t native_view_depth_q12;
     int32_t projective_view_x;
     int32_t projective_view_y;
     int32_t projective_view_z;

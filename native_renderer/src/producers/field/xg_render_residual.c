@@ -8,6 +8,7 @@
 #include "xg_render_primitive_utils.h"
 #include "xg_render_quad_builder.h"
 #include "xg_render_resource_watch.h"
+#include "xg_render_depth_policy.h"
 
 #include <limits.h>
 #include <stddef.h>
@@ -115,6 +116,8 @@ static bool store_template(
     if (xg_render_quad_build_primitive(source, &record->primitive) !=
             XG_RENDER_QUAD_BUILDER_OK)
         return false;
+    /* Only its projected quads carry view depth; the 2D bars stay OT-ordered. */
+    xg_render_depth_policy_stamp_primitive(&record->primitive, XG_RENDER_DEPTH_FAMILY_FIELD_RESIDUAL);
     record->command_address = command_address & UINT32_C(0x1ffffffc);
     record->producer_seam = producer_seam;
     record->resource_size = resource_size;

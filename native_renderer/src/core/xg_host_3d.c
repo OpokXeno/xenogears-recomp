@@ -488,9 +488,24 @@ int xg_host_3d_scale_matrix(XgHost3dMatrix *matrix,
     return 1;
 }
 
+int32_t xg_host_3d_native_depth_q12(double view_z, uint32_t projection_distance) {
+    /* The presentation projection saturates its quotient at 131071/65536
+     * (z below ~H/2) and its divisor at 0xffff: a vertex there was placed as
+     * if at that depth, so its depth is clamped the same way instead of being
+     * dropped (the near/far "clip" in depth space). Behind the camera there is
+     * no meaningful depth. */
+    if (!isfinite(view_z) || view_z <= 0.0) return 0;
+    const double near = projection_distance * (65536.0 / 131071.0);
+    if (view_z < near) view_z = near;
+    if (view_z > 65535.0) view_z = 65535.0;
+    const double q12 = view_z * 4096.0;
+    return q12 >= 1.0 ? (int32_t)llround(q12) : 0;
+}
+
 int xg_host_3d_native_project(const XgHost3dProjection *projection,
                              const XgHost3dVector *vertex,
-                             int32_t *out_x, int32_t *out_y) {
+                             int32_t *out_x, int32_t *out_y,
+                             int32_t *out_depth_q12) {
     if (!native_view_enabled || !projection || !vertex || !out_x || !out_y) return 0;
     double view[3], xy[2];
     for (unsigned r = 0; r < 3; ++r) {
@@ -523,6 +538,8 @@ int xg_host_3d_native_project(const XgHost3dProjection *projection,
     for (unsigned a = 0; a < 2; ++a)
         if (!isfinite(xy[a]) || xy[a] < INT32_MIN || xy[a] > INT32_MAX) return 0;
     *out_x = (int32_t)llround(xy[0]); *out_y = (int32_t)llround(xy[1]);
+    if (out_depth_q12)
+        *out_depth_q12 = xg_host_3d_native_depth_q12(view[2], projection->projection_distance);
     return 1;
 }
 
@@ -617,7 +634,8 @@ static void project_vertex(XgHost3dMathState *state,
      * Do this for every producer, including sprites and projected overlays.
      * The canonical GTE results, flags and depth FIFO above remain unchanged. */
     if (xg_host_3d_native_project(projection, vertex,
-            &output->native_view_x_16_16, &output->native_view_y_16_16)) {
+            &output->native_view_x_16_16, &output->native_view_y_16_16,
+            &output->native_view_depth_q12)) {
         output->native_view_position = 1u;
         output->projective_native_offset_x_16_16 =
             native_view_center_offset_x_16_16;

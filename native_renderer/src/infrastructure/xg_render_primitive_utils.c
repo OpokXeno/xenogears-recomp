@@ -28,6 +28,7 @@ void xg_render_primitive_apply_projected_quad_positions(
             target->native_view_x = source_vertex.native_view_x_16_16;
             target->native_view_y = source_vertex.native_view_y_16_16;
             target->native_view_position = source_vertex.native_view_position;
+            target->native_view_depth = source_vertex.native_view_depth_q12;
             target->projective_view_z = source_vertex.projective_view_z;
             target->temporal_depth = source_vertex.projective_view_z;
             target->temporal_depth_valid = true;
@@ -81,6 +82,8 @@ void xg_render_primitive_apply_projective_payload(
                 projected[source_index].projective_view_y;
             target->projective_view_z =
                 projected[source_index].projective_view_z;
+            target->native_view_depth =
+                projected[source_index].native_view_depth_q12;
             target->projective_offset_x =
                 projected[source_index].projective_offset_x_16_16;
             target->projective_offset_y =

@@ -15,7 +15,12 @@ int xg_host_3d_rtps(const XgHost3dProjection *projection,
  * RTPS Native metadata; retains fractional MAC/SZ and H/Z until Q16 conversion. */
 int xg_host_3d_native_project(const XgHost3dProjection *projection,
                              const XgHost3dVector *vertex,
-                             int32_t *out_x, int32_t *out_y);
+                             int32_t *out_x, int32_t *out_y,
+                             int32_t *out_depth_q12);
+/* Unfloored view Z as the Native depth payload, in Q12. Clamped like the
+ * presentation projection saturates (near ~H/2, far 0xffff); zero behind the
+ * camera. */
+int32_t xg_host_3d_native_depth_q12(double view_z, uint32_t projection_distance);
 /* Continuous matrix * point: translation + rotation * point / 4096, with no
  * MAC flooring. The point may carry a sub-unit source position. */
 void xg_host_3d_native_transform_point(const XgHost3dMatrix *matrix,

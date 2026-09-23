@@ -8,6 +8,7 @@
 #include "xg_render_ir.h"
 #include "xg_render_primitive_utils.h"
 #include "xg_render_quad_builder.h"
+#include "xg_render_depth_policy.h"
 
 #include <limits.h>
 #include <stddef.h>
@@ -497,6 +498,8 @@ bool xg_render_f4_sources_resolve(
         if (xg_render_quad_build_primitive(&source, &primitive) !=
                 XG_RENDER_QUAD_BUILDER_OK)
             return false;
+        /* Projected POLY_F4 test; faders and fixed quads have no view depth. */
+        xg_render_depth_policy_stamp_primitive(&primitive, XG_RENDER_DEPTH_FAMILY_FIELD_F4);
         record->semantic_ready = false;
         if (xg_render_backend_translate_primitive(
                 &primitive, &record->semantic) != XG_RENDER_BACKEND_OK)

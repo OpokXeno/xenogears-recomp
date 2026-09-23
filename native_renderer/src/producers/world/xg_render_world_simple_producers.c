@@ -4,6 +4,7 @@
 #include "psx_cyc.h"
 #include "xg_field_render_services.h"
 #include "xg_render_backend.h"
+#include "xg_render_depth_policy.h"
 #include "xg_render_primitive_utils.h"
 #include "xg_render_submission.h"
 #include "xg_render_world_sky_producer.h"
@@ -603,8 +604,11 @@ bool xg_render_world_terrain_water_cutover(
         const uint32_t packet = preparation.packet_base +
             index * XG_WORLD_TERRAIN_WATER_NATIVE_PACKET_STRIDE;
 
+        XgRenderIrNativePrimitive primitive = record->primitive;
+        xg_render_depth_policy_stamp_primitive(
+            &primitive, XG_RENDER_DEPTH_FAMILY_WORLD_TERRAIN_WATER);
         if (!services->stage_native(
-                &record->primitive, packet,
+                &primitive, packet,
                 UINT32_C(0x63000000) | record->source_primitive_index,
                 XG_WORLD_TERRAIN_WATER_NATIVE_ENTRY_PC,
                 record->interpolation_primitive_id)) {
@@ -835,9 +839,12 @@ bool xg_render_world_entity_shadows_cutover(
         const XgWorldEntityShadowRecord *record =
             &entity_shadows.records[index];
         const uint32_t packet = packet_base + record->packet_offset;
+        XgRenderIrNativePrimitive primitive = record->primitive;
+        xg_render_depth_policy_stamp_primitive(
+            &primitive, XG_RENDER_DEPTH_FAMILY_WORLD_ENTITY_SHADOWS);
 
         if (record->accepted && !services->stage_native(
-                &record->primitive, packet,
+                &primitive, packet,
                 UINT32_C(0x64000000) |
                     ((packet & UINT32_C(0x001ffffc)) >> 2u),
                 XG_WORLD_ENTITY_SHADOWS_ENTRY_PC, record->source_index)) {
@@ -1138,8 +1145,11 @@ bool xg_render_world_decorations_cutover(
         const uint32_t packet = preparation.packet_base +
             record->packet_index * XG_WORLD_DECORATIONS_NATIVE_PACKET_STRIDE;
 
+        XgRenderIrNativePrimitive primitive = record->primitive;
+        xg_render_depth_policy_stamp_primitive(
+            &primitive, XG_RENDER_DEPTH_FAMILY_WORLD_DECORATIONS);
         if (!services->stage_native(
-                &record->primitive, packet,
+                &primitive, packet,
                 UINT32_C(0x65000000) |
                     ((packet & UINT32_C(0x001ffffc)) >> 2u),
                 XG_WORLD_DECORATIONS_NATIVE_ENTRY_PC, record->semantic_id)) {
@@ -2264,8 +2274,11 @@ bool xg_render_world_effects_cutover(
             return false;
     }
     for (uint32_t index = 0u; index < count; ++index) {
+        XgRenderIrNativePrimitive primitive = records[index].primitive;
+        xg_render_depth_policy_stamp_primitive(
+            &primitive, XG_RENDER_DEPTH_FAMILY_WORLD_EFFECTS);
         if (!services->stage_native(
-                &records[index].primitive, packet_addresses[index],
+                &primitive, packet_addresses[index],
                 UINT32_C(0x60000000) |
                     effects_interpolation_id(records[index].source_index),
                 effects_interpolation_producer(records[index].source_index),

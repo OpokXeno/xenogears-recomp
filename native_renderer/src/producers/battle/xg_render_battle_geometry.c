@@ -3,6 +3,7 @@
 #include "cpu_state.h"
 #include "xg_field_render_services.h"
 #include "xg_host_3d.h"
+#include "xg_render_depth_policy.h"
 #include "xg_render_producer_lifecycle.h"
 #include "xg_render_runtime_host_services.h"
 #include "xg_render_submission.h"
@@ -30,7 +31,9 @@ bool xg_render_battle_geometry_capture(
     };
     static const uint8_t split[2][3] = {{0, 1, 2}, {2, 1, 3}};
     XgRenderRuntimeHostServices host;
-    XgHost3dProjection projection;
+    /* Zeroed: the GTE capture fills only the canonical fields, and a stale
+     * native_transform_valid would project every vertex through garbage. */
+    XgHost3dProjection projection = {0};
     uint32_t model, vertex_base, topology, packet, packet_bytes, vertex_count, group_count;
 
     ++battle_geometry_diagnostics.attempts;
@@ -112,6 +115,7 @@ bool xg_render_battle_geometry_capture(
                     target->native_view_y = source->native_view_y_16_16;
                     target->native_view_position = source->native_view_position &&
                         source->projective_view_z > 0;
+                    target->native_view_depth = source->native_view_depth_q12;
                     target->projective_view_x = source->projective_view_x;
                     target->projective_view_y = source->projective_view_y;
                     target->projective_view_z = source->projective_view_z;
@@ -124,6 +128,7 @@ bool xg_render_battle_geometry_capture(
                     native &= target->native_view_position != 0u;
                 }
             }
+            xg_render_depth_policy_stamp_semantic(&semantic, XG_RENDER_DEPTH_FAMILY_BATTLE_GEOMETRY);
             battle_geometry_diagnostics.last_packet = packet;
             /* A binding is NOT a draw. GPU acceptance validates canonical XY
              * and layout, supplies final material, and retains real OT order.

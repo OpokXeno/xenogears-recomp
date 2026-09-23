@@ -5,6 +5,7 @@
 #include "psx_cyc.h"
 #include "xg_field_character_adapter.h"
 #include "xg_field_render_services.h"
+#include "xg_render_depth_policy.h"
 #include "xg_render_primitive_utils.h"
 
 #include <limits.h>
@@ -395,6 +396,8 @@ bool xg_field_particles_cutover(
         &primitive, output.vertices);
     xg_render_primitive_apply_projective_payload(
         &primitive, output.vertices);
+    xg_render_depth_policy_stamp_primitive(
+        &primitive, XG_RENDER_DEPTH_FAMILY_FIELD_PARTICLES);
 
     ordering_shift = cpu->read_word(UINT32_C(0x80050100)) & 31u;
     shifted_depth = (uint32_t)output.ordering_depth >> ordering_shift;
