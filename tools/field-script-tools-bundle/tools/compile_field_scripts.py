@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from decompile_field_scripts import (
     VariableSymbol, address_operand_offsets, analyze_bytecode, decode_instruction,
 )
-from field_instruction_codec import checked, encode_statement, integer
+from field_instruction_codec import checked, encode_statement, instruction_dependencies, integer
 
 
 IDENT = r"[A-Za-z_][A-Za-z_0-9]*"
@@ -32,6 +32,12 @@ class Record:
     alternate: str | None = None
     jump_target: str | None = None
     source_block: str | None = None
+    relative: dict[int, str] = field(default_factory=dict)
+    semantic: str | None = None
+    terminal: bool = False
+    guard: str | None = None
+    constraints: tuple = ()
+    site: int | None = None
 
 
 @dataclass
@@ -45,6 +51,9 @@ class Assembly:
     tables: dict[int, list[int]] = field(default_factory=dict)
     link_report: dict = field(default_factory=dict)
     aliases: dict[str, tuple[str, int]] = field(default_factory=dict)
+    alias_fallbacks: dict[str, bytes] = field(default_factory=dict)
+    script_images: set[str] = field(default_factory=set)
+    absolute_symbols: dict[str, int] = field(default_factory=dict)
 
     def label(self, name: str, pc: int | None) -> None:
         if name in self.labels:
@@ -56,22 +65,8 @@ class Assembly:
 
         return link_assembly(self, layout)
 
-    def build(self, layout: str = "relocate") -> bytes:
-        from extract_disc_field_scripts import MAX_SCRIPT_SECTION_SIZE, parse_scripts_file
-
-        if layout != "exact":
-            return self.link(layout).build("exact")
-        if len(self.bitmap) != 0x80:
-            raise ValueError("variable bitmap must contain exactly 128 bytes")
-        checked(self.size, 1, MAX_SCRIPT_SECTION_SIZE - 0x84, "bytecode size")
-        if sorted(self.rows) != list(range(len(self.rows))):
-            raise ValueError("entity IDs must be contiguous from zero")
-        if 0x84 + 0x40 * len(self.rows) + self.size > MAX_SCRIPT_SECTION_SIZE:
-            raise ValueError("ScriptsFile exceeds the loader allocation limit")
-        for name, pc in self.labels.items():
-            if pc is None:
-                raise ValueError(f"new label {name} requires relocating layout")
-            checked(pc, 0, self.size - 1, f"label {name}")
+    def encode_bytecode(self) -> bytes:
+        """Serialize current records and relocations; also used during relaxation."""
         bytecode = bytearray(self.size)
         covered = bytearray(self.size)
         for record in self.records:
@@ -96,19 +91,51 @@ class Assembly:
                         raise ValueError(f"{prefix}conflicting overlapping reference fields")
                     reference_bytes[position] = value
                     raw[position] = value
+            if record.guard is not None:
+                if record.guard not in self.labels or len(raw) != 8 or raw[0] != 2 or raw[2] != 1 or raw[5] != 0xC0:
+                    raise ValueError("invalid party continuation gate")
+                if (0x100 | raw[1]) == self.labels[record.guard]:
+                    raw[1] ^= 1  # Keep original bytes unless relocation creates equality.
             bytecode[record.pc:end] = raw
             covered[record.pc:end] = b"\1" * len(raw)
         if 0 in covered:
             raise ValueError(f"uncovered byte at 0x{covered.index(0):04X}; preserve data and padding explicitly")
+        return bytes(bytecode)
+
+    def build(self, layout: str = "relocate") -> bytes:
+        from extract_disc_field_scripts import MAX_SCRIPT_SECTION_SIZE, parse_scripts_file
+
+        if layout != "exact":
+            return self.link(layout).build("exact")
+        if any(record.kind == "semantic" for record in self.records):
+            raise ValueError("semantic operations must be lowered before exact assembly")
+        if len(self.bitmap) != 0x80:
+            raise ValueError("variable bitmap must contain exactly 128 bytes")
+        checked(self.size, 1, MAX_SCRIPT_SECTION_SIZE - 0x84, "bytecode size")
+        if sorted(self.rows) != list(range(len(self.rows))):
+            raise ValueError("entity IDs must be contiguous from zero")
+        if 0x84 + 0x40 * len(self.rows) + self.size > MAX_SCRIPT_SECTION_SIZE:
+            raise ValueError("ScriptsFile exceeds the loader allocation limit")
+        for name, pc in self.labels.items():
+            if pc is None:
+                raise ValueError(f"new label {name} requires relocating layout")
+            checked(pc, 0, self.size - 1, f"label {name}")
+        bytecode = self.encode_bytecode()
         for record in self.records:
             if record.kind != "op":
                 continue
+            for displacement, name in record.relative.items():
+                if name not in self.labels or self.labels[name] != record.pc + displacement:
+                    raise ValueError(f"line {record.line}: script-byte dependency {displacement:+d} -> {name} moved; "
+                                     "keep the dependent instructions contiguous")
             try:
                 instruction = decode_instruction(bytecode, record.pc)
             except (ValueError, struct.error) as error:
                 raise ValueError(f"line {record.line}: invalid instruction at 0x{record.pc:X}: {error}") from error
             if instruction.size != len(record.raw):
                 raise ValueError(f"line {record.line}: instruction size disagrees with opcode/mode at 0x{record.pc:X}")
+            if any(not 0 <= record.pc + offset < self.size for offset in instruction_dependencies(instruction)):
+                raise ValueError(f"line {record.line}: shared-byte operation reads outside the script")
             for target in instruction.targets:
                 checked(target, 0, self.size - 1, "branch target")
         result = bytearray(self.bitmap + struct.pack("<I", len(self.rows)))
@@ -122,6 +149,8 @@ class Assembly:
         return bytes(result)
 
     def text(self) -> str:
+        if any(record.kind == "semantic" for record in self.records):
+            raise ValueError("link semantic operations before exporting XGA")
         lines = [".xga 1", f'.bitmap "{self.bitmap.hex(" ").upper()}"', f".size {self.size}"]
         for name, pc in sorted(self.labels.items(), key=lambda pair: (pair[1] if pair[1] is not None else self.size, pair[0])):
             if pc is not None:
@@ -148,6 +177,10 @@ class Assembly:
                 references += f" !alternate={record.alternate}"
             if record.jump_target is not None:
                 references += f" !jump={record.jump_target}"
+            for displacement, name in sorted(record.relative.items()):
+                references += f" !relative={displacement}:{name}"
+            if record.guard is not None:
+                references += f" !guard={record.guard}"
             if record.alignment != 1:
                 residue = str(record.residue) if isinstance(record.residue, int) else f"high({record.residue})"
                 references += f" !align={record.alignment}:{residue}"
@@ -165,7 +198,8 @@ def disassemble(scripts: bytes) -> Assembly:
     bytecode = scripts[metadata["bytecode_offset"]:]
     analysis = analyze_bytecode(bytecode, metadata)
     assembly = Assembly(scripts[:0x80], len(bytecode))
-    assembly.labels = {f"L_{pc:04X}": pc for pc in analysis["labels"]}
+    # Keep the independent lossless XGA fully navigable at instruction starts.
+    assembly.labels = {f"L_{pc:04X}": pc for pc in analysis["labels"] | analysis["instructions"].keys()}
     assembly.rows = {row["entity_id"]: [f"L_{int(value, 16):04X}" for value in row["routine_offsets"]] for row in metadata["routine_rows"]}
     assembly.tables = {pc: list(entries) for pc, entries in analysis["computed_successors"].items() if entries}
     block = None
@@ -178,6 +212,13 @@ def disassemble(scripts: bytes) -> Assembly:
         assembly.blocks[block] = (assembly.blocks[block][0], end)
         references = {offset: f"L_{struct.unpack_from('<H', instruction.raw, offset)[0]:04X}" for offset in address_operand_offsets(instruction)}
         assembly.records.append(Record(pc, instruction.raw, references=references, block=block, original=instruction.raw))
+        for displacement in instruction_dependencies(instruction):
+            address = pc + displacement
+            if not 0 <= address < len(bytecode):
+                raise ValueError(f"{instruction.name} at 0x{pc:04X} reads outside the script")
+            name = f"L_{address:04X}"
+            assembly.labels[name] = address
+            assembly.records[-1].relative[displacement] = name
         if pc in analysis["alignments"]:
             assembly.records[-1].alignment, assembly.records[-1].residue = analysis["alignments"][pc]
     for start, end in analysis["data_ranges"]:
@@ -185,10 +226,18 @@ def disassemble(scripts: bytes) -> Assembly:
         assembly.blocks[block] = (start, end)
         for pc in range(start, end, 16):
             references = {offset: f"L_{target:04X}" for offset, target in analysis["landing_data"].get(pc, {}).items()}
-            assembly.records.append(Record(pc, bytecode[pc:min(pc + 16, end)], "data", references=references, block=block))
+            guard = None
+            if pc - 3 in analysis.get("semantic_branches", {}):
+                staged, present = analysis["semantic_branches"][pc - 3]
+                references = {3: f"L_{present:04X}", 6: f"L_{staged:04X}"}
+                guard = references[3]
+            assembly.records.append(Record(pc, bytecode[pc:min(pc + 16, end)], "data", references=references, block=block, guard=guard))
     assembly.records.sort(key=lambda record: record.pc)
+    labels_by_pc = {}
+    for name, pc in assembly.labels.items():
+        labels_by_pc.setdefault(pc, []).append(name)
     for record in assembly.records:
-        record.labels = [name for name, pc in assembly.labels.items() if pc == record.pc]
+        record.labels = labels_by_pc.get(record.pc, [])
     return assembly
 
 
@@ -249,6 +298,17 @@ def parse_assembly(text: str) -> Assembly:
                 record = Record(pc, bytes.fromhex(match[3]), match[2], line=line_number, block=block, labels=bindings)
                 bindings = []
                 for token in match[4].split():
+                    guard = re.fullmatch(rf"!guard=({IDENT})", token)
+                    if guard:
+                        record.guard = guard[1]
+                        continue
+                    relative = re.fullmatch(rf"!relative=(-?[0-9]+):({IDENT})", token)
+                    if relative:
+                        displacement = int(relative[1])
+                        if displacement in record.relative:
+                            raise ValueError("duplicate relative dependency")
+                        record.relative[displacement] = relative[2]
+                        continue
                     flow = re.fullmatch(rf"!(alternate|jump)=({IDENT})", token)
                     if flow:
                         setattr(record, "alternate" if flow[1] == "alternate" else "jump_target", flow[2])
@@ -285,6 +345,9 @@ def compile_xgs(text: str) -> Assembly:
     instruction per line, with the same nested sections emitted by the renderer.
     Unknown text is always an error, including text in diagnostics sections.
     """
+    # Discard comments before even selecting the grammar. Preserve line numbers
+    # for diagnostics; no downstream compiler stage receives trace payloads.
+    text = "\n".join(line.split("//", 1)[0] for line in text.splitlines())
     if not re.search(r'^\s*variable_types\s*=', text, re.MULTILINE):
         from editable_field_scripts import compile_source
 
@@ -478,8 +541,18 @@ def compile_xgs(text: str) -> Assembly:
     for pc, seed, statement, line_number, block, labels, alignment in statements:
         try:
             references = {}
-            raw = encode_statement(statement, seed, symbols, assembly.labels, references=references)
-            assembly.records.append(Record(pc, raw, references=references, line=line_number, block=block, labels=labels, original=seed, alignment=alignment[0], residue=alignment[1]))
+            relative = {}
+            if pc is not None and seed is not None:
+                offsets = (1,) if seed == b"\xfe" else instruction_dependencies(decode_instruction(seed, 0))
+                for offset in offsets:
+                    name = f"L_{pc + offset:04X}"
+                    assembly.labels.setdefault(name, pc + offset)
+                    relative[offset] = name
+            raw = encode_statement(statement, seed, symbols, assembly.labels,
+                                   references=references, layout_references=relative)
+            assembly.records.append(Record(pc, raw, references=references, line=line_number, block=block,
+                                           labels=labels, original=seed, alignment=alignment[0],
+                                           residue=alignment[1], relative=relative))
         except (ValueError, struct.error) as error:
             raise ValueError(f"line {line_number}, PC {hex(pc) if pc is not None else 'new'}: {error}") from error
     return assembly

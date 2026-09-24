@@ -60,9 +60,40 @@ party followers are presented.
 The tracked actor index is stored at `0x800B233E`. It normally matches the
 controlled actor but `FE AA` can change it independently.
 
-In normal mode the desired target begins at the tracked actor's committed
-position. Actor and map state can add a vertical target offset. The desired eye
-is then derived from target, yaw, dip, and camera depth.
+In the unconstrained follow solution, the desired target uses the tracked actor's
+committed XZ and a **fixed upward offset of 32 Field coordinate units** from its Y:
+
+```c
+desired_target.y = tracked_actor.position.y - 0x00200000; // 16.16: subtract 32
+```
+
+This is an immediate constant in `FieldComputeTrackedCameraPose` (`0x80072A38`),
+not a height amount loaded from the map. The ordinary path at
+`0x80072B38..0x80072B6C` writes the result to desired-target Y at `0x800AF8C4`.
+The caller at `0x80073230` supplies the committed position at
+`SceneActorRecord+0x20` and the signed elevation anchor at `+0x72`.
+The desired eye is then derived from target, yaw, dip, and camera depth; the
+current target and eye are smoothed afterward.
+
+A Y-up port converting 64 Field units to one world unit would represent this
+offset as `Vector3(0, 0.5, 0)`. The `0.5` depends on that coordinate conversion;
+the original constant is 32, not a per-map floating-point value.
+
+### Height policy at camera boundaries
+
+When the camera walkmesh trace returns `-1`, XZ is clipped and the byte at
+`0x800B21CD` selects the Y policy:
+
+- **Zero:** on first entering the constrained state, target Y becomes the actor's
+  elevation anchor (`+0x72`, converted to 16.16); it is then held while that state
+  continues. The latch is at `0x800ADBA8`.
+- **Nonzero:** target Y continues to use actor Y minus 32 units.
+
+The ordinary unconstrained path clears the latch and always uses the fixed offset.
+`FE 25` (`0x8008D5C8`) writes this policy byte; Field reset (`0x800705DC`) sets it
+to zero. A map's script can therefore change the boundary-following policy, but
+`FE 25` does **not** specify the amount of vertical offset. Script-controlled
+camera mode can separately supply explicit target positions.
 
 The derivation uses signed sine/cosine table entries and the 12-bit yaw. Camera
 depth is scaled before being projected into XZ and Y components, keeping orbit

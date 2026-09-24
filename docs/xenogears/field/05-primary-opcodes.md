@@ -23,7 +23,7 @@ The byte at the active PC directly selects one of these 256 entries.
 | `0E` | 1 | `0x80092404` | `Opcode0EAdvance` | advances one byte without changing other state. |
 | `0F` | 1 | `0x800923E4` | `Opcode0FAdvance` | advances one byte without changing other state. |
 | `10` | 2 or 9 | `0x80098C00` | `MoveActorToPosition` | initializes unrestricted interpolated actor movement. |
-| `11` | 13 | `0x80098C3C` | `MoveActorToPositionWithLimit` | initializes bounded interpolated actor movement. |
+| `11` | 4 or 9 | `0x80098C3C` | `MoveActorToPositionWithLimit` | phase zero initializes bounded interpolated movement and advances nine bytes; nonzero phases continue it, reread coordinates nine bytes earlier on completion, and resume four bytes after the continuation. The wrapper reads a limit at current IP+11 when its counter is uninitialized. |
 | `12` | 9 | `0x80093200` | `StartCustomFieldTransition` | waits for coordinator readiness, stages the destination field and entry parameter, records the transition mode and fade length, and yields for in-place map replacement. |
 | `13` | 1 | `0x800A2FC0` | `Nop` | Field script no-op handler. |
 | `14` | 1 | `0x80093C48` | `DisableRandomEncounters` | disables encounters. |
@@ -152,7 +152,7 @@ The byte at the active PC directly selects one of these 256 entries.
 | `8F` | 3 | `0x80095FB8` | `IncreaseGold` | increases party gold. |
 | `90` | 3 | `0x8009601C` | `DecreaseGold` | decreases party gold. |
 | `91` | 4 | `0x800964B0` | `CheckPartyMember` | tests party membership. |
-| `92` | 1 | `0x800A19B0` | `InitializeActorScripts` | resets all actor script slots. |
+| `92` | 1 | `0x800A19B0` | `InitializeActorScripts` | clears and disables all eight script slots of the current actor, resets scheduler state and yields without advancing the instruction pointer; there is no fallthrough to the next byte. |
 | `93` | 3 | `0x800A1364` | `AddCurrentActorToMechaList` | initializes the current actor's base graphic, synchronizes its transform, assigns a mecha-list slot and model identifier, and increments the mecha count. |
 | `94` | 5 | `0x800945D4` | `SetAndPauseEventTimer` | packs two evaluated bytes into VM variable 0x0A, pauses the event timer, and resets its update divider. |
 | `95` | 2 | `0x80094650` | `ConfigureEventTimer` | configures event-timer pause and count direction from the supplied control byte. |
@@ -235,7 +235,7 @@ The byte at the active PC directly selects one of these 256 entries.
 | `E2` | 5 | `0x80096150` | `CheckCurrentInputExact` | conditionally branches on exact current input. |
 | `E3` | 5 | `0x80096178` | `CheckAccumulatedInputExact` | conditionally branches on exact accumulated input. |
 | `E4` | stall | `0x80091AD4` | `OpcodeE4NoOp` | returns immediately without changing state or advancing script execution. |
-| `E5` | 17 | `0x80091944` | `ConfigureFog` | stores near and far RGB colors plus near and far fog distances, enables fog, applies the new configuration, and advances seventeen bytes. |
+| `E5` | 17 | `0x80091944` | `ConfigureFog` | stores the base depth-cue RGB color, far-fog RGB color, and near/far fog distances, enables fog, applies the new configuration, and advances seventeen bytes. |
 | `E6` | 9 | `0x80091A08` | `SetCameraLimits` | stores the signed camera-limit origin and extents while negating the final extent and advances nine bytes. |
 | `E7` | 7 | `0x80091A78` | `SetExtendedBackgroundClearColor` | stores the red, green, and blue background clear components and advances seven bytes. |
 | `E8` | 7 | `0x80094158` | `MoveActorAndSetStateFlag` | moves an actor for a scripted step count and sets its state flag. |

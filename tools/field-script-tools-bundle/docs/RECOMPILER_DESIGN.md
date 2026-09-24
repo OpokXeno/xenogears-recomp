@@ -10,16 +10,22 @@ script.xgs -> symbolic IR -> scripts.bin -> compressed Field section 5
                     +-> script.xga / link map       +-> runtime override
 ```
 
-XGS is standalone. Compilation never matches source lines to an old binary or
-looks up original instruction positions in a sidecar. The linker assigns current
-addresses from the parsed program. Entity event bindings and entity-owned code
-are displayed together; shared code is emitted once.
+XGS is the complete compilation input. No sibling XGA or external original file
+is read. The source is parsed into IR and each operand is encoded on every build.
+All comments are discarded before grammar selection. Dispatch variants and unused
+format fields are retained in typed code; concise forms use canonical defaults.
+Native forms are checked against current layout; invalid forms relax to
+private operand islands. The same pipeline handles edited and unedited source. Entity event bindings
+and entity-owned code are displayed together; shared code is emitted once.
 
 | Module | Responsibility |
 |---|---|
 | `decompile_field_scripts.py` | Bytecode analysis, symbols, ownership and low-level rendering helpers |
 | `editable_field_scripts.py` | Standalone XGS rendering/parsing, entity grouping, variables and event defaults |
 | `field_instruction_codec.py` | Shared operand forms, encoding and verified encoding equivalences |
+| `field_semantic_ops.py` | Lift shared reads into values, reconstruct native operand islands, recover generated islands |
+| `field_source_fidelity.py` | Decompiler-only diagnostic traces; never consumed by compilation |
+| `field_native_selection.py` | Validate current operands/layout, explicit data sharing and terminal aliases; relax failed forms |
 | `compile_field_scripts.py` | Assembly IR, XGA parser/serializer and ScriptsFile construction |
 | `field_linker.py` | Placement, fixups, fallthroughs and generated routing code |
 | `repack_field_scripts.py` | LZSS, section replacement and indexed-file override packages |
@@ -41,9 +47,12 @@ New scene variables can request allocation with `new`. Unnamed unsigned slots
 are represented by `unsigned slots[...]`, preserving bitmap meaning without
 embedding a historical bitmap blob in the source.
 
-Historical PCs and bytes are comments (`// PC: bytes`), as are original event
-aliases (`// event: ...`). They are useful for inspection but ignored by the
-compiler. Handler descriptions stay in the operation catalog.
+Historical PCs/bytes, entry comments and checksums are informational. The compiler
+discards them and has no trace index or trace-derived placement fields. Event
+tables come from current symbolic bindings. Operand fields are encoded from code;
+data images come from explicit `script_data` declarations. There is no global
+code/hash match or re-decompilation inside compilation. Handler descriptions stay
+in the catalog.
 
 The extraction manifest and JSON reports describe the input assets and disc
 routes. They are inputs to regeneration/corpus verification, not compilation.
@@ -60,22 +69,28 @@ The encoded instruction is decoded and rendered again to check that it represent
 the requested form and has a valid size. Unclassified fields remain explicit
 bytes rather than being guessed from an operation name or a trailing `80`.
 
-XGS prioritizes readable semantics over irrelevant encoding differences. For
+XGS preserves instruction format distinctions without sacrificing typed values. For
 opcodes `35`, `38`, `39`, `3A`, `3B`, `3E`, `3F`, `40`, `DE` and `DF`, executable
 inspection confirms that only bit `0x40` of the control byte is read by the
-shared source-operand helper. Canonicalizing other bits is permitted. The opcode,
-destination, source value/reference and immediate-versus-variable selection
-must still match. This exemption is never applied to arbitrary data bytes.
+shared source-operand helper. Other bits are retained as `reserved_flags` when
+needed. Opcode, destination, source value/reference, immediate-versus-variable
+selection and reserved fields are all encoded from the source statement.
 
 For example, both `35 3A 04 01 00 40` and `35 3A 04 01 00 C0` express assignment
-of immediate `1` to VM slot `0x043A`; both are rendered as an assignment, not raw
-instructions. Likewise, `38 10 04 12 04 00` is a variable-to-variable addition.
+of immediate `1` to VM slot `0x043A`; the latter uses the typed function form
+`state.assign(destination, 1, reserved_flags=128)`. Likewise,
+`38 10 04 12 04 00` is a variable-to-variable addition.
 
 Other distinctions are preserved where meaningful: `49` exposes unsigned versus
 signed reads as `state.read_script_u16` / `state.read_script_s16`; `5B` is
 `movement.park_actor_movement_update()`, not an interchangeable inert stall.
-An encoding without a verified semantic equivalent remains an explicit raw
-operation. Address-bearing raw forms include symbolic target arguments.
+The renderer checks each concise spelling for exact invertibility and emits its
+complete typed form when necessary. Shared-byte readers
+receive explicit values or VM variables. The compiler constructs private operand
+islands at their required offsets, rather than constraining the placement of
+neighboring source instructions. Script bytes observed as lookup data are lifted
+into immutable `script_data` images. XGS has no encoding/layout annotations. See
+[`SHARED_SCRIPT_BYTES.md`](SHARED_SCRIPT_BYTES.md).
 
 XGA is the byte-exact representation. It contains the full bitmap, routine rows,
 instruction encodings, data and optional original address assertions. Exact
@@ -165,12 +180,18 @@ the port's existing format-6 indexed-file handler and authenticated stock files.
 ## 7. Verification Scope
 
 - XGA round trips compare complete files byte-for-byte.
-- XGS reconstruction compares complete files, permitting only the verified
+- Unedited decompiled XGS is compared byte-for-byte against its original:
+  729/729 exact in the current code-only pass. The strict check passes.
+- Historical XGS reconstruction compared complete files, permitting only the verified
   instruction-bit normalizations from section 3.
+- Current standalone lowering validates native structure and linked XGA identity;
+  private operand islands and data images intentionally change the original bytes.
 - LZSS and repacking checks compare the compiled payload plus any accounted-for
   compression trailer.
-- Tests cover edits, new variables/events, label resolution, data reads, triplet
-  tables, alternate paths, alignment, raw operands, CLI workflows and comments.
+- The full corpus passes source-edit structural checks and byte-for-byte comparison
+  of builds with normal, removed and misleading comments, both before and after
+  edits; see `RELOCATION_EVIDENCE.md`.
+- These checks do not execute the game or cover handler modes absent from the corpus.
 
 `verify --resize --repack` is an explicit whole-corpus regression, not part of
 normal compilation. Recorded full-corpus runs and executable evidence are in

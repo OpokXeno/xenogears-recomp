@@ -45,7 +45,8 @@ Declares only the variables observed in the recovered instructions. A variable
 occupies 16 bits. Its `at` binding is a byte offset in VM memory, not a bytecode
 address or element index. Optional `unsigned slots[...]` declarations preserve
 unsigned slots without named symbols. The compiler reconstructs the bitmap and
-bytecode size from the source; no original file or sidecar is required.
+bytecode size from the source. Native instruction variants and private operand
+islands are generated from that source; no original encoding is consulted.
 
 ```text
 state {
@@ -239,9 +240,9 @@ Semantic values are shown in decimal. Hexadecimal is retained for:
 - Raw contents of uninterpreted regions.
 
 This separation allows `flow.sleep(30)` to be read as a normal operation while
-its original encoding remains available in comments. Label names and comments
-are not address assertions. The linker computes final positions and exposes
-them in the optional map and XGA output. XGA carries low-level address/encoding
+its original encoding choices remain visible in diagnostic comments. All comments
+are ignored by compilation. The linker computes positions and
+exposes them in the optional map and XGA output. XGA carries low-level address/encoding
 directives for inspection and exact assembly; XGS does not need those directives.
 
 ## 5. Coverage

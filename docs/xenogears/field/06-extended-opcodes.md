@@ -30,7 +30,7 @@ Each instruction is encoded as `FE xx`; byte counts include the `FE` prefix. Onl
 | `FE 15` | 6 | `0x800A14F0` | `InitializeActorGraphicVariant` | initializes the current actor from a selected field graphic and variant, synchronizes placement, enables updates and visibility, and advances five bytes. |
 | `FE 16` | 2 | `0x8008C7D8` | `FreeMovementBoundingZone` | releases the current actor's allocated movement-boundary vertices and clears their ownership flag. |
 | `FE 17` | 4 | `0x8009AA00` | `FaceActorTowardActor` | turns the first selected actor toward the second selected actor when both are valid. |
-| `FE 18` | 5 | `0x8008BDD8` | `AddImmediatePartyCharacter` | reserves a staging slot and begins loading an immediate party character, or marks an already staged character as present. |
+| `FE 18` | 3 | `0x8008BDD8` | `AddImmediatePartyCharacter` | reserves a staging slot and begins loading an immediate party character, or marks an already staged character as present. The staged path resumes at FE-relative +3; the already-present path skips two subsequent code bytes and resumes at +5. Those bytes are not parameters. |
 | `FE 19` | 3 | `0x8008C334` | `RemovePartyCharacter` | removes a resolved party member, compacts party resources and slot metadata, and reactivates shifted actors. |
 | `FE 1A` | 2 | `0x8008B894` | `FinalizePartyCharacterLoad` | waits for staged loading, decompresses the character resource, releases compressed data, and initializes the first entry actor targeting that character. |
 | `FE 1B` | 6 | `0x8008B5D4` | `AdjustCurrentModelRedGreen` | adds signed red and green deltas to every current-model vertex and mirrors the colors into the alternate render buffer. |
@@ -92,13 +92,13 @@ Each instruction is encoded as `FE xx`; byte counts include the `FE` prefix. Onl
 | `FE 53` | 2 | `0x80093AC8` | `EnableEncountersFieldMenuAndCompass` | enables random encounters, the player-opened Field menu, and the Field compass. |
 | `FE 54` | 2 | `0x80093B10` | `DisableEncountersFieldMenuAndCompass` | disables random encounters, the player-opened Field menu, and the Field compass. |
 | `FE 55` | 2 | `0x80093740` | `OpenNormalMenu` | queues menu mode 0 with the configured menu argument, yields, increments the open-menu count, and advances one byte. |
-| `FE 56` | 4 | `0x80093930` | `OpenMenuMode1WithSelection` | copies the evaluated selection into script variable 1 and persistent menu state, queues menu mode 1, yields, and advances three bytes. |
+| `FE 56` | 4 | `0x80093930` | `OpenMenuMode1WithSelection` | copies the evaluated selection into menu/game-state fields, queues menu mode 1, yields, and advances three bytes; it does not write an encoded or fixed VM output slot. |
 | `FE 57` | 2 | `0x800937E0` | `OpenLoadGameMenu` | queues menu mode 2, yields, increments the open-menu count, and advances one byte. |
 | `FE 58` | 4 | `0x80093824` | `OpenEnterNameMenu` | queues the Enter Name menu for the selected character or name record and yields the current script. |
 | `FE 59` | 4 | `0x800939A0` | `OpenShopMenu` | queues the selected shop inventory and yields the current script. |
 | `FE 5A` | 4 | `0x80093A04` | `OpenGearShopMenu` | queues the selected Gear shop inventory and yields the current script. |
 | `FE 5B` | 4 | `0x8008B210` | `SetActorModelTurnRate` | sets the current actor's model-specific angular rotation step. |
-| `FE 5C` | 3 or 5 | `0x800A0FD8` | `LoadCurrentActorMecha` | waits for I/O, hides or frees the indexed mecha, asynchronously loads replacement files, then constructs and binds the replacement with the actor's scale and position. |
+| `FE 5C` | 3, 4 or 5 | `0x800A0FD8` | `LoadCurrentActorMecha` | waits for I/O, hides or frees the indexed mecha, asynchronously loads replacement files, then constructs and binds the replacement with the actor's scale and position. Mode 1 reads its resource word at FE-relative +6. Unsupported modes return at the subopcode and execute primary 5C, giving the combined escape a four-byte footprint. |
 | `FE 5D` | 8 | `0x8008F6AC` | `PlaySoundEffectWithParameters` | plays the requested sound effect on channel 3 with resolved volume and pan values and advances seven bytes. |
 | `FE 5E` | 4 | `0x8008F2D8` | `SetCurrentActorTransparencyMode` | applies the selected transparency mode to the current actor and advances three bytes. |
 | `FE 5F` | 9 | `0x8008F1C8` | `SetCurrentActorDualLightingColors` | conditionally assigns either or both RGB lighting triplets to the current actor and advances eight bytes. |
@@ -114,7 +114,7 @@ Each instruction is encoded as `FE xx`; byte counts include the `FE` prefix. Onl
 | `FE 69` | 6 | `0x8008A6E0` | `GetPartyProgressTotal` | writes a selected character's base-plus-remainder progression to a script variable, or zero when no character resolves. |
 | `FE 6A` | 4 | `0x8008A604` | `SetLinkOrderingTableIndex` | sets the ordering-table link index from an immediate or variable operand. |
 | `FE 6B` | 6 | `0x8008A640` | `SetPartyProgressRemainder` | sets a selected character's progression remainder to the nonnegative difference between a requested total and its base progression. |
-| `FE 6C` | 2 | `0x8008A5A0` | `ClearControllerEnableFlag` | clears the controller enable byte when the operand is zero, then advances one byte. |
+| `FE 6C` | 2 | `0x8008A5A0` | `ClearControllerEnableFlag` | tests the byte immediately after this two-byte instruction and clears controller enable when it is zero; advances one byte after the FE prefix, leaving the tested byte for subsequent dispatch. |
 | `FE 6D` | 2 | `0x8008FB28` | `SnapshotCameraProjectionBaseline` | snapshots the current scaled projection depth, projection dip, and camera yaw as script baselines, resets camera scale to 0x1000, and advances one byte. |
 | `FE 6E` | 5 | `0x8008FABC` | `SetSceneAngleY` | assigns both scene Y-angle fields. |
 | `FE 6F` | 9 | `0x8008B45C` | `SetGlobalModelRotation` | sets the three signed global model-rotation angles used to rebuild the rendering matrix. |
@@ -125,7 +125,7 @@ Each instruction is encoded as `FE xx`; byte counts include the `FE` prefix. Onl
 | `FE 74` | 4 | `0x800985BC` | `DebugPrintVariableHexAndDecimal` | evaluates the encoded operand and prints it in hexadecimal and decimal when Field debug output is enabled. |
 | `FE 75` | 5 | `0x800989F0` | `WriteActorRotationAngle` | writes a selected actor rotation modulo one revolution to script memory when that actor is valid. |
 | `FE 76` | 17 | `0x80098738` | `WriteDistanceBetween3DPoints` | computes the spatial distance between two scripted points and writes the result to script memory. |
-| `FE 77` | 3 or 12 | `0x8008A2E8` | `ManageOverlayImageAsset` | waits for archive I/O, then loads an indexed image into memory, uploads it with optional VRAM backup, or releases it according to the mode, and stops the current VM cycle. |
+| `FE 77` | 3 or 12 | `0x8008A2E8` | `ManageOverlayImageAsset` | waits for archive I/O, then loads an indexed image into memory, uploads it with optional VRAM backup, or releases it according to the mode, and stops the current VM cycle. In short mode 0 it reads a control byte beyond the three-byte encoding; preserve the neighboring bytes. |
 | `FE 78` | fallback | `0x8008A4F0` | `ReservedOpcode78NoOp` | returns immediately without changing state as the reserved opcode 0x78 entry. |
 | `FE 79` | fallback | `0x8008A4E8` | `ReservedOpcode79NoOp` | returns immediately without changing state as the reserved opcode 0x79 entry. |
 | `FE 7A` | fallback | `0x8008A4E0` | `ReservedOpcode7ANoOp` | returns immediately without changing state as the reserved opcode 0x7A entry. |
@@ -200,7 +200,7 @@ Each instruction is encoded as `FE xx`; byte counts include the `FE` prefix. Onl
 | `FE BF` | 14 | `0x80087848` | `SetupBattling` | waits for field resources and music readiness, then stores six battle parameters and requests battle setup. |
 | `FE C0` | 4 | `0x80087800` | `WriteBattlingMatchResultCode` | copies the Battling mode match-result code to a script variable. |
 | `FE C1` | 8 | `0x80088508` | `QueryPartySpriteAnimationStatus` | resolves a party actor, writes its sprite-animation status and actor index to script variables, clears nonterminal status values, adds four VM cycles, and advances seven bytes. |
-| `FE C2` | 5 | `0x80088674` | `ResetParticleConfigImmediateActor` | selects an immediate actor with zero fallback, stores three particle modifiers, resets its default particle banks, normalizes mode values 1 through 3 to 0x10 through 0x30, adds four VM cycles, and advances nine bytes. |
+| `FE C2` | 10 | `0x80088674` | `ResetParticleConfigImmediateActor` | resolves an evaluated actor selector with zero fallback, stores three evaluated particle modifiers, resets its default particle banks, normalizes mode values 1 through 3 to 0x10 through 0x30, adds four VM cycles, and advances nine bytes after the FE prefix. |
 | `FE C3` | 2 | `0x8009E014` | `SetCurrentActorFlags02000800` | sets flags 0x02000000 and 0x800 on the current actor. |
 | `FE C4` | 3 | `0x8009DF78` | `SetActorFlags02000800ById` | sets actor flags 0x02000000 and 0x800 by ID. |
 | `FE C5` | 6 | `0x80086F7C` | `SetModelAnimation` | assigns a model animation. |
@@ -221,7 +221,7 @@ Each instruction is encoded as `FE xx`; byte counts include the `FE` prefix. Onl
 | `FE D4` | 3 or 11 | `0x80086FD0` | `ManageSpriteOverlayList` | mode 0 allocates and initializes a 33-entry sprite-overlay list, mode 1 links an indexed entry at evaluated screen coordinates, mode 2 frees the list, and mode 3 sets an indexed entry's RGB color. |
 | `FE D5` | 6 | `0x80087960` | `WriteWorldMapPosition` | writes both persistent world-map position values to script variables. |
 | `FE D6` | 6 | `0x800879D0` | `WriteGameState184EAnd1852` | writes two game-state fields to script memory. |
-| `FE D7` | 7 | `0x80087AB8` | `SetWorldMapMarkerPositionXZ` | writes evaluated X and Z coordinates into the saved world-map marker position, clears Y and padding, marks the position valid, and advances six bytes. |
+| `FE D7` | 7 | `0x80087AB8` | `SetWorldMapMarkerPositionXZ` | writes X and Z coordinates into the saved world-map marker position, clears Y and padding, marks the position valid, and advances six bytes after FE. Its masked readers use a control byte at FE-relative +10, beyond the declared seven-byte encoding; preserve the neighboring bytes. |
 | `FE D8` | 3 | `0x80087A40` | `SetSpriteLightingBypass` | stores a script byte that enables or bypasses dynamic sprite color lighting. |
 | `FE D9` | 3 | `0x80087A7C` | `SetRandomTurnDirectionTable` | stores a script byte selecting the direction table used for random actor turns. |
 | `FE DA` | 2 | `0x80093790` | `OpenMenuMode6` | queues menu mode 6 with argument 1, yields, increments the open-menu count, and advances one byte. |

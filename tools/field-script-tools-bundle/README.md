@@ -51,18 +51,17 @@ global names come from the Field documentation; other names combine the
 variable's observed role with the surrounding actor, movement, dialogue,
 camera, or other subsystem operations.
 
-`script.xga` is lossless assembly containing complete instruction encodings,
-symbolic references, all routine rows, the bitmap and byte-exact data. Both
-source formats are self-contained. XGA preserves exact bytes; XGS may normalize
-verified, behavior-neutral instruction encoding variants for readability.
-
+`script.xga` is independent lossless assembly containing complete instruction
+encodings, symbolic references, all routine rows, the bitmap and byte-exact data.
+XGS compilation does not read it. Standalone XGS reconstructs native operations
+and private operand data from the semantic source.
 ## Compile And Repack
 
 From this bundle directory:
 
 ```bash
 python3 tools/field_script.py decompile /path/to/scripts.bin \
-  --field 7 --xgs script.xgs --xga script.xga
+  --field 7 --xgs script.xgs
 
 # Edit script.xgs, then compile its semantic statements:
 python3 tools/field_script.py compile script.xgs \
@@ -76,14 +75,29 @@ python3 tools/field_script.py repack field.bin \
   --scripts scripts.modified.bin --output field.modified.bin
 ```
 
-The `.xgs` is standalone: compilation needs no original binary or per-script
-metadata file. Each entity contains its events and `code`; shared instructions
+The `.xgs` contains operations and symbolic arguments without encoding or layout
+annotations. Each entity contains its events and `code`; shared instructions
 appear under `shared_code`. Original byte traces and event comments are retained.
 Behavior descriptions are not emitted.
 
+`decompile --xgs script.xgs` writes only that source. XGA is written only when
+explicitly requested with `--xga`. Compilation reads only XGS: no sibling file,
+original binary or per-script sidecar is needed. The compiler builds
+private operand islands for handlers that formerly depended on neighboring
+instructions, so those source operations can move and resize independently.
+
 The linker recalculates positions, routine entries, jumps, calls and script-data
-references. Comments are informational and ignored by compilation. VM variable bindings and
-preserved data remain explicit because they have runtime meaning.
+references on every build. There is one instruction-selection and layout pipeline
+for edited and unedited source. It encodes the current arguments from canonical
+instruction templates and validates native sharing against the current
+encoded bytes. Incompatible native forms relax independently to operand islands.
+No whole-file reconstruction or source-equality shortcut exists. Removing or
+changing any comments produces the same binary, including after source edits.
+VM variable bindings and preserved data remain explicit.
+The decompiler retains otherwise omitted format fields and dispatch distinctions
+as typed source arguments and operation spellings. All 729 corpus resources now
+reproduce their original binaries exactly, also with all comments removed or
+falsified; see [validation evidence](docs/RELOCATION_EVIDENCE.md).
 For fixed-address assertions in the low-level representation, use
 `assemble --layout exact`. The optional link map reports final placement.
 
@@ -93,16 +107,18 @@ mechanism. See [`docs/RECOMPILER_USAGE.md`](docs/RECOMPILER_USAGE.md) for the fu
 editing and runtime workflow. Regenerate older extractions before compiling;
 there is one current source format, with no compatibility layer.
 
-Regenerate all catalog `.xgs` files from the extracted assets, checking each
-compiled result against its original (including verified neutral encodings):
+Regenerate all catalog `.xgs` files from extracted assets and validate their
+standalone compilation and native structure:
 
 ```bash
 python3 tools/field_script.py regenerate extracted-field-scripts
 ```
 
 For focused maintenance of generated sources without full compilation, use
-`--comments-only`, `--layout-only` or `--simplify-raw`. Full regeneration
-overwrites the generated catalog source. Normal `compile` processes one file;
+`--comments-only` or `--layout-only`. Older source formats must be re-decompiled
+from the current binary; migration never guesses missing operands or discards edits.
+Full regeneration overwrites generated catalog XGS and its independent XGA view.
+Normal `compile` processes one source file;
 the corpus-wide `verify` commands below are separate, potentially lengthy tests.
 
 ## Documentation
@@ -120,6 +136,12 @@ the corpus-wide `verify` commands below are separate, potentially lengthy tests.
   primary and extended operations under `actor`, `movement`, `world`, `camera`,
   `dialogue`, `audio`, `visual`, `battle`, `inventory`, `input`, `state`,
   `flow`, and `event`.
+- [`docs/OPERATION_CONTRACTS.md`](docs/OPERATION_CONTRACTS.md) gives a per-opcode
+  effect, executable XGS form, operand encoding and output contract. Unverified
+  byte fields are explicitly identified instead of being assigned guessed roles.
+- [`docs/SHARED_SCRIPT_BYTES.md`](docs/SHARED_SCRIPT_BYTES.md) explains cross-instruction
+   operands, alternate continuations and native semantic lowering.
+  Generated instructions remain named operations instead of falling back to `raw`.
 - [`docs/RECOMPILER_DESIGN.md`](docs/RECOMPILER_DESIGN.md) describes the
   implemented standalone compiler, relocation, validation and binary guarantees.
 - [`docs/RECOMPILER_USAGE.md`](docs/RECOMPILER_USAGE.md) documents compilation,
@@ -197,14 +219,23 @@ python3 tools/build_dsl_documentation.py
 ## Compiler Validation
 
 ```bash
+python3 tools/validate_field_script_corpus.py extracted-field-scripts \
+  --output /path/to/new-corpus-report --workers 4 --require-exact
+
 python3 -m pytest tests -q
 python3 tools/field_script.py verify extracted-field-scripts
 python3 tools/field_script.py verify extracted-field-scripts --repack
 python3 tools/field_script.py verify extracted-field-scripts --repack --resize
 ```
 
-The corpus check compares exact XGA reconstruction, XGS reconstruction with only
-verified neutral instruction-bit differences, and LZSS compression. `--repack`
+The non-fail-fast corpus runner records every resource separately. Its report
+distinguishes exact binary identity, different reconstructed bytes, build errors
+and edited-source results. It inserts a NOP before each source operation for the
+edit check, and retains source/binaries per resource in the report directory.
+
+The corpus check compares exact XGA reconstruction, validates standalone XGS
+lowering and its linked assembly, and checks LZSS compression. It is not a
+gameplay-equivalence proof. `--repack`
 uses the original disc paths in the manifest to rebuild Field containers.
 The corpus has 729 unique assets: 4,453,533 ScriptsFile bytes, including 3,198,265
 bytecode bytes. These checks are not run by a normal single-file compilation.

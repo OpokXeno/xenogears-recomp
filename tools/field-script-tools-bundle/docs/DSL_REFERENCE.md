@@ -30,8 +30,9 @@ field id {
 
 Each entity contains its event bindings followed by its code. Shared code is
 separate. Source uses one declaration, label or instruction per line. It is
-self-contained; no reconstruction sidecar is required.
-This is an operation-oriented Field VM language, not general C: use the
+self-contained. Compilation reads no XGA or external original binary and ignores
+all comments. Every operand is encoded from the source statements.
+This is an operation-oriented Field VM language: use the
 documented statements and explicit control flow. Examples with `...` abbreviate
 surrounding declarations; the usage guide includes a complete compilable file.
 
@@ -49,14 +50,14 @@ camera.yaw = -120;
 An argument that lacks a proven typed schema is a positional **encoded byte**
 (`0..255`), not a guessed signed word or variable reference. Recognized branch
 targets instead use symbolic labels in the corresponding argument position.
-Operands come from the statement. Recompilation may canonicalize its
-ignored control bits (`40` to `C0`); the original bytes stay in the trace comment.
+Operands come from the statement. The concise spelling uses canonical defaults;
+the lossless spelling retains ignored bits (`C0` versus `40`) in a named
+`reserved_flags` argument. The trace comment is never an input.
 The same rule applies to `38`, `39`, `3A`, `3B`, `3E`, `3F`, `40`, `DE` and `DF`:
 their handlers share the same operand reader, which tests only control bit
 `0x40`. For example, `38 10 04 12 04 00` is the variable-to-variable operation
 `destination += source`, using VM slots `0x0410` and `0x0412`.
-Use XGA for strict byte identity. Encodings with no verified semantic equivalent
-retain the explicit `raw("...");` escape.
+Use XGA for strict byte identity.
 
 ### Immediate Tags Are Not Extra Arguments
 
@@ -80,10 +81,10 @@ A variable declared at `0x0400` instead produces `21 00 04`:
 movement.set_actor_movement_speed(scene.actor_movement_speed);
 ```
 
-This schema is verified for primary opcodes `0B`, `21`, `69`, `71`, `72`, `74`,
-`75`, `8C`, `8D`, `9A` and the three operands of `A0`, in addition to specialized
-forms such as sleep and actor binding. Their handlers call the evaluated-word
-helper at `0x800ACDEC` (music calls it through `0x8008F7B8`).
+The per-opcode [operation contracts](OPERATION_CONTRACTS.md) identify every
+evaluated word, direct signed/unsigned word, packed field, mask-controlled
+signed word, destination slot and branch target. Evaluated words are read by
+`0x800ACDEC` (some primary music opcodes use `0x8008F7B8` as an intermediary).
 
 ### State
 
@@ -223,14 +224,14 @@ path safe; normal authored routines should terminate or name their continuation.
 
 ```text
 call L_2200;
-call L_2200 inline 4660;
+flow.call_with_reserved_word(L_2200, reserved=4660);
 ```
 
 Calls use a four-entry stack belonging to the current actor. They do not start
 a routine on another actor.
 
-The `inline` form preserves opcode `06`'s extra encoded `u16`; it is an editable
-operand, not a comment.
+The function form preserves opcode `06`'s skipped `u16` as an editable reserved
+format field. Plain `call` selects opcode `05`.
 
 ### Starting Actor Routines
 
@@ -420,6 +421,17 @@ record-relative byte offsets for little-endian `u16` references. A generated
 `landing(normal, alternate);` object represents the two overlapping dialogue
 landing entries; the compiler derives its placement constraints. These are
 low-level data constructs, not entity code wrappers.
+
+An independently entered terminal can share a byte inside another instruction:
+
+```text
+alias terminal_entry = assignment_entry + 3 fallback stop;
+```
+
+The symbolic alias is used only while its current linked byte encodes `stop`.
+If an edit breaks that relationship, the same linker emits a separate `stop`
+and redirects this entry to it. Both the relationship and the fallback operation
+are explicit code; no historical address is taken from a trace comment.
 
 The raw instruction escape also accepts symbolic address operands:
 

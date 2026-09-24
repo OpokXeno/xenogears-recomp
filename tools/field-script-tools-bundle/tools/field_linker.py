@@ -11,11 +11,19 @@ import bisect
 import copy
 import struct
 
-from decompile_field_scripts import address_operand_offsets, decode_instruction
+from decompile_field_scripts import PRIMARY_TERMINALS, address_operand_offsets, decode_instruction
 from field_instruction_codec import checked
 
 
 def link_assembly(source, layout: str):
+    if layout == "relocate" and source.link_report.get("source_stage") == "clean":
+        from field_native_selection import link_source
+
+        return link_source(source, _link_native)
+    return _link_native(source, layout)
+
+
+def _link_native(source, layout: str, *, defer_validation=False):
     from compile_field_scripts import Assembly, Record
 
     if layout not in {"exact", "relocate"}:
@@ -51,7 +59,7 @@ def link_assembly(source, layout: str):
         else:
             free_units.append((next_pc, next_pc, None, [record]))
     units.extend(reversed(free_units))
-    if source.link_report.get("grouped_source"):
+    if source.link_report.get("grouped_source") and source.link_report.get("source_stage") == "clean":
         def symbol_order(unit):
             _, _, name, items = unit
             labels = [label for item in items for label in item.labels if not label.startswith("__xgs_")]
@@ -93,6 +101,7 @@ def link_assembly(source, layout: str):
             if name in bindings:
                 raise ValueError(f"duplicate label binding: {name}")
             bindings[name] = record
+    absolute_records = {name: Record(None, b"") for name in source.absolute_symbols}
 
     def binding(name, trail=()):
         if name in trail:
@@ -101,6 +110,8 @@ def link_assembly(source, layout: str):
             base, offset = source.aliases[name]
             item, addend = binding(base, trail + (name,))
             return item, addend + offset
+        if name in absolute_records:
+            return absolute_records[name], 0
         if name not in bindings:
             raise ValueError(f"unresolved label: {name}")
         return bindings[name], 0
@@ -224,7 +235,7 @@ def link_assembly(source, layout: str):
             # Entry labels must enter the body (including inserted instructions),
             # while the dynamic dispatcher enters its fixed-width veneer.
             last = body[-1]
-            if last.kind == "op" and last.raw[0] not in {0x00, 0x01, 0x04, 0x0D, 0x5B, 0xD1, 0xE4}:
+            if last.kind == "op" and last.raw[0] not in PRIMARY_TERMINALS | {0x01}:
                 body.append(Record(None, b"\x01\0\0", references={1: anchor_name(pc + 3)}))
             islands.extend(body)
         records[begin:end] = slots
@@ -233,7 +244,7 @@ def link_assembly(source, layout: str):
     records.extend(islands)
     prefix_noops = []
     for index, record in enumerate(records[:-1]):
-        if record.kind == "op" and record.raw == b"\xfe" and records[index + 1].raw[0] not in {0, *range(0x78, 0x7F)}:
+        if record.kind == "op" and record.raw == b"\xfe" and not record.relative and records[index + 1].raw[0] not in {0, *range(0x78, 0x7F)}:
             # These FE slots consume one byte and do nothing else. If an edit
             # separates the prefix from its lookahead, use the equivalent primary
             # one-byte NOP instead of accidentally selecting a different FE op.
@@ -254,6 +265,7 @@ def link_assembly(source, layout: str):
             cursor = 0
             placed = []
             positions.clear()
+            positions.update({id(record): source.absolute_symbols[name] for name, record in absolute_records.items()})
             forward = False
             for record in real:
                 residue = record.residue
@@ -340,7 +352,9 @@ def link_assembly(source, layout: str):
 
     labels = {}
     for name, pc in (source.labels | extra_labels).items():
-        if name in source.aliases:
+        if name in source.absolute_symbols:
+            labels[name] = source.absolute_symbols[name]
+        elif name in source.aliases:
             item, offset = binding(name)
             labels[name] = positions[id(item)] + offset
         elif name in bindings:
@@ -375,6 +389,12 @@ def link_assembly(source, layout: str):
         record.jump_target = None
         result.records.append(record)
     result.link_report = source.link_report | {"source_stage": "linked", "layout": "relocate", "source_size": None if source.link_report.get("source_stage") == "clean" else source.size, "bytecode_size": cursor, "address_map": address_map, "symbols": labels, "source_map": [{"block": record.source_block, "line": record.line, "pc": record.pc, "size": len(record.raw)} for record in result.records if record.line], "computed_tables": table_reports, "relative_landing_pads": skip_reports, "prefix_noops": prefix_noops}
+    result.link_report["script_byte_dependencies"] = [
+        {"pc": record.pc, "line": record.line, "relative": dict(record.relative)}
+        for record in result.records if record.relative
+    ]
+    result.link_report["binary_fidelity"] = "recompiled"
     # Validate before exposing a partially linked result or writing any output.
-    result.build("exact")
+    if not defer_validation:
+        result.build("exact")
     return result

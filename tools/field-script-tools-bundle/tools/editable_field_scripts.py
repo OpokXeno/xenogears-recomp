@@ -1,4 +1,4 @@
-"""Standalone symbolic Field source. No original binary or sidecar is required."""
+"""Standalone Field source, native lowering and validated same-file fidelity."""
 
 from __future__ import annotations
 
@@ -11,7 +11,11 @@ from decompile_field_scripts import (
     _instruction_owners, _routine_lines, address_operand_offsets, analyze_bytecode,
     build_variable_symbols, decode_instruction, render_instruction,
 )
-from field_instruction_codec import checked, encode_statement, equivalent_instruction_encoding, integer
+from field_instruction_codec import (
+    checked, encode_statement, equivalent_instruction_encoding, instruction_dependencies,
+    instruction_form, integer, normalized, render_lossless_instruction,
+)
+from field_semantic_ops import SCRIPT_IMAGE_MAGIC, encode_semantic, render_semantic
 
 
 def _slot_ranges(values):
@@ -35,12 +39,49 @@ def _alternate(instruction) -> bool:
 def render_source(field_id: int, scripts: bytes, metadata: dict) -> tuple[str, dict]:
     bytecode = scripts[metadata["bytecode_offset"]:]
     analysis = analyze_bytecode(bytecode, metadata)
-    instructions = analysis["instructions"]
+    instructions = dict(analysis["instructions"])
     symbols = build_variable_symbols(analysis, metadata)
-    owners = _instruction_owners(analysis, metadata)
+    owners = _instruction_owners(analysis | {"instructions": instructions}, metadata)
     tables = {pc: list(entries) for pc, entries in analysis["computed_successors"].items() if entries}
     slots = {pc for entries in tables.values() for pc in entries}
     labels = set(analysis["labels"])
+    statements = {}
+    terminal_pcs = set()
+    script_reads = {}
+    read_images = {}
+    for pc, instruction in instructions.items():
+        if instruction.subopcode is None and instruction.opcode in {0x48, 0x49}:
+            index = int.from_bytes(instruction.raw[5:7], "little")
+            base = int.from_bytes(instruction.raw[1:3], "little")
+            destination = symbols[int.from_bytes(instruction.raw[3:5], "little")].reference
+            image_body = next((body for body, (_, end) in analysis["script_images"].items()
+                               if body <= base < end), 0)
+            if image_body not in read_images:
+                image_end = analysis["script_images"][image_body][1] if image_body else len(bytecode)
+                read_images[image_body] = (f"script_read_image_{len(read_images)}", bytecode[image_body:image_end])
+            image_name = read_images[image_body][0]
+            script_reads[pc] = (base, image_name, base - image_body)
+            name = "state.write_script_u8_to_variable" if instruction.opcode == 0x48 else (
+                "state.read_script_s16" if instruction.raw[7] else "state.read_script_u16")
+            index_value = str(index & 0x7FFF) if index & 0x8000 else symbols[index].reference
+            statements[pc] = f"{name}(script_data_{base:04X}, {index_value}) -> ({destination});"
+            continue
+        semantic = render_semantic(instruction, bytecode, symbols)
+        if semantic is not None:
+            statements[pc], kind, terminal = semantic
+            if terminal:
+                terminal_pcs.add(pc)
+            if kind == "party_stage":
+                labels.update((pc + 3, pc + 5))
+        elif instruction.raw == b"\xfe":
+            statements[pc] = "flow.extended_prefix();"
+        else:
+            statements[pc] = render_lossless_instruction(instruction, symbols)
+    data_bases = {int.from_bytes(ins.raw[1:3], "little") for ins in instructions.values()
+                  if ins.subopcode is None and ins.opcode in {0x48, 0x49}}
+    control_labels = set(analysis["entries"]) | {target for ins in instructions.values() for target in ins.targets}
+    control_labels.update(pc for entries in analysis["computed_successors"].values() for pc in entries)
+    labels.difference_update(data_bases - control_labels)
     relative = {}
     skips = {}
     for pc, instruction in instructions.items():
@@ -53,13 +94,24 @@ def render_source(field_id: int, scripts: bytes, metadata: dict) -> tuple[str, d
     # An interior code address must be explicit as a byte-relative symbolic
     # alias, rather than silently attaching to a nearby instruction.
     aliases = {}
+    alias_fallbacks = {}
+    for base, image_name, offset in script_reads.values():
+        aliases[f"script_data_{base:04X}"] = (image_name, offset)
+    for pc, (staged, present) in analysis["semantic_branches"].items():
+        for target in labels:
+            if pc + 3 <= target < pc + 11:
+                aliases[f"L_{target:04X}"] = (f"D_{pc + 3:04X}", target - pc - 3)
     for target in list(labels):
+        if f"L_{target:04X}" in aliases:
+            continue
         if target in instructions:
             continue
         containing = next((pc for pc, ins in instructions.items() if pc < target < pc + ins.size), None)
         if containing is not None:
             labels.add(containing)
             aliases[f"L_{target:04X}"] = (f"L_{containing:04X}", target - containing)
+            if target in analysis.get('interior_terminals', {}):
+                alias_fallbacks[f'L_{target:04X}'] = render_lossless_instruction(analysis['interior_terminals'][target], symbols)
     groups = []
     current = None
     for pc, instruction in sorted(instructions.items()):
@@ -73,7 +125,7 @@ def render_source(field_id: int, scripts: bytes, metadata: dict) -> tuple[str, d
             groups.append(current)
         current["pcs"].append(pc)
         current["end"] = end
-        if instruction.targets or instruction.opcode in PRIMARY_TERMINALS | {0xA6} or pc in relative:
+        if instruction.targets or instruction.opcode in PRIMARY_TERMINALS | {0xA6} or pc in relative or pc in terminal_pcs:
             current = None
     for group in groups:
         labels.add(group["start"])
@@ -86,7 +138,6 @@ def render_source(field_id: int, scripts: bytes, metadata: dict) -> tuple[str, d
         for target in labels:
             if start < target < start + 4:
                 aliases[f"L_{target:04X}"] = (f"D_{start:04X}", target - start)
-    label_values = {f"L_{pc:04X}": pc for pc in labels}
     source = ["// Xenogears editable Field script", f"field {field_id} {{", "  state {"]
     undeclared_unsigned = {int(offset, 16) for offset in metadata["unsigned_variable_offsets"]} - symbols.keys()
     if undeclared_unsigned:
@@ -104,7 +155,8 @@ def render_source(field_id: int, scripts: bytes, metadata: dict) -> tuple[str, d
                 base = "arrivals" if pc == 0 else f"arrival_{(pc - 1) // 7}"
                 aliases[f"L_{pc:04X}"] = (base, 0 if pc == 0 else (pc - 1) % 7)
     for name, (base, offset) in sorted(aliases.items()):
-        source.append(f"  alias {name} = {base} + {offset};")
+        fallback = f' fallback {alias_fallbacks[name][:-1]}' if name in alias_fallbacks else ''
+        source.append(f"  alias {name} = {base} + {offset}{fallback};")
     if arrival_end:
         source.extend(("", "  arrivals {"))
         for index, arrival in enumerate(arrivals):
@@ -121,21 +173,12 @@ def render_source(field_id: int, scripts: bytes, metadata: dict) -> tuple[str, d
                 result.append(f"{indent}  L_{pc:04X}:")
             if pc in analysis["entries"]:
                 result.append(f"{indent}  // event: {_entry_aliases(analysis['entries'][pc])}")
-            statement = render_instruction(instruction, symbols).split("//", 1)[0].strip()
+            statement = statements[pc]
             if pc in tables:
                 pairs = ", ".join(f"L_{entry:04X} -> L_{instructions[entry].targets[0]:04X}" for entry in tables[pc])
                 statement = statement[:-2] + f", [{pairs}]);"
             elif pc in skips:
                 statement = f"flow.skip_triplets_to(L_{skips[pc]:04X});"
-            else:
-                try:
-                    candidate = encode_statement(statement, None, symbols, label_values)
-                except ValueError:
-                    candidate = None
-                if not equivalent_instruction_encoding(candidate, instruction.raw):
-                    targets = [f"L_{int.from_bytes(instruction.raw[offset:offset + 2], 'little'):04X}" for offset in address_operand_offsets(instruction)]
-                    suffix = "" if not targets else ", " + ", ".join(targets)
-                    statement = f'raw("{instruction.raw.hex(" ").upper()}"{suffix});'
             if pc in relative:
                 statement = statement[:-1] + f" otherwise goto L_{relative[pc]:04X};"
             result.append(f"{indent}  {statement} // {pc:04X}: {instruction.raw.hex(' ').upper()}")
@@ -144,7 +187,9 @@ def render_source(field_id: int, scripts: bytes, metadata: dict) -> tuple[str, d
                     result.append(f"{indent}  // event: {_entry_aliases(analysis['entries'][entry])}")
                 result.append(f"{indent}  // {entry:04X}: {instructions[entry].raw.hex(' ').upper()}")
         last = instructions[group["pcs"][-1]]
-        if last.opcode not in PRIMARY_TERMINALS | {0x01} and group["pcs"][-1] not in skips and group["end"] < len(bytecode):
+        if group["pcs"][-1] in terminal_pcs:
+            pass
+        elif last.opcode not in PRIMARY_TERMINALS | {0x01} and group["pcs"][-1] not in skips and group["end"] < len(bytecode):
             result.append(f"{indent}  fallthrough L_{group['end']:04X};")
         elif last.opcode not in PRIMARY_TERMINALS | {0x01, 0xA6} and group["end"] == len(bytecode):
             result.append(f"{indent}  unreachable;")
@@ -154,11 +199,17 @@ def render_source(field_id: int, scripts: bytes, metadata: dict) -> tuple[str, d
     source.append("  entities {")
     for row in metadata["routine_rows"]:
         source.extend((f"    entity {row['entity_id']} {{", "      events {"))
-        source.extend(_routine_lines(row))
+        source.extend(_routine_lines(row, trace_entries=True))
         source.append("      }")
         source.append("    }")
     source.append("  }")
-    data_regions = [region for region in analysis["data_regions"] if region["classification"] != "arrival_table"]
+    data_regions = []
+    for region in analysis["data_regions"]:
+        if region["classification"] == "arrival_table" or any(start <= region["start"] < end for start, end in analysis["script_images"].values()):
+            continue
+        fragments = [(region["start"], region["end"])]
+        data_regions.extend(region | {"start": start, "end": end, "size": end - start}
+                            for start, end in fragments)
     source.extend(("", "  program {"))
     units = [(group["start"], "code", group) for group in groups] + [(region["start"], "data", region) for region in data_regions]
     for _, kind, unit in sorted(units, key=lambda unit: unit[0]):
@@ -170,7 +221,7 @@ def render_source(field_id: int, scripts: bytes, metadata: dict) -> tuple[str, d
             name = "arrivals" if start == 0 and metadata["arrival_table_marker_present"] and not arrival_end else f"D_{start:04X}"
             source.append(f"    region {name} {{")
             cuts = sorted({start, end, *(pc for pc in labels if start <= pc < end)})
-            if start in analysis["landing_data"]:
+            if start in analysis["landing_data"] or start - 3 in analysis["semantic_branches"]:
                 cuts = [start, end]
             for left, right in zip(cuts, cuts[1:]):
                 if left in labels:
@@ -178,19 +229,43 @@ def render_source(field_id: int, scripts: bytes, metadata: dict) -> tuple[str, d
                 for pc in range(left, right, 16):
                     raw = bytecode[pc:min(pc + 16, right)]
                     refs = analysis["landing_data"].get(pc, {})
-                    if refs:
-                        source.append(f"      landing(L_{refs[1]:04X}, L_{refs[2]:04X});")
+                    trace = f" // {pc:04X}: {raw.hex(' ').upper()}"
+                    if pc - 3 in analysis["semantic_branches"]:
+                        staged, present = analysis["semantic_branches"][pc - 3]
+                        source.append(f"      party_landing(L_{staged:04X}, L_{present:04X});" + trace)
+                    elif refs:
+                        source.append(f"      landing(L_{refs[1]:04X}, L_{refs[2]:04X});" + trace)
                     else:
-                        source.append(f'      bytes "{raw.hex(" ").upper()}";')
+                        source.append(f'      bytes "{raw.hex(" ").upper()}";' + trace)
             source.append("    }")
+    for view, (image_name, image) in read_images.items():
+        source.append(f"    region {image_name} {{")
+        source.append(f"      // view: {view:04X}")
+        for at in range(0, len(image), 16):
+            source.append(f'      bytes "{image[at:at + 16].hex(" ").upper()}";')
+        source.append("    }")
     source.append("  }")
     if analysis["diagnostics"]:
         source.append("")
         source.extend(f"  // Diagnostic: {message}" for message in analysis["diagnostics"])
     source.extend(("}", ""))
     report = {key: analysis[key] for key in ("instruction_count", "instruction_bytes", "data_bytes", "classified_bytes", "bytecode_size", "instruction_coverage_percent", "total_coverage_percent", "diagnostics")}
-    report.update({"data_range_count": len(analysis["data_ranges"]), "data_classifications": {kind: sum(r["size"] for r in analysis["data_regions"] if r["classification"] == kind) for kind in {r["classification"] for r in analysis["data_regions"]}}, "semantic_symbol_count": len(symbols), "orphan_instruction_count": len(analysis["orphan_instruction_pcs"]), "orphan_instruction_bytes": sum(instructions[pc].size for pc in analysis["orphan_instruction_pcs"]), "language": "xenogears-field-event-dsl/v4"})
-    return group_source_by_entity("\n".join(source), scripts, analysis=analysis), report
+    report.update({
+        "data_range_count": len(analysis["data_ranges"]),
+        "data_classifications": {kind: sum(r["size"] for r in analysis["data_regions"] if r["classification"] == kind)
+                                 for kind in {r["classification"] for r in analysis["data_regions"]}},
+        "semantic_symbol_count": len(symbols),
+        "orphan_instruction_count": len(analysis["orphan_instruction_pcs"]),
+        "orphan_instruction_bytes": sum(analysis["instructions"][pc].size for pc in analysis["orphan_instruction_pcs"]),
+        "language": "xenogears-field-event-dsl/v10",
+        "script_data_image_bytes": sum(len(image) for _, image in read_images.values()),
+        "recovered_native_islands": len(analysis["recovered_lowerings"]),
+        "cloned_interior_terminals": len(analysis.get("interior_terminals", {})),
+    })
+    from field_source_fidelity import add_fidelity_traces
+
+    text = group_source_by_entity("\n".join(source), scripts, analysis=analysis)
+    return add_fidelity_traces(text, scripts, metadata), report
 
 
 def group_source_by_entity(text: str, scripts: bytes, *, analysis: dict | None = None) -> str:
@@ -223,7 +298,8 @@ def group_source_by_entity(text: str, scripts: bytes, *, analysis: dict | None =
         if kind == "region":
             if name.startswith("D_") and not any(line.strip() == f"L_{name[2:]}:" for line in body):
                 body.insert(0, f"L_{name[2:]}:")
-            data.extend([f"    {name} {{", *("      " + line if line else "" for line in body), "    }"])
+            declaration = f"script_data {name}" if name.startswith("script_read_image_") else name
+            data.extend([f"    {declaration} {{", *("      " + line if line else "" for line in body), "    }"])
             continue
         pc = int(name[2:], 16)
         if not any(line.strip() == f"L_{pc:04X}:" for line in body):
@@ -251,87 +327,55 @@ def group_source_by_entity(text: str, scripts: bytes, *, analysis: dict | None =
     return "\n".join(output) + "\n"
 
 
-def restore_source_comments(text: str, scripts: bytes, *, simplify_raw: bool = False) -> str:
-    """Fast trace refresh for generated sources; verify each matched instruction.
+def restore_source_comments(text: str, scripts: bytes) -> str:
+    """Restore traces from the semantic renderer without compiling the source.
 
-    This does not run CFG discovery, symbol inference or whole-program linking.
-    Addresses are used only to restore diagnostic comments, never for compiling.
+    Native instruction counts no longer correspond one-to-one with statements.
+    Compare source tokens, preserve authored comments, and refuse to discard edits.
     """
-    from decompile_field_scripts import _entry_map
     from extract_disc_field_scripts import parse_scripts_file
+    from field_source_fidelity import ORIGIN
 
     metadata = parse_scripts_file(scripts)
-    bytecode = scripts[metadata["bytecode_offset"]:]
-    entries = _entry_map(metadata)
-    symbols = {}
-    scope = None
-    for original in text.splitlines():
-        line = original.split("//", 1)[0].strip()
-        if line in {"persistent {", "scene {", "out_of_range {"}:
-            scope = line[:-2]
-        match = re.fullmatch(rf"(signed|unsigned) ({IDENT}) at (0x[0-9A-Fa-f]+);", line)
-        if match:
-            offset = int(match[3], 16)
-            symbols[offset] = VariableSymbol(offset, match[2], scope, match[1], "source", "declared")
-    labels = {name: int(name[2:], 16) for name in re.findall(r"\bL_[0-9A-F]{4,}\b", text)}
+    field = re.search(r"^\s*field (\d+) \{", text, re.MULTILINE)
+    if field is None:
+        raise ValueError("missing field declaration")
+    rendered, _ = render_source(int(field[1]), scripts, metadata)
+
+    def is_trace(line):
+        return (ORIGIN.fullmatch(line) is not None or line.strip().startswith("// event:")
+                or re.fullmatch(r"\s*// [0-9A-F]{4,}: [0-9A-F ]+", line) is not None)
+
+    expected = []
+    pending = []
+    for line in rendered.splitlines():
+        if is_trace(line):
+            pending.append(line)
+        elif line.split("//", 1)[0].strip():
+            code, _, comment = line.partition("//")
+            trace = " //" + comment if re.match(r" (?:[0-9A-F]{4,}: |entry: )", comment) else ""
+            expected.append((normalized(code), pending, trace))
+            pending = []
     output = []
-    pc = None
-    in_code = False
+    index = 0
     for original in text.splitlines():
-        stripped = original.strip()
-        if stripped.startswith("// event:") or re.fullmatch(r"// [0-9A-F]{4,}: [0-9A-F ]+", stripped):
+        if is_trace(original):
             continue
         original = re.sub(r"\s+// [0-9A-F]{4,}: [0-9A-F ]+$", "", original)
-        line = original.split("//", 1)[0].strip()
-        if line in {"code {", "shared_code {"}:
-            in_code = True
-            pc = None
-        elif in_code and (match := re.fullmatch(r"L_([0-9A-F]{4,}):", line)):
-            pc = int(match[1], 16)
-        elif match := re.fullmatch(r"block B_([0-9A-F]{4,}) \{", line):
-            pc = int(match[1], 16)
-        elif line == "}":
-            pc = None
-            in_code = False
-        elif pc is not None and line.endswith(";") and not line.startswith(("fallthrough ", "unreachable;")):
-            instruction = decode_instruction(bytecode, pc)
-            statement = re.sub(r" otherwise goto L_[0-9A-F]+;$", ";", line)
-            table = re.fullmatch(r"flow\.dispatch_triplet_table\((.+), \[(.*)\]\);", statement)
-            if table:
-                statement = f"flow.dispatch_triplet_table({table[1]});"
-            skip = re.fullmatch(r"flow\.skip_triplets_to\((L_[0-9A-F]+)\);", statement)
-            if skip:
-                expected = (pc + 3 + (int.from_bytes(instruction.raw[1:3], "little") & 0x7FFF) * 3) & 0xFFFF
-                valid = instruction.opcode == 0xA6 and labels[skip[1]] == expected
-            else:
-                valid = equivalent_instruction_encoding(encode_statement(statement, None, symbols, labels), instruction.raw)
-            if not valid:
-                raise ValueError(f"source differs from the original at 0x{pc:04X}; cannot restore an unambiguous trace")
-            if simplify_raw and statement.startswith("raw("):
-                readable = render_instruction(instruction, symbols).split("//", 1)[0].strip()
-                try:
-                    candidate = encode_statement(readable, None, symbols, labels)
-                except ValueError:
-                    candidate = None
-                if equivalent_instruction_encoding(candidate, instruction.raw):
-                    original = original.replace(statement, readable, 1)
-            indent = original[:len(original) - len(original.lstrip())]
-            if pc in entries:
-                output.append(f"{indent}// event: {_entry_aliases(entries[pc])}")
-            output.append(f"{original} // {pc:04X}: {instruction.raw.hex(' ').upper()}")
-            pc += instruction.size
-            if table:
-                for case in table[2].split(","):
-                    pair = re.fullmatch(r"\s*(L_[0-9A-F]+) -> (L_[0-9A-F]+)\s*", case)
-                    jump = decode_instruction(bytecode, pc)
-                    if pair is None or labels[pair[1]] != pc or jump.opcode != 1 or jump.targets != (labels[pair[2]],):
-                        raise ValueError("computed table differs from the original")
-                    if pc in entries:
-                        output.append(f"{indent}// event: {_entry_aliases(entries[pc])}")
-                    output.append(f"{indent}// {pc:04X}: {jump.raw.hex(' ').upper()}")
-                    pc += jump.size
+        original = re.sub(r"\s+// entry: [0-9A-F]{4}$", "", original)
+        code = original.split("//", 1)[0].strip()
+        if not code:
+            output.append(original)
             continue
-        output.append(original)
+        if index >= len(expected) or normalized(code) != expected[index][0]:
+            raise ValueError("source differs from the current decompilation; decompile the edited binary to retain changes")
+        _, traces, suffix = expected[index]
+        output.extend(traces)
+        output.append(original + suffix)
+        index += 1
+    if index != len(expected):
+        raise ValueError("source is incomplete; refusing to overwrite edits")
+    output.extend(pending)
     return "\n".join(output) + "\n"
 
 
@@ -351,15 +395,20 @@ def equivalent_scripts(compiled: bytes, original: bytes) -> bool:
     start = metadata["bytecode_offset"]
     expected = bytearray(original)
     analysis = analyze_bytecode(original[start:], metadata)
+    shared_bytes = {pc + offset for pc, instruction in analysis["instructions"].items()
+                    for offset in instruction_dependencies(instruction)}
     for pc, instruction in analysis["instructions"].items():
         emitted = compiled[start + pc:start + pc + instruction.size]
+        if any(pc + offset in shared_bytes and value != instruction.raw[offset]
+               for offset, value in enumerate(emitted)):
+            continue  # An otherwise unused bit may be an operand of a neighbor.
         if equivalent_instruction_encoding(emitted, instruction.raw):
             expected[start + pc:start + pc + instruction.size] = emitted
     return bytes(expected) == compiled
 
 
 def compile_source(text: str) -> Assembly:
-    """Encode only the program written in the source, with no provenance input."""
+    """Encode only semantic information explicitly present in the source."""
     assembly = Assembly(bytes(128), 0)
     stack = []
     seen_sections = set()
@@ -423,6 +472,15 @@ def compile_source(text: str) -> Assembly:
                     if indices != list(range(len(indices))):
                         raise ValueError("arrival indices must be contiguous from zero")
                     assembly.records.extend(record for _, record in sorted(arrival_records))
+                if kind == "script_data":
+                    image_records = [record for record in assembly.records if record.block == value]
+                    length = sum(len(record.raw) for record in image_records)
+                    if not image_records or not length:
+                        raise ValueError("script_data image cannot be empty")
+                    header = Record(None, SCRIPT_IMAGE_MAGIC + struct.pack("<I", length), "data", block=value)
+                    at = next(i for i, record in enumerate(assembly.records) if record is image_records[0])
+                    assembly.records.insert(at, header)
+                    current_block = None
                 continue
             if match := re.fullmatch(r"field ([0-9]+) \{", line):
                 if stack or field_seen:
@@ -457,9 +515,14 @@ def compile_source(text: str) -> Assembly:
                 stack.append((kind, None))
             elif context() in {"persistent", "scene", "out_of_range"} and (match := re.fullmatch(rf"(new )?(signed|unsigned) ({IDENT})(?: at (0x[0-9A-Fa-f]+|[0-9]+))?;", line)):
                 declarations.append((context(), match[3], match[2], integer(match[4]) if match[4] else None, line_number, bool(match[1])))
-            elif context() == "field" and (match := re.fullmatch(rf"alias ({IDENT}) = ({IDENT})(?: \+ ([0-9]+))?;", line)):
+            elif context() == "field" and (match := re.fullmatch(rf"alias ({IDENT}) = ({IDENT})(?: \+ ([0-9]+))?(?: fallback (.+))?;", line)):
                 label(match[1])
                 assembly.aliases[match[1]] = (match[2], int(match[3] or 0))
+                if match[4]:
+                    terminal = encode_statement(match[4] + ';', None, {}, {})
+                    if len(terminal) != 1 or terminal[0] not in PRIMARY_TERMINALS:
+                        raise ValueError('alias fallback must be a single-byte terminal operation')
+                    assembly.alias_fallbacks[match[1]] = terminal
             elif context() == "entities" and (match := re.fullmatch(r"entity ([0-9]+) \{", line)):
                 entity = int(match[1])
                 if entity in assembly.rows:
@@ -493,6 +556,10 @@ def compile_source(text: str) -> Assembly:
             elif context() in {"program", "data"} and (match := re.fullmatch(rf"region ({IDENT}) \{{", line)):
                 start_block(match[1], "data")
                 stack.append(("region", current_block))
+            elif context() == "data" and (match := re.fullmatch(rf"script_data ({IDENT}) \{{", line)):
+                start_block(match[1], "data")
+                assembly.script_images.add(current_block)
+                stack.append(("script_data", current_block))
             elif context() == "data" and (match := re.fullmatch(rf"({IDENT}) \{{", line)):
                 start_block(match[1], "data")
                 stack.append(("region", current_block))
@@ -504,7 +571,7 @@ def compile_source(text: str) -> Assembly:
                     start_fragment()
                 label(match[1])
                 pending.append(match[1])
-            elif context() in {"block", "region"} and (match := re.fullmatch(rf"({IDENT}):", line)):
+            elif context() in {"block", "region", "script_data"} and (match := re.fullmatch(rf"({IDENT}):", line)):
                 label(match[1])
                 pending.append(match[1])
             elif context() in {"block", "code", "shared_code"} and line.endswith(";"):
@@ -516,7 +583,7 @@ def compile_source(text: str) -> Assembly:
                 if context() in {"code", "shared_code"} and line.startswith("fallthrough "):
                     current_block = None
                     fragment_has_code = False
-            elif context() == "region" and (match := re.fullmatch(r'bytes "([0-9A-Fa-f\s]+)"(?: refs\((.*)\))?;', line)):
+            elif context() in {"region", "script_data"} and (match := re.fullmatch(r'bytes "([0-9A-Fa-f\s]+)"(?: refs\((.*)\))?;', line)):
                 references = {}
                 fields = [part.strip() for part in match[2].split(",")] if match[2] else []
                 if len(fields) % 2:
@@ -526,12 +593,18 @@ def compile_source(text: str) -> Assembly:
                     if at in references or not re.fullmatch(IDENT, name):
                         raise ValueError("invalid or duplicate data reference")
                     references[at] = name
-                assembly.records.append(Record(None, bytes.fromhex(match[1]), "data", references, line_number, current_block, pending))
+                assembly.records.append(Record(None, bytes.fromhex(match[1]), "data", references, line_number,
+                                               current_block, pending))
                 pending = []
             elif context() == "region" and (match := re.fullmatch(rf"landing\(({IDENT}), ({IDENT})\);", line)):
                 record = Record(None, b"\x01\x01\0\0", "data", {1: match[1], 2: match[2]}, line_number, current_block, pending)
                 assembly.records.append(record)
                 landing_records.append(record)
+                pending = []
+            elif context() == "region" and (match := re.fullmatch(rf"party_landing\(({IDENT}), ({IDENT})\);", line)):
+                raw = bytes.fromhex("02 00 01 00 00 C0 00 00")
+                assembly.records.append(Record(None, raw, "data", {3: match[2], 6: match[1]},
+                                               line_number, current_block, pending, guard=match[2]))
                 pending = []
             elif context() == "field" and line == "arrivals {":
                 start_block("arrivals", "arrivals")
@@ -544,7 +617,8 @@ def compile_source(text: str) -> Assembly:
                 label(name)
                 x, z = (checked(int(match[i]), -32768, 32767, "arrival coordinate") for i in (2, 3))
                 small = [255 if match[i] == "restore" else checked(int(match[i]), 0, 255, "arrival byte") for i in (4, 5, 6)]
-                arrival_records.append((index, Record(None, struct.pack("<hhBBB", x, z, *small), "data", line=line_number, block=current_block, labels=[name])))
+                arrival_records.append((index, Record(None, struct.pack("<hhBBB", x, z, *small), "data", line=line_number,
+                                                       block=current_block, labels=[name])))
             else:
                 raise ValueError(f"unexpected syntax in {context() or 'document'}: {line}")
         except (ValueError, TypeError, struct.error) as error:
@@ -591,6 +665,7 @@ def compile_source(text: str) -> Assembly:
     # bytes. Temporary addresses for new variables are outside the scene bank;
     # they are never emitted in the linked program.
     provisional = {}
+    restricted_variables = set()
     temporary = 0x800
     for scope, name, value_type, offset, line in resolved:
         if offset is None:
@@ -599,7 +674,7 @@ def compile_source(text: str) -> Assembly:
             offset = temporary
             temporary += 2
         provisional[offset] = VariableSymbol(offset, name, scope, value_type, "source", "declared")
-    for index, (statement, line, _, _) in enumerate(statements):
+    for index, (statement, line, _, names) in enumerate(statements):
         if statement.startswith(("fallthrough ", "__xgs_sequence ", "flow.skip_triplets_to(")) or statement == "unreachable;":
             continue
         if match := re.fullmatch(rf"(.+) otherwise goto ({IDENT});", statement):
@@ -607,7 +682,11 @@ def compile_source(text: str) -> Assembly:
         if index in dispatches:
             statement = f"flow.dispatch_triplet_table({dispatches[index][0]});"
         try:
-            raw = encode_statement(statement, None, provisional, assembly.labels, references={})
+            semantic = encode_semantic(statement, provisional, assembly.labels, provisional=True)
+            if semantic is not None and semantic[0] == "mecha_reinterpret":
+                match = re.fullmatch(r"actor\.load_current_actor_mecha_reinterpret\(([^()]+)\);", normalized(statement))
+                restricted_variables.add(match[1])
+            raw = semantic[1] if semantic is not None else encode_statement(statement, None, provisional, assembly.labels, references={})
         except ValueError as error:
             raise ValueError(f"line {line}: {error}") from error
         for at in range(2 if raw[0] == 0xFE else 1, len(raw) - 1):
@@ -620,7 +699,8 @@ def compile_source(text: str) -> Assembly:
         if offset is None:
             if scope != "scene":
                 raise ValueError(f"line {line}: new {scope} variable {name} requires an explicit 'at' binding")
-            offset = next((slot for slot in range(0x400, 0x800, 2) if slot not in used), None)
+            offset = next((slot for slot in range(0x400, 0x800, 2) if slot not in used
+                           and (f"{scope}.{name}" not in restricted_variables or (slot & 0xFF) > 2)), None)
             if offset is None:
                 raise ValueError("no unreserved scene VM slots remain")
             used.add(offset)
@@ -647,7 +727,7 @@ def compile_source(text: str) -> Assembly:
                 continue
             elif match := re.fullmatch(rf"__xgs_sequence ({IDENT});", statement):
                 previous = next((r for r in reversed(assembly.records) if r.block == block), None)
-                if previous is None or previous.kind == "edge" or block in unreachable_blocks or previous.jump_target is not None or previous.raw[0] in PRIMARY_TERMINALS | {0x01}:
+                if previous is None or previous.kind == "edge" or previous.terminal or block in unreachable_blocks or previous.jump_target is not None or previous.raw[0] in PRIMARY_TERMINALS | {0x01}:
                     continue
                 record = Record(None, b"", "edge", {1: match[1]}, 0, block)
             elif match := re.fullmatch(rf"fallthrough ({IDENT});", statement):
@@ -661,10 +741,28 @@ def compile_source(text: str) -> Assembly:
                 if index in dispatches:
                     statement = f"flow.dispatch_triplet_table({dispatches[index][0]});"
                 references = {}
-                raw = encode_statement(statement, None, symbols, assembly.labels, references=references)
+                relative = {}
+                semantic = encode_semantic(statement, symbols, assembly.labels)
+                if semantic is not None:
+                    kind, raw, references, terminal = semantic
+                    if alternate is not None:
+                        raise ValueError("semantic operation already defines its continuations")
+                    assembly.records.append(Record(None, raw, "semantic", references=references,
+                                                   line=line, block=block, labels=names,
+                                                   semantic=kind, terminal=terminal))
+                    continue
+                raw = encode_statement(statement, None, symbols, assembly.labels,
+                                       references=references, layout_references=relative)
+                if relative:
+                    raise ValueError("legacy script-byte operands require re-decompilation into standalone semantic operations")
+                if raw != b"\xfe" and instruction_dependencies(decode_instruction(raw, 0)):
+                    raise ValueError("this native opcode requires its standalone semantic operation, not a neighboring-byte encoding")
                 if raw != b"\xfe" and any(offset not in references for offset in address_operand_offsets(decode_instruction(raw, 0))):
                     raise ValueError("raw address operands require symbolic label arguments")
-                record = Record(None, raw, references=references, line=line, block=block, labels=names, alternate=alternate)
+                # The codec derives physical relationships from script.* reads
+                # and named continuations. No user-authored layout is needed.
+                record = Record(None, raw, references=references, line=line, block=block,
+                                labels=names, alternate=alternate, relative=relative)
                 if raw[0] == 0xA6 and index not in dispatches and not statement.startswith("raw("):
                     raise ValueError("dispatch_triplet_table requires an explicit case list")
                 if raw != b"\xfe" and _alternate(decode_instruction(raw, 0)) and alternate is None:
@@ -708,7 +806,7 @@ def compile_source(text: str) -> Assembly:
         if any(record.kind == "edge" and record.line for record in body[:-1]):
             raise ValueError(f"block {name}: fallthrough must be its last statement")
         last = body[-1]
-        if last.kind != "edge" and last.jump_target is None and last.raw[0] not in PRIMARY_TERMINALS | {0x01}:
+        if last.kind != "edge" and not last.terminal and last.jump_target is None and last.raw[0] not in PRIMARY_TERMINALS | {0x01}:
             if name not in unreachable_blocks:
                 raise ValueError(f"block {name}: add stop, return, goto or an explicit fallthrough")
     # New or deliberately unbound events have a defined empty implementation.
@@ -724,7 +822,7 @@ def compile_source(text: str) -> Assembly:
             if target not in assembly.labels:
                 raise ValueError(f"entity {entity}, routine {index}: unresolved label {target}")
     for record in assembly.records:
-        for target in (*record.references.values(), record.alternate, record.jump_target):
+        for target in (*record.references.values(), *record.relative.values(), record.alternate, record.jump_target):
             if target is not None and target not in assembly.labels:
                 raise ValueError(f"line {record.line}: unresolved label {target}")
     for name, (base, _) in assembly.aliases.items():
@@ -735,4 +833,6 @@ def compile_source(text: str) -> Assembly:
     assembly.link_report["source_stage"] = "clean"
     assembly.link_report["grouped_source"] = "program" not in seen_sections
     assembly.link_report["unreachable_assertions"] = sorted(unreachable_blocks)
+    for site, record in enumerate(assembly.records):
+        record.site = site
     return assembly

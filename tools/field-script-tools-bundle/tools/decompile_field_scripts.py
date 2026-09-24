@@ -13,7 +13,7 @@ from pathlib import Path
 TABLE_PATH = Path(__file__).with_name("field_opcode_table.json")
 TABLE_SCHEMA = "xenogears-field-opcodes/v1"
 
-PRIMARY_TERMINALS = {0x00, 0x04, 0x0D, 0x5B, 0xD1, 0xE4}
+PRIMARY_TERMINALS = {0x00, 0x04, 0x0D, 0x5B, 0x92, 0xD1, 0xE4}
 PRIMARY_UNCONDITIONAL_JUMPS = {0x01}
 PRIMARY_CALLS = {0x05, 0x06}
 PRIMARY_CONDITIONAL_CALLS = {0x0A, 0xCC}
@@ -158,6 +158,13 @@ OUTPUT_VARIABLES = {
         (11, "camera_orbit_position_z"),
         (13, "camera_orbit_position_y"),
     ),
+    # 800915C4 reads selector +1, writes all three selected camera-vector
+    # components through FUN_800A3074 to destination words +2/+4/+6.
+    (0xED, None): (
+        (2, "camera_parameter_x"),
+        (4, "camera_parameter_z"),
+        (6, "camera_parameter_y"),
+    ),
     (0xF0, None): (
         (1, "camera_yaw"),
         (3, "camera_projection_dip"),
@@ -173,6 +180,12 @@ OUTPUT_VARIABLES = {
     (0xFE, 0x29): ((2, "actor_flags_2"),),
     (0xFE, 0x2A): ((2, "actor_flags_3"),),
     (0xFE, 0x2B): ((2, "actor_flags_4"),),
+    # 8008DEBC..8008E054 use this SAME word as a VM destination and use
+    # its low byte as an actor selector. There is no separate actor field.
+    (0xFE, 0x2C): ((2, "target_actor_flags_1"),),
+    (0xFE, 0x2D): ((2, "target_actor_flags_2"),),
+    (0xFE, 0x2E): ((2, "target_actor_flags_3"),),
+    (0xFE, 0x2F): ((2, "target_actor_flags_4"),),
     (0xFE, 0x38): ((2, "actor_distance"),),
     (0xFE, 0x69): ((2, "party_progress_total"),),
     (0xFE, 0x71): ((2, "current_actor_rotation_angle"),),
@@ -236,7 +249,6 @@ IMPLICIT_OUTPUT_VARIABLES = {
     (0x98, None): ((0x0002, "map_entry_point"),),
     (0x9C, None): ((0x0014, "dialogue_choice_line"),),
     (0xEA, None): ((0x0002, "map_entry_point"),),
-    (0xFE, 0x56): ((0x0002, "menu_selection"),),
     (0xFE, 0x84): ((0x0002, "map_entry_point"),),
     (0xFE, 0xCF): ((0x0002, "map_entry_point"),),
 }
@@ -289,6 +301,10 @@ def instruction_size(bytecode: bytes, pc: int) -> tuple[int, int | None, dict]:
             if pc + 2 > len(bytecode):
                 raise ValueError("truncated MoveActorToPosition mode")
             return (9 if bytecode[pc + 1] == 0 else 2), None, record
+        if opcode == 0x11:
+            if pc + 2 > len(bytecode):
+                raise ValueError("truncated bounded movement phase")
+            return (9 if bytecode[pc + 1] == 0 else 4), None, record
         if opcode == 0x57:
             if pc + 2 > len(bytecode):
                 raise ValueError("truncated ContinueBallisticActorMove mode")
@@ -296,7 +312,7 @@ def instruction_size(bytecode: bytes, pc: int) -> tuple[int, int | None, dict]:
         if opcode == 0x73:
             if pc + 2 > len(bytecode):
                 raise ValueError("truncated InitializeParticleSystemCommand mode")
-            return (2 if bytecode[pc + 1] == 0 else 8), None, record
+            return (8 if bytecode[pc + 1] == 1 else 2), None, record
         return _fixed_size(record), None, record
 
     if pc + 2 > len(bytecode):
@@ -307,6 +323,15 @@ def instruction_size(bytecode: bytes, pc: int) -> tuple[int, int | None, dict]:
     extended = EXTENDED[subopcode]
     if subopcode == 0x00 or 0x78 <= subopcode <= 0x7E:
         return 1, subopcode, extended
+    if subopcode == 0x18:
+        # The staged-character path consumes FE, subcode and character byte.
+        # The already-present path skips two additional code bytes (+5),
+        # not two additional parameters. Keep that as an alternate successor.
+        return 3, subopcode, extended
+    if subopcode == 0xC2:
+        # 80088674 reads words at FE-relative +2,+4,+6,+8 and advances
+        # nine bytes beyond the prefix. Older inventories listed five bytes.
+        return 10, subopcode, extended
     if subopcode in {0x27, 0x5C, 0x77, 0xB0, 0xD4, 0xDD}:
         if pc + 3 > len(bytecode):
             raise ValueError(f"truncated {extended['name']} mode")
@@ -314,7 +339,7 @@ def instruction_size(bytecode: bytes, pc: int) -> tuple[int, int | None, dict]:
         if subopcode == 0x27:
             size = 5 if mode == 0 else 3
         elif subopcode == 0x5C:
-            size = 5 if mode == 2 else 3
+            size = 5 if mode == 2 else 4 if mode > 2 else 3
         elif subopcode == 0x77:
             size = 12 if mode == 1 else 3
         elif subopcode == 0xB0:
@@ -374,13 +399,15 @@ def decode_instruction(bytecode: bytes, pc: int) -> Instruction:
             successors.append(pc + size + 3 * (count & 0x7FFF))
     elif subopcode is None and opcode in PRIMARY_UNCONDITIONAL_JUMPS:
         successors.extend(targets)
-    elif subopcode is None and opcode in PRIMARY_TERMINALS:
+    elif subopcode is None and (opcode in PRIMARY_TERMINALS or (opcode == 0x73 and bytecode[pc + 1] > 1)):
         pass
     else:
         if fallthrough < len(bytecode):
             successors.append(fallthrough)
         if target is not None and target not in successors:
             successors.append(target)
+        if subopcode == 0x18 and pc + 5 < len(bytecode):
+            successors.append(pc + 5)
     return Instruction(
         pc=pc,
         opcode=opcode,
@@ -456,7 +483,11 @@ def _arrival_records_from_entries(
 
 
 def analyze_bytecode(bytecode: bytes, metadata: dict) -> dict:
+    from field_semantic_ops import recover_lowerings, script_images
+
     entries = _entry_map(metadata)
+    images = {body: span for body, span in script_images(bytecode).items()
+              if not any(span[0] <= entry < span[1] for entry in entries)}
     seeds = set(entries)
     if metadata["arrival_table_marker_present"]:
         seeds.discard(0)
@@ -467,8 +498,13 @@ def analyze_bytecode(bytecode: bytes, metadata: dict) -> dict:
     diagnostics = []
     computed_successors: dict[int, tuple[int, ...]] = {}
     landing_data = {}
+    semantic_branches = {}
+    semantic_hidden = []
+    interior_terminals = {}
     alignments = {}
     reserved = set()
+    for start, end in images.values():
+        reserved.update(range(start, end))
 
     while queue:
         pc = queue.popleft()
@@ -481,6 +517,14 @@ def analyze_bytecode(bytecode: bytes, metadata: dict) -> dict:
             continue
         owner = occupied.get(pc)
         if owner is not None and owner != pc:
+            # A VM entry may deliberately share a byte with another operation's
+            # operand. A single-byte terminal has a complete independent meaning
+            # and can be cloned into source without preserving that byte alias.
+            if bytecode[pc] in PRIMARY_TERMINALS:
+                interior = decode_instruction(bytecode, pc)
+                if interior.size == 1 and interior.subopcode is None:
+                    interior_terminals[pc] = interior
+                    continue
             diagnostics.append(
                 f"target 0x{pc:04X} enters instruction at 0x{owner:04X}"
             )
@@ -515,6 +559,15 @@ def analyze_bytecode(bytecode: bytes, metadata: dict) -> dict:
                 alignments[alternate] = (256, f"L_{normal:04X}")
                 labels.update((normal, alternate))
                 instruction = replace(instruction, successors=(normal, alternate))
+        if instruction.subopcode == 0x18 and pc + 11 <= len(bytecode):
+            gate = bytecode[pc + 3:pc + 11]
+            if gate[0] == 2 and gate[2] == 1 and gate[5] == 0xC0 and _u16(gate, 1) != _u16(gate, 3):
+                staged, present = _u16(gate, 6), _u16(gate, 3)
+                if staged < len(bytecode) and present < len(bytecode):
+                    semantic_branches[pc] = (staged, present)
+                    semantic_hidden.append((pc + 3, pc + 11))
+                    reserved.update(range(pc + 3, pc + 11))
+                    instruction = replace(instruction, successors=(staged, present), targets=(staged, present))
         instructions[pc] = instruction
         for position in range(pc, pc + instruction.size):
             occupied[position] = pc
@@ -543,6 +596,9 @@ def analyze_bytecode(bytecode: bytes, metadata: dict) -> dict:
                     table_pc += 3
                 computed_successors[pc] = tuple(table_entries)
 
+    recovered_lowerings = recover_lowerings(bytecode, instructions, entries)
+    for root, (_, end, _) in recovered_lowerings.items():
+        reserved.update(range(root, end))
     arrivals = _arrival_records_from_entries(bytecode, entries, metadata)
     arrival_end = 0
     if metadata["arrival_table_marker_present"] and arrivals is not None:
@@ -558,7 +614,9 @@ def analyze_bytecode(bytecode: bytes, metadata: dict) -> dict:
             elif not is_data and start is not None:
                 ranges.append((start, position))
                 start = None
-        boundaries = sorted({point for start in landing_data for point in (start, start + 4)})
+        boundaries = sorted({point for start in landing_data for point in (start, start + 4)}
+                            | {point for span in semantic_hidden + list(images.values()) for point in span}
+                            | {point for root, (_, end, _) in recovered_lowerings.items() for point in (root, end)})
         split = []
         for start, end in ranges:
             points = [start] + [point for point in boundaries if start < point < end] + [end]
@@ -569,7 +627,7 @@ def analyze_bytecode(bytecode: bytes, metadata: dict) -> dict:
     candidate_regions = []
     for range_start, range_end in uncovered_ranges():
         range_start = max(range_start, arrival_end)
-        if range_start in landing_data:
+        if range_start in landing_data or range_start in reserved:
             continue
         if range_end - range_start < 3:
             continue
@@ -644,6 +702,10 @@ def analyze_bytecode(bytecode: bytes, metadata: dict) -> dict:
         payload = bytecode[range_start:range_end]
         if range_start in landing_data:
             classification = "dual_landing"
+        elif any(start <= range_start < end for start, end in semantic_hidden):
+            classification = "native_semantic_data"
+        elif range_start in reserved:
+            classification = "script_image"
         elif range_start < arrival_end and range_end <= arrival_end:
             classification = "arrival_table"
         elif payload and not any(payload):
@@ -677,6 +739,12 @@ def analyze_bytecode(bytecode: bytes, metadata: dict) -> dict:
     data_bytes = sum(region["size"] for region in data_regions)
     classified_bytes = len(occupied) + data_bytes
     return {
+        "bytecode": bytecode,
+        "semantic_branches": semantic_branches,
+        "semantic_hidden": semantic_hidden,
+        "interior_terminals": interior_terminals,
+        "script_images": images,
+        "recovered_lowerings": recovered_lowerings,
         "instructions": instructions,
         "entries": entries,
         "labels": labels,
@@ -714,8 +782,8 @@ def _encoded_outputs(instruction: Instruction) -> tuple[tuple[int, str], ...]:
     return outputs
 
 
-def _instruction_variable_references(instruction: Instruction) -> list[VariableReference]:
-    from field_instruction_codec import EVALUATED_OPERATION_INPUTS
+def _instruction_variable_references(instruction: Instruction, bytecode: bytes | None = None) -> list[VariableReference]:
+    from field_instruction_codec import EVALUATED_OPERATION_INPUTS, MASKED_EXTENDED_WORDS, PRIMARY_INPUT_SCHEMAS
 
     raw = instruction.raw
     opcode = instruction.opcode
@@ -739,7 +807,7 @@ def _instruction_variable_references(instruction: Instruction) -> list[VariableR
             )
         )
 
-    if instruction.subopcode is None and opcode == 0x02:
+    if instruction.subopcode is None and opcode == 0x02 and not raw[5] & 0x30:
         control = raw[5]
         if not control & 0x80:
             references.append(VariableReference(_u16(raw, 1), "event_condition", "conditional read"))
@@ -780,6 +848,57 @@ def _instruction_variable_references(instruction: Instruction) -> list[VariableR
                 f"opcode {instruction.name} packed destination",
             )
         )
+    elif instruction.subopcode == 0x1C:
+        for offset, mask, role in ((2, 0x80, "actor_position_x"),
+                                    (4, 0x40, "actor_position_z"),
+                                    (6, 0x20, "actor_position_y")):
+            if not raw[8] & mask:
+                references.append(VariableReference(_u16(raw, offset), role,
+                                                    "opcode SetActorPosition3DImmediate input"))
+    elif instruction.subopcode in {0x0F, 0x11}:
+        effect = "music_pitch" if instruction.subopcode == 0x0F else "music_pan"
+        for offset, mask, role in ((2, 0x80, f"{effect}_target"),
+                                    (4, 0x40, "music_fade_duration")):
+            if not raw[6] & mask:
+                references.append(VariableReference(_u16(raw, offset), role,
+                                                    f"opcode {instruction.name} input"))
+    elif instruction.subopcode in MASKED_EXTENDED_WORDS:
+        for offset, role, control, mask in MASKED_EXTENDED_WORDS[instruction.subopcode]:
+            if not raw[control] & mask:
+                references.append(VariableReference(_u16(raw, offset), role,
+                                                    f"opcode {instruction.name} masked input"))
+    elif instruction.subopcode == 0x74:
+        references.append(VariableReference(_u16(raw, 2), "debug_variable",
+                                            "opcode DebugPrintVariableHexAndDecimal direct input"))
+    elif instruction.subopcode == 0x77 and len(raw) == 12:
+        for offset, mask, role in ((5, 0x40, "image_upload_x"),
+                                    (7, 0x20, "image_upload_y"),
+                                    (9, 0x10, "image_upload_placement")):
+            if not raw[11] & mask:
+                references.append(VariableReference(_u16(raw, offset), role,
+                                                    "opcode ManageOverlayImageAsset input"))
+
+    # The primary table is derived from the overlay's operand-reader calls.
+    # A trailing mask is not a VM slot; only words whose immediate bit is clear
+    # refer to declared state. Mode-dependent short encodings omit their words.
+    if instruction.subopcode is None:
+        for kind, offset, role, control, mask in PRIMARY_INPUT_SCHEMAS.get(opcode, ()):
+            if opcode in {0x10, 0x11} and raw[1] != 0:
+                continue  # Continuations reread their predecessor's operands.
+            if opcode == 0x73 and (raw[1] != 1 or offset in {2, 6}):
+                continue  # Evaluated but discarded by the mode-1 handler.
+            if offset + 2 > len(raw) or kind not in {"v80", "masked", "packedvar"}:
+                continue
+            value = _u16(raw, offset)
+            if kind == "packedvar":
+                value >>= 4
+            elif kind == "v80" and value & 0x8000:
+                continue
+            elif kind == "masked" and (control >= len(raw) or raw[control] & mask):
+                continue
+            if not any(reference.offset == value and reference.role == role for reference in references):
+                references.append(VariableReference(value, role,
+                                                    f"opcode {instruction.name} input"))
 
     v80_operands = list(EVALUATED_OPERATION_INPUTS.get(output_key, ()))
     if instruction.subopcode is None and opcode in {0x16, 0x5C}:
@@ -796,7 +915,7 @@ def _instruction_variable_references(instruction: Instruction) -> list[VariableR
         v80_operands.append((3, "random_maximum"))
     elif instruction.subopcode == 0x0D:
         v80_operands.append((2, "dialogue_portrait_character"))
-    elif instruction.subopcode == 0x56:
+    elif instruction.subopcode == 0x56 and output_key not in EVALUATED_OPERATION_INPUTS:
         v80_operands.append((2, "menu_selection"))
     elif instruction.subopcode == 0x69:
         v80_operands.append((4, "character_selector"))
@@ -804,11 +923,53 @@ def _instruction_variable_references(instruction: Instruction) -> list[VariableR
         v80_operands.append((6, "party_slot"))
     elif instruction.subopcode == 0xC7:
         v80_operands.append((2, "actor_selector"))
+    elif instruction.subopcode == 0xD3:
+        v80_operands.extend((offset, f"ratio_operand_{index}")
+                            for index, offset in enumerate(range(2, 14, 2), 1))
     for offset, role in v80_operands:
+        if offset + 1 >= len(raw):
+            continue  # Mode-dependent short FE forms omit their longer operands.
         value = _u16(raw, offset)
         if not value & 0x8000:
             references.append(VariableReference(value, role, f"opcode {instruction.name} input"))
 
+    if bytecode is not None:
+        external = []
+        sub = instruction.subopcode
+        if sub == 0x5C and raw[2] == 1:
+            external = [(6, None, 0, "mecha_resource")]
+        elif sub == 0x5C and raw[2] > 2:
+            external = [(2, None, 0, "party_slot_after_mecha_mode")]
+        elif sub == 0x77 and raw[2] == 0:
+            external = [(6, 14, 0x80, "image_resource")]
+        elif sub == 0xD7:
+            external = [(2, 10, 0x80, "world_marker_x"), (4, 10, 0x40, "world_marker_z")]
+        elif sub is None and opcode == 0x57 and len(raw) == 2 and raw[1] != 15:
+            external = [(-9, -1, 0x80, "ballistic_x"), (-7, -1, 0x40, "ballistic_z"),
+                        (-5, -1, 0x20, "ballistic_y")]
+        elif sub is None and opcode in {0x10, 0x11}:
+            if raw[1] != 0:
+                external.extend([(-7, -1, 0x80, "movement_x"), (-5, -1, 0x40, "movement_z"),
+                                 (-3, -1, 0x20, "movement_y")])
+            if opcode == 0x11:
+                offset = 11
+                if instruction.pc + 13 > len(bytecode) and raw[1] != 0 and bytecode[instruction.pc - 9:instruction.pc - 7] == b"\x11\0":
+                    offset = 2
+                external.append((offset, None, 0, "movement_step_limit"))
+        for offset, control, mask, role in external:
+            at = instruction.pc + offset
+            if not 0 <= at < len(bytecode) - 1:
+                continue
+            value = _u16(bytecode, at)
+            if control is None:
+                immediate = bool(value & 0x8000)
+            else:
+                control_at = instruction.pc + control
+                if not 0 <= control_at < len(bytecode):
+                    continue
+                immediate = bool(bytecode[control_at] & mask)
+            if not immediate:
+                references.append(VariableReference(value, role, f"opcode {instruction.name} shared-byte input"))
     return references
 
 
@@ -816,7 +977,7 @@ def build_variable_symbols(analysis: dict, metadata: dict) -> dict[int, Variable
     references: dict[int, list[VariableReference]] = {}
     reference_pcs: dict[int, set[int]] = {}
     for instruction in analysis["instructions"].values():
-        for reference in _instruction_variable_references(instruction):
+        for reference in _instruction_variable_references(instruction, analysis.get("bytecode")):
             references.setdefault(reference.offset, []).append(reference)
             reference_pcs.setdefault(reference.offset, set()).add(instruction.pc)
 
@@ -974,10 +1135,14 @@ def operation_namespace(name: str) -> str:
         ("world", ("field", "encounter", "compass", "trigger", "scene", "map")),
         ("state", ("variable", "flag", "random")),
     )
-    return next(
-        (category for category, terms in categories if any(term in lowered for term in terms)),
-        "event",
-    )
+    # This hot path is called for every candidate instruction form. Avoid
+    # nested generator frames: the system CPython 3.14 build exhibited invalid
+    # closure-cell accesses and interpreter aborts here during corpus runs.
+    for category, terms in categories:
+        for term in terms:
+            if term in lowered:
+                return category
+    return "event"
 
 
 def operation_dsl_name(name: str) -> str:
@@ -1007,7 +1172,7 @@ def _arrival_records(bytecode: bytes, analysis: dict, metadata: dict) -> list[di
     return _arrival_records_from_entries(bytecode, analysis["entries"], metadata)
 
 
-def _routine_lines(row: dict) -> list[str]:
+def _routine_lines(row: dict, *, trace_entries: bool = False) -> list[str]:
     role_names = {0: "initialize", 1: "update", 2: "interact", 3: "contact"}
     offsets = row["routine_offsets"]
     lines = []
@@ -1015,6 +1180,7 @@ def _routine_lines(row: dict) -> list[str]:
         role = role_names[routine_id]
         lines.append(
             f"        {role:<14} -> {_label(int(offsets[routine_id], 16))};"
+            + (f" // entry: {int(offsets[routine_id], 16):04X}" if trace_entries else "")
         )
     start = 4
     while start < len(offsets):
@@ -1025,6 +1191,7 @@ def _routine_lines(row: dict) -> list[str]:
         selector = f"routine[{selector}]"
         lines.append(
             f"        {selector:<14} -> {_label(int(offsets[start], 16))};"
+            + (f" // entry: {int(offsets[start], 16):04X}" if trace_entries else "")
         )
         start = end + 1
     return lines
@@ -1128,6 +1295,13 @@ def _render_code_lines(
 
 
 def render_high_level_script(field_id: int, scripts_file: bytes, metadata: dict) -> tuple[str, dict]:
+    """Use the same clean XGS format as the extractor and the command-line tool."""
+    from editable_field_scripts import render_source
+
+    return render_source(field_id, scripts_file, metadata)
+
+
+def _render_legacy_high_level_script(field_id: int, scripts_file: bytes, metadata: dict) -> tuple[str, dict]:
     bytecode = scripts_file[metadata["bytecode_offset"] :]
     analysis = analyze_bytecode(bytecode, metadata)
     symbols = build_variable_symbols(analysis, metadata)

@@ -7,14 +7,16 @@ use only the standard library. Pytest is needed only for the test suite.
 
 ```bash
 python3 tools/field_script.py decompile /path/to/scripts.bin \
-  --field 7 --xgs script.xgs --xga script.xga
+  --field 7 --xgs script.xgs
 
 # Edit script.xgs, then compile that file:
 python3 tools/field_script.py compile script.xgs \
   --output scripts.modified.bin --xga script.modified.xga --map script.map.json
 ```
 
-`--xga` and `--map` are optional diagnostic outputs.
+`--xga` and `--map` are optional outputs. `decompile --xgs script.xgs` produces
+only XGS. Compilation never discovers or reads a sibling XGA or original binary;
+the XGS source contains all semantic operands and any required lookup data.
 
 The source groups each entity's events and `code` together. Shared instructions
 appear once under `shared_code`; preserved bytes appear in named objects under
@@ -43,10 +45,10 @@ not move the entry onto the inserted code.
 flow.sleep(30); // 01A5: 26 1E 80
 ```
 
-Byte traces describe the original input, not necessarily the result after an
-edit. Event comments summarize original entry aliases. Both are informational;
-the compiler ignores comments. Handler descriptions are documented in the
-operation catalog rather than repeated in generated scripts.
+The compiler ignores all `//` comments, including byte traces, checksums,
+entry offsets and `view` markers. Removing or changing them produces the same
+binary. Operands, event bindings and layout come only from code, through the same
+instruction selection and layout checks before and after edits.
 
 ## 2. Variables, Entities And Events
 
@@ -149,15 +151,22 @@ Generic operands without a verified typed schema remain encoded byte values
 (`0..255`). The byte `80` is not universally a separate argument: for example,
 `21 10 80` is a tagged immediate and renders as movement speed `16`.
 
-Behavior-neutral encodings are normalized where verified. The variable-operation
+Behavior-neutral fields are retained in the lossless source. The variable-operation
 family `35`, `38`, `39`, `3A`, `3B`, `3E`, `3F`, `40`, `DE`, `DF` observes only
 control bit `0x40`. Differences in the other control bits do not force `raw`.
-This means XGS recompilation can differ in those bits while preserving behavior.
-The original bytes remain in the trace; use XGA for strict byte identity.
+The complete function forms expose the remaining bits as `reserved_flags`.
+Skipped words similarly use typed `reserved` arguments. These are source format
+fields, not extra gameplay effects. The current code-only pass rebuilds all
+729/729 resources byte-identically; XGA remains independently lossless.
+See [validation evidence](RELOCATION_EVIDENCE.md).
 
-An encoding with no verified semantic equivalent uses `raw("...");`. Its size
-must still match an instruction. Address-bearing raw instructions take symbolic
-labels after the bytes, for example `raw("01 00 00", destination);`.
+Distinct instruction spellings retain dispatch aliases and movement phases.
+Shared script-byte readers receive real arguments; private native operand data
+and routing are constructed by the compiler. No encoding/layout annotations or
+external provenance are required. See
+[`SHARED_SCRIPT_BYTES.md`](SHARED_SCRIPT_BYTES.md) for their editing rules.
+The low-level `raw("01 00 00", destination);` escape is still accepted in
+existing sources, including symbolic operands for address-bearing instructions.
 
 The compiler checks structure, references and encoded ranges. It cannot prove
 that a new event implements the intended gameplay or uses suitable external
@@ -241,17 +250,18 @@ python3 tools/field_script.py regenerate extracted-field-scripts
 # Focused maintenance of generated sources, without full compilation:
 python3 tools/field_script.py regenerate extracted-field-scripts --comments-only
 python3 tools/field_script.py regenerate extracted-field-scripts --layout-only
-python3 tools/field_script.py regenerate extracted-field-scripts --simplify-raw
 
 # Fast unit suite:
 python3 -m pytest tests -q
 ```
 
-Full regeneration validates each generated source against its original binary,
-allowing only the verified neutral instruction differences described above.
-The maintenance flags refresh traces/events, entity grouping, or known raw
-variants respectively; they are for generated sources matching the original
-assets, not a substitute for compiling authored modifications.
+Full regeneration compiles each generated source and validates native structure.
+The strict corpus runner additionally requires exact original bytes for unedited
+source. Edited source may use a new layout and compiler-owned operand data.
+The maintenance flags refresh traces/events or entity grouping. Trace refresh
+compares the semantic source tokens with a fresh rendering and refuses to discard
+edits. Older formats must be re-decompiled from the current binary. These commands
+are not a substitute for compiling authored modifications.
 
 `verify` is an **explicit, potentially lengthy regression run**, not a normal
 editing step:
@@ -259,9 +269,12 @@ editing step:
 ```bash
 python3 tools/field_script.py verify extracted-field-scripts
 python3 tools/field_script.py verify extracted-field-scripts --repack --resize
+python3 tools/validate_field_script_corpus.py extracted-field-scripts \
+  --output /path/to/new-report --workers 4 --require-exact
 ```
 
-It checks the unique corpus resources, lossless XGA, semantic XGS reconstruction
-and LZSS. `--repack` reads the disc paths in the manifest; `--resize` additionally
-exercises insertion and relocation. Use these for tool development or broad
+It checks every unique resource for byte-exact unedited XGA/XGS reconstruction,
+validates linked output and checks LZSS. It does not prove gameplay equivalence. `--repack` reads disc paths in
+the manifest; `--resize` inserts source-level NOPs before native lowering, keeping
+the compiler's private data out of that edit. Use these for tool development or broad
 regression checks, rather than after each small script edit.

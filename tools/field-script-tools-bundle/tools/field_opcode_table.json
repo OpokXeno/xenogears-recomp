@@ -108,10 +108,10 @@
       "behavior": "initializes unrestricted interpolated actor movement."
     },
     "11": {
-      "bytes": "13",
+      "bytes": "4 or 9",
       "handler": "0x80098C3C",
       "name": "MoveActorToPositionWithLimit",
-      "behavior": "initializes bounded interpolated actor movement."
+      "behavior": "phase zero initializes bounded interpolated movement and advances nine bytes; nonzero phases continue it, reread coordinates nine bytes earlier on completion, and resume four bytes after the continuation. The wrapper reads a limit at current IP+11 when its counter is uninitialized."
     },
     "12": {
       "bytes": "9",
@@ -207,7 +207,7 @@
       "bytes": "3",
       "handler": "0x8009E094",
       "name": "SetActorMovementSpeed",
-      "behavior": "writes the evaluated speed to ActorData+0x76, propagates it to the actor's bound field entity, and advances three bytecode bytes."
+      "behavior": "writes the evaluated speed to SceneActorRecord+0x76, propagates it to the actor's bound field entity, and advances three bytecode bytes."
     },
     "22": {
       "bytes": "1",
@@ -885,7 +885,7 @@
       "bytes": "1",
       "handler": "0x800A19B0",
       "name": "InitializeActorScripts",
-      "behavior": "resets all actor script slots."
+      "behavior": "clears and disables all eight script slots of the current actor, resets scheduler state and yields without advancing the instruction pointer; there is no fallthrough to the next byte."
     },
     "93": {
       "bytes": "3",
@@ -1383,7 +1383,7 @@
       "bytes": "17",
       "handler": "0x80091944",
       "name": "ConfigureFog",
-      "behavior": "stores near and far RGB colors plus near and far fog distances, enables fog, applies the new configuration, and advances seventeen bytes."
+      "behavior": "stores the base depth-cue RGB color, far-fog RGB color, and near/far fog distances, enables fog, applies the new configuration, and advances seventeen bytes."
     },
     "E6": {
       "bytes": "9",
@@ -1688,10 +1688,10 @@
       "behavior": "turns the first selected actor toward the second selected actor when both are valid."
     },
     "18": {
-      "bytes": "5",
+      "bytes": "3",
       "handler": "0x8008BDD8",
       "name": "AddImmediatePartyCharacter",
-      "behavior": "reserves a staging slot and begins loading an immediate party character, or marks an already staged character as present."
+      "behavior": "reserves a staging slot and begins loading an immediate party character, or marks an already staged character as present. The staged path resumes at FE-relative +3; the already-present path skips two subsequent code bytes and resumes at +5. Those bytes are not parameters."
     },
     "19": {
       "bytes": "3",
@@ -2063,7 +2063,7 @@
       "bytes": "4",
       "handler": "0x80093930",
       "name": "OpenMenuMode1WithSelection",
-      "behavior": "copies the evaluated selection into script variable 1 and persistent menu state, queues menu mode 1, yields, and advances three bytes."
+      "behavior": "copies the evaluated selection into menu/game-state fields, queues menu mode 1, yields, and advances three bytes; it does not write an encoded or fixed VM output slot."
     },
     "57": {
       "bytes": "2",
@@ -2096,10 +2096,10 @@
       "behavior": "sets the current actor's model-specific angular rotation step."
     },
     "5C": {
-      "bytes": "3 or 5",
+      "bytes": "3, 4 or 5",
       "handler": "0x800A0FD8",
       "name": "LoadCurrentActorMecha",
-      "behavior": "waits for I/O, hides or frees the indexed mecha, asynchronously loads replacement files, then constructs and binds the replacement with the actor's scale and position."
+      "behavior": "waits for I/O, hides or frees the indexed mecha, asynchronously loads replacement files, then constructs and binds the replacement with the actor's scale and position. Mode 1 reads its resource word at FE-relative +6. Unsupported modes return at the subopcode and execute primary 5C, giving the combined escape a four-byte footprint."
     },
     "5D": {
       "bytes": "8",
@@ -2195,7 +2195,7 @@
       "bytes": "2",
       "handler": "0x8008A5A0",
       "name": "ClearControllerEnableFlag",
-      "behavior": "clears the controller enable byte when the operand is zero, then advances one byte."
+      "behavior": "tests the byte immediately after this two-byte instruction and clears controller enable when it is zero; advances one byte after the FE prefix, leaving the tested byte for subsequent dispatch."
     },
     "6D": {
       "bytes": "2",
@@ -2261,7 +2261,7 @@
       "bytes": "3 or 12",
       "handler": "0x8008A2E8",
       "name": "ManageOverlayImageAsset",
-      "behavior": "waits for archive I/O, then loads an indexed image into memory, uploads it with optional VRAM backup, or releases it according to the mode, and stops the current VM cycle."
+      "behavior": "waits for archive I/O, then loads an indexed image into memory, uploads it with optional VRAM backup, or releases it according to the mode, and stops the current VM cycle. In short mode 0 it reads a control byte beyond the three-byte encoding; preserve the neighboring bytes."
     },
     "78": {
       "bytes": "fallback",
@@ -2708,10 +2708,10 @@
       "behavior": "resolves a party actor, writes its sprite-animation status and actor index to script variables, clears nonterminal status values, adds four VM cycles, and advances seven bytes."
     },
     "C2": {
-      "bytes": "5",
+      "bytes": "10",
       "handler": "0x80088674",
       "name": "ResetParticleConfigImmediateActor",
-      "behavior": "selects an immediate actor with zero fallback, stores three particle modifiers, resets its default particle banks, normalizes mode values 1 through 3 to 0x10 through 0x30, adds four VM cycles, and advances nine bytes."
+      "behavior": "resolves an evaluated actor selector with zero fallback, stores three evaluated particle modifiers, resets its default particle banks, normalizes mode values 1 through 3 to 0x10 through 0x30, adds four VM cycles, and advances nine bytes after the FE prefix."
     },
     "C3": {
       "bytes": "2",
@@ -2837,7 +2837,7 @@
       "bytes": "7",
       "handler": "0x80087AB8",
       "name": "SetWorldMapMarkerPositionXZ",
-      "behavior": "writes evaluated X and Z coordinates into the saved world-map marker position, clears Y and padding, marks the position valid, and advances six bytes."
+      "behavior": "writes X and Z coordinates into the saved world-map marker position, clears Y and padding, marks the position valid, and advances six bytes after FE. Its masked readers use a control byte at FE-relative +10, beyond the declared seven-byte encoding; preserve the neighboring bytes."
     },
     "D8": {
       "bytes": "3",

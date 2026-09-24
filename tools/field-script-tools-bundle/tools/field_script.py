@@ -6,12 +6,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import struct
 from pathlib import Path
 
-from compile_field_scripts import Record, compile_xgs, disassemble, parse_assembly
-from decompile_field_scripts import address_operand_offsets, decode_instruction
-from editable_field_scripts import equivalent_scripts, group_source_by_entity, render_source, restore_source_comments
+from compile_field_scripts import compile_xgs, disassemble, parse_assembly
+from editable_field_scripts import group_source_by_entity, render_source, restore_source_comments
 from extract_disc_field_scripts import parse_scripts_file, write_if_changed
 from repack_field_scripts import lzss_compress, read_field_container, repack_container, write_override
 
@@ -46,14 +44,17 @@ def verify_corpus(root: Path, *, repack: bool = False, resize: bool = False) -> 
             metadata = parse_scripts_file(scripts)
             occurrence = resource["occurrences"][0]
             field_id = occurrence["field_id"]
-            xga = disassemble(scripts).text()
+            original_assembly = disassemble(scripts)
+            xga = original_assembly.text()
             if parse_assembly(xga).build() != scripts:
                 raise ValueError("assembly round-trip differs")
             source, _ = render_source(field_id, scripts, metadata)
-            compiled = compile_xgs(source).build()
-            if not equivalent_scripts(compiled, scripts):
-                first = next((i for i, (left, right) in enumerate(zip(compiled, scripts)) if left != right), min(len(compiled), len(scripts)))
-                raise ValueError(f"DSL round-trip differs at ScriptsFile offset 0x{first:X}")
+            lowered = compile_xgs(source).link()
+            compiled = lowered.build("exact")
+            if compiled != scripts:
+                raise ValueError("unedited XGS does not reproduce the original binary exactly")
+            if parse_assembly(lowered.text()).build("exact") != compiled:
+                raise ValueError("lowered standalone DSL does not reproduce its linked assembly")
             compressed_bytes += len(lzss_compress(compiled))
             if repack:
                 disc = Path(manifest["discs"][occurrence["disc_index"]]["input_path"])
@@ -67,72 +68,45 @@ def verify_corpus(root: Path, *, repack: bool = False, resize: bool = False) -> 
                 inside_block = False
                 for line in source.splitlines():
                     stripped = line.split("//", 1)[0].strip()
-                    if stripped.startswith("block ") and stripped.endswith("{"):
+                    if stripped in {"code {", "shared_code {"} or (stripped.startswith("block ") and stripped.endswith("{")):
                         inside_block = True
                     elif stripped == "}":
                         inside_block = False
-                    if inside_block and stripped.endswith(";") and not stripped.startswith("fallthrough "):
+                    if inside_block and stripped.endswith(";") and not stripped.startswith("fallthrough ") and stripped != "unreachable;":
                         edited_lines.append("          nop;")
                         inserted_lines.add(len(edited_lines))
                     edited_lines.append(line)
                 original_ir = compile_xgs(source)
                 edited_ir = compile_xgs("\n".join(edited_lines))
                 def fingerprint(record):
-                    return (record.kind, record.raw, record.references, record.block, record.alternate, record.jump_target)
+                    return (record.kind, record.raw, record.references, record.block, record.alternate,
+                            record.jump_target, record.semantic, record.terminal)
                 before = [fingerprint(record) for record in original_ir.records]
                 after = [fingerprint(record) for record in edited_ir.records if record.line not in inserted_lines]
                 if before != after:
                     raise ValueError("source insertion changed an existing operation or reference")
                 source_linked = edited_ir.link()
                 source_resized = source_linked.build("exact")
-                if parse_assembly(source_linked.text()).build() != source_resized:
+                if parse_assembly(source_linked.text()).build("exact") != source_resized:
                     raise ValueError("edited source assembly round-trip differs")
                 if repack:
                     repack_container(container, source_resized, logical_size=logical_size)
                 source_resized_count += 1
-                expanded = disassemble(scripts)
-                old_records = list(expanded.records)
-                expanded.records = []
-                for record in old_records:
-                    if record.kind == "op":
-                        names = [name for name, pc in expanded.labels.items() if pc == record.pc]
-                        expanded.records.append(Record(None, b"\x13", block=record.block, labels=names))
-                        record.labels = []
-                    expanded.records.append(record)
-                linked = expanded.link()
-                resized = linked.build("exact")
-                new_code = resized[parse_scripts_file(resized)["bytecode_offset"]:]
-                mapping = {item["source"]: item["linked"] for item in linked.link_report["address_map"]}
-                for record in old_records:
-                    if record.kind != "op" or record.raw == b"\xfe":
-                        continue
-                    old = decode_instruction(record.raw, 0)
-                    new = decode_instruction(new_code, mapping[record.pc])
-                    addresses = {position for offset in address_operand_offsets(old) for position in (offset, offset + 1)}
-                    if old.opcode != new.opcode or any(a != b for i, (a, b) in enumerate(zip(old.raw, new.raw)) if i not in addresses):
-                        raise ValueError(f"resizing changed a non-address operand at 0x{record.pc:04X}")
-                    for offset, name in record.references.items():
-                        if struct.unpack_from("<H", new.raw, offset)[0] != linked.labels[name]:
-                            raise ValueError("resizing did not preserve a symbolic reference")
-                if parse_assembly(linked.text()).build() != resized:
-                    raise ValueError("resized assembly round-trip differs")
-                if repack:
-                    repack_container(container, resized, logical_size=logical_size)
                 resized_count += 1
-                resized_bytes += len(resized)
+                resized_bytes += len(source_resized)
             count += 1
             total += len(scripts)
             bytecode_bytes += metadata["bytecode_size"]
         except ValueError as error:
             raise ValueError(f"{path.name} (Field {resource['occurrences'][0]['field_id']}): {error}") from error
-    return {"resources": count, "scripts_file_bytes": total, "bytecode_bytes": bytecode_bytes, "lzss_bytes": compressed_bytes, "containers_repacked": count if repack else 0, "resized_resources": resized_count, "resized_scripts_bytes": resized_bytes, "edited_source_resources": source_resized_count}
+    return {"resources": count, "scripts_file_bytes": total, "bytecode_bytes": bytecode_bytes, "lzss_bytes": compressed_bytes, "containers_repacked": count if repack else 0, "resized_resources": resized_count, "resized_scripts_bytes": resized_bytes, "edited_source_resources": source_resized_count, "xgs_validation": "byte-exact unedited XGS; edited IR and linked assembly checks; not gameplay validation"}
 
 
-def regenerate_xgs(root: Path, *, comments_only: bool = False, layout_only: bool = False, simplify_raw: bool = False) -> dict:
+def regenerate_xgs(root: Path, *, comments_only: bool = False, layout_only: bool = False) -> dict:
     """Re-render catalog sources from extracted assets, checking each round trip.
 
-    Only script_path entries are rewritten. This deliberately avoids rebuilding
-    or deleting the catalog, so binary views and other catalog files survive.
+    Full regeneration writes standalone source. XGA remains an independent
+    lossless view, never an input to source compilation.
     """
     root = root.resolve()
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
@@ -161,20 +135,24 @@ def regenerate_xgs(root: Path, *, comments_only: bool = False, layout_only: bool
     resources = set()
     for entry, destination in work:
         scripts, metadata = assets[_catalog_digest(entry)]
+        companion = None
         if layout_only:
             text = group_source_by_entity(destination.read_text(encoding="utf-8"), scripts)
-        elif comments_only or simplify_raw:
-            text = restore_source_comments(destination.read_text(encoding="utf-8"), scripts, simplify_raw=simplify_raw)
+        elif comments_only:
+            text = restore_source_comments(destination.read_text(encoding="utf-8"), scripts)
         else:
+            companion = disassemble(scripts)
             text, _ = render_source(entry["field_id"], scripts, metadata)
-            if not equivalent_scripts(compile_xgs(text).build(), scripts):
-                raise ValueError(f"{entry['script_path']}: regenerated DSL round-trip differs")
+            if compile_xgs(text).build() != scripts:
+                raise ValueError(f"{entry['script_path']}: generated XGS is not byte-exact")
+        if companion is not None:
+            write_if_changed(destination.with_suffix(".xga"), companion.text().encode("utf-8"))
         content = text.encode("utf-8")
         write_if_changed(destination, content)
         if destination.read_bytes() != content:
             raise ValueError(f"{destination}: regenerated source write verification failed")
         resources.add(_catalog_digest(entry))
-    return {"regenerated_xgs": len(work), "verified_scripts": 0 if comments_only or layout_only or simplify_raw else len(work), "unique_resources": len(resources), **({"comments_only": True} if comments_only else {}), **({"layout_only": True} if layout_only else {}), **({"simplify_raw": True} if simplify_raw else {})}
+    return {"regenerated_xgs": len(work), "verified_scripts": 0 if comments_only or layout_only else len(work), "unique_resources": len(resources), **({"comments_only": True} if comments_only else {}), **({"layout_only": True} if layout_only else {})}
 
 
 def main() -> int:
@@ -206,7 +184,7 @@ def main() -> int:
     override.add_argument("--disc-sha256", required=True, help="canonical digest from XenogearsRecomp --disc-hash")
     override.add_argument("--id", default="local.field-script")
     override.add_argument("--game-id", choices=("SLUS-00664", "SLUS-00669"), default="SLUS-00664")
-    verify = commands.add_parser("verify", help="byte-exact round-trip validation of an extracted corpus")
+    verify = commands.add_parser("verify", help="require byte-exact XGA/XGS round trips and validate edited lowering")
     verify.add_argument("input", type=Path)
     verify.add_argument("--repack", action="store_true", help="also repack containers from the stock disc paths recorded in manifest.json")
     verify.add_argument("--resize", action="store_true", help="also insert one NOP before every instruction and verify all relocated encodings")
@@ -215,7 +193,6 @@ def main() -> int:
     quick = regenerate.add_mutually_exclusive_group()
     quick.add_argument("--comments-only", action="store_true", help="restore original byte/event traces without recompiling the corpus")
     quick.add_argument("--layout-only", action="store_true", help="restore entity-owned code presentation without recompiling the corpus")
-    quick.add_argument("--simplify-raw", action="store_true", help="replace raw operations with verified semantic forms, preserving trace comments")
     args = parser.parse_args()
     try:
         if args.command not in {"override", "verify", "regenerate"}:
@@ -255,7 +232,7 @@ def main() -> int:
             path = write_override(args.input, args.field, args.scripts.read_bytes(), args.output, disc_sha256=args.disc_sha256, package_id=args.id, game_id=args.game_id)
             print(f"Runtime override source: {path}")
         elif args.command == "regenerate":
-            print(json.dumps(regenerate_xgs(args.input, comments_only=args.comments_only, layout_only=args.layout_only, simplify_raw=args.simplify_raw), indent=2))
+            print(json.dumps(regenerate_xgs(args.input, comments_only=args.comments_only, layout_only=args.layout_only), indent=2))
         else:
             print(json.dumps(verify_corpus(args.input, repack=args.repack, resize=args.resize), indent=2))
         for path, payload in outputs.items():
