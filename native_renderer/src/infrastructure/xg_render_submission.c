@@ -717,10 +717,12 @@ bool xg_render_submission_materialize_semantic_draw(
     memcpy(out_draw->lines, semantic->lines,
            semantic->line_count * sizeof(out_draw->lines[0]));
     out_draw->screen_space_2d = semantic->screen_space_2d;
+    out_draw->aa_exempt = semantic->aa_exempt;
     out_draw->native_view_effect = semantic->native_view_effect;
     out_draw->native_view_effect_index = semantic->native_view_effect_index;
     primitive->depth_policy = semantic->depth_policy;
     primitive->depth_bias = semantic->depth_bias;
+    primitive->aa_exempt = semantic->aa_exempt;
 #define COPY_MATERIAL(field)                                                   \
     primitive->material.field = semantic->material.field
     COPY_MATERIAL(tpage);

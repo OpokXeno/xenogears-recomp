@@ -289,6 +289,7 @@ static XgRenderBackendStatus translate_native_primitive(
     out_semantic->screen_space_2d = GPU_RENDER_SCREEN_SPACE_2D_NONE;
     out_semantic->depth_policy = primitive->depth_policy;
     out_semantic->depth_bias = primitive->depth_bias;
+    out_semantic->aa_exempt = primitive->aa_exempt;
     out_semantic->triangle_count = primitive->triangle_count;
     for (triangle_index = 0u;
          triangle_index < primitive->triangle_count;

@@ -143,11 +143,20 @@ static inline uint8_t xg_render_depth_policy_bias(XgRenderDepthFamily family) {
     return entry ? entry->bias : 0u;
 }
 
+static inline uint8_t xg_render_aa_exempt(XgRenderDepthFamily family) {
+    return family == XG_RENDER_DEPTH_FAMILY_WORLD_ACTOR_SPRITES ||
+        family == XG_RENDER_DEPTH_FAMILY_SPRITES ||
+        family == XG_RENDER_DEPTH_FAMILY_WORLD_MINIMAP ||
+        family == XG_RENDER_DEPTH_FAMILY_FIELD_COMPASS ||
+        family == XG_RENDER_DEPTH_FAMILY_RESIDENT_UI;
+}
+
 static inline void xg_render_depth_policy_stamp_semantic(GpuRenderSemantic *semantic,
                                                          XgRenderDepthFamily family) {
     if (!semantic) return;
     semantic->depth_policy = (uint8_t)xg_render_depth_policy(family);
     semantic->depth_bias = xg_render_depth_policy_bias(family);
+    semantic->aa_exempt = xg_render_aa_exempt(family);
 }
 
 static inline void xg_render_depth_policy_stamp_primitive(XgRenderIrNativePrimitive *primitive,
@@ -155,6 +164,7 @@ static inline void xg_render_depth_policy_stamp_primitive(XgRenderIrNativePrimit
     if (!primitive) return;
     primitive->depth_policy = (uint8_t)xg_render_depth_policy(family);
     primitive->depth_bias = xg_render_depth_policy_bias(family);
+    primitive->aa_exempt = xg_render_aa_exempt(family);
 }
 
 #ifdef __cplusplus

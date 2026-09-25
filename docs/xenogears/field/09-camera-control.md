@@ -115,6 +115,42 @@ blocked walkmesh edge:
 This dedicated camera trace consumes walkmesh adjacency but does not alter actor
 position, active layer, or triangle state.
 
+### Camera eye-height check (`B7` / `B8`)
+
+There is a separate vertical constraint on the **desired eye**, not the target.
+In `FieldUpdateCameraTrackingMode` (`0x80073230`), after computing the follow pose
+and before interpolation, the engine samples the last walkmesh layer at the
+desired eye's integer XZ using `0x8007B1C4` with layer `walkmesh_count - 1`:
+
+```c
+if ((camera_flags & 0x4000) == 0) {
+    surface_y = sample_walkmesh_height(eye_x, eye_z, walkmesh_count - 1);
+    if (surface_y < (desired_eye.y >> 16)) {
+        desired_eye.y = surface_y * 65536;
+    }
+}
+```
+
+Field Y increases downward, so this raises a desired eye lying below the sampled
+surface to that surface. The comparison uses integer Y; the corrected position
+is stored in 16.16 at `0x800AF8B4` and then goes through ordinary interpolation.
+It does not move the target, add a height margin, or perform a general 3D
+camera-volume collision test. The sampled layer is the last indexed walkmesh,
+not necessarily the actor's active layer. If the lookup finds no triangle, its
+output position is zeroed; the camera caller does not separately reject that case.
+
+| Opcode | Handler | Camera flags at `0x800AF9D8` | Effect |
+|---|---|---|---|
+| `B7` | `0x8009ADDC` | Set bit `0x4000` | Disable the eye-height check |
+| `B8` | `0x8009AE0C` | Clear bit `0x4000` | Enable the eye-height check |
+
+Both opcodes have no operands and advance the VM PC by one byte. Camera reset at
+`0x8007254C` clears the flags, so the check starts enabled. This code runs in normal
+follow mode (0) and reacquisition mode (2); script-controlled mode (1) bypasses it.
+The flag is global camera state, not a property of the actor executing the opcode.
+It is independent of the fixed 32-unit target offset and the `FE 25` target-height
+policy described above.
+
 ## 6. Manual Orbit
 
 In normal follow mode, logical input `0x0004` requests left orbit and `0x0008`
@@ -219,6 +255,27 @@ multiplies the stored depth baseline.
 Script setup snapshots current depth after applying scale. Subsequent scale or
 depth changes therefore compose from the captured value rather than repeatedly
 rescaling an already rounded eye vector.
+
+### Projection distance and equivalent FOV
+
+Field initializes the GTE projection-plane distance `H` to `0x200` (512) through
+`SetGeomScreen` / `WriteProjectionDistance` at `0x8004A14C`. The standard logical
+draw area is 320 by 224, with projection center `(160,112)`. For this centered
+projection, before display stretching or pixel-aspect correction:
+
+```text
+vertical_fov   = degrees(2 * atan(224 / (2 * H)))
+horizontal_fov = degrees(2 * atan(320 / (2 * H)))
+H = 512: vertical_fov = 24.67817455665239 degrees
+         horizontal_fov = 34.70804927252264 degrees
+```
+
+Thus `24.678175` degrees is the equivalent **default vertical FOV**.
+It is not a universal FOV for every scene: `A0`(`0x8009BA7C`)
+evaluates its third operand, writes `sceneSCRZ` at `0x800AF9F8`,
+and passes it to `SetGeomScreen`. That same scene value also participates in
+constructing the follow-camera eye, so projection and orbit-distance calculations
+must both reflect the original state.
 
 Orbit rotation advances at `0x800726E8`; tracked pitch and scale transitions
 advance at `0x80072A38`; vector interpolation, depth, and shake advance at
