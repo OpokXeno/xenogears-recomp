@@ -290,6 +290,7 @@ static XgRenderBackendStatus translate_native_primitive(
     out_semantic->depth_policy = primitive->depth_policy;
     out_semantic->depth_bias = primitive->depth_bias;
     out_semantic->aa_exempt = primitive->aa_exempt;
+    out_semantic->sprite_texture = primitive->sprite_texture;
     out_semantic->triangle_count = primitive->triangle_count;
     for (triangle_index = 0u;
          triangle_index < primitive->triangle_count;

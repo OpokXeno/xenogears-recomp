@@ -7,6 +7,7 @@
 #include "xg_render_submission.h"
 #include "xg_render_resource_repository.h"
 #include "xg_render_route_descriptor.h"
+#include "xg_render_depth_policy.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -130,6 +131,8 @@ static bool debug_font_capture(void *context, uint32_t base, uint32_t parity,
     (void)context; (void)base; (void)parity;
     if (count != 1u || records == NULL) return false;
     debug_font_pending = records[0];
+    xg_render_depth_policy_stamp_primitive(
+        &debug_font_pending.primitive, XG_RENDER_DEPTH_FAMILY_RESIDENT_UI);
     debug_font_ready = true;
     return true;
 }

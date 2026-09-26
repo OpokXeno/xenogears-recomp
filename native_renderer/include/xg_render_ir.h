@@ -174,6 +174,7 @@ typedef struct XgRenderIrNativePrimitive {
     uint8_t depth_policy;
     uint8_t depth_bias;
     uint8_t aa_exempt;
+    uint8_t sprite_texture;
     uint8_t triangle_count;
     XgRenderIrTriangle triangles[XG_RENDER_IR_TRIANGLE_CAPACITY];
 } XgRenderIrNativePrimitive;

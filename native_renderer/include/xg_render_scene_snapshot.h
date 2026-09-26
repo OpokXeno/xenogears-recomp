@@ -194,6 +194,7 @@ typedef struct XgSemanticDrawRecord {
     GpuRenderSemanticLine lines[GPU_RENDER_SEMANTIC_LINE_CAPACITY];
     uint8_t screen_space_2d;
     uint8_t aa_exempt;
+    uint8_t sprite_texture;
     uint8_t native_view_effect;
     uint16_t native_view_effect_index;
     /* Host HD texture replacement chosen for this draw (valid == 0: none). */

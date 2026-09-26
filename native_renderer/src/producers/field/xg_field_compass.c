@@ -7,6 +7,7 @@
 #include "xg_field_render_services.h"
 #include "xg_host_3d.h"
 #include "xg_render_primitive_utils.h"
+#include "xg_render_depth_policy.h"
 
 #include <limits.h>
 #include <stddef.h>
@@ -285,6 +286,8 @@ bool xg_field_compass_cutover(
         &primitive, render_vertices);
     xg_render_primitive_apply_projective_payload(
         &primitive, render_vertices);
+    xg_render_depth_policy_stamp_primitive(
+        &primitive, XG_RENDER_DEPTH_FAMILY_FIELD_COMPASS);
 
     packet_tag = cpu->read_word(packet_address);
     previous_head = cpu->read_word(ot_address);

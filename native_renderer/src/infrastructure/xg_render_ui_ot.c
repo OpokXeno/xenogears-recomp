@@ -305,10 +305,17 @@ bool xg_render_ui_ot_prepare(uint32_t start_address,
             candidates[candidate_count].opcode = opcode;
             if (candidates[candidate_count].producer_captured)
                 ++prebound_count;
-            else if (guest_render_native_stream_note_diagnostic_event(
-                         GUEST_RENDER_NATIVE_DIAGNOSTIC_PACKET_DERIVED,
-                         &source) != GUEST_RENDER_NATIVE_STREAM_OK)
-                goto done;
+            else {
+                /* An unclaimed textured draw in this resident UI OT is font,
+                 * menu or HUD art. Producer-captured geometry keeps its own
+                 * classification; packet-derived UI takes the sprite filter. */
+                if (candidates[candidate_count].semantic.material.textured)
+                    candidates[candidate_count].semantic.sprite_texture = 1u;
+                if (guest_render_native_stream_note_diagnostic_event(
+                        GUEST_RENDER_NATIVE_DIAGNOSTIC_PACKET_DERIVED,
+                        &source) != GUEST_RENDER_NATIVE_STREAM_OK)
+                    goto done;
+            }
             semantic_digest = hash_semantic(
                 semantic_digest, &candidates[candidate_count].semantic);
             ++candidate_count;

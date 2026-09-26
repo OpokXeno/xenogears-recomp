@@ -559,6 +559,9 @@ bool xg_render_submission_resolve_command(
         } else {
             ++submission_diagnostics.geometry_matched;
             *out_command = *source;
+            /* A GP0 SPRT stays a sprite even when its producer supplied
+             * geometry before the final packet was accepted. */
+            out_command->semantic.sprite_texture |= packet->sprite_texture;
             /* Draw environment is consumed in OT order, not capture order. */
             out_command->semantic.material = packet->material;
             /* Lighting/fog, texture animation and blend flags may change after
@@ -718,11 +721,13 @@ bool xg_render_submission_materialize_semantic_draw(
            semantic->line_count * sizeof(out_draw->lines[0]));
     out_draw->screen_space_2d = semantic->screen_space_2d;
     out_draw->aa_exempt = semantic->aa_exempt;
+    out_draw->sprite_texture = semantic->sprite_texture;
     out_draw->native_view_effect = semantic->native_view_effect;
     out_draw->native_view_effect_index = semantic->native_view_effect_index;
     primitive->depth_policy = semantic->depth_policy;
     primitive->depth_bias = semantic->depth_bias;
     primitive->aa_exempt = semantic->aa_exempt;
+    primitive->sprite_texture = semantic->sprite_texture;
 #define COPY_MATERIAL(field)                                                   \
     primitive->material.field = semantic->material.field
     COPY_MATERIAL(tpage);

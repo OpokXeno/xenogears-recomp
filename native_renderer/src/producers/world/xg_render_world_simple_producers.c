@@ -2437,6 +2437,8 @@ bool xg_render_world_minimap_cutover(
                 &record->primitive, &semantics[triangle]) !=
                 XG_RENDER_BACKEND_OK)
             return false;
+        xg_render_depth_policy_stamp_semantic(
+            &semantics[triangle], XG_RENDER_DEPTH_FAMILY_WORLD_MINIMAP);
         for (uint32_t vertex = 0u;
              vertex < XG_WORLD_MINIMAP_TRIANGLE_VERTEX_COUNT; ++vertex)
             if (record->screen_xy_address[vertex] !=

@@ -1,4 +1,5 @@
 #include "xg_render_field_sprite.h"
+#include "xg_render_depth_policy.h"
 
 #include "xg_render_overlay_ft4.h"
 
@@ -220,6 +221,8 @@ bool xg_render_field_sprite_capture_template(
 
     if (input == NULL) return false;
     record.primitive = input->primitive;
+    xg_render_depth_policy_stamp_primitive(
+        &record.primitive, XG_RENDER_DEPTH_FAMILY_SPRITES);
     record.lifecycle = input->lifecycle;
     record.packet_address = input->packet_address;
     record.interpolation_producer_id = input->interpolation_producer_id;
@@ -584,6 +587,9 @@ static bool authored_pending(void *context, uint32_t base, uint32_t parity,
             .interpolation_primitive_id = index,
         };
         XgRenderFieldSpriteRecord *record = &builder.records[index];
+        if (builder.overlay_family == 0u)
+            xg_render_depth_policy_stamp_primitive(
+                &record->primitive, XG_RENDER_DEPTH_FAMILY_SPRITES);
         record->tpage = record->primitive.material.tpage;
         record->clut = (uint16_t)((record->primitive.material.clut_y << 6u) |
                                   (record->primitive.material.clut_x >> 4u));
@@ -813,6 +819,10 @@ static void finish(
             }
         }
         for (uint32_t index = 0u; index < builder.count; ++index) {
+            if (builder.overlay_family == 0u)
+                xg_render_depth_policy_stamp_primitive(
+                    &builder.records[index].primitive,
+                    XG_RENDER_DEPTH_FAMILY_SPRITES);
             if (!capture_template(&builder.records[index], services)) {
                 block_builder(9u, services);
                 return;
