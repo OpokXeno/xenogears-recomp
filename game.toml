@@ -192,3 +192,19 @@ overlay_cache = false
 
 [controller]
 multitap_analog = true
+
+# Menu open (field Triangle 2125-> entry): datos dir 0x10. Ruta caliente acotada
+# (fails closed a 1x, XA intacto). Probado: 2256->2235 (21 frames) con matches=1.
+[[runtime.warm_cd_routes]]
+arm_lba = 239265
+lbas = [239335, 239684]
+instant_max_per_frame = 32
+
+# Menu close (b 2638 -> campo): mapa Lahan 121911 (130 sectores, queda a 2x)
+# + Fei 119504 (28 sectores, a instant). La musica 111123 NO se recarga al
+# cerrar (cero refs en ccmd completo base y parcheado): el campo sigue sonando.
+# Solo esos, resto 1x/2x intacto. Medido: tail 2740->2731 (9 frames).
+[[runtime.warm_cd_routes]]
+arm_lba = 121911
+lbas = [119504]
+instant_max_per_frame = 32
