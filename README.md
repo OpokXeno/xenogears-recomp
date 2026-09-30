@@ -42,6 +42,7 @@ integrity-pinned SDL3 release and links it into the runtime.
 **Alpha.** What works today, and what doesn't:
 
 - ✅ **Boots and plays** — BIOS boot → game handoff, title screen, intro FMV, and the opening gameplay all run with rendering, audio, input, and memory-card saves
+- ✅ **Faster memory-card access**: the BIOS wasted every other VBlank on an idle port while a card transfer was running; the card check, saves and loads now use every frame (25% to 48% shorter depending on the step, same card data). Set `XG_FAST_CARD_SERVICE=0` to restore stock timing
 - ✅ **AOT overlay pipeline** — supported disc overlays are authenticated and compiled into the executable during the build
 - ⚠️ **Not validated end-to-end** — no complete playthrough has been done; treat every area past the opening as unverified
 - 🐛 **Known issues**:

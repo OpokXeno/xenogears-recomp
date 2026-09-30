@@ -74,6 +74,24 @@ Every `CreateKernelEvent` uses descriptor `0xF4000001`, mode `0x2000`, and a nul
 `FinalizeMemoryCardEventHandles` at `menu-overlay:0x801C8960` renders once and
 closes all handles in a critical section.
 
+### Transfer Timing
+
+Card I/O is paced by the retail BIOS, not by the menu. Its per-VBlank card/pad service (kernel RAM `0x5128`) flips the current port in `0x7264` every VBlank and skips a port whose state byte at `0x7568 + port` has bit 0 set (idle). A busy card therefore gets a frame only every second VBlank. Each 128-byte sector transaction starts about 17,000 cycles after a VBlank and lasts about half a frame, so the card idles for the rest.
+
+Measured stock cost at 60 VBlank/s, on the slot-1 card:
+
+| Operation | Sector I/O | VBlanks |
+|---|---|---|
+| Card check (before the load list and before the save screen) | 152 reads, 4 writes | 320 |
+| Load, one block | 65 reads | 128 |
+| Save, one block | 66 writes, 4 reads | 212 |
+
+Saves write through `0x801CC470` in `0x100`-byte BIOS `write` calls, two sectors each. One chunk takes four VBlanks: two service frames, then one menu frame that redraws and calls `VSync(0)` at `menu-overlay:0x801C7CE8`, then the frame that issues the next chunk. The menu spins on the four event deliveries while a chunk runs, so the wait is guest time, not host work.
+
+`xenogears_card_service` keeps the busy port instead of idle-skipping the other one. Sectors then run one per VBlank, which measures the check at 167 VBlanks and the save at 138. The menu's per-chunk redraw is not changed.
+
+Limits found while looking for more speed. A sector transaction lasts about 0.54 frame (roughly 2,200 cycles per byte, about 1,250 of it SIO baud and ACK), so a second sector started inside the same frame would still be running at the next VBlank. The tick at kernel `0x5000` treats a transaction still in flight (`0x755a` set) as a failure and takes its reset path, so sectors cannot be chained without also shortening them and patching the kernel completion path (`0x4F74` delivers the HwCARD event after the ROM card layer runs). The game's libcard also rewrites kernel words at runtime (`_patch_card`: a delay trampoline inside the byte step at `0x4D98`, a wait hook at `0x6444`, and removed checks near `0x47A8`, `0x48B0`, `0x4964` and `0x49FC`), so any kernel patch must tolerate those.
+
 ## 4. Two-Port Probe And Periodic Refresh
 
 Ports `0` and `1` use BIOS prefixes `bu00:` and `bu10:`. `ProbeMemoryCardPortState` at `menu-overlay:0x801C8A10` sets tentative presence, requests card info for that channel, and stores the signed result at `+0x4F74[port]`.
