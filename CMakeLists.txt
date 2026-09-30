@@ -77,6 +77,22 @@ option(XG_RENDER_VALIDATE_OVERLAYS
     "Verify private native-render overlay artifacts during the build"
     OFF)
 if(BUILD_TESTING)
+    add_executable(xenogears_map_reads_test
+        tests/xenogears_map_reads_test.c src/mods/xenogears_map_reads.c)
+    target_include_directories(xenogears_map_reads_test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp/runtime/include")
+    add_test(NAME xenogears_map_reads COMMAND xenogears_map_reads_test)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+       CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        add_executable(xenogears_cd_read_policy_test
+            tests/xenogears_cd_read_policy_test.c)
+        target_include_directories(xenogears_cd_read_policy_test PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp/runtime/include")
+        target_compile_options(xenogears_cd_read_policy_test PRIVATE
+            -ffunction-sections -fdata-sections)
+        target_link_options(xenogears_cd_read_policy_test PRIVATE -Wl,--gc-sections)
+        add_test(NAME xenogears_cd_read_policy COMMAND xenogears_cd_read_policy_test)
+    endif()
     add_test(NAME overlay_annotation_catalog
         COMMAND "${Python3_EXECUTABLE}" -m pytest
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_overlay_annotations.py")
@@ -536,6 +552,7 @@ target_link_libraries(psx-runtime PRIVATE
 target_sources(psx-runtime PRIVATE
         native_renderer/src/core/xg_native_render_baseline.c
         src/mods/xenogears_field_pacing.c
+        src/mods/xenogears_map_reads.c
         src/mods/xenogears_indexed_disc.cpp)
 target_include_directories(psx-runtime PRIVATE
     native_renderer/include
@@ -561,6 +578,7 @@ if(TARGET psx-runtime-pgxp)
     target_sources(psx-runtime-pgxp PRIVATE
         native_renderer/src/core/xg_native_render_baseline.c
         src/mods/xenogears_field_pacing.c
+        src/mods/xenogears_map_reads.c
         src/mods/xenogears_indexed_disc.cpp)
     target_include_directories(psx-runtime-pgxp PRIVATE
         native_renderer/include

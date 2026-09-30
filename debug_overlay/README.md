@@ -40,6 +40,11 @@ All widget actions are also reachable over TCP as
 `overlay_widget_action` (same code path as the click) — see
 `psxrecomp/TCP_COMMANDS.md` for the per-name argument encodings.
 
+**Fast map load** in Toggles shares the launcher's Settings → Display option.
+It saves `[video] fast_map_load` in the active `settings.toml`; the TCP action
+is `overlay_widget_action` with `name="fast_map_load"` and `value=0` or `1`.
+It shortens map reads while retaining normal gameplay and fade pacing.
+
 ## Data tables (`debug_overlay/data/`)
 
 XML tables loaded at init via the vendored pugixml (`debug_overlay_data.*`):
