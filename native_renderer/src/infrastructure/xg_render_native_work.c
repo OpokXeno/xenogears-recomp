@@ -333,6 +333,14 @@ bool xg_render_native_work_vram_event(const GpuVramEvent *event,
     hd_texture_note_vram_event(event);
     switch (event->operation) {
     case GPU_VRAM_EVENT_READBACK:
+        if (!event->rgb_content_digest) return true;
+        operation.kind = XG_RENDER_NATIVE_OPERATION_READBACK;
+        operation.dst_x = event->source_x;
+        operation.dst_y = event->source_y;
+        operation.width = event->width;
+        operation.height = event->height;
+        operation.readback_rgb_digest = event->rgb_content_digest;
+        return append_operation(&operation, guest_cycle);
     case GPU_VRAM_EVENT_RENDER_TARGET_WRITE:
     case GPU_VRAM_EVENT_SCANOUT:
         return true;

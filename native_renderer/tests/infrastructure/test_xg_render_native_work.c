@@ -165,6 +165,21 @@ int main(void) {
         assert(captured.semantic.triangles[0].vertices[v].x == s.triangles[1].vertices[v].x);
         assert(captured.semantic.triangles[0].vertices[v].u == s.triangles[1].vertices[v].u);
     }
+    /* A CPU screenshot receipt is ordered with draws/transfers but neither
+     * imports an upload resource nor mutates canonical VRAM. */
+    const GpuVramEvent readback = {.operation = GPU_VRAM_EVENT_READBACK,
+        .source_x = 704u, .source_y = 256u, .width = 64u, .height = 224u,
+        .pixel_count = 64u * 224u, .rgb_content_digest = UINT64_C(0x123456789)};
+    assert(xg_render_native_work_vram_event(&readback, 120u));
+    assert(xg_render_native_work_flush(false, 120u));
+    const XgRenderWorkerServices worker = {.compile = capture, .fence_status = fence_status,
+        .discard_fence = discard, .release_endpoint = release};
+    assert(xg_render_worker_compile_next(&worker) == XG_RENDER_WORKER_APPLIED);
+    assert(captured.kind == XG_RENDER_NATIVE_OPERATION_READBACK);
+    assert(captured.dst_x == 704u && captured.dst_y == 256u);
+    assert(captured.width == 64u && captured.height == 224u);
+    assert(captured.readback_rgb_digest == readback.rgb_content_digest);
+    assert(captured.upload.resource_id == 0u);
     xg_render_native_work_cancel_pending();
     xg_render_motion_reset();
     xg_render_semantic_presentation_reset();

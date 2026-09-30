@@ -479,6 +479,10 @@ static uint64_t commit_digest(const XgRenderSourceSlot *slot) {
         HASH_FIELD(operation->dst_y);
         HASH_FIELD(operation->width);
         HASH_FIELD(operation->height);
+        if (operation->kind == XG_RENDER_NATIVE_OPERATION_READBACK) {
+            HASH_FIELD(operation->readback_rgb_digest);
+            continue;
+        }
         if (operation->kind == XG_RENDER_NATIVE_OPERATION_TARGET) continue;
         HASH_FIELD(operation->mask_set);
         HASH_FIELD(operation->mask_check);
@@ -952,7 +956,7 @@ static bool draw_valid(const XgSemanticDrawRecord *draw) {
 static bool native_operation_valid(const XgRenderNativeOperation *operation) {
     XgRenderResourceView view;
     if (operation == NULL ||
-        (uint32_t)operation->kind > XG_RENDER_NATIVE_OPERATION_TARGET)
+        (uint32_t)operation->kind > XG_RENDER_NATIVE_OPERATION_READBACK)
         return false;
     if (operation->kind == XG_RENDER_NATIVE_OPERATION_DRAW) {
         const XgRenderTemporalBinding *binding = &operation->temporal;
@@ -979,6 +983,8 @@ static bool native_operation_valid(const XgRenderNativeOperation *operation) {
     if (operation->kind == XG_RENDER_NATIVE_OPERATION_TARGET)
         return operation->width <= 1024u - operation->dst_x &&
             operation->height <= 512u - operation->dst_y;
+    if (operation->kind == XG_RENDER_NATIVE_OPERATION_READBACK)
+        return operation->readback_rgb_digest != 0u;
     if (operation->kind == XG_RENDER_NATIVE_OPERATION_FILL) return true;
     if (operation->upload.resource_id == 0u ||
         operation->upload.generation == 0u ||
@@ -1870,7 +1876,9 @@ XgRenderSourceCommitResult xg_render_source_commit_append_native_operation(
                 copy.mask_set = operation->mask_set;
                 copy.mask_check = operation->mask_check;
             }
-            if (operation->kind == XG_RENDER_NATIVE_OPERATION_UPLOAD)
+            if (operation->kind == XG_RENDER_NATIVE_OPERATION_READBACK)
+                copy.readback_rgb_digest = operation->readback_rgb_digest;
+            else if (operation->kind == XG_RENDER_NATIVE_OPERATION_UPLOAD)
                 copy.upload = operation->upload;
             else if (operation->kind == XG_RENDER_NATIVE_OPERATION_COPY) {
                 copy.src_x = operation->src_x;

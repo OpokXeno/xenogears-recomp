@@ -207,6 +207,7 @@ typedef enum XgRenderNativeOperationKind {
     XG_RENDER_NATIVE_OPERATION_COPY,
     XG_RENDER_NATIVE_OPERATION_FILL,
     XG_RENDER_NATIVE_OPERATION_TARGET,
+    XG_RENDER_NATIVE_OPERATION_READBACK,
 } XgRenderNativeOperationKind;
 
 /* Pointer-free work for the native VRAM FIFO, not a scene fragment. Coordinates
@@ -233,6 +234,8 @@ typedef struct XgRenderNativeOperation {
     bool mask_set;
     bool mask_check;
     XgSemanticResourceRef upload;
+    /* READBACK only: actual guest RGB words; no canonical VRAM mutation. */
+    uint64_t readback_rgb_digest;
     /* DRAW only: host HD texture replacement decided at submission. */
     GpuRenderHdTexture hd_texture;
 } XgRenderNativeOperation;

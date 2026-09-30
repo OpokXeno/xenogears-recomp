@@ -824,6 +824,8 @@ if(BUILD_TESTING)
         ${PSXRECOMP_ROOT}/runtime/include)
     add_test(NAME gpu_semantic_workload COMMAND gpu_semantic_workload_test)
 
+    include("${PSXRECOMP_ROOT}/runtime/tests/gpu_gl_transition_test.cmake")
+
     add_executable(gpu_gl_mask_order_test
         psxrecomp/runtime/tests/test_gpu_gl_mask_order.c
         psxrecomp/runtime/tests/memory_profile_test_globals.c

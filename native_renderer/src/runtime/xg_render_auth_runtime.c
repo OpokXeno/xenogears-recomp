@@ -22,6 +22,7 @@
 #include "xg_render_native_work.h"
 #include "xg_render_battle_geometry.h"
 #include "xg_render_submission.h"
+#include "xg_render_hud.h"
 #include "xg_render_surface_graph.h"
 #include "xg_render_ui_resources.h"
 #include "xg_render_ui_owner_catalog.h"
@@ -602,11 +603,25 @@ bool psx_xg_render_auth_accept_native_draw(const GpuRenderSemantic *semantic) {
     XgRenderSubmissionCommand command;
     if (!xg_render_native_work_enabled()) return true;
     if (semantic == NULL) return false;
-    if (semantic->submission_command_id <= UINT32_C(0x001ffffc) &&
-        psx_xg_render_auth_describe_native_work(&description) &&
+    const bool described = psx_xg_render_auth_describe_native_work(&description);
+    if (semantic->submission_command_id <= UINT32_C(0x001ffffc) && described &&
         xg_render_submission_resolve_command(&description,
             (uint32_t)semantic->submission_command_id, semantic, &command))
         semantic = &command.semantic;
+    if (described && semantic->submission_command_id <= UINT32_C(0x001ffffc)) {
+        XgRenderRuntimeHostServices hud_host = {0};
+        const bool battle_hud =
+            description.scene.module == XG_SEMANTIC_MODULE_BATTLE &&
+            xg_render_runtime_host_services(&hud_host) && hud_host.read_word;
+        const uint32_t battle_graphics = battle_hud
+            ? hud_host.read_word(UINT32_C(0x800c3ea4)) : 0u;
+        const uint32_t battle_ui = battle_hud
+            ? hud_host.read_word(UINT32_C(0x800d2db4)) : 0u;
+        if (xg_render_hud_anchor(&description,
+                (uint32_t)semantic->submission_command_id, battle_graphics, battle_ui,
+                semantic, &command.semantic))
+            semantic = &command.semantic;
+    }
     /* Submission retains packet layout. Override it only for an authenticated
      * mask, after that merge; VIEW expands it without changing canonical XY. */
     if (xg_render_runtime_composition_is_transition_mask(semantic)) {

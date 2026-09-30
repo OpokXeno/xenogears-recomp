@@ -379,6 +379,7 @@ add_library(xg_render_auth STATIC
     src/producers/field/xg_render_resident_line_f2.c
     src/infrastructure/xg_render_resource_watch.c
     src/infrastructure/xg_render_submission.c
+    src/infrastructure/xg_render_hud.c
     src/infrastructure/xg_render_temporal_submission.c
     src/infrastructure/xg_render_ui_ot.c
     src/producers/world/xg_render_world_simple_producers.c
@@ -438,6 +439,14 @@ target_link_libraries(xg_render_static_auth PUBLIC xg_render_auth)
 
 if(BUILD_TESTING)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_executable(test_xg_render_hud
+        tests/infrastructure/test_xg_render_hud.c
+        src/infrastructure/xg_render_hud.c)
+    target_include_directories(test_xg_render_hud PRIVATE
+        include src/infrastructure
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
+    target_compile_features(test_xg_render_hud PRIVATE c_std_11)
+    add_test(NAME xg_render_hud COMMAND test_xg_render_hud)
     add_executable(test_xg_render_source_capture_cache
         tests/infrastructure/test_xg_render_source_capture_cache.c)
     target_include_directories(test_xg_render_source_capture_cache PRIVATE
@@ -654,6 +663,7 @@ if(BUILD_TESTING)
         src/producers/field/xg_render_resident_line_f2.c
         src/infrastructure/xg_render_resource_watch.c
         src/infrastructure/xg_render_submission.c
+        src/infrastructure/xg_render_hud.c
         src/infrastructure/xg_render_temporal_submission.c
         src/infrastructure/xg_render_ui_ot.c
         src/producers/world/xg_render_world_simple_producers.c
