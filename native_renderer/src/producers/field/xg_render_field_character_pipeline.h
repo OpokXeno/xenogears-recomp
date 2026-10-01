@@ -55,6 +55,8 @@ void xg_render_field_character_reject(
     const XgRenderFieldCharacterPipelineServices *services);
 void xg_render_field_character_disarm(void);
 void xg_render_field_character_scene_boundary(void);
+/* Drop timeline-owned captures/blockers while keeping producer/geometry modes.
+ * A machine/runtime reset below also clears those configured modes. */
 void xg_render_field_character_source_reset(void);
 void xg_render_field_character_reset(void);
 void xg_render_field_character_handle_invalidation(

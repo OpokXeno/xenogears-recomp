@@ -989,17 +989,26 @@ void xg_render_field_character_scene_boundary(void) {
 }
 
 void xg_render_field_character_source_reset(void) {
+    const bool producer_enabled = producer_family.enabled;
+
     source_state = (XgRenderSourceState){
         .aggregate = { .next_sequence = 1u },
         .next_auth_sequence = 1u,
     };
     field_character_shadow_init(&source_state.collector);
-    reset_ft4_geometry(false);
-    producer_family = (PsxXgRenderProducerFamilySnapshot){ 0 };
+    /* Restore/disc invalidation discards captures from the previous timeline,
+     * but the configured Native producer must keep rebuilding its projected
+     * shadows. Disabling it here leaves only the integer guest packets. */
+    reset_ft4_geometry(true);
+    producer_family = (PsxXgRenderProducerFamilySnapshot){
+        .enabled = producer_enabled,
+    };
 }
 
 void xg_render_field_character_reset(void) {
     xg_render_field_character_source_reset();
+    reset_ft4_geometry(false);
+    producer_family = (PsxXgRenderProducerFamilySnapshot){ 0 };
 }
 
 void xg_render_field_character_handle_invalidation(

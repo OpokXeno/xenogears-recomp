@@ -266,6 +266,7 @@ versioned API and independent example.
 | L1 / L2            | Q / E      | LB / LT |
 | R1 / R2            | W / R      | RB / RT |
 | Fullscreen toggle  | Alt+Enter / Ctrl+F | — |
+| Show/hide menu bar | F10        | — |
 | Debug menu overlay | Ctrl+F3    | — |
 
 Full rebinding is available through in-app settings.

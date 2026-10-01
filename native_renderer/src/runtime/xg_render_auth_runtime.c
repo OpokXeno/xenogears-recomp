@@ -4359,8 +4359,12 @@ bool psx_xg_render_auth_note_vram_event(
             lock_presentation_lifecycle();
             if (state.boot_restore_timeline_preapplied)
                 state.boot_restore_timeline_preapplied = false;
-            else
+            else {
+                invalidate_authenticated_authority();
                 (void)timeline_invalidate_locked(XG_RENDER_TIMELINE_RESTORE);
+                scene_boundary_locked();
+            }
+            state.movie_active_owner = event->movie_owner_kind;
             unlock_presentation_lifecycle();
         }
         return xg_render_native_work_vram_event(event, guest_cycle);
@@ -4447,6 +4451,7 @@ bool psx_xg_render_auth_note_vram_event(
     }
     lock_presentation_lifecycle();
     if (operation == XG_RENDER_VRAM_RESTORE) {
+        state.movie_active_owner = event->movie_owner_kind;
         if (state.boot_restore_timeline_preapplied) {
             state.boot_restore_timeline_preapplied = false;
             restore_journal_preapplied = true;
