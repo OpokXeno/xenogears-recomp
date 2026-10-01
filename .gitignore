@@ -88,6 +88,8 @@ probes/
 
 tools/*
 !tools/perfect_works_to_psxmod.py
+!tools/native_mod_symbols.py
+!tools/generate_native_mod_symbols.py
 !tools/native_render_manifest.py
 !tools/native_render_manifest_fixture.py
 !tools/native_render_manifest_model.py

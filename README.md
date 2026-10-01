@@ -247,6 +247,8 @@ Open **Mods** in the launcher to enable included enhancements or install a
 local `.psxmod` package. Packages are validated and applied over your stock disc
 without modifying it. See [`MODS.md`](MODS.md) for the included catalog,
 installation steps, package authoring, compatibility, and safety details.
+Separately compiled C/C++ function hooks are supported; see [`MOD_NATIVE_HOOKS.md`](MOD_NATIVE_HOOKS.md) for the
+versioned API and independent example.
 
 ---
 
@@ -286,6 +288,7 @@ XenogearsRecomp/
 ├── game.toml                 # Game configuration (patches, widescreen, runtime)
 ├── MODS.md                   # Player-facing mod guide
 ├── MOD_AUTHORING.md          # Detailed .psxmod authoring guide
+├── MOD_NATIVE_HOOKS.md       # External C/C++ hooks, API and trust model
 ├── game/                     # YOUR game EXE / disc image (not tracked)
 ├── generated/                # Recompiled C source from game EXE (not tracked)
 ├── overlays/                 # Captured overlay binaries (not tracked)

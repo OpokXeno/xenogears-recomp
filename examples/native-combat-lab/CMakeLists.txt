@@ -1,0 +1,12 @@
+cmake_minimum_required(VERSION 3.20)
+project(native_combat_lab CXX)
+set(PSX_NATIVE_SDK_INCLUDE "${CMAKE_CURRENT_LIST_DIR}/../../psxrecomp/runtime/include"
+    CACHE PATH "Directory containing mod_native_api.h and mod_native_api.hpp")
+add_library(combat_lab SHARED combat_lab.cpp)
+target_include_directories(combat_lab PRIVATE "${PSX_NATIVE_SDK_INCLUDE}")
+set_target_properties(combat_lab PROPERTIES PREFIX "" CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+if(MSVC)
+    set_target_properties(combat_lab PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+elseif(MINGW)
+    target_link_options(combat_lab PRIVATE -static-libgcc -static-libstdc++)
+endif()

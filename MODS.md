@@ -34,9 +34,15 @@ the other side disables the previous selection. This is separate from compatible
 same-file composition, which is performed automatically when both packages carry
 an authenticated format-specific recipe.
 
-Only install packages from authors you trust. The package loader validates the
-archive and does not allow a package to load arbitrary native libraries, but a
-mod can intentionally change game code, data, and assets.
+Only install packages from authors you trust. Packages containing native C/C++
+code require an explicit **Trust and install** decision before installation.
+The launcher warns that this code can access your files and run programs with
+the game's permissions. **Do not trust** skips installation. Trust applies to
+that exact package content; updates require a new decision. Native mods are
+loaded only when enabled for an offline game session. See
+[`MOD_NATIVE_HOOKS.md`](MOD_NATIVE_HOOKS.md) for the API and trust model.
+One native package can hook many functions and replace selected instruction
+ranges inside them while preserving their original prefix and suffix.
 
 ## Texture packs
 
@@ -82,7 +88,8 @@ A `.psxmod` is a ZIP-based, versioned installation and trust boundary. Its
 - guarded executable or disc patches;
 - sparse, file-backed disc overlays;
 - authenticated replacements for Xenogears' indexed internal files; and
-- optional trusted plugin IDs implemented by XenogearsRecomp itself.
+- optional trusted plugin IDs implemented by XenogearsRecomp itself; and
+- separately compiled native hook modules, with explicit player trust.
 
 Feature identity is `(package_id, feature_id)`. At launch, the manager expands
 only enabled features, verifies payloads and expected bytes, resolves package

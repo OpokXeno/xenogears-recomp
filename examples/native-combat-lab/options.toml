@@ -1,0 +1,102 @@
+# Insert these tables before [[native_module]] in the generated manifest.
+# Replace the basic packer's example option tables; keep its feature ID "hook".
+
+[[option]]
+feature = "hook"
+id = "damage_mode"
+label = "Damage behavior"
+type = "choice"
+default = "extend"
+choice = [
+    { value = "observe", label = "Observe original behavior" },
+    { value = "extend", label = "Adjust original damage" },
+    { value = "replace", label = "Replace damage calculation" }
+]
+
+[[option]]
+feature = "hook"
+id = "log_calls"
+label = "Log diagnostic messages"
+type = "boolean"
+default = true
+
+[[option]]
+feature = "hook"
+id = "damage_percent"
+label = "Damage multiplier (%)"
+type = "integer"
+default = 100
+min = 0
+max = 300
+step = 1
+
+[[option]]
+feature = "hook"
+id = "flat_bonus"
+label = "Additional damage"
+type = "integer"
+default = 0
+min = 0
+max = 9999
+step = 1
+
+[[option]]
+feature = "hook"
+id = "critical_bonus"
+label = "Additional critical damage"
+type = "integer"
+default = 0
+min = 0
+max = 9999
+step = 1
+
+[[option]]
+feature = "hook"
+id = "use_game_formula"
+label = "Use the game's formula in replacement mode"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "hook"
+id = "replace_reward"
+label = "Replace the XP award routine"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "hook"
+id = "xp_bonus"
+label = "Additional XP"
+type = "integer"
+default = 0
+min = 0
+max = 9999
+step = 1
+
+[[option]]
+feature = "hook"
+id = "regenerate"
+label = "Regenerate HP"
+type = "boolean"
+default = false
+
+[[option]]
+feature = "hook"
+id = "regen_frames"
+label = "Guest frames between heals"
+type = "integer"
+default = 120
+min = 1
+max = 3600
+step = 1
+
+[[option]]
+feature = "hook"
+id = "regen_amount"
+label = "HP per heal"
+type = "integer"
+default = 1
+min = 1
+max = 999
+step = 1

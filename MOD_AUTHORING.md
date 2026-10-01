@@ -17,8 +17,10 @@ A good package follows these rules:
 3. Split user-visible behavior into independent features.
 4. Use typed options instead of asking users to edit bytes or files.
 5. Guard every write with the expected stock bytes or digest.
-6. Prefer declarative patches and overlays. Native behavior must already be
-   reviewed and statically linked into XenogearsRecomp.
+6. Prefer declarative patches and overlays for changes they can express.
+   External native function hooks and partial hooks use format 9.
+   Both require explicit player trust; see
+   [`MOD_NATIVE_HOOKS.md`](MOD_NATIVE_HOOKS.md) and its standalone C/C++ example.
 7. Fail closed on unknown revisions, bad payloads, and incompatible mods.
 
 The player's stock disc is read-only. At launch, the manager validates enabled
@@ -80,7 +82,7 @@ url = "https://example.com/author"
 
 | Field | Meaning |
 |---|---|
-| `format_version` | Manifest feature level. Use the lowest version that provides the operations you need, from 1 through 7. |
+| `format_version` | Manifest feature level. Use the lowest version that provides the operations you need, from 1 through 9. |
 | `id` | Stable package identity. Do not change it between releases. Use lowercase letters, digits, `.`, `-`, and `_`; maximum 96 characters. |
 | `version` | Semantic package version such as `1.0.0`. Publish changed content as a new version. |
 | `name` | Player-facing package name. |
@@ -102,6 +104,9 @@ versions are cumulative:
 | 4 | Sparse owned fields and integer predicates. |
 | 5 | Trusted static plugin selectors. |
 | 6 | Authenticated replacement of game-specific indexed files. |
+| 7 | Indexed replacement composition, supersession and feature predicates. |
+| 8 | Disc-specific patch operations and patch feature predicates. |
+| 9 | External native modules, guarded function hooks and partial instruction-range hooks with explicit player trust. |
 
 ## Targets and revision guards
 

@@ -457,6 +457,25 @@ foreach(XG_OVERLAY_INDEX RANGE 0 ${XG_OVERLAY_PLAN_LAST})
     list(APPEND XG_OVERLAY_AGGREGATE_ARGS --unit "${XG_OVERLAY_METADATA}")
 endforeach()
 
+set(XG_NATIVE_MOD_SYMBOLS "${CMAKE_CURRENT_BINARY_DIR}/native_mod_symbols.cpp")
+add_custom_command(
+    OUTPUT "${XG_NATIVE_MOD_SYMBOLS}"
+    COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_mod_symbols.py"
+        --annotations "${CMAKE_CURRENT_SOURCE_DIR}/annotations"
+        --exe "${XG_RENDER_GAME_EXE}"
+        --aot "${XG_OVERLAY_AOT_DIR}"
+        --output "${XG_NATIVE_MOD_SYMBOLS}"
+    DEPENDS ${XG_OVERLAY_UNIT_METADATA}
+        "${XG_RENDER_GAME_EXE}"
+        "${XG_OVERLAY_CATALOG}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/annotations/slus_006.64_annotations.csv"
+        ${XG_OVERLAY_ANNOTATION_FILES}
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/native_mod_symbols.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_mod_symbols.py"
+    COMMENT "Generating native mod function names and code identity checks"
+    VERBATIM)
+
 add_custom_command(
     OUTPUT "${XG_OVERLAY_STATIC_C}" ${XG_OVERLAY_STATIC_DISPATCH_SHARDS}
            "${XG_OVERLAY_STATIC_COVERAGE}"
@@ -555,6 +574,7 @@ target_link_libraries(psx-runtime PRIVATE
     xg_render_resident_capture
     xg_render_battle_fx)
 target_sources(psx-runtime PRIVATE
+        "${XG_NATIVE_MOD_SYMBOLS}"
         native_renderer/src/core/xg_native_render_baseline.c
         src/mods/xenogears_field_pacing.c
         src/mods/xenogears_map_reads.c
@@ -582,6 +602,7 @@ if(TARGET psx-runtime-pgxp)
         xg_render_resident_capture
         xg_render_battle_fx)
     target_sources(psx-runtime-pgxp PRIVATE
+        "${XG_NATIVE_MOD_SYMBOLS}"
         native_renderer/src/core/xg_native_render_baseline.c
         src/mods/xenogears_field_pacing.c
         src/mods/xenogears_map_reads.c
@@ -600,6 +621,81 @@ if(BUILD_TESTING)
         COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_perfect_works_to_psxmod.py")
 
+    add_library(native_mod_fixture SHARED tests/native_mod_fixture.c)
+    add_library(native_mod_bad_abi_fixture SHARED tests/native_mod_fixture.c)
+    add_library(native_mod_old_descriptor_fixture SHARED tests/native_mod_fixture.c)
+    add_library(native_mod_cpp_fixture SHARED tests/native_cpp_fixture.cpp)
+    target_compile_features(native_mod_cpp_fixture PRIVATE cxx_std_17)
+    foreach(_fixture IN ITEMS native_mod_fixture native_mod_bad_abi_fixture native_mod_old_descriptor_fixture native_mod_cpp_fixture)
+        target_include_directories(${_fixture} PRIVATE ${PSXRECOMP_ROOT}/runtime/include)
+    endforeach()
+    target_compile_definitions(native_mod_bad_abi_fixture PRIVATE BAD_ABI=1)
+    target_compile_definitions(native_mod_old_descriptor_fixture PRIVATE OLD_DESCRIPTOR=1)
+    add_executable(native_mods_test
+        tests/native_mods_test.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/mod_packages.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/mod_native_runtime.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/crc32.c
+        ${PSXRECOMP_ROOT}/runtime/src/psx_sha256.c)
+    target_include_directories(native_mods_test PRIVATE
+        ${PSXRECOMP_ROOT}/runtime/include
+        ${PSXRECOMP_ROOT}/recompiler/lib/toml11)
+    target_compile_features(native_mods_test PRIVATE cxx_std_17)
+    target_link_libraries(native_mods_test PRIVATE ${CMAKE_DL_LIBS})
+    add_dependencies(native_mods_test native_mod_fixture native_mod_bad_abi_fixture native_mod_old_descriptor_fixture native_mod_cpp_fixture)
+    add_test(NAME native_mods COMMAND native_mods_test
+        $<TARGET_FILE:native_mod_fixture> $<TARGET_FILE:native_mod_bad_abi_fixture>
+        $<TARGET_FILE:native_mod_old_descriptor_fixture> $<TARGET_FILE:native_mod_cpp_fixture>)
+    add_test(NAME native_hook_package
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_hook_package.py")
+    add_test(NAME native_mod_symbols
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_mod_symbols.py")
+    add_executable(native_symbol_catalog_test
+        tests/native_symbol_catalog_test.cpp "${XG_NATIVE_MOD_SYMBOLS}"
+        ${PSXRECOMP_ROOT}/runtime/src/psx_sha256.c)
+    target_include_directories(native_symbol_catalog_test PRIVATE ${PSXRECOMP_ROOT}/runtime/include)
+    target_compile_features(native_symbol_catalog_test PRIVATE cxx_std_17)
+    add_test(NAME native_symbol_catalog COMMAND native_symbol_catalog_test
+        "${XG_RENDER_GAME_EXE}"
+        "${XG_OVERLAY_AOT_DIR}/inputs/battle-velocity-sprite-clone-strip-overlay.bin"
+        "${XG_OVERLAY_AOT_DIR}/inputs/battle-fixed-origin-sprite-marquee-overlay.bin")
+
+    add_executable(mod_packages_regression_test
+        ${PSXRECOMP_ROOT}/runtime/tests/test_mod_packages.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/mod_packages.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/crc32.c
+        ${PSXRECOMP_ROOT}/runtime/src/psx_sha256.c)
+    add_executable(mod_runtime_regression_test
+        ${PSXRECOMP_ROOT}/runtime/tests/test_mod_runtime.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/mod_runtime.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/mod_native_runtime.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/mod_packages.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/hd_texture_packs.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/hd_texture_runtime.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/hd_texture_pack.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/disc_path.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/cue_sheet.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/iso_reader.cpp
+        ${PSXRECOMP_ROOT}/runtime/src/crc32.c
+        ${PSXRECOMP_ROOT}/runtime/src/psx_sha256.c)
+    foreach(_mod_test IN ITEMS mod_packages_regression_test mod_runtime_regression_test)
+        target_include_directories(${_mod_test} PRIVATE
+            ${PSXRECOMP_ROOT}/runtime/include
+            ${PSXRECOMP_ROOT}/recompiler/include
+            ${PSXRECOMP_ROOT}/recompiler/lib/toml11)
+        target_compile_features(${_mod_test} PRIVATE cxx_std_17)
+        set_target_properties(${_mod_test} PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+    endforeach()
+    target_compile_definitions(mod_runtime_regression_test PRIVATE HD_TEXTURE_PACK_DISABLE_PNG_DECODE=1)
+    target_link_libraries(mod_runtime_regression_test PRIVATE chdr-static Threads::Threads ${CMAKE_DL_LIBS})
+    if(MSVC)
+        target_link_options(mod_runtime_regression_test PRIVATE /STACK:16777216)
+    elseif(MINGW)
+        target_link_options(mod_runtime_regression_test PRIVATE -Wl,--stack,16777216)
+    endif()
+    add_test(NAME mod_packages_regression COMMAND mod_packages_regression_test)
+    add_test(NAME mod_runtime_regression COMMAND mod_runtime_regression_test)
+
     add_executable(xenogears_indexed_disc_test
         tests/xenogears_indexed_disc_test.cpp
         src/mods/xenogears_indexed_disc.cpp
@@ -612,6 +708,7 @@ if(BUILD_TESTING)
     target_include_directories(xenogears_indexed_disc_test PRIVATE
         src/mods
         ${PSXRECOMP_ROOT}/runtime/include
+        ${PSXRECOMP_ROOT}/recompiler/include
         ${PSXRECOMP_ROOT}/recompiler/lib/toml11)
     target_compile_definitions(xenogears_indexed_disc_test PRIVATE
         XG_INDEXED_DISC_NO_REGISTRATION=1)
