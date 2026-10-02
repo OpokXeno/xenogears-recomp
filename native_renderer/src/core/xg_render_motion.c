@@ -190,19 +190,27 @@ bool xg_render_motion_decompose(const XgHost3dMatrix *matrix, XgRenderMotionTrs 
             r[row][c] /= trs.scale[c];
         trs.translation[c] = matrix->translation[c];
     }
-    /* Allow Q12 rounding, not an affine shear masquerading as rotation. */
+    /* Allow Q12 rounding, not an affine shear masquerading as rotation. GTE
+     * products truncate (up to one Q12 unit per element), an absolute error,
+     * so a small-scale matrix (e.g. a 1/13-scaled Battle part) has
+     * proportionally larger normalized error: a dot product of two columns
+     * can drift by 3 rows x 2 terms x 1 unit over the smallest column norm. */
+    double min_scale = trs.scale[0];
+    for (unsigned c = 1; c < 3; ++c)
+        if (trs.scale[c] < min_scale) min_scale = trs.scale[c];
+    const double rounding = 6.0 / (4096.0 * min_scale);
     for (unsigned a = 0; a < 3; ++a)
         for (unsigned b = a + 1; b < 3; ++b) {
             double dot = 0.0;
             for (unsigned row = 0; row < 3; ++row)
                 dot += r[row][a] * r[row][b];
-            if (fabs(dot) > 0.002)
+            if (fabs(dot) > 0.002 + rounding)
                 return false;
         }
     const double det = r[0][0] * (r[1][1] * r[2][2] - r[1][2] * r[2][1]) -
                        r[0][1] * (r[1][0] * r[2][2] - r[1][2] * r[2][0]) +
                        r[0][2] * (r[1][0] * r[2][1] - r[1][1] * r[2][0]);
-    if (det < 0.998 || det > 1.002)
+    if (fabs(det - 1.0) > 0.002 + 1.5 * rounding)
         return false;
     const double trace = r[0][0] + r[1][1] + r[2][2];
     if (trace > 0.0) {
