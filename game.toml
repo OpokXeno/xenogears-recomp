@@ -27,7 +27,7 @@ out_dir = "generated"
 discovery = "whole-image"
 # Field already enforces its authored mode+2 minimum at the end of each
 # iteration. Avoid waiting for a second boundary when scene work crossed one.
-mod_function_entry_funcs = ["0x8004B54C"]
+mod_function_entry_funcs = ["0x8004B54C", "0x80040464", "0x80040554"]
 
 [video]
 # Presentation rate: 30 preserves original PSX cadence; 60 enables Native
