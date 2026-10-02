@@ -87,6 +87,11 @@ if(BUILD_TESTING)
     target_include_directories(xenogears_card_service_test PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp/runtime/include")
     add_test(NAME xenogears_card_service COMMAND xenogears_card_service_test)
+    add_executable(xenogears_card_flow_test
+        tests/xenogears_card_flow_test.c)
+    target_include_directories(xenogears_card_flow_test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp/runtime/include")
+    add_test(NAME xenogears_card_flow COMMAND xenogears_card_flow_test)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
        CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         add_executable(xenogears_cd_read_policy_test
@@ -579,6 +584,7 @@ target_sources(psx-runtime PRIVATE
         src/mods/xenogears_field_pacing.c
         src/mods/xenogears_map_reads.c
         src/mods/xenogears_card_service.c
+        src/mods/xenogears_card_flow.c
         src/mods/xenogears_indexed_disc.cpp)
 target_include_directories(psx-runtime PRIVATE
     native_renderer/include
@@ -607,6 +613,7 @@ if(TARGET psx-runtime-pgxp)
         src/mods/xenogears_field_pacing.c
         src/mods/xenogears_map_reads.c
         src/mods/xenogears_card_service.c
+        src/mods/xenogears_card_flow.c
         src/mods/xenogears_indexed_disc.cpp)
     target_include_directories(psx-runtime-pgxp PRIVATE
         native_renderer/include
