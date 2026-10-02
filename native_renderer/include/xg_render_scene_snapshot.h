@@ -8,6 +8,7 @@
 #include "gpu_render.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifndef XG_RENDER_SCENE_PASS_CAPACITY
@@ -186,12 +187,19 @@ typedef struct XgSemanticDrawRecord {
     bool has_provenance;
     bool interpolable;
     uint64_t interpolation_id;
-    XgRenderIrNativePrimitive primitive;
-    /* Material remains in primitive.material for either topology. Triangles
-     * are stored only in primitive; line draws have primitive.triangle_count=0. */
+    /* Material remains in primitive.material for either topology. A draw is
+     * either triangles or lines, so line vertices reuse the triangle storage:
+     * line draws have primitive.triangle_count=0, triangle draws line_count=0.
+     * Every reader selects by topology/count. */
+    union {
+        XgRenderIrNativePrimitive primitive;
+        struct {
+            uint8_t line_storage_offset[offsetof(XgRenderIrNativePrimitive, triangles)];
+            GpuRenderSemanticLine lines[GPU_RENDER_SEMANTIC_LINE_CAPACITY];
+        };
+    };
     GpuRenderSemanticTopology topology;
     uint8_t line_count;
-    GpuRenderSemanticLine lines[GPU_RENDER_SEMANTIC_LINE_CAPACITY];
     uint8_t screen_space_2d;
     uint8_t aa_exempt;
     uint8_t sprite_texture;
@@ -200,6 +208,9 @@ typedef struct XgSemanticDrawRecord {
     /* Host HD texture replacement chosen for this draw (valid == 0: none). */
     GpuRenderHdTexture hd_texture;
 } XgSemanticDrawRecord;
+typedef char xg_semantic_draw_lines_fit_triangle_storage[
+    sizeof(((XgRenderIrNativePrimitive *)0)->triangles) >=
+        sizeof(GpuRenderSemanticLine) * GPU_RENDER_SEMANTIC_LINE_CAPACITY ? 1 : -1];
 
 typedef enum XgRenderNativeOperationKind {
     XG_RENDER_NATIVE_OPERATION_DRAW = 0,

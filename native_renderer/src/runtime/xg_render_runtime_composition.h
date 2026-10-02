@@ -233,4 +233,14 @@ void xg_render_runtime_composition_resident_text_snapshot(
     PsxXgRenderResidentTextSnapshot *out_snapshot);
 void xg_render_runtime_composition_scene_boundary(bool generation_advanced);
 
+/* Capture profile (debug-server armed); slots 0-23 cutover modules,
+ * 24 invalidation, 25 native draw, 26 source boundary. result 0 continue,
+ * 1 observed, 2 bypass. Guest thread only. */
+uint64_t xg_render_capture_profile_begin(void);
+void xg_render_capture_profile_end(uint32_t slot, uint32_t result, uint64_t begin);
+void xg_render_capture_profile_control(bool enable, bool reset);
+bool xg_render_capture_profile_read(uint32_t slot, uint64_t *calls, uint64_t *ns,
+                                    uint64_t results[3]);
+uint64_t xg_render_capture_profile_ring(const uint32_t **entries, uint32_t *capacity);
+
 #endif

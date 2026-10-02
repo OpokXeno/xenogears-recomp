@@ -1,4 +1,5 @@
 #include "xg_render_runtime_composition.h"
+#include <time.h>
 #include "xg_render_auth_runtime_diagnostics.h"
 #include "xg_render_backend.h"
 #include "xg_render_primitive_utils.h"
@@ -2214,7 +2215,92 @@ static XgRenderCutoverDispatchResult observe_variant_route(
     }
 }
 
+/* ---- Capture profile (debug-server armed) ---------------------------------
+ * Per cutover module and per guest-thread capture stage: call counts, host
+ * time and outcomes, plus an ordered ring of (slot, result, duration). It
+ * measures where native capture spends guest-thread time and how BYPASS
+ * (guest-visible) cutovers interleave with pure observers within a frame. */
+enum {
+    XG_CAPTURE_PROFILE_MODULE_SLOTS = 24,
+    XG_CAPTURE_PROFILE_SLOT_INVALIDATION = 24,
+    XG_CAPTURE_PROFILE_SLOT_NATIVE_DRAW = 25,
+    XG_CAPTURE_PROFILE_SLOT_SOURCE_BOUNDARY = 26,
+    XG_CAPTURE_PROFILE_SLOTS = 27,
+    XG_CAPTURE_PROFILE_RING = 16384,
+};
+static struct {
+    bool enabled;
+    uint64_t calls[XG_CAPTURE_PROFILE_SLOTS];
+    uint64_t ns[XG_CAPTURE_PROFILE_SLOTS];
+    uint64_t results[XG_CAPTURE_PROFILE_SLOTS][3];
+    uint32_t ring[XG_CAPTURE_PROFILE_RING];
+    uint64_t ring_count;
+} g_capture_profile;
+
+static uint64_t capture_profile_now(void) {
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (uint64_t)t.tv_sec * UINT64_C(1000000000) + (uint64_t)t.tv_nsec;
+}
+
+uint64_t xg_render_capture_profile_begin(void) {
+    return g_capture_profile.enabled ? capture_profile_now() : 0u;
+}
+
+void xg_render_capture_profile_end(uint32_t slot, uint32_t result, uint64_t begin) {
+    if (!begin || slot >= XG_CAPTURE_PROFILE_SLOTS) return;
+    const uint64_t elapsed = capture_profile_now() - begin;
+    if (result > 2u) result = 2u;
+    ++g_capture_profile.calls[slot];
+    g_capture_profile.ns[slot] += elapsed;
+    ++g_capture_profile.results[slot][result];
+    const uint64_t units = elapsed / 100u; /* 100 ns */
+    g_capture_profile.ring[g_capture_profile.ring_count++ % XG_CAPTURE_PROFILE_RING] =
+        (slot << 27) | (result << 25) | (uint32_t)(units > 0x1ffffffu ? 0x1ffffffu : units);
+}
+
+void xg_render_capture_profile_control(bool enable, bool reset) {
+    if (reset) {
+        const bool enabled = g_capture_profile.enabled;
+        memset(&g_capture_profile, 0, sizeof(g_capture_profile));
+        g_capture_profile.enabled = enabled;
+    }
+    g_capture_profile.enabled = enable;
+}
+
+bool xg_render_capture_profile_read(uint32_t slot, uint64_t *calls, uint64_t *ns,
+                                    uint64_t results[3]) {
+    if (slot >= XG_CAPTURE_PROFILE_SLOTS) return false;
+    *calls = g_capture_profile.calls[slot];
+    *ns = g_capture_profile.ns[slot];
+    memcpy(results, g_capture_profile.results[slot], sizeof(uint64_t) * 3u);
+    return true;
+}
+
+uint64_t xg_render_capture_profile_ring(const uint32_t **entries, uint32_t *capacity) {
+    *entries = g_capture_profile.ring;
+    *capacity = XG_CAPTURE_PROFILE_RING;
+    return g_capture_profile.ring_count;
+}
+
+static XgRenderCutoverDispatchResult observe_cutover_route_impl(
+        CPUState *cpu, const XgRenderCutoverRouteDescriptor *route);
+
 static XgRenderCutoverDispatchResult observe_cutover_route(
+        CPUState *cpu, const XgRenderCutoverRouteDescriptor *route) {
+    const uint64_t begin = xg_render_capture_profile_begin();
+    const XgRenderCutoverDispatchResult result = observe_cutover_route_impl(cpu, route);
+    if (begin && route != NULL)
+        xg_render_capture_profile_end(
+            (uint32_t)route->module < XG_CAPTURE_PROFILE_MODULE_SLOTS
+                ? (uint32_t)route->module : XG_CAPTURE_PROFILE_MODULE_SLOTS - 1u,
+            result == XG_RENDER_CUTOVER_DISPATCH_BYPASS ? 2u
+                : result == XG_RENDER_CUTOVER_DISPATCH_OBSERVED ? 1u : 0u,
+            begin);
+    return result;
+}
+
+static XgRenderCutoverDispatchResult observe_cutover_route_impl(
         CPUState *cpu, const XgRenderCutoverRouteDescriptor *route) {
     XgRenderRuntimeAuthSceneState state;
 
@@ -2939,6 +3025,9 @@ void xg_render_runtime_composition_set_exec_phase_exchange(
 
 void xg_render_runtime_composition_note_gpu_semantic_current(
         const GpuRenderSemantic *semantic) {
+    /* Native work never prepares a UI OT and covers temporal current itself;
+     * skipping keeps this per-draw call off capture-worker-owned state. */
+    if (xg_render_submission_native_work_mode()) return;
     xg_render_submission_note_semantic_current(semantic);
     (void)xg_render_submission_cover_temporal_current(semantic);
 }

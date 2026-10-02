@@ -5,9 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Grow host storage without changing contents or capacity on failure. New
- * slots are zeroed; maximum describes an address/index domain, not a budget. */
-static inline void *xg_render_array_reserve(void *data, size_t element_size,
+/* Grow storage for records whose complete value is assigned before publication.
+ * Failure preserves both contents and capacity. */
+static inline void *xg_render_array_reserve_uninitialized(void *data, size_t element_size,
         uint32_t *capacity, uint32_t required, uint32_t maximum) {
     if (required <= *capacity) return data;
     if (!element_size || required > maximum) return NULL;
@@ -17,9 +17,18 @@ static inline void *xg_render_array_reserve(void *data, size_t element_size,
     if ((size_t)next > SIZE_MAX / element_size) return NULL;
     void *grown = realloc(data, (size_t)next * element_size);
     if (!grown) return NULL;
-    memset((unsigned char *)grown + (size_t)*capacity * element_size, 0,
-        (size_t)(next - *capacity) * element_size);
     *capacity = next;
+    return grown;
+}
+
+/* General arrays retain zero initialization of all newly allocated slots. */
+static inline void *xg_render_array_reserve(void *data, size_t element_size,
+        uint32_t *capacity, uint32_t required, uint32_t maximum) {
+    const uint32_t previous=*capacity;
+    void *grown=xg_render_array_reserve_uninitialized(data,element_size,capacity,required,maximum);
+    if (grown && *capacity>previous)
+        memset((unsigned char *)grown+(size_t)previous*element_size,0,
+            (size_t)(*capacity-previous)*element_size);
     return grown;
 }
 

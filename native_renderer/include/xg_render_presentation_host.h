@@ -114,10 +114,12 @@ bool xg_render_presentation_host_set_period(
 /* Owner-only, between pumps. Pair a guest cycle with its signed wall-time offset
  * from now, without sharing the simulation clock's origin. Bind on a fresh epoch
  * or rate change; rebase also handles deliberate pauses/debt resets. This only
- * dates future publications, never postpones accepted work. Realtime means 1x. */
+ * dates future publications, never postpones accepted work. Realtime means 1x.
+ * guest_lag_ns: how far the guest currently executes behind that schedule. */
 bool xg_render_presentation_host_sync_source_clock(
     XgRenderPresentationHost *host, uint64_t guest_cycle,
-    int64_t guest_time_offset_ns, bool realtime, bool rebase);
+    int64_t guest_time_offset_ns, uint64_t guest_lag_ns, bool realtime,
+    bool rebase);
 
 /* Owner-only, between pumps. NULL disables idle holds, not completion of an
  * already accepted temporal interval. Use the semantic core's bool
@@ -126,6 +128,19 @@ bool xg_render_presentation_host_sync_source_clock(
 bool xg_render_presentation_host_set_hold_presenter(
     XgRenderPresentationHost *host,
     XgRenderPresentationHoldPresenter present_hold);
+
+/* Makes the calling thread the presenter owner (pump, time_until_*, join).
+ * Only while no pump runs. The starting thread stays the controller and may
+ * still call set_period, set_hold_presenter and sync_source_clock while the
+ * owner pumps, which lets a dedicated presenter thread own presentation. */
+bool xg_render_presentation_host_rebind_owner(XgRenderPresentationHost *host);
+
+/* Owner or controller. Nonzero display_period_ns when a blocking vsync swap
+ * paces presentation: each tick is then anchored at its actual pump (right
+ * after the previous vblank) rather than on a fixed grid, and phase sampling
+ * advances in whole display periods. Zero restores the free-running grid. */
+bool xg_render_presentation_host_set_display_locked(
+    XgRenderPresentationHost *host, uint64_t display_period_ns);
 
 /* Performs logical invalidation, then wakes the asynchronous worker. */
 uint64_t xg_render_presentation_host_invalidate_or_wake(

@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <time.h>
 
+
 enum { XG_RENDER_INVALIDATION_MODULE_CAPACITY = 32u };
 
 static XgRenderInvalidationModule

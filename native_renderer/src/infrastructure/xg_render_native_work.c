@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+
 #define NATIVE_WORK_UPLOAD_CAPACITY 32u
 /* One device-stream ID, not an authenticated game artifact identity. */
 #define NATIVE_WORK_UPLOAD_RESOURCE_ID UINT64_C(0x58474e415456524d)

@@ -17,6 +17,10 @@
 static XgRenderOverlayFt4Template *templates;
 static uint32_t template_capacity;
 static uint32_t template_count;
+/* Membership remains conservative until clear; exact ranges decide which
+ * cached packets are invalidated. */
+static uint8_t template_blocks[0x200000u / 64u];
+static bool template_filter_unbounded;
 static PsxXgRenderOverlayFt4Snapshot overlay_snapshot;
 static bool projected_2e_descriptor_scope;
 typedef struct XgRenderOverlayFt4LocalProducerPending {
@@ -200,6 +204,30 @@ static XgRenderOverlayFt4Template *overlay_ft4_find(
     return NULL;
 }
 
+static void include_template_range(uint32_t address) {
+    const uint32_t begin = address & UINT32_C(0x1fffffff);
+    if (begin > UINT32_C(0x200000) - 0x28u) {
+        template_filter_unbounded = true;
+        return;
+    }
+    const uint32_t end = begin + 0x28u;
+    for (uint32_t block = begin / 64u; block <= (end - 1u) / 64u; ++block)
+        template_blocks[block] = 1u;
+}
+
+static XgRenderOverlayFt4Template *allocate_template(void) {
+    /* Packet writes invalidate templates every frame. Reuse retired slots
+     * instead of growing and rescanning the entire scene's history. */
+    for (uint32_t index = 0u; index < template_count; ++index)
+        if (!templates[index].valid) return &templates[index];
+    XgRenderOverlayFt4Template *grown = template_count == UINT32_C(0x80000) ? NULL :
+        xg_render_array_reserve(templates, sizeof(*grown), &template_capacity,
+            template_count + 1u, UINT32_C(0x80000));
+    if (!grown) return NULL;
+    templates = grown;
+    return &templates[template_count++];
+}
+
 bool xg_render_overlay_ft4_lookup(
         uint32_t packet_address, XgRenderOverlayFt4Template *out_template) {
     const XgRenderOverlayFt4Template *record =
@@ -241,24 +269,21 @@ static XgRenderOverlayFt4Template *overlay_ft4_upsert(
         if (failure_detail != NULL) *failure_detail = 1u;
         return NULL;
     }
-    XgRenderOverlayFt4Template *grown = template_count == UINT32_C(0x80000) ? NULL :
-        xg_render_array_reserve(templates, sizeof(*grown), &template_capacity,
-            template_count + 1u, UINT32_C(0x80000));
-    if (!grown) {
+    record = allocate_template();
+    if (!record) {
         if (failure_detail != NULL) *failure_detail = 2u;
         return NULL;
     }
-    templates = grown;
-    record = &templates[template_count++];
     *record = (XgRenderOverlayFt4Template){
         .packet_address = packet_address,
     };
     if (!services->lifecycle->begin(producer_pc, &record->lifecycle)) {
         if (failure_detail != NULL) *failure_detail = 3u;
         *record = (XgRenderOverlayFt4Template){0};
-        --template_count;
+        if (record == &templates[template_count - 1u]) --template_count;
         return NULL;
     }
+    include_template_range(packet_address);
     if (services->watch_resource != NULL)
         services->watch_resource(packet_address, 0x28u);
     return record;
@@ -279,15 +304,11 @@ bool xg_render_overlay_ft4_publish_field_sprite(
     }
     target = overlay_ft4_find(publication->packet_address);
     if (target == NULL) {
-        XgRenderOverlayFt4Template *grown = template_count == UINT32_C(0x80000) ? NULL :
-            xg_render_array_reserve(templates, sizeof(*grown), &template_capacity,
-                template_count + 1u, UINT32_C(0x80000));
-        if (!grown) {
+        target = allocate_template();
+        if (!target) {
             if (failure_detail != NULL) *failure_detail = 2u;
             return false;
         }
-        templates = grown;
-        target = &templates[template_count++];
     }
     *target = (XgRenderOverlayFt4Template){
         .primitive = publication->primitive,
@@ -303,6 +324,7 @@ bool xg_render_overlay_ft4_publish_field_sprite(
         .material_ready = publication->material_ready,
         .valid = true,
     };
+    include_template_range(publication->packet_address);
     if (services->watch_resource != NULL)
         services->watch_resource(publication->packet_address, 0x28u);
     if (publication->kind == XG_RENDER_FIELD_SPRITE_OVERLAY_PROJECTED_2E) {
@@ -1309,10 +1331,23 @@ void xg_render_overlay_ft4_snapshot(
 
 void xg_render_overlay_ft4_clear(void) {
     ripple_pending.valid = false;
+    if (template_count) memset(template_blocks, 0, sizeof(template_blocks));
     template_count = 0u;
+    template_filter_unbounded = false;
 }
 
 void xg_render_overlay_ft4_invalidate(uint32_t address, uint32_t size) {
+    const uint64_t begin = address & UINT32_C(0x1fffffff);
+    uint64_t end = begin + size;
+    if (!template_count || !size) return;
+    if (!template_filter_unbounded) {
+        if (begin >= UINT32_C(0x200000)) return;
+        if (end > UINT32_C(0x200000)) end = UINT32_C(0x200000);
+        bool occupied = false;
+        for (uint32_t block = (uint32_t)begin / 64u; block <= (end - 1u) / 64u; ++block)
+            occupied |= template_blocks[block] != 0u;
+        if (!occupied) return;
+    }
     for (uint32_t index = 0u; index < template_count; ++index) {
         XgRenderOverlayFt4Template *record = &templates[index];
 
@@ -1323,8 +1358,7 @@ void xg_render_overlay_ft4_invalidate(uint32_t address, uint32_t size) {
 }
 
 void xg_render_overlay_ft4_reset(void) {
-    ripple_pending.valid = false;
-    template_count = 0u;
+    xg_render_overlay_ft4_clear();
     overlay_snapshot = (PsxXgRenderOverlayFt4Snapshot){0};
     projected_2e_descriptor_scope = false;
     local_producer_pending = (XgRenderOverlayFt4LocalProducerPending){0};

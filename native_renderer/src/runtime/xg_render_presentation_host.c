@@ -29,8 +29,13 @@
 struct XgRenderPresentationHost {
     XgRenderWorkerServices worker_services;
     XgRenderPresenterServices presenter_services;
-    XgRenderPresentationHoldPresenter present_hold;
-    uint64_t presentation_period_ns;
+    /* Written by the controller or owner, read by the pumping owner. */
+    _Atomic(XgRenderPresentationHoldPresenter) present_hold;
+    atomic_uint_fast64_t presentation_period_ns;
+    /* Nonzero while a blocking vsync swap owns the cadence: each tick is
+     * anchored at the actual pump instead of a fixed grid that drifts against
+     * vblank, and the phase clock advances in whole display periods. */
+    atomic_uint_fast64_t display_period_ns;
 
     mtx_t mutex;
     mtx_t lifecycle_mutex;
@@ -38,6 +43,10 @@ struct XgRenderPresentationHost {
     cnd_t join_condition;
     thrd_t worker_thread;
     thrd_t presenter_owner_thread;
+    /* The starting thread. When a dedicated presenter thread rebinds
+     * ownership, the controller keeps the cross-thread control calls
+     * (period, hold presenter, source clock). */
+    thrd_t controller_thread;
     uint64_t present_period_start_ns;
     uint64_t retirement_period_start_ns;
 
@@ -192,6 +201,15 @@ static bool caller_is_presenter_owner(XgRenderPresentationHost *host) {
         thrd_equal(thrd_current(), host->presenter_owner_thread) != 0;
 }
 
+static bool caller_is_controller(XgRenderPresentationHost *host) {
+    return thrd_equal(thrd_current(), host->controller_thread) != 0;
+}
+
+static uint64_t period_load(XgRenderPresentationHost *host) {
+    return (uint64_t)atomic_load_explicit(&host->presentation_period_ns,
+                                          memory_order_relaxed);
+}
+
 static bool caller_is_worker_thread(XgRenderPresentationHost *host) {
     return host->worker_created &&
         !atomic_load_explicit(&host->worker_done, memory_order_acquire) &&
@@ -244,7 +262,6 @@ static void record_worker_result(XgRenderPresentationHost *host,
 
 static void record_presenter_result(XgRenderPresentationHost *host,
                                     XgRenderPresenterResult result) {
-    counter_increment(&host->presenter_attempts);
     atomic_store_explicit(&host->last_presenter_result, (int)result,
                           memory_order_relaxed);
     switch (result) {
@@ -409,9 +426,12 @@ XgRenderPresentationHost *xg_render_presentation_host_start(
     host->worker_services = *worker_services;
     host->presenter_services = *presenter_services;
     host->presenter_services.clock_sample_valid = false;
-    host->presentation_period_ns = presentation_period_ns;
+    atomic_init(&host->presentation_period_ns, presentation_period_ns);
+    atomic_init(&host->present_hold, (XgRenderPresentationHoldPresenter)NULL);
+    atomic_init(&host->display_period_ns, 0u);
     host->presenter_services.owner_token = next_owner_token();
     host->presenter_owner_thread = thrd_current();
+    host->controller_thread = host->presenter_owner_thread;
     if (!monotonic_nanoseconds(&host->present_period_start_ns))
         goto fail_all;
     host->retirement_period_start_ns = host->present_period_start_ns;
@@ -516,6 +536,7 @@ void xg_render_presentation_host_notify(XgRenderPresentationHost *host) {
 
 bool xg_render_presentation_host_pump(XgRenderPresentationHost *host) {
     XgRenderPresenterResult result;
+    XgRenderPresentationHoldPresenter present_hold;
     XgRenderPresentationDiagnostics after;
     uint64_t now_ns;
     uint64_t elapsed_ns;
@@ -566,20 +587,22 @@ bool xg_render_presentation_host_pump(XgRenderPresentationHost *host) {
     /* Unsigned elapsed time avoids overflowing a future deadline. Skip missed
      * periods in O(1), preserving the host cadence independently of guest work. */
     elapsed_ns = now_ns - host->present_period_start_ns;
-    if (elapsed_ns < host->presentation_period_ns)
+    const uint64_t period_ns = period_load(host);
+    if (elapsed_ns < period_ns)
         goto done;
-    advance_ns = elapsed_ns - elapsed_ns % host->presentation_period_ns;
+    advance_ns = elapsed_ns - elapsed_ns % period_ns;
+    const uint64_t display_period_ns = (uint64_t)atomic_load_explicit(
+        &host->display_period_ns, memory_order_relaxed);
+    if (display_period_ns != 0u)
+        advance_ns = elapsed_ns; /* this pump follows the previous vblank */
     host->present_period_start_ns += advance_ns;
     /* The phase selector samples the scheduled tick, not when SDL/GL happened
-     * to get CPU time. Keep backend clock identity and callback ownership. */
-    if (host->presenter_services.clock_sample_valid) {
-        if (advance_ns > UINT64_MAX - host->presenter_services.clock_sample_ns) {
-            fail_host_from_presenter(host);
-            accepted = false;
-            goto done;
-        }
-        host->presenter_services.clock_sample_ns += advance_ns;
-    } else if (host->presenter_services.clock_ns != NULL) {
+     * to get CPU time. Keep backend clock identity and callback ownership.
+     * Resample every tick: the backend clock (SDL: CLOCK_MONOTONIC_RAW) and
+     * this cadence clock (CLOCK_MONOTONIC, NTP-slewed) drift apart by tens of
+     * ppm, so accumulating periods skews presenter time against the worker's
+     * deadline checks by ~50 ms per hour. Only the lateness spans domains. */
+    if (host->presenter_services.clock_ns != NULL) {
         const uint64_t clock_ns = host->presenter_services.clock_ns(
             host->presenter_services.user_data);
         uint64_t sampled_ns;
@@ -589,17 +612,46 @@ bool xg_render_presentation_host_pump(XgRenderPresentationHost *host) {
             goto done;
         }
         const uint64_t lateness_ns = sampled_ns - host->present_period_start_ns;
-        host->presenter_services.clock_sample_ns = clock_ns >= lateness_ns
-            ? clock_ns - lateness_ns : 0u;
+        uint64_t sample_ns = clock_ns >= lateness_ns ? clock_ns - lateness_ns : 0u;
+        /* Display-locked: the pump wakes when the compositor releases the
+         * previous frame, which jitters by a millisecond or more, while every
+         * swap lands on its own vblank. Advance the phase clock in whole
+         * display periods (a missed vblank skips a phase instead of
+         * repeating one) and fold the residual error in slowly. */
+        if (display_period_ns != 0u &&
+            host->presenter_services.clock_sample_valid) {
+            const uint64_t previous_ns = host->presenter_services.clock_sample_ns;
+            const uint64_t delta_ns = sample_ns > previous_ns ? sample_ns - previous_ns : 0u;
+            uint64_t frames = (delta_ns + display_period_ns / 2u) / display_period_ns;
+            if (frames == 0u) frames = 1u;
+            const uint64_t locked_ns = previous_ns + frames * display_period_ns;
+            if (locked_ns > sample_ns + display_period_ns) {
+                /* Far ahead of real time: resynchronize. */
+            } else if (locked_ns >= sample_ns) {
+                sample_ns = locked_ns - (locked_ns - sample_ns) / 16u;
+            } else {
+                sample_ns = locked_ns + (sample_ns - locked_ns) / 16u;
+            }
+        }
+        /* Phase selection requires a non-decreasing clock. */
+        if (host->presenter_services.clock_sample_valid &&
+            sample_ns < host->presenter_services.clock_sample_ns)
+            sample_ns = host->presenter_services.clock_sample_ns;
+        host->presenter_services.clock_sample_ns = sample_ns;
         host->presenter_services.clock_sample_valid = true;
     }
+    /* A fallback hold is another outcome of this same tick, not a second
+     * scheduled presentation attempt. */
+    counter_increment(&host->presenter_attempts);
     result = xg_render_presenter_present_next(&host->presenter_services);
     record_presenter_result(host, result);
     if ((result == XG_RENDER_PRESENTER_EMPTY ||
          result == XG_RENDER_PRESENTER_FENCE_PENDING ||
-         result == XG_RENDER_PRESENTER_COMPOSE_FAILED) && host->present_hold) {
+         result == XG_RENDER_PRESENTER_COMPOSE_FAILED) &&
+        (present_hold = atomic_load_explicit(&host->present_hold,
+                                             memory_order_acquire)) != NULL) {
         counter_increment(&host->presenter_hold_attempts);
-        if (host->present_hold(&host->presenter_services)) {
+        if (present_hold(&host->presenter_services)) {
             counter_increment(&host->presenter_held);
             record_presenter_result(host, XG_RENDER_PRESENTER_PRESENTED);
         }
@@ -642,8 +694,9 @@ static bool time_until_pump(
         return false;
     }
     elapsed_ns = now_ns - host->present_period_start_ns;
-    if (elapsed_ns < host->presentation_period_ns)
-        *out_nanoseconds = host->presentation_period_ns - elapsed_ns;
+    const uint64_t period_ns = period_load(host);
+    if (elapsed_ns < period_ns)
+        *out_nanoseconds = period_ns - elapsed_ns;
     if (!include_retirements) return true;
     elapsed_ns = now_ns - host->retirement_period_start_ns;
     if (elapsed_ns >= XG_RENDER_HOST_RETIREMENT_PERIOD_NS)
@@ -679,7 +732,7 @@ bool xg_render_presentation_host_set_period(
      * presenter_running is always true. A plain aligned u64 store takes
      * effect on the next pump; the pump reads the period at well-defined
      * points, so a mid-pump change cannot tear a tick. */
-    if (!caller_is_presenter_owner(host)) {
+    if (!caller_is_presenter_owner(host) && !caller_is_controller(host)) {
         counter_increment(&host->presenter_owner_rejections);
         return false;
     }
@@ -687,17 +740,43 @@ bool xg_render_presentation_host_set_period(
             XG_RENDER_PRESENTATION_HOST_RUNNING ||
         atomic_load_explicit(&host->stop_requested, memory_order_acquire))
         return false;
-    host->presentation_period_ns = period_ns;
+    atomic_store_explicit(&host->presentation_period_ns, period_ns,
+                          memory_order_relaxed);
     return true;
 }
 
 bool xg_render_presentation_host_sync_source_clock(
         XgRenderPresentationHost *host, uint64_t guest_cycle,
-        int64_t guest_time_offset_ns, bool realtime, bool rebase) {
+        int64_t guest_time_offset_ns, uint64_t guest_lag_ns, bool realtime,
+        bool rebase) {
     uint64_t guest_time_ns = 0u;
     bool accepted = false;
 
     if (host == NULL) return false;
+    /* With a dedicated presenter thread the controller (guest) thread keeps
+     * dating its own sources concurrently with pumps: this only touches the
+     * core's source-side visual clock, never presenter state. */
+    if (!caller_is_presenter_owner(host) && caller_is_controller(host)) {
+        if (atomic_load_explicit(&host->state, memory_order_acquire) !=
+                XG_RENDER_PRESENTATION_HOST_RUNNING ||
+            atomic_load_explicit(&host->stop_requested, memory_order_acquire))
+            return false;
+        if (realtime && host->presenter_services.clock_ns != NULL) {
+            guest_time_ns = host->presenter_services.clock_ns(
+                host->presenter_services.user_data);
+            if (guest_time_offset_ns < 0) {
+                const uint64_t earlier_ns = (uint64_t)(-(guest_time_offset_ns + 1)) + 1u;
+                guest_time_ns = earlier_ns < guest_time_ns ? guest_time_ns - earlier_ns : 0u;
+            } else {
+                if ((uint64_t)guest_time_offset_ns > UINT64_MAX - guest_time_ns)
+                    return false;
+                guest_time_ns += (uint64_t)guest_time_offset_ns;
+            }
+        }
+        return xg_render_presenter_sync_source_clock(
+            &host->presenter_services, guest_cycle, guest_time_ns, guest_lag_ns,
+            realtime, rebase);
+    }
     if (!caller_is_presenter_owner(host) ||
         atomic_exchange_explicit(&host->presenter_running, true, memory_order_acq_rel)) {
         counter_increment(&host->presenter_owner_rejections);
@@ -730,7 +809,8 @@ bool xg_render_presentation_host_sync_source_clock(
         }
     }
     accepted = xg_render_presenter_sync_source_clock(
-        &host->presenter_services, guest_cycle, guest_time_ns, realtime, rebase);
+        &host->presenter_services, guest_cycle, guest_time_ns, guest_lag_ns,
+        realtime, rebase);
 done:
     atomic_store_explicit(&host->presenter_running, false, memory_order_release);
     return accepted;
@@ -740,8 +820,10 @@ bool xg_render_presentation_host_set_hold_presenter(
         XgRenderPresentationHost *host,
         XgRenderPresentationHoldPresenter present_hold) {
     if (host == NULL) return false;
-    if (!caller_is_presenter_owner(host) ||
-        atomic_load_explicit(&host->presenter_running, memory_order_acquire)) {
+    const bool owner = caller_is_presenter_owner(host);
+    if ((!owner && !caller_is_controller(host)) ||
+        (owner && atomic_load_explicit(&host->presenter_running,
+                                       memory_order_acquire))) {
         counter_increment(&host->presenter_owner_rejections);
         return false;
     }
@@ -749,7 +831,32 @@ bool xg_render_presentation_host_set_hold_presenter(
             XG_RENDER_PRESENTATION_HOST_RUNNING ||
         atomic_load_explicit(&host->stop_requested, memory_order_acquire))
         return false;
-    host->present_hold = present_hold;
+    atomic_store_explicit(&host->present_hold, present_hold,
+                          memory_order_release);
+    return true;
+}
+
+bool xg_render_presentation_host_set_display_locked(
+        XgRenderPresentationHost *host, uint64_t display_period_ns) {
+    if (host == NULL) return false;
+    if (!caller_is_presenter_owner(host) && !caller_is_controller(host)) {
+        counter_increment(&host->presenter_owner_rejections);
+        return false;
+    }
+    atomic_store_explicit(&host->display_period_ns, display_period_ns,
+                          memory_order_relaxed);
+    return true;
+}
+
+bool xg_render_presentation_host_rebind_owner(XgRenderPresentationHost *host) {
+    if (host == NULL ||
+        atomic_load_explicit(&host->presenter_running, memory_order_acquire))
+        return false;
+    (void)mtx_lock(&host->mutex);
+    host->presenter_owner_thread = thrd_current();
+    /* Re-derive the presenter clock sample on the new owner's next tick. */
+    host->presenter_services.clock_sample_valid = false;
+    (void)mtx_unlock(&host->mutex);
     return true;
 }
 

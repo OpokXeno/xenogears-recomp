@@ -14,6 +14,7 @@
 #include <stddef.h>
 #include <string.h>
 
+
 enum {
     MAX_RESOURCE_SIZE = 0x24u,
 };

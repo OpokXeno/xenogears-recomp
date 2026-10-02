@@ -8,8 +8,12 @@
 typedef struct XgRenderSourceSlot {
     XgRenderSourceCommitHeader header;
     XgSemanticPassRecord passes[XG_RENDER_SCENE_PASS_CAPACITY];
-    XgSemanticDrawRecord draws[XG_RENDER_SCENE_DRAW_CAPACITY];
-    XgRenderNativeOperation native_operations[XG_RENDER_NATIVE_OPERATION_CAPACITY];
+    /* Grown on demand up to their capacity limits: a native-work slot never
+     * touches draws, and typical frames use a fraction of the operations. */
+    XgSemanticDrawRecord *draws;
+    XgRenderNativeOperation *native_operations;
+    uint32_t draw_capacity;
+    uint32_t native_operation_capacity;
     XgSemanticResourceRef resources[XG_RENDER_SCENE_RESOURCE_CAPACITY];
     XgRenderMotionRef motion_resources[XG_RENDER_SCENE_RESOURCE_CAPACITY];
     XgSemanticResourceRef temporal_coverage[XG_RENDER_SCENE_RESOURCE_CAPACITY];
@@ -21,7 +25,9 @@ typedef struct XgRenderSourceSlot {
     XgSemanticUiGlyphPlacementRecord
         ui_glyph_placements[XG_RENDER_SCENE_UI_GLYPH_PLACEMENT_CAPACITY];
     uint32_t generation;
+    uint32_t readers;
     bool occupied;
+    bool retire_pending;
 } XgRenderSourceSlot;
 
 /* The queue has bounded backpressure, but inactive queue slots do not need a
@@ -398,7 +404,22 @@ static uint64_t commit_digest(const XgRenderSourceSlot *slot) {
     uint64_t hash = UINT64_C(1469598103934665603);
     uint32_t index;
 
-#define HASH_FIELD(value) hash = hash_bytes(hash, &(value), sizeof(value))
+    /* Fields are packed into a buffer and mixed a 64-bit word at a time
+     * (hash_words); byte-wise FNV over every operation/draw field was a
+     * measurable share of guest-thread time at each source seal. */
+    uint8_t field_buffer[256];
+    size_t field_used = 0u;
+#define HASH_FLUSH()                                                           \
+    do {                                                                       \
+        hash = hash_words(hash, field_buffer, field_used);                     \
+        field_used = 0u;                                                       \
+    } while (0)
+#define HASH_FIELD(value)                                                      \
+    do {                                                                       \
+        if (field_used + sizeof(value) > sizeof(field_buffer)) HASH_FLUSH();   \
+        memcpy(field_buffer + field_used, &(value), sizeof(value));            \
+        field_used += sizeof(value);                                           \
+    } while (0)
     HASH_FIELD(slot->header.identity.presentation_epoch);
     HASH_FIELD(slot->header.identity.source_sequence);
     HASH_FIELD(slot->header.identity.guest_vblank_sequence);
@@ -454,6 +475,7 @@ static uint64_t commit_digest(const XgRenderSourceSlot *slot) {
             &slot->native_operations[index];
         HASH_FIELD(operation->kind);
         if (operation->kind == XG_RENDER_NATIVE_OPERATION_DRAW) {
+            HASH_FLUSH();
             hash = hash_semantic(hash, &operation->semantic);
             HASH_FIELD(operation->hd_texture);
             HASH_FIELD(operation->temporal.coverage.resource_id);
@@ -529,12 +551,14 @@ static uint64_t commit_digest(const XgRenderSourceSlot *slot) {
         HASH_FIELD(draw->has_provenance);
         HASH_FIELD(draw->interpolable);
         HASH_FIELD(draw->interpolation_id);
+        HASH_FLUSH();
         hash = hash_primitive(hash, &draw->primitive);
         HASH_FIELD(draw->topology);
         HASH_FIELD(draw->line_count);
         HASH_FIELD(draw->screen_space_2d);
         HASH_FIELD(draw->native_view_effect);
         HASH_FIELD(draw->native_view_effect_index);
+        if (draw->line_count != 0u) HASH_FLUSH();
         for (uint32_t line = 0u; line < draw->line_count; ++line)
             for (uint32_t vertex = 0u; vertex < 2u; ++vertex)
                 hash = hash_semantic_vertex(
@@ -679,7 +703,9 @@ static uint64_t commit_digest(const XgRenderSourceSlot *slot) {
         HASH_FIELD(placement->glyph_index);
         HASH_FIELD(placement->palette_index);
     }
+    HASH_FLUSH();
 #undef HASH_FIELD
+#undef HASH_FLUSH
     return hash;
 }
 
@@ -1217,14 +1243,41 @@ static XgRenderSourceCommitResult validate_ui(
     return XG_RENDER_SOURCE_COMMIT_OK;
 }
 
+static bool slot_array_reserve(void **array, uint32_t *capacity,
+                               uint32_t count, size_t element_size,
+                               uint32_t limit) {
+    uint32_t grown;
+    void *resized;
+    if (count < *capacity) return true;
+    if (count >= limit) return false;
+    grown = *capacity ? *capacity * 2u : 256u;
+    if (grown > limit) grown = limit;
+    resized = realloc(*array, (size_t)grown * element_size);
+    if (resized == NULL) return false;
+    *array = resized;
+    *capacity = grown;
+    return true;
+}
+
+static void slot_free(XgRenderSourceSlot *slot) {
+    if (slot == NULL) return;
+    free(slot->draws);
+    free(slot->native_operations);
+    free(slot);
+}
+
 static void source_commit_reset_unlocked(void) {
     uint32_t index;
     for (index = 0; index < XG_RENDER_SOURCE_COMMIT_CAPACITY; index++) {
         XgRenderSourceSlot *slot = g_slots[index];
         uint32_t generation = (slot ? slot->generation : g_slot_generations[index]) + 1u;
         if (generation == 0u) generation = 1u;
+        if (slot && slot->occupied && slot->readers) {
+            slot->retire_pending = true;
+            continue;
+        }
         if (slot && slot->occupied) release_resources(slot);
-        free(slot);
+        slot_free(slot);
         g_slots[index] = NULL;
         g_slot_generations[index] = generation;
     }
@@ -1260,6 +1313,10 @@ static XgRenderSourceCommitResult source_commit_begin_unlocked(
         if (!slot) {
             slot = malloc(sizeof(*slot));
             if (!slot) return XG_RENDER_SOURCE_COMMIT_CAPACITY_EXCEEDED;
+            slot->draws = NULL;
+            slot->native_operations = NULL;
+            slot->draw_capacity = 0u;
+            slot->native_operation_capacity = 0u;
             slot->generation = g_slot_generations[index];
             g_slots[index] = slot;
         }
@@ -1273,6 +1330,8 @@ static XgRenderSourceCommitResult source_commit_begin_unlocked(
         slot->header.temporally_eligible = temporally_eligible && !discontinuity;
         slot->header.display_boundary = true;
         slot->header.state = XG_RENDER_SOURCE_BUILDING;
+        slot->readers = 0u;
+        slot->retire_pending = false;
         slot->occupied = true;
         *out_builder = (XgRenderSourceBuilder){ index, slot->generation };
         return XG_RENDER_SOURCE_COMMIT_OK;
@@ -1303,7 +1362,9 @@ static XgRenderSourceCommitResult source_commit_append_draw_unlocked(
     if (draw == NULL || !draw_valid(draw) ||
         !pass_exists(slot, draw->order.pass_id))
         return XG_RENDER_SOURCE_COMMIT_PROOF_REJECTED;
-    if (slot->header.draw_count >= XG_RENDER_SCENE_DRAW_CAPACITY)
+    if (!slot_array_reserve((void **)&slot->draws, &slot->draw_capacity,
+                            slot->header.draw_count, sizeof(*slot->draws),
+                            XG_RENDER_SCENE_DRAW_CAPACITY))
         return XG_RENDER_SOURCE_COMMIT_CAPACITY_EXCEEDED;
     slot->draws[slot->header.draw_count++] = *draw;
     return XG_RENDER_SOURCE_COMMIT_OK;
@@ -1462,12 +1523,10 @@ static XgRenderSourceCommitResult source_commit_seal_unlocked(
                 return XG_RENDER_SOURCE_COMMIT_PROOF_REJECTED;
             }
         }
-        for (index = 0u; index < slot->header.native_operation_count; ++index) {
-            if (!native_operation_valid(&slot->native_operations[index])) {
-                reject_slot(slot, XG_RENDER_SOURCE_REJECTED);
-                return XG_RENDER_SOURCE_COMMIT_PROOF_REJECTED;
-            }
-        }
+        /* Append validates each operation before copying it, and retains its
+         * immutable motion/coverage/upload snapshots in the same transaction.
+         * The builder exposes no mutable operation storage. Revalidating every
+         * polygon here repeats the append checks without checking new state. */
         /* A work chunk is an ordered mutation stream. Display state (including
          * disabled or not-yet-sized scanout) does not constrain VRAM writes. */
         goto sealed;
@@ -1603,7 +1662,9 @@ static XgRenderSourceCommitResult source_commit_retire_unlocked(
     if (slot == NULL || (slot->header.state != XG_RENDER_SOURCE_SEALED &&
                          slot->header.state != XG_RENDER_SOURCE_QUEUED))
         return XG_RENDER_SOURCE_COMMIT_INVALID_TRANSITION;
-    reject_slot(slot, XG_RENDER_SOURCE_RETIRED);
+    if (slot->retire_pending) return XG_RENDER_SOURCE_COMMIT_INVALID_TRANSITION;
+    if (slot->readers) slot->retire_pending = true;
+    else reject_slot(slot, XG_RENDER_SOURCE_RETIRED);
     return XG_RENDER_SOURCE_COMMIT_OK;
 }
 
@@ -1843,8 +1904,11 @@ XgRenderSourceCommitResult xg_render_source_commit_append_native_operation(
         result = XG_RENDER_SOURCE_COMMIT_INVALID_TRANSITION;
     } else if (operation == NULL) {
         result = XG_RENDER_SOURCE_COMMIT_INVALID_ARGUMENT;
-    } else if (slot->header.native_operation_count >=
-               XG_RENDER_NATIVE_OPERATION_CAPACITY) {
+    } else if (!slot_array_reserve((void **)&slot->native_operations,
+                                   &slot->native_operation_capacity,
+                                   slot->header.native_operation_count,
+                                   sizeof(*slot->native_operations),
+                                   XG_RENDER_NATIVE_OPERATION_CAPACITY)) {
         result = XG_RENDER_SOURCE_COMMIT_CAPACITY_EXCEEDED;
     } else if (!native_operation_valid(operation)) {
         result = XG_RENDER_SOURCE_COMMIT_PROOF_REJECTED;
@@ -1980,6 +2044,35 @@ XgRenderSourceCommitResult xg_render_source_commit_retire(
     XgRenderSourceCommitResult result;
     source_commit_lock();
     result = source_commit_retire_unlocked(commit);
+    source_commit_unlock();
+    return result;
+}
+
+XgRenderSourceCommitResult xg_render_source_commit_acquire_read(
+        XgRenderSourceCommitHandle commit) {
+    XgRenderSourceCommitResult result = XG_RENDER_SOURCE_COMMIT_INVALID_TRANSITION;
+    source_commit_lock();
+    XgRenderSourceSlot *slot = handle_slot(commit);
+    if (slot && !slot->retire_pending && slot->readers != UINT32_MAX &&
+        (slot->header.state == XG_RENDER_SOURCE_SEALED ||
+         slot->header.state == XG_RENDER_SOURCE_QUEUED)) {
+        ++slot->readers;
+        result = XG_RENDER_SOURCE_COMMIT_OK;
+    }
+    source_commit_unlock();
+    return result;
+}
+
+XgRenderSourceCommitResult xg_render_source_commit_release_read(
+        XgRenderSourceCommitHandle commit) {
+    XgRenderSourceCommitResult result = XG_RENDER_SOURCE_COMMIT_INVALID_TRANSITION;
+    source_commit_lock();
+    XgRenderSourceSlot *slot = handle_slot(commit);
+    if (slot && slot->readers) {
+        if (!--slot->readers && slot->retire_pending)
+            reject_slot(slot, XG_RENDER_SOURCE_RETIRED);
+        result = XG_RENDER_SOURCE_COMMIT_OK;
+    }
     source_commit_unlock();
     return result;
 }

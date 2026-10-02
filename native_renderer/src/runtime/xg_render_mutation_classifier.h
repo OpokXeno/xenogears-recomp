@@ -22,6 +22,9 @@ typedef void (*XgRenderMutationWatchRegistrar)(
 typedef struct XgRenderMutationSource {
     XgRenderMutationClassifier classify;
     XgRenderMutationWatchRegistrar register_watches;
+    /* Opt in only when these fixed watches cover every possible contribution.
+     * Dynamic classifiers keep the full call path. */
+    bool watches_cover_classification;
 } XgRenderMutationSource;
 
 void xg_render_mutation_classifier_clear_sources(void);

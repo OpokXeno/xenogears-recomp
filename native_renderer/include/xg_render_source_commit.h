@@ -161,6 +161,13 @@ XgRenderSourceCommitResult xg_render_source_commit_mark_queued(
     XgRenderSourceCommitHandle commit);
 XgRenderSourceCommitResult xg_render_source_commit_retire(
     XgRenderSourceCommitHandle commit);
+/* Read lease on an immutable sealed/queued commit. Retirement/reset stops new
+ * leases and defers storage/resource release until existing readers release.
+ * A lease never queues, ACKs or applies a source transaction. */
+XgRenderSourceCommitResult xg_render_source_commit_acquire_read(
+    XgRenderSourceCommitHandle commit);
+XgRenderSourceCommitResult xg_render_source_commit_release_read(
+    XgRenderSourceCommitHandle commit);
 XgRenderSourceCommitResult xg_render_source_commit_header_copy(
     XgRenderSourceCommitHandle commit,
     XgRenderSourceCommitHeader *out_header);

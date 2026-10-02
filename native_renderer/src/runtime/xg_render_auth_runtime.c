@@ -598,7 +598,16 @@ bool psx_xg_render_auth_describe_native_work(
     return true;
 }
 
+static bool accept_native_draw_impl(const GpuRenderSemantic *semantic);
+
 bool psx_xg_render_auth_accept_native_draw(const GpuRenderSemantic *semantic) {
+    const uint64_t begin = xg_render_capture_profile_begin();
+    const bool accepted = accept_native_draw_impl(semantic);
+    xg_render_capture_profile_end(25u, accepted ? 1u : 0u, begin);
+    return accepted;
+}
+
+static bool accept_native_draw_impl(const GpuRenderSemantic *semantic) {
     XgRenderSourceFrameDescription description;
     XgRenderSubmissionCommand command;
     if (!xg_render_native_work_enabled()) return true;
@@ -2484,10 +2493,22 @@ static void invalidate_authenticated_authority_overlapping(
     }
 }
 
+static void note_code_write_impl(uint64_t previous_generation,
+                                 uint64_t current_generation,
+                                 uint32_t guest_pc, uint32_t write_size);
+
 void psx_xg_render_auth_note_code_write(uint64_t previous_generation,
                                            uint64_t current_generation,
                                            uint32_t guest_pc,
                                            uint32_t write_size) {
+    const uint64_t begin = xg_render_capture_profile_begin();
+    note_code_write_impl(previous_generation, current_generation, guest_pc, write_size);
+    xg_render_capture_profile_end(24u, 1u, begin);
+}
+
+static void note_code_write_impl(uint64_t previous_generation,
+                                 uint64_t current_generation,
+                                 uint32_t guest_pc, uint32_t write_size) {
     XgRenderMutationClassification classification;
     XgRenderMutationContext mutation_context;
 
@@ -5012,8 +5033,17 @@ bool psx_xg_render_auth_note_vram_clear(
         x, y, width, height, pixels, pixel_count, NULL);
 }
 
+static bool source_boundary_impl(uint64_t guest_vblank_sequence, uint64_t guest_cycle);
+
 bool psx_xg_render_auth_source_boundary(uint64_t guest_vblank_sequence,
                                           uint64_t guest_cycle) {
+    const uint64_t begin = xg_render_capture_profile_begin();
+    const bool accepted = source_boundary_impl(guest_vblank_sequence, guest_cycle);
+    xg_render_capture_profile_end(26u, accepted ? 1u : 0u, begin);
+    return accepted;
+}
+
+static bool source_boundary_impl(uint64_t guest_vblank_sequence, uint64_t guest_cycle) {
     XgRenderTimelineResult result;
     XgRenderSourceFrameResult completion_result;
     XgRenderSourceFrameResult frame_result;

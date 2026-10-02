@@ -3,15 +3,42 @@
 #include "xg_render_auth_candidate_types.h"
 
 #include <stddef.h>
+#include <string.h>
 
 enum { XG_RENDER_MUTATION_SOURCE_CAPACITY = 16u };
 
 static XgRenderMutationSource sources[XG_RENDER_MUTATION_SOURCE_CAPACITY];
 static uint32_t source_count;
+static uint32_t source_page_masks[0x200000u / 4096u];
+static uint32_t unfiltered_sources;
+static uint32_t building_source_mask;
 static XgRenderMutationWatchRegistrar registered_watch_sources[
     XG_RENDER_MUTATION_SOURCE_CAPACITY];
 static uint32_t registered_watch_source_count;
 static void (*watch_callback)(uint32_t physical_address, uint32_t size);
+
+static void include_source_range(uint32_t address, uint32_t size) {
+    const uint64_t begin = address & UINT32_C(0x1fffffff);
+    const uint64_t end = begin + size;
+    if (!size) return;
+    if (end > UINT32_C(0x200000)) {
+        unfiltered_sources |= building_source_mask;
+        return;
+    }
+    for (uint32_t page = (uint32_t)begin / 4096u; page <= (end - 1u) / 4096u; ++page)
+        source_page_masks[page] |= building_source_mask;
+}
+
+static uint32_t sources_for_write(uint32_t address, uint32_t size) {
+    const uint64_t begin = address & UINT32_C(0x1fffffff);
+    uint64_t end = begin + size;
+    uint32_t mask = unfiltered_sources;
+    if (!size || begin >= UINT32_C(0x200000)) return mask;
+    if (end > UINT32_C(0x200000)) end = UINT32_C(0x200000);
+    for (uint32_t page = (uint32_t)begin / 4096u; page <= (end - 1u) / 4096u; ++page)
+        mask |= source_page_masks[page];
+    return mask;
+}
 
 static bool watch_source_is_registered(
         XgRenderMutationWatchRegistrar register_watches) {
@@ -50,6 +77,8 @@ void xg_render_mutation_classifier_clear_sources(void) {
     /* The rebuilt table uses the same registrars, so retain which callbacks
      * have already populated the host watch set. */
     source_count = 0u;
+    memset(source_page_masks, 0, sizeof(source_page_masks));
+    unfiltered_sources = 0u;
 }
 
 bool xg_render_mutation_classifier_register_source(
@@ -57,7 +86,14 @@ bool xg_render_mutation_classifier_register_source(
     if (source == NULL || source->classify == NULL ||
         source_count >= XG_RENDER_MUTATION_SOURCE_CAPACITY)
         return false;
+    const uint32_t mask = UINT32_C(1) << source_count;
     sources[source_count++] = *source;
+    if (source->watches_cover_classification && source->register_watches != NULL) {
+        building_source_mask = mask;
+        source->register_watches(include_source_range);
+    } else {
+        unfiltered_sources |= mask;
+    }
     register_source_watches(source);
     return true;
 }
@@ -69,7 +105,9 @@ void xg_render_mutation_classify(
     XgRenderMutationClassification classification = {0};
 
     if (out_classification == NULL) return;
+    const uint32_t mask = sources_for_write(address, size);
     for (uint32_t index = 0u; index < source_count; ++index) {
+        if (!(mask & (UINT32_C(1) << index))) continue;
         XgRenderMutationClassification contribution = {0};
 
         sources[index].classify(address, size, &contribution);

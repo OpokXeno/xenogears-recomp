@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+
 static XgRenderPreSceneState pre_scene;
 static XgRenderStandaloneSubmissionState standalone_submission;
 static uint32_t standalone_stage_failure_detail;

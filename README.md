@@ -169,6 +169,20 @@ binary is produced simply by choosing a debug `CMAKE_BUILD_TYPE`:
 .\build.ps1 -BuildDir build-dbg -BuildType Debug
 ```
 
+Native renderer record hashing is an opt-in diagnostic:
+`PSX_NATIVE_RECORD_AUDIT=1` enables the bytewise record audit, and
+`PSX_NATIVE_RECIPE_AUDIT=1` also enables it alongside recipe verification.
+Normal play still uses source/resource identities and rendered-image digests.
+Native timing and phase-selection buffers retain their latest 8192 records so
+profiling a long-running scene includes its current queue and presentation delays.
+The Native compiler can prepare up to two queued transactions while OpenGL
+finishes the current one. Preparation remains private until FIFO promotion;
+`native_pipeline_diag` reports `prefetch_prepared`, `prefetch_used`,
+`prefetch_discarded`, and `prefetch_cpu_ns` under `gpu`.
+Prepared journals also include vertex and attribute/depth data for the GL owner.
+The raw-word texture keeps its storage across transactions, and phase resets
+restore only the word blocks changed since the shared baseline.
+
 #### 2.3.2 Windows: building with clang-cl (recommended)
 
 clang-cl is the Clang compiler that ships with Visual Studio. It builds this
@@ -265,7 +279,7 @@ versioned API and independent example.
 | Select             | Right Shift | Back |
 | L1 / L2            | Q / E      | LB / LT |
 | R1 / R2            | W / R      | RB / RT |
-| Fullscreen toggle  | Alt+Enter / Ctrl+F | — |
+| Fullscreen toggle  | F11 | — |
 | Show/hide menu bar | F10        | — |
 | Debug menu overlay | Ctrl+F3    | — |
 

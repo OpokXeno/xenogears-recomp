@@ -65,6 +65,44 @@ static XgRenderAddressLookupSlot ft4_source_lookup[
     XG_RENDER_LOOKUP_WORD_CAPACITY];
 static uint16_t ft3_source_lookup_epoch = 1u;
 static uint16_t ft4_source_lookup_epoch = 1u;
+static bool ft3_source_linear_fallback;
+/* Conservative page membership may retain removed entries until clear. It
+ * only rejects writes with no possible source overlap; exact predicates still
+ * decide invalidation. Avoid dozens of cold word lookups per unrelated store. */
+static uint8_t ft3_source_pages[0x200000u / 4096u];
+static uint8_t ft4_source_pages[0x200000u / 4096u];
+static uint32_t ft3_source_words[XG_RENDER_LOOKUP_WORD_CAPACITY / 32u];
+static uint32_t ft4_source_words[XG_RENDER_LOOKUP_WORD_CAPACITY / 32u];
+static uint32_t packet_words[XG_RENDER_LOOKUP_WORD_CAPACITY / 32u];
+static uint32_t descriptor_words[XG_RENDER_LOOKUP_WORD_CAPACITY / 32u];
+
+static void include_word(uint32_t *words, uint32_t address) {
+    address &= UINT32_C(0x1fffffff);
+    const uint32_t key = address / 4u;
+    if (key < XG_RENDER_LOOKUP_WORD_CAPACITY && !(address & 3u))
+        words[key / 32u] |= UINT32_C(1) << (key % 32u);
+}
+
+static bool has_word(const uint32_t *words, uint32_t address) {
+    const uint32_t key = address / 4u;
+    return key < XG_RENDER_LOOKUP_WORD_CAPACITY &&
+        (words[key / 32u] & (UINT32_C(1) << (key % 32u))) != 0u;
+}
+
+static void include_source_pages(uint8_t *pages, uint32_t address, uint32_t size) {
+    const uint64_t begin = address & UINT32_C(0x1fffffff);
+    uint64_t end = begin + size;
+    if (!size || begin >= UINT32_C(0x200000)) return;
+    if (end > UINT32_C(0x200000)) end = UINT32_C(0x200000);
+    for (uint32_t page = (uint32_t)begin / 4096u; page <= (end - 1u) / 4096u; ++page)
+        pages[page] = 1u;
+}
+
+static bool source_pages_overlap(const uint8_t *pages, uint64_t begin, uint64_t end) {
+    for (uint32_t page = (uint32_t)begin / 4096u; page <= (end - 1u) / 4096u; ++page)
+        if (pages[page]) return true;
+    return false;
+}
 
 static XgRenderModelFt4TemplateEntry packet_templates[
     XG_RENDER_MODEL_FT4_TEMPLATE_CAPACITY];
@@ -233,6 +271,10 @@ static XgRenderModelFt3SourceRecord *ft3_source_find(uint32_t source_id) {
     if (indexed != UINT32_MAX && ft3_sources[indexed].valid &&
         ft3_sources[indexed].source_id == source_id)
         return &ft3_sources[indexed];
+    /* Every insertion and compaction updates the direct word index. Normal
+     * sources have unique physical word keys, so a miss cannot hide one. Keep
+     * the legacy scan when a caller supplied aliases or unindexable addresses. */
+    if (!ft3_source_linear_fallback) return NULL;
     for (uint32_t index = 0u; index < ft3_source_count; ++index) {
         if (ft3_sources[index].valid &&
             ft3_sources[index].source_id == source_id) {
@@ -483,6 +525,10 @@ bool xg_render_model_repository_store_ft3_source(
     xg_render_lookup_put(
         ft3_source_lookup, ft3_source_lookup_epoch, target->source_id,
         (uint32_t)(target - ft3_sources));
+    include_source_pages(ft3_source_pages, target->source_id, 0x1cu);
+    include_word(ft3_source_words, target->source_id);
+    ft3_source_linear_fallback |=
+        target->source_id >= UINT32_C(0x200000) || (target->source_id & 3u) != 0u;
     publish_resource(target->source_id, false, publication, services);
     return true;
 }
@@ -504,6 +550,8 @@ bool xg_render_model_repository_store_ft4_source(
     xg_render_lookup_put(
         ft4_source_lookup, ft4_source_lookup_epoch, target->source_id,
         (uint32_t)(target - ft4_sources));
+    include_source_pages(ft4_source_pages, target->source_id, 0x24u);
+    include_word(ft4_source_words, target->source_id);
     publish_resource(target->source_id, true, publication, services);
     return true;
 }
@@ -540,6 +588,8 @@ bool xg_render_model_repository_store_ft4_sources(
         target->valid = true;
         xg_render_lookup_put(ft4_source_lookup, ft4_source_lookup_epoch,
             target->source_id, targets[reserved]);
+        include_source_pages(ft4_source_pages, target->source_id, 0x24u);
+        include_word(ft4_source_words, target->source_id);
     }
     for (uint32_t index = 0u; index < count; ++index) {
         XgRenderModelFt4SourceRecord *target = &ft4_sources[targets[index]];
@@ -585,8 +635,11 @@ void xg_render_model_repository_finish_ft3_link(
 
 void xg_render_model_repository_clear_ft3_sources(
         const XgRenderModelRepositoryServices *services) {
+    ft3_source_linear_fallback = false;
     if(ft3_source_count) {
         ft3_source_count = 0u;
+        memset(ft3_source_pages, 0, sizeof(ft3_source_pages));
+        memset(ft3_source_words, 0, sizeof(ft3_source_words));
         memset(ft3_anchor_ranges, 0, sizeof(ft3_anchor_ranges));
         xg_render_lookup_reset(ft3_source_lookup, &ft3_source_lookup_epoch);
     }
@@ -598,6 +651,8 @@ void xg_render_model_repository_clear_ft4_sources(void) {
     ft4_first_free = 0u;
     if(ft4_source_count) {
         ft4_source_count = 0u;
+        memset(ft4_source_pages, 0, sizeof(ft4_source_pages));
+        memset(ft4_source_words, 0, sizeof(ft4_source_words));
         memset(ft4_anchor_ranges, 0, sizeof(ft4_anchor_ranges));
         xg_render_lookup_reset(ft4_source_lookup, &ft4_source_lookup_epoch);
     }
@@ -780,6 +835,7 @@ bool xg_render_model_repository_store_template(
     xg_render_lookup_put(
         packet_lookup, packet_lookup_epoch, packet->material.packet_address,
         packet_index);
+    include_word(packet_words, packet->material.packet_address);
 
     if (!new_descriptor)
         xg_render_lookup_remove(
@@ -791,6 +847,7 @@ bool xg_render_model_repository_store_template(
     xg_render_lookup_put(
         descriptor_lookup, descriptor_lookup_epoch,
         descriptor->material.descriptor_address, descriptor_index);
+    include_word(descriptor_words, descriptor->material.descriptor_address);
     if (new_packet) ++packet_template_count;
     if (new_descriptor) ++descriptor_template_count;
     return true;
@@ -847,6 +904,8 @@ void xg_render_model_repository_reset_templates(void) {
     descriptor_template_count = 0u;
     xg_render_lookup_reset(packet_lookup, &packet_lookup_epoch);
     xg_render_lookup_reset(descriptor_lookup, &descriptor_lookup_epoch);
+    memset(packet_words, 0, sizeof(packet_words));
+    memset(descriptor_words, 0, sizeof(descriptor_words));
     memset(descriptor_packet_heads, 0, sizeof(descriptor_packet_heads));
     if (template_table_epoch == UINT32_MAX) {
         memset(packet_templates, 0, sizeof(packet_templates));
@@ -906,6 +965,7 @@ static void invalidate_packet_candidates(uint32_t address, uint32_t size) {
     first = (first + 3u) & ~UINT64_C(3);
     last = (write_end - 1u) & ~UINT64_C(3);
     for (uint64_t candidate = first; candidate <= last; candidate += 4u) {
+        if (!has_word(packet_words, (uint32_t)candidate)) continue;
         XgRenderModelFt4TemplateEntry *packet = template_direct_find(
             packet_templates, packet_lookup, packet_lookup_epoch,
             (uint32_t)candidate, false);
@@ -943,6 +1003,7 @@ static void invalidate_descriptor_candidates(uint32_t address, uint32_t size) {
     first = (first + 3u) & ~UINT64_C(3);
     last = (write_end - 1u) & ~UINT64_C(3);
     for (uint64_t candidate = first; candidate <= last; candidate += 4u) {
+        if (!has_word(descriptor_words, (uint32_t)candidate)) continue;
         XgRenderModelFt4TemplateEntry *descriptor = template_direct_find(
             descriptor_templates, descriptor_lookup, descriptor_lookup_epoch,
             (uint32_t)candidate, true);
@@ -972,32 +1033,38 @@ void xg_render_model_repository_invalidate_overlapping(
     first = write_begin >= 0x28u ? write_begin - 0x28u + 1u : 0u;
     first = (first + 3u) & ~UINT64_C(3);
     last = (write_end - 1u) & ~UINT64_C(3);
-    for (uint64_t candidate = first; candidate <= last; candidate += 4u) {
-        const uint32_t source_id = (uint32_t)candidate + 4u;
-        const uint32_t index = xg_render_lookup_find(
-            ft4_source_lookup, ft4_source_lookup_epoch, source_id,
-            ft4_source_count);
-        if (index != UINT32_MAX && ranges_overlap(
-                ft4_sources[index].source_id, 0x24u, address, size)) {
-            ft4_sources[index].valid = false;
-            if (index < ft4_first_free) ft4_first_free = index;
-            xg_render_lookup_remove(
-                ft4_source_lookup, ft4_source_lookup_epoch,
-                ft4_sources[index].source_id, index);
+    if (source_pages_overlap(ft4_source_pages, write_begin, write_end)) {
+        for (uint64_t candidate = first; candidate <= last; candidate += 4u) {
+            const uint32_t source_id = (uint32_t)candidate + 4u;
+            if (!has_word(ft4_source_words, source_id)) continue;
+            const uint32_t index = xg_render_lookup_find(
+                ft4_source_lookup, ft4_source_lookup_epoch, source_id,
+                ft4_source_count);
+            if (index != UINT32_MAX && ranges_overlap(
+                    ft4_sources[index].source_id, 0x24u, address, size)) {
+                ft4_sources[index].valid = false;
+                if (index < ft4_first_free) ft4_first_free = index;
+                xg_render_lookup_remove(
+                    ft4_source_lookup, ft4_source_lookup_epoch,
+                    ft4_sources[index].source_id, index);
+            }
         }
     }
     first = write_begin >= 0x20u ? write_begin - 0x20u + 1u : 0u;
     first = (first + 3u) & ~UINT64_C(3);
-    for (uint64_t candidate = first; candidate <= last; candidate += 4u) {
-        const uint32_t source_id = (uint32_t)candidate + 4u;
-        const uint32_t index = xg_render_lookup_find(
-            ft3_source_lookup, ft3_source_lookup_epoch, source_id,
-            ft3_source_count);
-        if (index != UINT32_MAX && ft3_sources[index].geometry_ready &&
-            ft3_sources[index].source_id >= 4u && ranges_overlap(
-                ft3_sources[index].source_id, 0x1cu, address, size)) {
-            ft3_sources[index].geometry_ready = false;
-            ft3_sources[index].link_pending = false;
+    if (source_pages_overlap(ft3_source_pages, write_begin, write_end)) {
+        for (uint64_t candidate = first; candidate <= last; candidate += 4u) {
+            const uint32_t source_id = (uint32_t)candidate + 4u;
+            if (!has_word(ft3_source_words, source_id)) continue;
+            const uint32_t index = xg_render_lookup_find(
+                ft3_source_lookup, ft3_source_lookup_epoch, source_id,
+                ft3_source_count);
+            if (index != UINT32_MAX && ft3_sources[index].geometry_ready &&
+                ft3_sources[index].source_id >= 4u && ranges_overlap(
+                    ft3_sources[index].source_id, 0x1cu, address, size)) {
+                ft3_sources[index].geometry_ready = false;
+                ft3_sources[index].link_pending = false;
+            }
         }
     }
     if (services != NULL &&

@@ -12,6 +12,11 @@ _Static_assert(XG_RENDER_PRESENTATION_BATCH_CAPACITY >= 2u,
  * It also bounds the intervals treated as regular updates rather than idle holds. */
 #define XG_RENDER_TEMPORAL_BUDGET_NS UINT64_C(66666667)
 #define XG_RENDER_GUEST_CYCLES_PER_SECOND UINT64_C(33868800)
+/* The pacer rebases beyond 250 ms of debt; never date work later than that. */
+#define XG_RENDER_VISUAL_LAG_LIMIT_NS UINT64_C(250000000)
+/* Lag recovery slope: deadlines approach each other by 1/16 of elapsed time,
+ * under one 240 Hz tick per 50 ms source interval. */
+#define XG_RENDER_VISUAL_LAG_DECAY_SHIFT 4u
 
 typedef enum XgRenderPresentationBatchState {
     XG_RENDER_BATCH_FREE = 0,
@@ -59,6 +64,7 @@ typedef struct XgRenderPresentationBatch {
     uint64_t presentation_deadline_ns; /* Fixed at FIFO acceptance; zero is whole-only. */
     uint64_t phase_count; /* Effective denominator N+1; zero means whole-only. */
     uint64_t phase_index;
+    uint64_t phase_interval_ns; /* Window the phases span, ending at the deadline. */
     uint32_t generation;
     XgRenderPresentationBatchState state;
     bool has_commit;
@@ -105,9 +111,9 @@ typedef struct XgRenderPhaseSelectionEvent {
     uint32_t generated_phases;
 } XgRenderPhaseSelectionEvent;
 static volatile XgRenderPhaseSelectionEvent g_phase_selections[8192];
-static volatile uint32_t g_phase_selection_count;
+static volatile uint64_t g_phase_selection_count;
 static volatile XgRenderPhaseSelectionEvent g_source_acceptances[8192];
-static volatile uint32_t g_source_acceptance_count;
+static volatile uint64_t g_source_acceptance_count;
 static XgRenderRetirement
     g_deferred_retirements[XG_RENDER_DEFERRED_RETIREMENT_CAPACITY];
 static uint32_t g_deferred_retirement_count;
@@ -124,6 +130,10 @@ static uint64_t g_visual_origin_ns;
 static uint64_t g_visual_origin_cycle;
 static XgPresentationIdentity g_visual_source_identity;
 static uint64_t g_visual_source_interval_ns;
+static uint64_t g_visual_budget_interval_ns;
+/* Envelope of how late the guest runs behind its paced schedule. */
+static uint64_t g_visual_lag_ns;
+static uint64_t g_visual_lag_time_ns;
 static bool g_visual_origin_seen;
 static bool g_visual_realtime;
 static uint32_t g_worker_operations;
@@ -226,15 +236,22 @@ static uint64_t source_deadline_locked(const XgRenderSourceCommitHeader *header)
     delta_ns = seconds * UINT64_C(1000000000) +
         (cycles % XG_RENDER_GUEST_CYCLES_PER_SECOND) * UINT64_C(1000000000) /
             XG_RENDER_GUEST_CYCLES_PER_SECOND;
-    if (g_visual_source_interval_ns != 0u &&
+    if (g_visual_budget_interval_ns != 0u &&
         header->identity.presentation_epoch == g_visual_source_identity.presentation_epoch &&
         header->identity.scene_generation == g_visual_source_identity.scene_generation) {
-        /* One source interval to bracket motion, one for construction, and one
-         * presentation tick to sample a READY image. Transport chunks are not
-         * source updates. Only newly accepted work uses the measured cadence. */
-        budget_ns = 2u * g_visual_source_interval_ns +
+        /* Keep the two-interval pipeline delay stable within this scene. The
+         * game alternates two/three-vblank source updates: using the last gap
+         * moves deadlines backwards by two vblanks when it shrinks, giving
+         * successive endpoints the same presentation time and erasing their
+         * phase window. The longest ordinary guest interval observed in this
+         * scene establishes the delay; host completion time never moves it. */
+        budget_ns = 2u * g_visual_budget_interval_ns +
             (UINT64_C(1000000000) + header->display.temporal_hz - 1u) / header->display.temporal_hz;
     }
+    /* A guest running behind its paced schedule publishes late by the same
+     * amount. Without this the fixed budget is spent before the worker starts
+     * and every phase arrives after its deadline (all-whole, all-hold). */
+    budget_ns += g_visual_lag_ns;
     uint64_t source_ns;
     if (guest_cycle < g_visual_origin_cycle) {
         if (delta_ns >= g_visual_origin_ns) return 0u;
@@ -417,6 +434,9 @@ static void initialize_locked(void) {
     g_visual_origin_seen = false;
     memset(&g_visual_source_identity, 0, sizeof(g_visual_source_identity));
     g_visual_source_interval_ns = 0u;
+    g_visual_budget_interval_ns = 0u;
+    g_visual_lag_ns = 0u;
+    g_visual_lag_time_ns = 0u;
     g_visual_realtime = true;
     g_worker_operations = 0u;
     g_presenter_busy = false;
@@ -1049,8 +1069,7 @@ XgRenderTimelineResult xg_render_source_queue_publish(
         /* A later guest pause/debt reset must not postpone accepted work,
          * including inputs still waiting for a free compiler batch. */
         g_source_deadlines[tail] = source_deadline_locked(&header);
-        if (g_source_acceptance_count < 8192u)
-            g_source_acceptances[g_source_acceptance_count++] = (XgRenderPhaseSelectionEvent){
+        g_source_acceptances[g_source_acceptance_count++ % 8192u] = (XgRenderPhaseSelectionEvent){
                 .identity = header.identity, .clock_ns = g_phase_clock_last_ns,
                 .deadline_ns = g_source_deadlines[tail], .interval_ns = g_visual_source_interval_ns};
         ++g_source_count;
@@ -1085,6 +1104,43 @@ bool xg_render_worker_source_deadline(
         source_head_locked() == pack_handle(commit.slot, commit.generation)) {
         *out_deadline_ns = batch->presentation_deadline_ns;
         available = true;
+    }
+    state_unlock();
+    return available;
+}
+
+bool xg_render_worker_acquire_next_source(
+        XgRenderSourceCommitHandle current, XgRenderSourceCommitHandle after,
+        XgRenderSourceCommitHandle *out_next,
+        XgRenderSourceCommitHeader *out_header, uint64_t *out_deadline_ns) {
+    XgRenderPresentationBatchHandle handle;
+    XgRenderPresentationBatch *batch = NULL;
+    XgRenderSourceCommitHandle next;
+    XgRenderSourceCommitHeader header;
+    bool available = false;
+    if (!out_next || !out_header || !out_deadline_ns) return false;
+    state_lock();
+    if (g_initialized && g_worker_operations && unpack_batch(g_work_batch, &handle))
+        batch = batch_from_handle_locked(handle);
+    if (batch_is_current_locked(batch) && batch->state == XG_RENDER_BATCH_COMPILING &&
+        source_head_locked() == pack_handle(current.slot, current.generation) &&
+        g_source_count > 1u) {
+        uint32_t offset = 0u;
+        while (offset + 1u < g_source_count &&
+            g_source_queue[(g_source_head + offset) % XG_RENDER_SOURCE_COMMIT_CAPACITY] !=
+                pack_handle(after.slot, after.generation)) ++offset;
+        if (offset + 1u == g_source_count) { state_unlock(); return false; }
+        const uint32_t index = (g_source_head + offset + 1u) % XG_RENDER_SOURCE_COMMIT_CAPACITY;
+        if (unpack_source(g_source_queue[index], &next) &&
+            xg_render_source_commit_header_copy(next, &header) == XG_RENDER_SOURCE_COMMIT_OK &&
+            header.identity.presentation_epoch == batch->identity.presentation_epoch &&
+            header.identity.scene_generation == batch->identity.scene_generation &&
+            xg_render_source_commit_acquire_read(next) == XG_RENDER_SOURCE_COMMIT_OK) {
+            *out_next = next;
+            *out_header = header;
+            *out_deadline_ns = g_source_deadlines[index];
+            available = true;
+        }
     }
     state_unlock();
     return available;
@@ -1357,10 +1413,16 @@ outcome:
             /* Long idle holds do not establish a slow simulation cadence or
              * enlarge the queue budget. Observe ordinary source updates only. */
             if (cycles <= XG_RENDER_TEMPORAL_BUDGET_NS * XG_RENDER_GUEST_CYCLES_PER_SECOND /
-                    UINT64_C(1000000000))
+                    UINT64_C(1000000000)) {
                 g_visual_source_interval_ns = cycles * UINT64_C(1000000000) /
                     XG_RENDER_GUEST_CYCLES_PER_SECOND;
-        } else g_visual_source_interval_ns = 0u;
+                if (g_visual_source_interval_ns > g_visual_budget_interval_ns)
+                    g_visual_budget_interval_ns = g_visual_source_interval_ns;
+            }
+        } else {
+            g_visual_source_interval_ns = 0u;
+            g_visual_budget_interval_ns = 0u;
+        }
         g_visual_source_identity = *identity;
     }
 
@@ -1505,9 +1567,13 @@ bool xg_render_presenter_drain_retirements(
 
 bool xg_render_presenter_sync_source_clock(
         const XgRenderPresenterServices *services, uint64_t guest_cycle,
-        uint64_t guest_time_ns, bool realtime, bool rebase) {
+        uint64_t guest_time_ns, uint64_t guest_lag_ns, bool realtime,
+        bool rebase) {
     lock_ready();
-    if (services == NULL || services->owner_token == 0u || g_presenter_busy ||
+    /* Not gated on g_presenter_busy: this only updates the source-side
+     * visual clock (read at FIFO publication), never presenter state, so a
+     * controller thread may date sources while a presenter thread composes. */
+    if (services == NULL || services->owner_token == 0u ||
         services->owner_token != g_presenter_owner_token || !g_publication_open ||
         (realtime && guest_time_ns > UINT64_MAX - XG_RENDER_TEMPORAL_BUDGET_NS)) {
         state_unlock();
@@ -1521,6 +1587,23 @@ bool xg_render_presenter_sync_source_clock(
         g_visual_origin_cycle = guest_cycle;
         g_visual_origin_ns = guest_time_ns;
         g_visual_origin_seen = true;
+        g_visual_lag_ns = 0u;
+        g_visual_lag_time_ns = guest_time_ns;
+    }
+    if (realtime && g_visual_origin_seen) {
+        /* Rise at once (late sources need the slack now), recover slowly so
+         * consecutive deadlines never overlap by more than a fraction of a
+         * tick. Scheduled time, not wall time, paces the recovery. */
+        const uint64_t lag = guest_lag_ns < XG_RENDER_VISUAL_LAG_LIMIT_NS
+            ? guest_lag_ns : XG_RENDER_VISUAL_LAG_LIMIT_NS;
+        if (guest_time_ns > g_visual_lag_time_ns) {
+            const uint64_t decay = (guest_time_ns - g_visual_lag_time_ns) >>
+                XG_RENDER_VISUAL_LAG_DECAY_SHIFT;
+            g_visual_lag_ns = g_visual_lag_ns > decay ? g_visual_lag_ns - decay : 0u;
+            g_visual_lag_time_ns = guest_time_ns;
+        }
+        if (lag > g_visual_lag_ns) g_visual_lag_ns = lag;
+        g_diagnostics.visual_lag_ns = g_visual_lag_ns;
     }
     state_unlock();
     return true;
@@ -1633,12 +1716,29 @@ static XgRenderPresenterResult presenter_present(
 
         batch->phase_count = 0u;
         batch->phase_index = 0u;
+        batch->phase_interval_ns = 0u;
         if (unpack_batch(g_retained_batch, &previous_handle))
             previous = batch_from_handle_locked(previous_handle);
         /* Compare logical final images, not an intermediate last swapped.
          * Source-work ordinals may have APPLIED-only gaps between endpoints. */
-        if (batch_has_temporal_base_locked(batch, previous))
+        if (batch_has_temporal_base_locked(batch, previous)) {
             batch->phase_count = (uint64_t)endpoint.temporal_phase_count + 1u;
+            batch->phase_interval_ns = endpoint.temporal_interval_ns;
+            /* A guest running behind schedule spaces deadlines wider than its
+             * cycle interval (the lag envelope grows). Stretch the phases over
+             * the actual gap since the previous whole, proportionally for a
+             * time-boxed prefix, so it is filled with motion instead of a
+             * repeated image. Bounded: long gaps are idle holds, not motion. */
+            const uint64_t full_ns = previous->identity.guest_cycle < batch->identity.guest_cycle
+                ? (batch->identity.guest_cycle - previous->identity.guest_cycle) *
+                    UINT64_C(1000000000) / XG_RENDER_GUEST_CYCLES_PER_SECOND : 0u;
+            const uint64_t spacing_ns = previous->presentation_deadline_ns != 0u &&
+                    batch->presentation_deadline_ns > previous->presentation_deadline_ns
+                ? batch->presentation_deadline_ns - previous->presentation_deadline_ns : 0u;
+            if (full_ns != 0u && spacing_ns > full_ns && spacing_ns <= full_ns + full_ns / 2u &&
+                endpoint.temporal_interval_ns <= full_ns)
+                batch->phase_interval_ns = endpoint.temporal_interval_ns * spacing_ns / full_ns;
+        }
     }
     {
         uint64_t (*clock_ns)(void *) = services->clock_ns;
@@ -1695,7 +1795,8 @@ static XgRenderPresenterResult presenter_present(
         uint64_t phase = batch->phase_count;
 
         if (batch->phase_count != 0u && !due) {
-            const uint64_t interval = endpoint.temporal_interval_ns;
+            const uint64_t interval = batch->phase_interval_ns != 0u
+                ? batch->phase_interval_ns : endpoint.temporal_interval_ns;
             const uint64_t remaining = deadline_ns - now;
             /* Latest due approved image, including the retained base at zero.
              * Never advance to the authored whole before its accepted deadline:
@@ -1748,12 +1849,12 @@ static XgRenderPresenterResult presenter_present(
         alpha_numerator = selected_phase;
         alpha_denominator = batch->phase_count;
     }
-    if (g_phase_selection_count < 8192u) {
+    {
         XgRenderPresentationBatchHandle previous_handle;
         const XgRenderPresentationBatch *previous =
             unpack_batch(g_retained_batch, &previous_handle)
                 ? batch_from_handle_locked(previous_handle) : NULL;
-        g_phase_selections[g_phase_selection_count++] = (XgRenderPhaseSelectionEvent){
+        g_phase_selections[g_phase_selection_count++ % 8192u] = (XgRenderPhaseSelectionEvent){
             .identity = endpoint.identity, .clock_ns = now, .deadline_ns = deadline_ns,
             .interval_ns = endpoint.temporal_interval_ns, .phase_count = batch->phase_count,
             .selected_phase = selected_phase, .generated_phases = endpoint.temporal_phase_count,
@@ -1878,6 +1979,10 @@ static XgRenderPresenterResult presenter_present(
             batch, XG_RENDER_PRESENTATION_TRACE_SWAP_CALLBACK_RETURNED);
         trace_set_presenter_result_locked(
             batch, XG_RENDER_PRESENTER_PRESENTED);
+        /* A hold that selects its already shown phase repeats the image;
+         * one that advances the retained interval presents a new phase. */
+        if (hold && selected_phase == batch->phase_index)
+            g_diagnostics.duplicate_presents++;
         batch->phase_index = selected_phase;
         if (hold) g_diagnostics.presented_holds++;
         else g_diagnostics.presented_endpoints++;

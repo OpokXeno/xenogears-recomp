@@ -353,6 +353,11 @@ typedef struct XgRenderPresentationDiagnostics {
      * Distinguishes "published just past deadline" (small) from clock-domain
      * skew (huge). */
     int64_t selection_last_remaining_ms;
+    /* Swaps that repeated the previously shown image (true holds). Unlike
+     * presented_holds, excludes retained-interval phase advances. */
+    uint64_t duplicate_presents;
+    /* Current guest-lag envelope added to new source deadlines. */
+    uint64_t visual_lag_ns;
 } XgRenderPresentationDiagnostics;
 
 /*
@@ -416,6 +421,15 @@ XgRenderWorkerResult xg_render_worker_compile_next(
  * the snapshot does not prevent subsequent epoch invalidation. */
 bool xg_render_worker_source_deadline(
     XgRenderSourceCommitHandle commit, uint64_t *out_deadline_ns);
+/* Active FIFO-head compiler only: acquire a read lease on the immediate
+ * successor of current or an already prepared FIFO prefix (after), together
+ * with that source's fixed deadline. The caller releases
+ * with xg_render_source_commit_release_read. This permits private preparation
+ * while the head's GPU work finishes; it never advances or ACKs the FIFO. */
+bool xg_render_worker_acquire_next_source(
+    XgRenderSourceCommitHandle current, XgRenderSourceCommitHandle after,
+    XgRenderSourceCommitHandle *out_next,
+    XgRenderSourceCommitHeader *out_header, uint64_t *out_deadline_ns);
 /* Matching retained logical pixel digest + epoch/scene enables approved phases.
  * Guest cycles map to a fixed-latency presenter timeline at FIFO acceptance;
  * approved images are selected monotonically, never timed from endpoint arrival.
@@ -445,10 +459,12 @@ bool xg_render_presenter_drain_retirements(
  * presenter's clock domain. Bind on a fresh epoch/rate change or explicit rebase
  * (pause/debt reset), not on endpoint arrival. Only future FIFO publications use
  * the new mapping; accepted source/batch deadlines and resources are unchanged.
- * Non-realtime/unbound sources use immediate whole images. */
+ * Non-realtime/unbound sources use immediate whole images. guest_lag_ns is how
+ * far the guest currently runs behind that schedule; future deadlines carry a
+ * fast-rise/slow-decay envelope of it so late publication keeps its phases. */
 bool xg_render_presenter_sync_source_clock(
     const XgRenderPresenterServices *services, uint64_t guest_cycle,
-    uint64_t guest_time_ns, bool realtime, bool rebase);
+    uint64_t guest_time_ns, uint64_t guest_lag_ns, bool realtime, bool rebase);
 bool xg_render_presentation_phase_count(
     uint32_t source_interval_vblanks,
     uint32_t refresh_numerator,

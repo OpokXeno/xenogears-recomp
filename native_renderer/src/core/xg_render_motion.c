@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <string.h>
 
+
 #define MOTION_INITIAL_INSTANCE_CAPACITY 512u
 #define MOTION_INITIAL_COMMAND_CAPACITY 16384u
 #define MOTION_COMMAND_MAXIMUM (0x200000u / 4u)
@@ -43,11 +44,15 @@ static uint32_t command_capacity;
  * only at an empty slot, so tombstones must not be allowed to fill the table. */
 static uint32_t command_used;
 static uint64_t *command_pages;
+static uint32_t command_page_counts[0x200000u / 4096u];
 static bool commands_dirty;
 static uint64_t serial;
 static uint64_t geometry_serial;
 static XgRenderMotionDiagnostics motion_diagnostics;
 static uint32_t watched_pages[0x200000u / 4096u];
+/* Page membership is too broad for the small pose/matrix ranges: unrelated
+ * packet writes on the same page otherwise scan every motion instance. */
+static uint32_t watched_blocks[0x200000u / 64u];
 #define MOTION_NATIVE_TRANSFORM_CACHE_CAPACITY 64u
 static struct {
     XgRenderMotionRef ref;
@@ -56,7 +61,7 @@ static struct {
 static uint32_t native_transform_cache_cursor;
 static bool evaluate_transform(const XgRenderMotionPose *a, const XgRenderMotionPose *b,
                                double alpha, double wrap_shift[3], bool choose_wrap,
-                               XgRenderMotionTransform *out);
+                               bool initialized, XgRenderMotionTransform *out);
 
 void xg_render_motion_note(XgRenderMotionEvent event, uint32_t pc) {
     if ((unsigned)event >= XG_MOTION_EVENT_COUNT)
@@ -80,6 +85,24 @@ static void watch_pages(uint32_t address, uint32_t size, bool add) {
         else
             --watched_pages[page];
     }
+    for (uint32_t block = address / 64u; block <= (address + size - 1u) / 64u; ++block) {
+        if (add) ++watched_blocks[block];
+        else --watched_blocks[block];
+    }
+}
+
+static unsigned first_command_bit(uint64_t bits) {
+#if defined(__GNUC__) || defined(__clang__)
+    return (unsigned)__builtin_ctzll(bits);
+#else
+    unsigned bit = 0u;
+    if (!(bits & UINT32_MAX)) { bits >>= 32u; bit += 32u; }
+    if (!(bits & UINT16_MAX)) { bits >>= 16u; bit += 16u; }
+    if (!(bits & UINT8_MAX)) { bits >>= 8u; bit += 8u; }
+    if (!(bits & 0xfu)) { bits >>= 4u; bit += 4u; }
+    if (!(bits & 3u)) { bits >>= 2u; bit += 2u; }
+    return bit + !(bits & 1u);
+#endif
 }
 
 static void clear_command(MotionCommand *command) {
@@ -88,6 +111,7 @@ static void clear_command(MotionCommand *command) {
     if(command->command_id&&command->command_id!=MOTION_TOMBSTONE) {
         const size_t index=(size_t)(command-commands);
         command_pages[(size_t)(command->command_id/4096u)*(command_capacity/64u)+index/64u]&=~(UINT64_C(1)<<(index%64u));
+        --command_page_counts[command->command_id / 4096u];
     }
     if (command->binding.motion.handle.resource_id) {
         (void)xg_render_resource_release(command->binding.motion.handle);
@@ -106,6 +130,7 @@ static bool rehash_commands(uint32_t capacity) {
     MotionCommand *grown = calloc(capacity, sizeof(*grown));
     uint64_t *pages = calloc((size_t)512u * (capacity / 64u), sizeof(*pages));
     if (!grown || !pages) { free(grown); free(pages); return false; }
+    memset(command_page_counts, 0, sizeof(command_page_counts));
     /* Rehash under guest ownership. The immutable resource retains transfer
      * with the bindings; resizing must neither release nor reacquire poses. */
     for (uint32_t i = 0u; i < command_capacity; ++i) {
@@ -115,6 +140,7 @@ static bool rehash_commands(uint32_t capacity) {
         while (grown[slot].command_id) slot = (slot + 1u) % capacity;
         grown[slot] = *c;
         pages[(size_t)(c->command_id / 4096u) * (capacity / 64u) + slot / 64u] |= UINT64_C(1) << (slot % 64u);
+        ++command_page_counts[c->command_id / 4096u];
     }
     uint32_t live = 0u;
     for (uint32_t i = 0u; i < capacity; ++i) live += grown[i].command_id != 0u;
@@ -345,6 +371,30 @@ static bool pose_valid(const XgRenderMotionPose *p) {
     return true;
 }
 
+typedef struct MotionProjectedVertex {
+    XgRenderMotionRef previous, current;
+    double alpha;
+    uint32_t part;
+    XgHost3dVector local;
+    double screen[3], native[3];
+    double projected_endpoints[2][2], anchors[2][2];
+    double native_current[2], native_current_z;
+    uint64_t last_use;
+} MotionProjectedVertex;
+enum { MOTION_PROJECTED_VERTEX_SETS = 4096, MOTION_PROJECTED_VERTEX_WAYS = 4 };
+
+#if defined(_MSC_VER) && !defined(__clang__)
+static __declspec(thread) XgRenderMotionRef validated_poses[2];
+static __declspec(thread) XgRenderMotionRef validated_pose_sets[256][2];
+static __declspec(thread) MotionProjectedVertex projected_vertices[MOTION_PROJECTED_VERTEX_SETS][MOTION_PROJECTED_VERTEX_WAYS];
+static __declspec(thread) uint64_t projected_vertex_clock;
+#else
+static _Thread_local XgRenderMotionRef validated_poses[2];
+static _Thread_local XgRenderMotionRef validated_pose_sets[256][2];
+static _Thread_local MotionProjectedVertex projected_vertices[MOTION_PROJECTED_VERTEX_SETS][MOTION_PROJECTED_VERTEX_WAYS];
+static _Thread_local uint64_t projected_vertex_clock;
+#endif
+
 bool xg_render_motion_view(XgRenderMotionRef ref, const XgRenderMotionPose **out) {
     XgRenderResourceView view;
     if (out == NULL || !ref.handle.resource_id || !ref.handle.generation || !ref.digest ||
@@ -354,8 +404,21 @@ bool xg_render_motion_view(XgRenderMotionRef ref, const XgRenderMotionPose **out
         view.byte_count != sizeof(XgRenderMotionPose))
         return false;
     const XgRenderMotionPose *p = view.bytes;
-    if (!pose_valid(p))
-        return false;
+    /* Snapshot bytes are immutable for a handle/generation/digest. Keep the
+     * lifetime/type check above, but don't revalidate the same hierarchy for
+     * every vertex or command. The hot pair handles adjacent draws; a set cache
+     * also covers the scene's entities across phase sweeps. Each reader owns
+     * its cache, with no borrowed pointers or extra resource retain. */
+    if (!ref_equal(ref, validated_poses[0]) && !ref_equal(ref, validated_poses[1])) {
+        const uint64_t key = ref.handle.resource_id ^ (ref.handle.resource_id >> 32u) ^ ref.handle.generation;
+        XgRenderMotionRef *set = validated_pose_sets[(key * UINT64_C(11400714819323198485)) >> 56u];
+        if (!ref_equal(ref, set[0]) && !ref_equal(ref, set[1])) {
+            if (!pose_valid(p)) return false;
+            set[1] = set[0];set[0] = ref;
+        }
+        validated_poses[1] = validated_poses[0];
+        validated_poses[0] = ref;
+    }
     *out = p;
     return true;
 }
@@ -599,6 +662,7 @@ bool xg_render_motion_register_command(uint32_t command_id,
         ++motion_diagnostics.active_commands;
         const size_t index=(size_t)(slot-commands);
         command_pages[(size_t)(command_id/4096u)*(command_capacity/64u)+index/64u]|=UINT64_C(1)<<(index%64u);
+        ++command_page_counts[command_id / 4096u];
     }
     return true;
 }
@@ -609,6 +673,10 @@ void xg_render_motion_forget_range(uint32_t address, uint32_t size) {
     if(begin>=0x200000u)return;
     const unsigned first=(unsigned)begin/4096u;
     const unsigned last=(unsigned)((end>0x200000u?0x200000u:end)-1u)/4096u;
+    bool occupied = false;
+    for (unsigned page = first; page <= last; ++page)
+        occupied |= command_page_counts[page] != 0u;
+    if (!occupied) return;
     if(last-first<128u) {
         /* Union exact page membership, then visit slots in the original table
          * order. Full address predicates and reference retirement are unchanged. */
@@ -616,8 +684,7 @@ void xg_render_motion_forget_range(uint32_t address, uint32_t size) {
             uint64_t candidates=0;
             for(unsigned page=first;page<=last;++page)candidates|=command_pages[(size_t)page*(command_capacity/64u)+word];
             while(candidates) {
-                unsigned bit=0;
-                while(!(candidates&(UINT64_C(1)<<bit)))++bit;
+                const unsigned bit = first_command_bit(candidates);
                 candidates&=candidates-1u;
                 MotionCommand *c=&commands[word*64u+bit];
                 if(c->command_id>=begin&&c->command_id<end)clear_command(c);
@@ -691,8 +758,19 @@ void xg_render_motion_invalidate_range(uint32_t address, uint32_t size) {
         xg_render_motion_note(XG_MOTION_INVALIDATE_SKIPPED, address);
         return;
     }
+    watched = false;
+    const uint32_t last_block = (uint32_t)((end > 0x200000u ? 0x200000u : end) - 1u) / 64u;
+    for (uint32_t block = (uint32_t)begin / 64u; block <= last_block; ++block)
+        watched |= watched_blocks[block] != 0u;
+    if (!watched) {
+        xg_render_motion_note(XG_MOTION_INVALIDATE_SKIPPED, address);
+        return;
+    }
     for (unsigned i = 0; i < instance_capacity; ++i) {
         MotionInstance *s = &instances[i];
+        /* Free slots carry no watches; most of the table is free. */
+        if (!s->watch_count)
+            continue;
         bool overlap = false;
         for (unsigned j = 0; j < s->watch_count; ++j)
             overlap |= s->watch_size[j] &&
@@ -757,7 +835,7 @@ static const XgRenderMotionTransform *native_pose_transform(
     const unsigned slot = native_transform_cache_cursor++ % MOTION_NATIVE_TRANSFORM_CACHE_CAPACITY;
     double wrap_shift[3] = {0};
     native_transform_cache[slot].ref = (XgRenderMotionRef){0};
-    if (!evaluate_transform(pose, pose, 1.0, wrap_shift, true,
+    if (!evaluate_transform(pose, pose, 1.0, wrap_shift, true, false,
                             &native_transform_cache[slot].transform)) return NULL;
     native_transform_cache[slot].ref = ref;
     return &native_transform_cache[slot].transform;
@@ -1060,10 +1138,10 @@ static double periodic_delta(double a, double b, double span) {
 
 static bool evaluate_transform(const XgRenderMotionPose *a, const XgRenderMotionPose *b,
                                double alpha, double wrap_shift[3], bool choose_wrap,
-                               XgRenderMotionTransform *out) {
+                               bool initialized, XgRenderMotionTransform *out) {
     XgRenderMotionTrs locals[XG_RENDER_MOTION_NODE_CAPACITY], camera;
     double world[XG_RENDER_MOTION_NODE_CAPACITY][3][4];
-    memset(out, 0, sizeof(*out));
+    if (!initialized) memset(out, 0, sizeof(*out));
     interpolate_trs(&a->camera, &b->camera, alpha, &camera);
     double camera_world[3][4];
     matrix_trs(&camera, camera_world);
@@ -1147,17 +1225,26 @@ bool xg_render_motion_evaluate(XgRenderMotionRef previous, XgRenderMotionRef cur
     }
     memset(out, 0, sizeof(*out));
     out->current = current;
+    out->previous = interpolate ? previous : current;
     out->node_count = b->node_count;
     out->interpolated = interpolate;
     out->alpha = alpha;
     double wrap_shift[3] = {0};
-    if (!evaluate_transform(a, b, 1, wrap_shift, true, &out->endpoints[1]) ||
-        !evaluate_transform(a, b, 0, wrap_shift, false, &out->endpoints[0]) ||
-        !evaluate_transform(a, b, alpha, wrap_shift, false, &out->phase))
+    /* The evaluation was cleared above, including inactive nodes. Do not
+     * clear its three embedded fixed-capacity transforms a second time. */
+    if (!evaluate_transform(a, b, 1, wrap_shift, true, true, &out->endpoints[1]) ||
+        !evaluate_transform(a, b, 0, wrap_shift, false, true, &out->endpoints[0]) ||
+        !evaluate_transform(a, b, alpha, wrap_shift, false, true, &out->phase))
         return false;
+    memcpy(out->curve_wrap_shift,wrap_shift,sizeof(wrap_shift));
+    for (unsigned endpoint=0u;endpoint<2u;++endpoint)
+        memcpy(out->curve_endpoints[endpoint],out->endpoints[endpoint].model_to_view,
+            b->node_count*sizeof(out->curve_endpoints[endpoint][0]));
+    const size_t transform_bytes = offsetof(XgRenderMotionTransform, model_to_view) +
+        b->node_count * sizeof(out->phase.model_to_view[0]);
     if (native_pose_uses_trs(b)) {
-        out->native_current = out->endpoints[1];
-        out->native_phase = out->phase;
+        memcpy(&out->native_current, &out->endpoints[1], transform_bytes);
+        memcpy(&out->native_phase, &out->phase, transform_bytes);
     }
     for (unsigned endpoint = 0; endpoint < 2; ++endpoint) {
         const XgRenderMotionPose *pose = endpoint ? b : a;
@@ -1190,9 +1277,37 @@ bool xg_render_motion_evaluate(XgRenderMotionRef previous, XgRenderMotionRef cur
                 out->endpoints[1].model_to_view[i][r][c] = cb;
             }
     if (!native_pose_uses_trs(b)) {
-        out->native_current = out->endpoints[1];
-        out->native_phase = out->phase;
+        memcpy(&out->native_current, &out->endpoints[1], transform_bytes);
+        memcpy(&out->native_phase, &out->phase, transform_bytes);
     }
+    return true;
+}
+
+bool xg_render_motion_advance(double alpha, XgRenderMotionEvaluation *out) {
+    const XgRenderMotionPose *a,*b;
+    if (!out || !isfinite(alpha) || alpha<0.0 || alpha>1.0 ||
+        !xg_render_motion_view(out->current,&b) || !xg_render_motion_view(out->previous,&a) ||
+        out->node_count!=b->node_count || a->node_count!=b->node_count) return false;
+    if (!out->interpolated) {a=b;alpha=1.0;}
+    /* The first evaluation already validated compatibility and chose this
+     * curve's wrap. Only the intermediate hierarchy changes with alpha. */
+    if (!evaluate_transform(a,b,alpha,out->curve_wrap_shift,false,true,&out->phase)) return false;
+    const size_t bytes=offsetof(XgRenderMotionTransform,model_to_view)+
+        b->node_count*sizeof(out->phase.model_to_view[0]);
+    if (native_pose_uses_trs(b)) memcpy(&out->native_phase,&out->phase,bytes);
+    for (uint32_t i=0u;i<b->node_count;++i)
+        for (unsigned r=0u;r<3u;++r)
+            for (unsigned c=0u;c<4u;++c) {
+                const double ca=out->endpoints[0].model_to_view[i][r][c];
+                const double cb=out->endpoints[1].model_to_view[i][r][c];
+                const double fa=out->curve_endpoints[0][i][r][c];
+                const double fb=out->curve_endpoints[1][i][r][c];
+                const double f=out->phase.model_to_view[i][r][c];
+                out->phase.model_to_view[i][r][c]=alpha==0.0?ca:alpha==1.0?cb:
+                    cb+(1-alpha)*(ca-cb)+((f-fb)-(1-alpha)*(fa-fb));
+            }
+    if (!native_pose_uses_trs(b)) memcpy(&out->native_phase,&out->phase,bytes);
+    out->alpha=alpha;
     return true;
 }
 
@@ -1211,10 +1326,46 @@ XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluat
     for (unsigned t = 0; t < b->triangle_count; ++t)
         for (unsigned v = 0; v < 3; ++v) {
             const XgHost3dVector *p = &b->local[t][v];
+            MotionProjectedVertex *cached = NULL;
+            bool same_vertex=false;
+            if (e->previous.handle.resource_id) {
+                uint64_t key = (uint16_t)p->x | (uint64_t)(uint16_t)p->y << 16u |
+                    (uint64_t)(uint16_t)p->z << 32u;
+                key ^= e->current.digest ^ e->previous.digest ^
+                    (uint64_t)b->motion_part_index * UINT64_C(11400714819323198485);
+                key ^= key >> 33u;
+                MotionProjectedVertex *set = projected_vertices[
+                    (key * UINT64_C(11400714819323198485)) >> 52u];
+                cached = &set[0];
+                for (unsigned way = 0u; way < MOTION_PROJECTED_VERTEX_WAYS; ++way) {
+                    MotionProjectedVertex *candidate = &set[way];
+                    const bool same_pair = ref_equal(candidate->current,e->current) &&
+                        ref_equal(candidate->previous,e->previous);
+                    if (same_pair && candidate->part==b->motion_part_index &&
+                        candidate->local.x==p->x && candidate->local.y==p->y && candidate->local.z==p->z) {
+                        cached = candidate; same_vertex = true; break;
+                    }
+                    if (candidate->last_use < cached->last_use) cached = candidate;
+                }
+                cached->last_use = ++projected_vertex_clock;
+                if (same_vertex && !memcmp(&cached->alpha,&e->alpha,sizeof(e->alpha))) {
+                    memcpy(result[t][v], cached->screen, sizeof(cached->screen));
+                    memcpy(native_result[t][v], cached->native, sizeof(cached->native));
+                    continue;
+                }
+            }
             double projected[3][2];
             double native_projected[2][2];
             double native_z[2] = {0.0, 0.0};
             for (unsigned sample = 0; sample < 3; ++sample) {
+                if (same_vertex && sample<2u) {
+                    memcpy(projected[sample],cached->projected_endpoints[sample],sizeof(projected[sample]));
+                    if (sample==1u) {
+                        memcpy(native_projected[0],cached->native_current,sizeof(native_projected[0]));
+                        native_z[0]=cached->native_current_z;
+                    }
+                    continue;
+                }
                 const XgRenderMotionTransform *transform = sample < 2 ? &e->endpoints[sample] : &e->phase;
                 const double (*m)[4] = transform->model_to_view[b->motion_part_index];
                 double view[3];
@@ -1253,6 +1404,10 @@ XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluat
             }
             double anchors[2][2];
             for (unsigned endpoint = 0; endpoint < 2; ++endpoint) {
+                if (same_vertex) {
+                    memcpy(anchors[endpoint],cached->anchors[endpoint],sizeof(anchors[endpoint]));
+                    continue;
+                }
                 const XgHost3dProjection *source = &e->source_projection[endpoint][b->motion_part_index];
                 project_source_vertex(source, p, anchors[endpoint], NULL);
             }
@@ -1272,6 +1427,20 @@ XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluat
             /* Depth in the same difference form: a static pose adds exactly 0
              * to the endpoint's own unfloored depth. */
             native_result[t][v][2] = native_z[1] - native_z[0];
+            if (cached) {
+                /* Shared corners depend on the immutable pose pair, alpha,
+                 * part and exact LOCAL coordinates. Reuse the same completed
+                 * calculation, including Native subpixel/depth precision. */
+                cached->previous = e->previous; cached->current = e->current;
+                cached->alpha = e->alpha; cached->part = b->motion_part_index;
+                cached->local = *p;
+                memcpy(cached->screen, result[t][v], sizeof(cached->screen));
+                memcpy(cached->native, native_result[t][v], sizeof(cached->native));
+                memcpy(cached->projected_endpoints,projected,sizeof(cached->projected_endpoints));
+                memcpy(cached->anchors,anchors,sizeof(cached->anchors));
+                memcpy(cached->native_current,native_projected[0],sizeof(cached->native_current));
+                cached->native_current_z=native_z[0];
+            }
         }
     memcpy(screen_delta, result, sizeof(result));
     memcpy(native_delta, native_result, sizeof(native_result));

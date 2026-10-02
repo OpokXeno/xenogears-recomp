@@ -61,21 +61,21 @@ static const XgRenderInvalidationModule producer_modules[] = {
 
 static const XgRenderMutationSource mutation_sources[] = {
     { xg_field_particles_classify_code_write,
-      xg_field_particles_register_code_watches },
+      xg_field_particles_register_code_watches, true },
     { xg_field_zoom_classify_code_write,
-      xg_field_zoom_register_code_watches },
+      xg_field_zoom_register_code_watches, true },
     { xg_field_projected_classify_code_write,
-      xg_field_projected_register_code_watches },
+      xg_field_projected_register_code_watches, true },
     { xg_render_model_sprite_pipeline_classify_code_write,
-      xg_render_model_sprite_pipeline_register_code_watches },
+      xg_render_model_sprite_pipeline_register_code_watches, true },
     { xg_render_world_simple_classify_code_write,
-      xg_render_world_simple_register_code_watches },
+      xg_render_world_simple_register_code_watches, true },
     { xg_render_world_sky_classify_code_write,
-      xg_render_world_sky_register_code_watches },
+      xg_render_world_sky_register_code_watches, true },
     { xg_render_runtime_variant_classify_code_write,
-      xg_render_runtime_variant_register_descriptor_code_watches },
+      xg_render_runtime_variant_register_descriptor_code_watches, false },
     { xg_render_resident_text_classify_code_write,
-      xg_render_resident_text_register_code_watches },
+      xg_render_resident_text_register_code_watches, true },
 };
 
 bool xg_render_invalidation_modules_configure(void) {

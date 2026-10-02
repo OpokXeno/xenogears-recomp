@@ -162,6 +162,7 @@ typedef struct XgRenderMotionTransform {
 
 typedef struct XgRenderMotionEvaluation {
     XgRenderMotionRef current;
+    XgRenderMotionRef previous; /* Immutable curve identity for shared-vertex reuse. */
     uint32_t node_count;
     bool interpolated;
     double alpha;
@@ -172,6 +173,10 @@ typedef struct XgRenderMotionEvaluation {
     XgRenderMotionTransform native_phase;
     XgRenderMotionTransform native_current;
     XgHost3dProjection source_projection[2][XG_RENDER_MOTION_NODE_CAPACITY];
+    /* Retained unanchored endpoint curves and the one World wrap branch.
+     * Advancing alpha reuses these exact values within the owned pose pair. */
+    double curve_endpoints[2][XG_RENDER_MOTION_NODE_CAPACITY][3][4];
+    double curve_wrap_shift[3];
 } XgRenderMotionEvaluation;
 
 typedef enum XgRenderMotionProjectResult {
@@ -219,6 +224,9 @@ bool xg_render_motion_bind_command(uint32_t command_id, struct XgRenderNativeOpe
  * Incompatible lifecycle/hierarchy selects current without interpolation. */
 bool xg_render_motion_evaluate(XgRenderMotionRef previous, XgRenderMotionRef current, double alpha,
                                XgRenderMotionEvaluation *out);
+/* Advance a successfully evaluated, still-retained pose pair to another alpha.
+ * Endpoint transforms and GTE anchors remain immutable across its phases. */
+bool xg_render_motion_advance(double alpha, XgRenderMotionEvaluation *evaluation);
 /* Transform LOCAL geometry with a shared endpoint-anchored matrix curve, then
  * anchor each local vertex to exact GTE screen endpoints. Equal local vertices
  * share the result, including aliases in different polygons. Both alpha 0 and 1
