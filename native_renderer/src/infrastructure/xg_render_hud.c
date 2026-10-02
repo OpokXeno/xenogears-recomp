@@ -32,6 +32,19 @@ static int hud_anchor(const XgSemanticSceneIdentity *scene, uint32_t packet,
         const uint32_t ui_base = battle_ui & 0x001fffffu;
         if (packet >= ui_base) {
             const uint32_t ui_offset = packet - ui_base;
+            /* Bottom-left Gear widgets move to the left edge, with the left
+             * gauge; the surrounding full-width bottom frame stays centred.
+             * 0x800891e4 builds the Attack level and Fuel boxes from two
+             * glyphs (base byte 0x800d2c34 - 0x5d / - 0x25) into the 0x3e80
+             * labels/digit and 0x43d0 box banks; 0x800898f0 builds the Fuel
+             * value into 0x5280 (current) and 0x53c0 ("/" and maximum).
+             * Each bank is linked every other 0x28 packet from parity byte
+             * 0x800ccb34 (0x80074ab8), so anchor every slot of each bank. */
+            if (packet_array(ui_offset, 0x3e80u, 34u, 0x28u) ||
+                packet_array(ui_offset, 0x43d0u, 18u, 0x28u) ||
+                packet_array(ui_offset, 0x5280u, 8u, 0x28u) ||
+                packet_array(ui_offset, 0x53c0u, 10u, 0x28u))
+                return -1;
             /* BattleBuildGearCommandHeaderText (0x8008860c): glyph 0x9e
              * contributes 42 label/arrow pairs; glyph 0xda's pairs 1..14
              * form the status-panel background. The neighbouring glyphs
