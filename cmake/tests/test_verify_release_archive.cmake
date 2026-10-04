@@ -18,6 +18,8 @@ set(OPENBIOS_IMAGE "${PROJECT_ROOT}/psxrecomp/bios/openbios.bin")
 set(OPENBIOS_LICENSE "${PROJECT_ROOT}/psxrecomp/bios/OpenBIOS.LICENSE")
 set(OPENBIOS_PROFILE "${PROJECT_ROOT}/psxrecomp/bios/OpenBIOS.toml")
 set(BUILTIN_MODS_CATALOG "${PROJECT_ROOT}/psxrecomp/mods/builtin/packages")
+include("${PROJECT_ROOT}/cmake/xg_release_mods.cmake")
+xg_release_mod_packages("${PROJECT_ROOT}" RELEASE_MOD_PACKAGES)
 set(CD_SPEED_MANIFEST
     "psx.enhancement.cd-speed/1.0.0/manifest.toml")
 set(FAST_LOADING_MANIFEST
@@ -88,7 +90,9 @@ function(create_package_root platform case_name output_variable)
     file(WRITE "${_package_root}/MOD_AUTHORING.md" "Synthetic mod authoring guide fixture.\n")
     file(WRITE "${_package_root}/README.md" "Synthetic release README fixture.\n")
     file(WRITE "${_package_root}/assets/placeholder.txt" "Synthetic release asset fixture.\n")
-    file(COPY "${BUILTIN_MODS_CATALOG}/" DESTINATION "${_package_root}/mods/bundled")
+    foreach(_package IN LISTS RELEASE_MOD_PACKAGES)
+        file(COPY "${_package}" DESTINATION "${_package_root}/mods/bundled")
+    endforeach()
     copy_fixture_file("${OPENBIOS_IMAGE}" "${_package_root}/bios/openbios.bin")
     copy_fixture_file("${OPENBIOS_LICENSE}" "${_package_root}/bios/OpenBIOS.LICENSE")
 
@@ -275,12 +279,15 @@ function(assert_fixture_tree archive platform case_name)
         "bios/OpenBIOS.LICENSE"
         "bios/openbios.bin"
         "game.toml")
-    file(GLOB_RECURSE _builtin_mod_files
-        RELATIVE "${BUILTIN_MODS_CATALOG}"
-        LIST_DIRECTORIES FALSE
-        "${BUILTIN_MODS_CATALOG}/*")
-    foreach(_mod_file IN LISTS _builtin_mod_files)
-        list(APPEND _expected_files "mods/bundled/${_mod_file}")
+    foreach(_package IN LISTS RELEASE_MOD_PACKAGES)
+        get_filename_component(_package_name "${_package}" NAME)
+        file(GLOB_RECURSE _package_mod_files
+            RELATIVE "${_package}"
+            LIST_DIRECTORIES FALSE
+            "${_package}/*")
+        foreach(_mod_file IN LISTS _package_mod_files)
+            list(APPEND _expected_files "mods/bundled/${_package_name}/${_mod_file}")
+        endforeach()
     endforeach()
     list(SORT _expected_files)
     file(GLOB_RECURSE _actual_files

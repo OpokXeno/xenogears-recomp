@@ -552,12 +552,9 @@ endif()
 # psxrecomp/lib/recomp-ui submodule (disable with -DPSX_RECOMP_UI=OFF).
 set(PSXRT_LAUNCHER_BOXART "${CMAKE_CURRENT_SOURCE_DIR}/assets/boxart.tga")
 
-# Framework mods this title ships. Bezel Artwork is left out: Xenogears is
-# presented in widescreen, so there are no side bars for it to fill.
-set(PSX_BUILTIN_MOD_ALLOWLIST
-    psx.enhancement.cd-speed
-    psx.enhancement.fast-loading
-    psx.enhancement.pgxp)
+# Framework mods this title ships (PSX_BUILTIN_MOD_ALLOWLIST), shared with
+# the release archive verifier.
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/xg_release_mods.cmake")
 
 psxrecomp_add_runtime_target(psx-runtime
     GAME_GENERATED_FULL_C      ${GAME_FULL_C}

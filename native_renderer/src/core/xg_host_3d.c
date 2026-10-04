@@ -495,8 +495,8 @@ int32_t xg_host_3d_native_depth_q12(double view_z, uint32_t projection_distance)
      * dropped (the near/far "clip" in depth space). Behind the camera there is
      * no meaningful depth. */
     if (!isfinite(view_z) || view_z <= 0.0) return 0;
-    const double near = projection_distance * (65536.0 / 131071.0);
-    if (view_z < near) view_z = near;
+    const double near_z = projection_distance * (65536.0 / 131071.0);
+    if (view_z < near_z) view_z = near_z;
     if (view_z > 65535.0) view_z = 65535.0;
     const double q12 = view_z * 4096.0;
     return q12 >= 1.0 ? (int32_t)llround(q12) : 0;

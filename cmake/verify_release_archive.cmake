@@ -17,6 +17,8 @@ set(OPENBIOS_IMAGE "${PROJECT_ROOT}/psxrecomp/bios/openbios.bin")
 set(OPENBIOS_LICENSE "${PROJECT_ROOT}/psxrecomp/bios/OpenBIOS.LICENSE")
 set(OPENBIOS_PROFILE "${PROJECT_ROOT}/psxrecomp/bios/OpenBIOS.toml")
 set(BUILTIN_MODS_CATALOG "${PROJECT_ROOT}/psxrecomp/mods/builtin/packages")
+include("${PROJECT_ROOT}/cmake/xg_release_mods.cmake")
+xg_release_mod_packages("${PROJECT_ROOT}" RELEASE_MOD_PACKAGES)
 set(REQUIRED_BUILTIN_MOD_MANIFESTS
     psx.enhancement.cd-speed/1.0.0/manifest.toml
     psx.enhancement.fast-loading/1.0.0/manifest.toml
@@ -284,10 +286,20 @@ if(NOT IS_DIRECTORY "${_package_directory}/mods")
     fail("Archive mods path is not a directory")
 endif()
 
-file(GLOB_RECURSE _canonical_mod_entries
-    RELATIVE "${BUILTIN_MODS_CATALOG}"
-    LIST_DIRECTORIES TRUE
-    "${BUILTIN_MODS_CATALOG}/*")
+# The release catalog: the allowlisted framework packages plus the game's own.
+set(_canonical_mod_entries "")
+foreach(_package IN LISTS RELEASE_MOD_PACKAGES)
+    get_filename_component(_package_name "${_package}" NAME)
+    set(_mod_source_${_package_name} "${_package}")
+    list(APPEND _canonical_mod_entries "${_package_name}")
+    file(GLOB_RECURSE _package_entries
+        RELATIVE "${_package}"
+        LIST_DIRECTORIES TRUE
+        "${_package}/*")
+    foreach(_package_entry IN LISTS _package_entries)
+        list(APPEND _canonical_mod_entries "${_package_name}/${_package_entry}")
+    endforeach()
+endforeach()
 file(GLOB_RECURSE _bundled_mod_entries
     RELATIVE "${_package_directory}/mods/bundled"
     LIST_DIRECTORIES TRUE
@@ -296,7 +308,7 @@ list(SORT _canonical_mod_entries)
 list(SORT _bundled_mod_entries)
 if(NOT "${_bundled_mod_entries}" STREQUAL "${_canonical_mod_entries}")
     fail(
-        "Archive mods catalog must contain only the canonical built-in packages.\n"
+        "Archive mods catalog must contain exactly the release mod packages.\n"
         "Expected: ${_canonical_mod_entries}\n"
         "Actual: ${_bundled_mod_entries}")
 endif()
@@ -307,10 +319,13 @@ foreach(_manifest IN LISTS REQUIRED_BUILTIN_MOD_MANIFESTS)
     endif()
 endforeach()
 foreach(_entry IN LISTS _canonical_mod_entries)
-    if(IS_DIRECTORY "${BUILTIN_MODS_CATALOG}/${_entry}")
+    string(REGEX REPLACE "/.*" "" _package_name "${_entry}")
+    string(REGEX REPLACE "^[^/]*" "" _package_entry "${_entry}")
+    set(_canonical_entry "${_mod_source_${_package_name}}${_package_entry}")
+    if(IS_DIRECTORY "${_canonical_entry}")
         continue()
     endif()
-    file(SHA256 "${BUILTIN_MODS_CATALOG}/${_entry}" _canonical_mod_hash)
+    file(SHA256 "${_canonical_entry}" _canonical_mod_hash)
     file(SHA256 "${_package_directory}/mods/bundled/${_entry}" _bundled_mod_hash)
     if(NOT _bundled_mod_hash STREQUAL _canonical_mod_hash)
         fail("Bundled built-in mod file does not match the canonical catalog: ${_entry}")
