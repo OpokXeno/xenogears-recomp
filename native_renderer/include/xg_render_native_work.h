@@ -63,6 +63,13 @@ bool xg_render_native_work_temporal_coverage(
     uint32_t component_count, const XgRenderTemporalSample *samples,
     uint32_t sample_count, uint64_t guest_cycle, XgSemanticResourceRef *out_coverage);
 /* Generic pointer-free FIFO operation, including explicit TARGET selection. */
+/* One MESH operation: material (and identity/depth policy) from a template
+ * semantic, the mesh's shared pose binding, and retained mesh resources (an
+ * instance and the geometry it expands). */
+bool xg_render_native_work_mesh(const GpuRenderSemantic *material,
+                                const XgRenderMotionDrawBinding *motion,
+                                XgSemanticResourceRef mesh, XgSemanticResourceRef geometry,
+                                uint64_t guest_cycle);
 bool xg_render_native_work_operation(const XgRenderNativeOperation *operation,
                                      uint64_t guest_cycle);
 bool xg_render_native_work_vram_event(const GpuVramEvent *event,

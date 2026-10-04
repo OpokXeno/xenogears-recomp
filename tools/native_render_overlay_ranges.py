@@ -490,7 +490,7 @@ def emit_cold_cutover_table(
         "                  xg_render_manifest_identity,",
         "                  sizeof(candidate->identity.manifest_sha256)) == 0 &&",
         "           artifact_base < UINT32_C(0x00200000) &&",
-        "           (artifact_base & UINT32_C(0xfff)) == 0u &&",
+        "           (artifact_base & UINT32_C(3)) == 0u &&",
         "           candidate->artifact_size != 0u &&",
         "           candidate->artifact_size <= UINT32_C(0x00200000) - artifact_base &&",
         "           candidate->producer_entry != 0u &&",

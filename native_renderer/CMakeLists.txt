@@ -217,6 +217,7 @@ add_library(xg_semantic_presentation STATIC
     src/infrastructure/xg_render_source_frame.c
     src/infrastructure/xg_render_source_commit.c
     src/infrastructure/xg_render_native_work.c
+    src/infrastructure/xg_render_native_mesh.c
     src/infrastructure/xg_render_semantic_presentation.c
     src/runtime/xg_render_presentation_host.c
     src/infrastructure/xg_render_resource_repository.c
@@ -367,6 +368,8 @@ add_library(xg_render_auth STATIC
     src/producers/model/xg_render_model_repository.c
     src/producers/model/xg_render_model_sprite_pipeline.c
     src/producers/battle/xg_render_battle_geometry.c
+    src/producers/battling/xg_render_battling.c
+    src/producers/model/xg_render_model_kernel.c
     src/producers/model/xg_render_gear_motion.c
     src/producers/world/xg_render_world_model_repository.c
     src/producers/world/xg_render_world_models_pipeline.c
@@ -652,6 +655,8 @@ if(BUILD_TESTING)
         src/producers/model/xg_render_model_repository.c
         src/producers/model/xg_render_model_sprite_pipeline.c
         src/producers/battle/xg_render_battle_geometry.c
+        src/producers/battling/xg_render_battling.c
+        src/producers/model/xg_render_model_kernel.c
         src/producers/world/xg_render_world_model_repository.c
         src/producers/world/xg_render_world_models_pipeline.c
         src/producers/field/xg_render_overlay_ft4.c

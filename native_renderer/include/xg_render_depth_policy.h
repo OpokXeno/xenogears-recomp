@@ -54,6 +54,10 @@ typedef enum XgRenderDepthFamily {
     XG_RENDER_DEPTH_FAMILY_FIELD_COMPASS,
     XG_RENDER_DEPTH_FAMILY_FIELD_LINES,
     XG_RENDER_DEPTH_FAMILY_RESIDENT_UI,           /* menus, text, UI OT */
+    XG_RENDER_DEPTH_FAMILY_BATTLING_ARENA,        /* heightfield and wall ring */
+    XG_RENDER_DEPTH_FAMILY_BATTLING_MODELS,       /* Gear hierarchy parts */
+    XG_RENDER_DEPTH_FAMILY_BATTLING_SHADOWS,      /* actor ground quads */
+    XG_RENDER_DEPTH_FAMILY_BATTLING_EFFECTS,      /* GTE-projected effects */
     XG_RENDER_DEPTH_FAMILY_COUNT
 } XgRenderDepthFamily;
 
@@ -124,6 +128,14 @@ static const XgRenderDepthPolicyEntry xg_render_depth_policy_table[XG_RENDER_DEP
      "line primitives"},
     {XG_RENDER_DEPTH_FAMILY_RESIDENT_UI, GPU_RENDER_DEPTH_NONE, 0u, "resident_ui",
      "menus, fonts and UI"},
+    {XG_RENDER_DEPTH_FAMILY_BATTLING_ARENA, GPU_RENDER_DEPTH_TEST_WRITE, 0u, "battling_arena",
+     "Battling heightfield and perimeter ring; occludes Gears behind hills"},
+    {XG_RENDER_DEPTH_FAMILY_BATTLING_MODELS, GPU_RENDER_DEPTH_TEST_WRITE, 0u, "battling_models",
+     "Gear hierarchy parts at their real depth"},
+    {XG_RENDER_DEPTH_FAMILY_BATTLING_SHADOWS, GPU_RENDER_DEPTH_TEST_WRITE, 5u, "battling_shadows",
+     "ground decal; biased so it does not sink (blended texels never write)"},
+    {XG_RENDER_DEPTH_FAMILY_BATTLING_EFFECTS, GPU_RENDER_DEPTH_TEST_WRITE, 6u, "battling_effects",
+     "projective particles and trails; opaque texels write, blended never do"},
 };
 
 /* The classification row of one family (NULL for an invalid family). */

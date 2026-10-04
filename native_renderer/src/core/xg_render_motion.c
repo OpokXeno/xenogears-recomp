@@ -44,7 +44,28 @@ static uint32_t command_capacity;
  * only at an empty slot, so tombstones must not be allowed to fill the table. */
 static uint32_t command_used;
 static uint64_t *command_pages;
-static uint32_t command_page_counts[0x200000u / 4096u];
+/* 4 KiB pages of main-RAM command ids, for forget_range. Host packets in
+ * the GPU-DMA aperture are never forgotten by guest range: no pages. */
+#define MOTION_COMMAND_PAGES 512u
+static uint32_t command_page_counts[MOTION_COMMAND_PAGES];
+
+static bool command_paged(uint32_t command_id) {
+    return command_id < 0x200000u;
+}
+
+static unsigned command_page(uint32_t command_id) {
+    return command_id / 4096u;
+}
+
+/* Home slot of a command id. Ids are packet addresses at fixed strides
+ * (0x20, 0x28, 0x40...), so the low bits of (id >> 2) * odd reach only a
+ * fraction of a power-of-two table and linear probes run long. Take the high
+ * bits of a 64-bit Fibonacci product instead. */
+static unsigned command_home(uint32_t command_id, uint32_t capacity) {
+    const uint64_t product = (uint64_t)(command_id >> 2u) * UINT64_C(11400714819323198485);
+    return (unsigned)((product >> 32u) % capacity);
+}
+
 static bool commands_dirty;
 static uint64_t serial;
 static uint64_t geometry_serial;
@@ -108,10 +129,10 @@ static unsigned first_command_bit(uint64_t bits) {
 static void clear_command(MotionCommand *command) {
     commands_dirty = true;
     if (!command->command_id) ++command_used;
-    if(command->command_id&&command->command_id!=MOTION_TOMBSTONE) {
+    if(command->command_id&&command->command_id!=MOTION_TOMBSTONE&&command_paged(command->command_id)) {
         const size_t index=(size_t)(command-commands);
-        command_pages[(size_t)(command->command_id/4096u)*(command_capacity/64u)+index/64u]&=~(UINT64_C(1)<<(index%64u));
-        --command_page_counts[command->command_id / 4096u];
+        command_pages[(size_t)(command_page(command->command_id))*(command_capacity/64u)+index/64u]&=~(UINT64_C(1)<<(index%64u));
+        --command_page_counts[command_page(command->command_id)];
     }
     if (command->binding.motion.handle.resource_id) {
         (void)xg_render_resource_release(command->binding.motion.handle);
@@ -128,7 +149,7 @@ static bool ref_equal(XgRenderMotionRef a, XgRenderMotionRef b) {
 /* Rebuild the table at the given capacity, dropping tombstones. */
 static bool rehash_commands(uint32_t capacity) {
     MotionCommand *grown = calloc(capacity, sizeof(*grown));
-    uint64_t *pages = calloc((size_t)512u * (capacity / 64u), sizeof(*pages));
+    uint64_t *pages = calloc((size_t)MOTION_COMMAND_PAGES * (capacity / 64u), sizeof(*pages));
     if (!grown || !pages) { free(grown); free(pages); return false; }
     memset(command_page_counts, 0, sizeof(command_page_counts));
     /* Rehash under guest ownership. The immutable resource retains transfer
@@ -136,11 +157,12 @@ static bool rehash_commands(uint32_t capacity) {
     for (uint32_t i = 0u; i < command_capacity; ++i) {
         const MotionCommand *c = &commands[i];
         if (!c->command_id || c->command_id == MOTION_TOMBSTONE) continue;
-        uint32_t slot = ((c->command_id >> 2u) * 2654435761u) % capacity;
+        uint32_t slot = command_home(c->command_id, capacity);
         while (grown[slot].command_id) slot = (slot + 1u) % capacity;
         grown[slot] = *c;
-        pages[(size_t)(c->command_id / 4096u) * (capacity / 64u) + slot / 64u] |= UINT64_C(1) << (slot % 64u);
-        ++command_page_counts[c->command_id / 4096u];
+        if (!command_paged(c->command_id)) continue;
+        pages[(size_t)(command_page(c->command_id)) * (capacity / 64u) + slot / 64u] |= UINT64_C(1) << (slot % 64u);
+        ++command_page_counts[command_page(c->command_id)];
     }
     uint32_t live = 0u;
     for (uint32_t i = 0u; i < capacity; ++i) live += grown[i].command_id != 0u;
@@ -172,15 +194,92 @@ int32_t xg_render_motion_s16_translation(int32_t stored) {
     return low < 0x8000u ? (int32_t)low : (int32_t)low - 65536;
 }
 
+static void quaternion_from_rotation(const double r[3][3], double q[4]) {
+    const double trace = r[0][0] + r[1][1] + r[2][2];
+    if (trace > 0.0) {
+        const double s = sqrt(trace + 1.0) * 2.0;
+        q[3] = s * 0.25;
+        q[0] = (r[2][1] - r[1][2]) / s;
+        q[1] = (r[0][2] - r[2][0]) / s;
+        q[2] = (r[1][0] - r[0][1]) / s;
+    } else {
+        unsigned i = r[1][1] > r[0][0] ? 1u : 0u;
+        if (r[2][2] > r[i][i])
+            i = 2;
+        const unsigned j = (i + 1) % 3, k = (i + 2) % 3;
+        const double s = sqrt(1.0 + r[i][i] - r[j][j] - r[k][k]) * 2.0;
+        q[i] = s * 0.25;
+        q[j] = (r[j][i] + r[i][j]) / s;
+        q[k] = (r[k][i] + r[i][k]) / s;
+        q[3] = (r[k][j] - r[j][k]) / s;
+    }
+}
+
+static double determinant3(const double m[3][3]) {
+    return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
+           m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
+           m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+}
+
+/* A scaled parent composed with a rotated child, R1 * S * R2, is no longer a
+ * rotation times a diagonal scale. Its polar decomposition A = R * S (R the
+ * nearest rotation, S symmetric positive definite) still is exact, and
+ * interpolating R by slerp and S per element keeps the mesh rigid where the
+ * source is rigid. Reflections and singular matrices are not motion. */
+static bool polar_decompose(const double a[3][3], XgRenderMotionTrs *trs) {
+    double r[3][3];
+    const double det = determinant3(a);
+    if (!isfinite(det) || det < 1e-9)
+        return false;
+    memcpy(r, a, sizeof(r));
+    for (unsigned iteration = 0; iteration < 32u; ++iteration) {
+        /* R <- (R + inverse(R)^T) / 2; the cofactor matrix is det * inverse^T. */
+        const double d = determinant3(r);
+        if (!isfinite(d) || fabs(d) < 1e-12)
+            return false;
+        double next[3][3], change = 0.0;
+        for (unsigned i = 0; i < 3; ++i)
+            for (unsigned j = 0; j < 3; ++j) {
+                const unsigned i1 = (i + 1) % 3, i2 = (i + 2) % 3;
+                const unsigned j1 = (j + 1) % 3, j2 = (j + 2) % 3;
+                const double cofactor = r[i1][j1] * r[i2][j2] - r[i1][j2] * r[i2][j1];
+                next[i][j] = 0.5 * (r[i][j] + cofactor / d);
+                change += fabs(next[i][j] - r[i][j]);
+            }
+        memcpy(r, next, sizeof(r));
+        if (change < 1e-13)
+            break;
+    }
+    if (fabs(determinant3(r) - 1.0) > 1e-6)
+        return false;
+    double s[3][3];
+    for (unsigned i = 0; i < 3; ++i)
+        for (unsigned j = 0; j < 3; ++j) {
+            s[i][j] = 0.0;
+            for (unsigned k = 0; k < 3; ++k)
+                s[i][j] += r[k][i] * a[k][j];
+        }
+    for (unsigned i = 0; i < 3; ++i) {
+        trs->scale[i] = s[i][i];
+        if (!(trs->scale[i] > 1.0 / 4096.0))
+            return false;
+    }
+    trs->shear[0] = 0.5 * (s[0][1] + s[1][0]);
+    trs->shear[1] = 0.5 * (s[0][2] + s[2][0]);
+    trs->shear[2] = 0.5 * (s[1][2] + s[2][1]);
+    quaternion_from_rotation(r, trs->rotation);
+    return normalize(trs->rotation);
+}
+
 bool xg_render_motion_decompose(const XgHost3dMatrix *matrix, XgRenderMotionTrs *out) {
     XgRenderMotionTrs trs = {0};
-    double r[3][3];
+    double r[3][3], a[3][3];
     if (matrix == NULL || out == NULL)
         return false;
     for (unsigned c = 0; c < 3; ++c) {
         double n = 0.0;
         for (unsigned row = 0; row < 3; ++row) {
-            r[row][c] = matrix->rotation[row][c] / 4096.0;
+            a[row][c] = r[row][c] = matrix->rotation[row][c] / 4096.0;
             n += r[row][c] * r[row][c];
         }
         trs.scale[c] = sqrt(n);
@@ -205,32 +304,20 @@ bool xg_render_motion_decompose(const XgHost3dMatrix *matrix, XgRenderMotionTrs 
             for (unsigned row = 0; row < 3; ++row)
                 dot += r[row][a] * r[row][b];
             if (fabs(dot) > 0.002 + rounding)
-                return false;
+                goto stretch;
         }
-    const double det = r[0][0] * (r[1][1] * r[2][2] - r[1][2] * r[2][1]) -
-                       r[0][1] * (r[1][0] * r[2][2] - r[1][2] * r[2][0]) +
-                       r[0][2] * (r[1][0] * r[2][1] - r[1][1] * r[2][0]);
-    if (fabs(det - 1.0) > 0.002 + 1.5 * rounding)
-        return false;
-    const double trace = r[0][0] + r[1][1] + r[2][2];
-    if (trace > 0.0) {
-        const double s = sqrt(trace + 1.0) * 2.0;
-        trs.rotation[3] = s * 0.25;
-        trs.rotation[0] = (r[2][1] - r[1][2]) / s;
-        trs.rotation[1] = (r[0][2] - r[2][0]) / s;
-        trs.rotation[2] = (r[1][0] - r[0][1]) / s;
-    } else {
-        unsigned i = r[1][1] > r[0][0] ? 1u : 0u;
-        if (r[2][2] > r[i][i])
-            i = 2;
-        const unsigned j = (i + 1) % 3, k = (i + 2) % 3;
-        const double s = sqrt(1.0 + r[i][i] - r[j][j] - r[k][k]) * 2.0;
-        trs.rotation[i] = s * 0.25;
-        trs.rotation[j] = (r[j][i] + r[i][j]) / s;
-        trs.rotation[k] = (r[k][i] + r[i][k]) / s;
-        trs.rotation[3] = (r[k][j] - r[j][k]) / s;
-    }
+    if (fabs(determinant3(r) - 1.0) > 0.002 + 1.5 * rounding)
+        goto stretch;
+    quaternion_from_rotation(r, trs.rotation);
     if (!normalize(trs.rotation))
+        return false;
+    *out = trs;
+    return true;
+stretch:
+    trs = (XgRenderMotionTrs){0};
+    for (unsigned c = 0; c < 3; ++c)
+        trs.translation[c] = matrix->translation[c];
+    if (!polar_decompose(a, &trs))
         return false;
     *out = trs;
     return true;
@@ -239,7 +326,8 @@ bool xg_render_motion_decompose(const XgHost3dMatrix *matrix, XgRenderMotionTrs 
 static bool trs_valid(const XgRenderMotionTrs *t) {
     double norm = 0;
     for (unsigned i = 0; i < 3; ++i)
-        if (!isfinite(t->translation[i]) || !isfinite(t->scale[i]))
+        if (!isfinite(t->translation[i]) || !isfinite(t->scale[i]) ||
+            !isfinite(t->shear[i]))
             return false;
     for (unsigned i = 0; i < 4; ++i)
         norm += t->rotation[i] * t->rotation[i];
@@ -322,8 +410,31 @@ bool xg_render_motion_camera_from_view(const XgHost3dMatrix *view, XgRenderMotio
             t -= cofactor[j][i] * view->translation[j] / determinant;
         camera.translation[i] = t;
         camera.rotation[i] = -camera.rotation[i];
-        camera.scale[i] = 1.0 / scale;
     }
+    /* The camera's own stretch: view L = R P (polar), camera C = L^-1 =
+     * R^T S with S = R P^-1 R^T. A camera whose rows carry different scales
+     * (Battling zooms through its depth row) keeps them: a uniform average
+     * would widen the phase projection against the guest's (by H/SZ ratio),
+     * moving every vertex by more than its camera moved, the further from
+     * the screen centre the more. Pure rotation * scale yields S = I/scale. */
+    double inverse_l[3][3], stretch[3][3];
+    for (unsigned i = 0; i < 3; ++i)
+        for (unsigned j = 0; j < 3; ++j) inverse_l[i][j] = cofactor[j][i] / determinant;
+    /* S = R * L^-1 (since C = L^-1 = R^T S): symmetric up to Q12 noise. */
+    for (unsigned i = 0; i < 3; ++i)
+        for (unsigned j = 0; j < 3; ++j) {
+            stretch[i][j] = 0;
+            for (unsigned k = 0; k < 3; ++k) stretch[i][j] += rotation[i][k] * inverse_l[k][j];
+        }
+    for (unsigned i = 0; i < 3; ++i) {
+        camera.scale[i] = stretch[i][i];
+        if (!isfinite(camera.scale[i]) || camera.scale[i] < 1e-8) camera.scale[i] = 1.0 / scale;
+    }
+    camera.shear[0] = 0.5 * (stretch[0][1] + stretch[1][0]);
+    camera.shear[1] = 0.5 * (stretch[0][2] + stretch[2][0]);
+    camera.shear[2] = 0.5 * (stretch[1][2] + stretch[2][1]);
+    for (unsigned i = 0; i < 3; ++i)
+        if (!isfinite(camera.shear[i])) return false;
     *out = camera;
     return true;
 }
@@ -608,6 +719,17 @@ static bool motion_binding_pose(const XgRenderMotionDrawBinding *b,
     return true;
 }
 
+bool xg_render_motion_mesh_binding_valid(const XgRenderMotionDrawBinding *b) {
+    const XgRenderMotionPose *pose;
+    if (b == NULL || b->triangle_count) return false;
+    if (!b->motion.handle.resource_id)
+        return !b->motion.handle.generation && !b->motion.digest && !b->motion_part_index;
+    return xg_render_motion_view(b->motion, &pose) && b->motion_part_index < pose->node_count &&
+           pose->nodes[b->motion_part_index].source_matrix_valid &&
+           (pose->translation_stage != XG_RENDER_MOTION_TRANSLATION_WORLD ||
+            b->motion_part_index + 1 == pose->node_count);
+}
+
 bool xg_render_motion_binding_valid(const XgRenderMotionDrawBinding *b) {
     const XgRenderMotionPose *pose;
     return motion_binding_pose(b, &pose);
@@ -617,7 +739,10 @@ bool xg_render_motion_register_command(uint32_t command_id,
                                        const XgRenderMotionDrawBinding *binding,
                                        uint32_t producer_id, uint32_t primitive_id) {
     command_id &= UINT32_C(0x1fffffff);
-    if (!command_id || command_id > 0x1ffffcu || (command_id & 3u))
+    /* Main RAM packets, or host packets in the GPU-DMA aperture's first 4 MiB. */
+    if (!command_id || (command_id > 0x1ffffcu &&
+                        (command_id < 0x800000u || command_id >= 0xc00000u)) ||
+        (command_id & 3u))
         return false;
     if (!command_capacity && (!binding || !grow_commands())) return binding == NULL;
     /* Keep probes short: at 3/4 occupancy (tombstones included) rebuild, and
@@ -628,7 +753,7 @@ bool xg_render_motion_register_command(uint32_t command_id,
             command_capacity < MOTION_COMMAND_MAXIMUM ? command_capacity * 2u : command_capacity;
         if (!rehash_commands(capacity)) return false;
     }
-    const unsigned start = ((command_id >> 2) * 2654435761u) % command_capacity;
+    const unsigned start = command_home(command_id, command_capacity);
     MotionCommand *empty = NULL, *slot = NULL;
     for (unsigned i = 0; i < command_capacity; ++i) {
         MotionCommand *c = &commands[(start + i) % command_capacity];
@@ -669,8 +794,10 @@ bool xg_render_motion_register_command(uint32_t command_id,
                                 .primitive_id = primitive_id};
         ++motion_diagnostics.active_commands;
         const size_t index=(size_t)(slot-commands);
-        command_pages[(size_t)(command_id/4096u)*(command_capacity/64u)+index/64u]|=UINT64_C(1)<<(index%64u);
-        ++command_page_counts[command_id / 4096u];
+        if (command_paged(command_id)) {
+            command_pages[(size_t)(command_page(command_id))*(command_capacity/64u)+index/64u]|=UINT64_C(1)<<(index%64u);
+            ++command_page_counts[command_page(command_id)];
+        }
     }
     return true;
 }
@@ -719,6 +846,10 @@ void xg_render_motion_reset(void) {
         return;
     }
     xg_render_motion_forget_range(0, 0x200000u);
+    /* Host packets in the GPU-DMA aperture lie outside the RAM range. */
+    for (uint32_t i = 0u; i < command_capacity; ++i)
+        if (commands[i].command_id && commands[i].command_id != MOTION_TOMBSTONE)
+            clear_command(&commands[i]);
     free(commands); commands = NULL;
     free(command_pages); command_pages = NULL; command_capacity = 0u;
     command_used = 0u;
@@ -953,7 +1084,7 @@ bool xg_render_motion_bind_command(uint32_t command_id, XgRenderNativeOperation 
     op->motion = (XgRenderMotionDrawBinding){0};
     command_id &= UINT32_C(0x1fffffff);
     if (!command_capacity) return false;
-    const unsigned start = ((command_id >> 2) * 2654435761u) % command_capacity;
+    const unsigned start = command_home(command_id, command_capacity);
     for (unsigned i = 0; i < command_capacity; ++i) {
         const MotionCommand *c = &commands[(start + i) % command_capacity];
         if (!c->command_id)
@@ -988,7 +1119,7 @@ bool xg_render_motion_bind_command(uint32_t command_id, XgRenderNativeOperation 
         projection.screen_offset_y = (int32_t)(pose->screen_offset[1] * 65536.0);
         projection.projection_distance = (uint16_t)pose->projection_distance;
         const XgRenderMotionTransform *native_transform = NULL;
-        if (native_pose_uses_trs(pose)) {
+        if (!c->binding.native_exact && native_pose_uses_trs(pose)) {
             native_transform = native_pose_transform(c->binding.motion, pose);
             if (!native_transform) return false;
         }
@@ -1029,7 +1160,8 @@ bool xg_render_motion_bind_command(uint32_t command_id, XgRenderNativeOperation 
                 native_xy[t][v][0] = vertex->native_view_x;
                 native_xy[t][v][1] = vertex->native_view_y;
                 native_depth[t][v] = vertex->native_view_depth;
-                if (!vertex->native_view_position || !native_transform) continue;
+                if (!vertex->native_view_position || !native_transform ||
+                    c->binding.native_exact) continue;
                 if (!refine_native_vertex(&projection, native_transform,
                         c->binding.motion_part_index, &c->binding.local[t][v],
                         native_xy[t][v], &native_depth[t][v])) {
@@ -1079,6 +1211,7 @@ static void interpolate_trs(const XgRenderMotionTrs *a, const XgRenderMotionTrs 
     for (unsigned i = 0; i < 3; ++i) {
         out->translation[i] = a->translation[i] + alpha * (b->translation[i] - a->translation[i]);
         out->scale[i] = a->scale[i] + alpha * (b->scale[i] - a->scale[i]);
+        out->shear[i] = a->shear[i] + alpha * (b->shear[i] - a->shear[i]);
     }
 }
 
@@ -1093,9 +1226,16 @@ static void matrix_trs(const XgRenderMotionTrs *t, double m[3][4]) {
     m[2][0] = 2 * (x * z - y * w);
     m[2][1] = 2 * (y * z + x * w);
     m[2][2] = 1 - 2 * (x * x + y * y);
+    /* M = R * S, S = diag(scale) plus the symmetric shear terms. */
+    const double s[3][3] = {
+        {t->scale[0], t->shear[0], t->shear[1]},
+        {t->shear[0], t->scale[1], t->shear[2]},
+        {t->shear[1], t->shear[2], t->scale[2]},
+    };
     for (unsigned r = 0; r < 3; ++r) {
+        const double row[3] = {m[r][0], m[r][1], m[r][2]};
         for (unsigned c = 0; c < 3; ++c)
-            m[r][c] *= t->scale[c];
+            m[r][c] = row[0] * s[0][c] + row[1] * s[1][c] + row[2] * s[2][c];
         m[r][3] = t->translation[r];
     }
 }
@@ -1153,10 +1293,19 @@ static bool evaluate_transform(const XgRenderMotionPose *a, const XgRenderMotion
     interpolate_trs(&a->camera, &b->camera, alpha, &camera);
     double camera_world[3][4];
     matrix_trs(&camera, camera_world);
+    /* The view is the camera's inverse: S^-1 R^T for any stretch S. */
+    double cofactor[3][3];
+    for (unsigned i = 0; i < 3; ++i)
+        for (unsigned j = 0; j < 3; ++j)
+            cofactor[i][j] = camera_world[(i+1)%3][(j+1)%3]*camera_world[(i+2)%3][(j+2)%3] -
+                camera_world[(i+1)%3][(j+2)%3]*camera_world[(i+2)%3][(j+1)%3];
+    const double determinant = camera_world[0][0]*cofactor[0][0] +
+        camera_world[0][1]*cofactor[0][1] + camera_world[0][2]*cofactor[0][2];
+    if (!isfinite(determinant) || fabs(determinant) < 1e-24) return false;
     for (unsigned r = 0; r < 3; ++r) {
         out->camera[r][3] = 0;
         for (unsigned c = 0; c < 3; ++c) {
-            out->camera[r][c] = camera_world[c][r] / (camera.scale[r] * camera.scale[r]);
+            out->camera[r][c] = cofactor[c][r] / determinant;
             out->camera[r][3] -= out->camera[r][c] * camera.translation[c];
         }
     }
@@ -1319,13 +1468,189 @@ bool xg_render_motion_advance(double alpha, XgRenderMotionEvaluation *out) {
     return true;
 }
 
-XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluation *e,
-                                                      const XgRenderMotionDrawBinding *b,
-                                                      double screen_delta[2][3][3],
-                                                      double native_delta[2][3][3]) {
-    if (e == NULL || b == NULL || screen_delta == NULL || native_delta == NULL ||
-        !ref_equal(e->current, b->motion) ||
-        b->motion_part_index >= e->node_count || b->triangle_count == 0 || b->triangle_count > 2)
+/* The alpha-independent part of one LOCAL vertex: its continuous projection
+ * under both endpoint transforms, the current Native projection and view
+ * depth, and both exact GTE screen anchors. */
+static bool motion_vertex_endpoints(const XgRenderMotionEvaluation *e, uint32_t part,
+                                    const XgHost3dVector *p, XgRenderMotionVertexEndpoints *out) {
+    for (unsigned sample = 0; sample < 2; ++sample) {
+        const double (*m)[4] = e->endpoints[sample].model_to_view[part];
+        double view[3];
+        for (unsigned r = 0; r < 3; ++r) {
+            view[r] = m[r][0] * p->x + m[r][1] * p->y + m[r][2] * p->z + m[r][3];
+            if (!isfinite(view[r]))
+                return false;
+        }
+        /* Continuous extension of IR/SZ/divide limits. Exact endpoint
+         * UNR and integer screen rounding are restored below, not
+         * confused with an unrestricted, high-precision H/Z camera.
+         * The GTE does not near-clip: nonpositive Z saturates SZ to
+         * zero and the divide result to 0x1ffff. Apply that same finite
+         * projection to phases. Rejecting a behind-camera vertex here
+         * would disable the entire model, including visible geometry,
+         * whenever an offscreen face crosses the camera plane. */
+        project_continuous_view(view, e->endpoints[sample].screen_offset,
+                                e->endpoints[sample].projection_distance, out->projected[sample]);
+        if (sample == 1u) {
+            const double (*native_matrix)[4] = e->native_current.model_to_view[part];
+            double native_view[3];
+            for (unsigned r = 0u; r < 3u; ++r) {
+                native_view[r] = native_matrix[r][0]*p->x + native_matrix[r][1]*p->y +
+                                 native_matrix[r][2]*p->z + native_matrix[r][3];
+                if (!isfinite(native_view[r])) return false;
+            }
+            project_continuous_view(native_view, e->native_current.screen_offset,
+                                    e->native_current.projection_distance, out->native_current);
+            out->native_current_z = native_view[2] + e->native_current.upright_depth_slope *
+                (native_view[1] - native_matrix[1][3]);
+        }
+    }
+    for (unsigned endpoint = 0; endpoint < 2; ++endpoint)
+        project_source_vertex(&e->source_projection[endpoint][part], p, out->anchors[endpoint], NULL);
+    return true;
+}
+
+/* The phase part of one vertex over its endpoints: canonical deltas from
+ * the current endpoint plus phase view depth, and Native deltas. */
+static bool motion_vertex_phase(const XgRenderMotionEvaluation *e, uint32_t part,
+                                const XgHost3dVector *p, const XgRenderMotionVertexEndpoints *endpoints,
+                                double result[3], double native_result[3],
+                                XgRenderMotionPhaseView *phase_view) {
+    const double (*m)[4] = e->phase.model_to_view[part];
+    double view[3], projected[2], native_projected[2];
+    for (unsigned r = 0; r < 3; ++r) {
+        view[r] = m[r][0] * p->x + m[r][1] * p->y + m[r][2] * p->z + m[r][3];
+        if (!isfinite(view[r]))
+            return false;
+    }
+    project_continuous_view(view, e->phase.screen_offset, e->phase.projection_distance, projected);
+    const double (*native_matrix)[4] = e->native_phase.model_to_view[part];
+    double native_view[3];
+    for (unsigned r = 0u; r < 3u; ++r) {
+        native_view[r] = native_matrix[r][0]*p->x + native_matrix[r][1]*p->y +
+                         native_matrix[r][2]*p->z + native_matrix[r][3];
+        if (!isfinite(native_view[r])) return false;
+    }
+    project_continuous_view(native_view, e->native_phase.screen_offset,
+                            e->native_phase.projection_distance, native_projected);
+    if (phase_view) {
+        memcpy(phase_view->view, native_view, sizeof(phase_view->view));
+        memcpy(phase_view->screen_offset, e->native_phase.screen_offset, sizeof(phase_view->screen_offset));
+        phase_view->distance = e->native_phase.projection_distance;
+    }
+    const double native_z = native_view[2] + e->native_phase.upright_depth_slope *
+        (native_view[1] - native_matrix[1][3]);
+    result[2] = view[2];
+    for (unsigned axis = 0; axis < 2; ++axis) {
+        const double a = endpoints->anchors[0][axis], c = endpoints->anchors[1][axis];
+        const double bend = (projected[axis] - endpoints->projected[1][axis]) -
+            (1 - e->alpha) * (endpoints->projected[0][axis] - endpoints->projected[1][axis]);
+        /* GTE(p) is a function of shared source geometry, never of a
+         * triangle/corner ID. Hidden vertex aliases get the same anchor.
+         * Difference form makes STATIC exactly zero at every alpha. */
+        result[axis] = (1 - e->alpha) * (a - c) + bend;
+        /* Native endpoints use the same unrounded transform/projector
+         * as this phase. Reintroducing integer MAC/UNR anchors here
+         * would put the removed wobble back into alternate frames. */
+        native_result[axis] = native_projected[axis] - endpoints->native_current[axis];
+    }
+    /* Depth in the same difference form: a static pose adds exactly 0
+     * to the endpoint's own unfloored depth. */
+    native_result[2] = native_z - endpoints->native_current_z;
+    return true;
+}
+
+bool xg_render_motion_vertex_endpoints(const XgRenderMotionEvaluation *e, uint32_t part,
+                                       const XgHost3dVector *local, XgRenderMotionVertexEndpoints *out) {
+    out->valid = e != NULL && local != NULL && part < e->node_count && e->interpolated &&
+        motion_vertex_endpoints(e, part, local, out);
+    return out->valid != 0u;
+}
+
+bool xg_render_motion_vertex_phase(const XgRenderMotionEvaluation *e, uint32_t part,
+                                   const XgHost3dVector *local, const XgRenderMotionVertexEndpoints *endpoints,
+                                   double screen_delta[3], double native_delta[3],
+                                   XgRenderMotionPhaseView *phase_view) {
+    return e != NULL && local != NULL && endpoints != NULL && endpoints->valid &&
+        part < e->node_count && e->interpolated &&
+        motion_vertex_phase(e, part, local, endpoints, screen_delta, native_delta, phase_view);
+}
+
+static bool motion_binding_projectable(const XgRenderMotionEvaluation *e, const XgRenderMotionDrawBinding *b) {
+    return e != NULL && b != NULL && ref_equal(e->current, b->motion) &&
+        b->motion_part_index < e->node_count && b->triangle_count != 0 && b->triangle_count <= 2;
+}
+
+/* The reader's cache slot for a vertex of this pose pair and part: the
+ * matching entry (*same_vertex) or the least recently used way. */
+static MotionProjectedVertex *motion_cache_slot(const XgRenderMotionEvaluation *e, uint32_t part,
+                                                const XgHost3dVector *p, bool *same_vertex) {
+    uint64_t key = (uint16_t)p->x | (uint64_t)(uint16_t)p->y << 16u |
+        (uint64_t)(uint16_t)p->z << 32u;
+    key ^= e->current.digest ^ e->previous.digest ^ (uint64_t)part * UINT64_C(11400714819323198485);
+    key ^= key >> 33u;
+    MotionProjectedVertex *set = projected_vertices[(key * UINT64_C(11400714819323198485)) >> 52u];
+    MotionProjectedVertex *cached = &set[0];
+    *same_vertex = false;
+    for (unsigned way = 0u; way < MOTION_PROJECTED_VERTEX_WAYS; ++way) {
+        MotionProjectedVertex *candidate = &set[way];
+        const bool same_pair = ref_equal(candidate->current,e->current) &&
+            ref_equal(candidate->previous,e->previous);
+        if (same_pair && candidate->part==part &&
+            candidate->local.x==p->x && candidate->local.y==p->y && candidate->local.z==p->z) {
+            cached = candidate; *same_vertex = true; break;
+        }
+        if (candidate->last_use < cached->last_use) cached = candidate;
+    }
+    cached->last_use = ++projected_vertex_clock;
+    return cached;
+}
+
+bool xg_render_motion_project_endpoints(const XgRenderMotionEvaluation *e,
+                                        const XgRenderMotionDrawBinding *b,
+                                        XgRenderMotionVertexEndpoints endpoints[2][3]) {
+    if (!motion_binding_projectable(e, b) || endpoints == NULL) return false;
+    for (unsigned t = 0; t < b->triangle_count; ++t)
+        for (unsigned v = 0; v < 3; ++v) {
+            XgRenderMotionVertexEndpoints *out = &endpoints[t][v];
+            const XgHost3dVector *p = &b->local[t][v];
+            out->valid = 0u;
+            if (!e->interpolated) continue;
+            if (!e->previous.handle.resource_id) {
+                out->valid = motion_vertex_endpoints(e, b->motion_part_index, p, out);
+                continue;
+            }
+            /* Shared corners: one computation per vertex, as in phases. */
+            bool same_vertex;
+            MotionProjectedVertex *cached = motion_cache_slot(e, b->motion_part_index, p, &same_vertex);
+            if (same_vertex) {
+                memcpy(out->projected, cached->projected_endpoints, sizeof(out->projected));
+                memcpy(out->anchors, cached->anchors, sizeof(out->anchors));
+                memcpy(out->native_current, cached->native_current, sizeof(out->native_current));
+                out->native_current_z = cached->native_current_z;
+                out->valid = 1u;
+                continue;
+            }
+            if (!motion_vertex_endpoints(e, b->motion_part_index, p, out)) continue;
+            out->valid = 1u;
+            /* Endpoints only: no phase result matches this entry's alpha. */
+            cached->previous = e->previous; cached->current = e->current;
+            cached->alpha = -1.0; cached->part = b->motion_part_index;
+            cached->local = *p;
+            memcpy(cached->projected_endpoints, out->projected, sizeof(cached->projected_endpoints));
+            memcpy(cached->anchors, out->anchors, sizeof(cached->anchors));
+            memcpy(cached->native_current, out->native_current, sizeof(cached->native_current));
+            cached->native_current_z = out->native_current_z;
+        }
+    return true;
+}
+
+XgRenderMotionProjectResult xg_render_motion_project_shared(const XgRenderMotionEvaluation *e,
+                                                            const XgRenderMotionDrawBinding *b,
+                                                            const XgRenderMotionVertexEndpoints (*shared)[3],
+                                                            double screen_delta[2][3][3],
+                                                            double native_delta[2][3][3]) {
+    if (screen_delta == NULL || native_delta == NULL || !motion_binding_projectable(e, b))
         return XG_RENDER_MOTION_INVALID;
     if (!e->interpolated)
         return XG_RENDER_MOTION_ENDPOINT;
@@ -1337,104 +1662,30 @@ XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluat
             MotionProjectedVertex *cached = NULL;
             bool same_vertex=false;
             if (e->previous.handle.resource_id) {
-                uint64_t key = (uint16_t)p->x | (uint64_t)(uint16_t)p->y << 16u |
-                    (uint64_t)(uint16_t)p->z << 32u;
-                key ^= e->current.digest ^ e->previous.digest ^
-                    (uint64_t)b->motion_part_index * UINT64_C(11400714819323198485);
-                key ^= key >> 33u;
-                MotionProjectedVertex *set = projected_vertices[
-                    (key * UINT64_C(11400714819323198485)) >> 52u];
-                cached = &set[0];
-                for (unsigned way = 0u; way < MOTION_PROJECTED_VERTEX_WAYS; ++way) {
-                    MotionProjectedVertex *candidate = &set[way];
-                    const bool same_pair = ref_equal(candidate->current,e->current) &&
-                        ref_equal(candidate->previous,e->previous);
-                    if (same_pair && candidate->part==b->motion_part_index &&
-                        candidate->local.x==p->x && candidate->local.y==p->y && candidate->local.z==p->z) {
-                        cached = candidate; same_vertex = true; break;
-                    }
-                    if (candidate->last_use < cached->last_use) cached = candidate;
-                }
-                cached->last_use = ++projected_vertex_clock;
+                cached = motion_cache_slot(e, b->motion_part_index, p, &same_vertex);
                 if (same_vertex && !memcmp(&cached->alpha,&e->alpha,sizeof(e->alpha))) {
                     memcpy(result[t][v], cached->screen, sizeof(cached->screen));
                     memcpy(native_result[t][v], cached->native, sizeof(cached->native));
                     continue;
                 }
             }
-            double projected[3][2];
-            double native_projected[2][2];
-            double native_z[2] = {0.0, 0.0};
-            for (unsigned sample = 0; sample < 3; ++sample) {
-                if (same_vertex && sample<2u) {
-                    memcpy(projected[sample],cached->projected_endpoints[sample],sizeof(projected[sample]));
-                    if (sample==1u) {
-                        memcpy(native_projected[0],cached->native_current,sizeof(native_projected[0]));
-                        native_z[0]=cached->native_current_z;
-                    }
-                    continue;
-                }
-                const XgRenderMotionTransform *transform = sample < 2 ? &e->endpoints[sample] : &e->phase;
-                const double (*m)[4] = transform->model_to_view[b->motion_part_index];
-                double view[3];
-                for (unsigned r = 0; r < 3; ++r) {
-                    view[r] = m[r][0] * p->x + m[r][1] * p->y + m[r][2] * p->z + m[r][3];
-                    if (!isfinite(view[r]))
-                        return XG_RENDER_MOTION_INVALID;
-                }
-                /* Continuous extension of IR/SZ/divide limits. Exact endpoint
-                 * UNR and integer screen rounding are restored below, not
-                 * confused with an unrestricted, high-precision H/Z camera.
-                 * The GTE does not near-clip: nonpositive Z saturates SZ to
-                 * zero and the divide result to 0x1ffff. Apply that same finite
-                 * projection to phases. Rejecting a behind-camera vertex here
-                 * would disable the entire model, including visible geometry,
-                 * whenever an offscreen face crosses the camera plane. */
-                project_continuous_view(view, transform->screen_offset,
-                                        transform->projection_distance, projected[sample]);
-                if (sample != 0u) {
-                    const XgRenderMotionTransform *native_transform = sample == 1u
-                        ? &e->native_current : &e->native_phase;
-                    const double (*native_matrix)[4] = native_transform->model_to_view[b->motion_part_index];
-                    double native_view[3];
-                    for (unsigned r = 0u; r < 3u; ++r) {
-                        native_view[r] = native_matrix[r][0]*p->x + native_matrix[r][1]*p->y +
-                                         native_matrix[r][2]*p->z + native_matrix[r][3];
-                        if (!isfinite(native_view[r])) return XG_RENDER_MOTION_INVALID;
-                    }
-                    project_continuous_view(native_view, native_transform->screen_offset,
-                                            native_transform->projection_distance, native_projected[sample-1u]);
-                    native_z[sample-1u] = native_view[2] + native_transform->upright_depth_slope *
-                        (native_view[1] - native_matrix[1][3]);
-                }
-                if (sample == 2)
-                    result[t][v][2] = view[2];
-            }
-            double anchors[2][2];
-            for (unsigned endpoint = 0; endpoint < 2; ++endpoint) {
-                if (same_vertex) {
-                    memcpy(anchors[endpoint],cached->anchors[endpoint],sizeof(anchors[endpoint]));
-                    continue;
-                }
-                const XgHost3dProjection *source = &e->source_projection[endpoint][b->motion_part_index];
-                project_source_vertex(source, p, anchors[endpoint], NULL);
-            }
-            for (unsigned axis = 0; axis < 2; ++axis) {
-                const double a = anchors[0][axis], c = anchors[1][axis];
-                const double bend = (projected[2][axis] - projected[1][axis]) -
-                    (1 - e->alpha) * (projected[0][axis] - projected[1][axis]);
-                /* GTE(p) is a function of shared source geometry, never of a
-                 * triangle/corner ID. Hidden vertex aliases get the same anchor.
-                 * Difference form makes STATIC exactly zero at every alpha. */
-                result[t][v][axis] = (1 - e->alpha) * (a - c) + bend;
-                /* Native endpoints use the same unrounded transform/projector
-                 * as this phase. Reintroducing integer MAC/UNR anchors here
-                 * would put the removed wobble back into alternate frames. */
-                native_result[t][v][axis] = native_projected[1][axis] - native_projected[0][axis];
-            }
-            /* Depth in the same difference form: a static pose adds exactly 0
-             * to the endpoint's own unfloored depth. */
-            native_result[t][v][2] = native_z[1] - native_z[0];
+            /* Endpoint samples and anchors do not depend on alpha: reuse a
+             * cached vertex, or the frame's shared precomputation, before
+             * computing them here. */
+            XgRenderMotionVertexEndpoints endpoints = {0};
+            if (same_vertex) {
+                memcpy(endpoints.projected, cached->projected_endpoints, sizeof(endpoints.projected));
+                memcpy(endpoints.anchors, cached->anchors, sizeof(endpoints.anchors));
+                memcpy(endpoints.native_current, cached->native_current, sizeof(endpoints.native_current));
+                endpoints.native_current_z = cached->native_current_z;
+            } else if (shared) {
+                if (!shared[t][v].valid) return XG_RENDER_MOTION_INVALID;
+                endpoints = shared[t][v];
+            } else if (!motion_vertex_endpoints(e, b->motion_part_index, p, &endpoints))
+                return XG_RENDER_MOTION_INVALID;
+            if (!motion_vertex_phase(e, b->motion_part_index, p, &endpoints,
+                                     result[t][v], native_result[t][v], NULL))
+                return XG_RENDER_MOTION_INVALID;
             if (cached) {
                 /* Shared corners depend on the immutable pose pair, alpha,
                  * part and exact LOCAL coordinates. Reuse the same completed
@@ -1444,13 +1695,20 @@ XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluat
                 cached->local = *p;
                 memcpy(cached->screen, result[t][v], sizeof(cached->screen));
                 memcpy(cached->native, native_result[t][v], sizeof(cached->native));
-                memcpy(cached->projected_endpoints,projected,sizeof(cached->projected_endpoints));
-                memcpy(cached->anchors,anchors,sizeof(cached->anchors));
-                memcpy(cached->native_current,native_projected[0],sizeof(cached->native_current));
-                cached->native_current_z=native_z[0];
+                memcpy(cached->projected_endpoints,endpoints.projected,sizeof(cached->projected_endpoints));
+                memcpy(cached->anchors,endpoints.anchors,sizeof(cached->anchors));
+                memcpy(cached->native_current,endpoints.native_current,sizeof(cached->native_current));
+                cached->native_current_z=endpoints.native_current_z;
             }
         }
     memcpy(screen_delta, result, sizeof(result));
     memcpy(native_delta, native_result, sizeof(native_result));
     return XG_RENDER_MOTION_PROJECTED;
+}
+
+XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluation *e,
+                                                      const XgRenderMotionDrawBinding *b,
+                                                      double screen_delta[2][3][3],
+                                                      double native_delta[2][3][3]) {
+    return xg_render_motion_project_shared(e, b, NULL, screen_delta, native_delta);
 }

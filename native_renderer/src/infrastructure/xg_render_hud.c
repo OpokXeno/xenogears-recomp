@@ -1,6 +1,42 @@
 #include "xg_render_hud.h"
 
+#include "xg_render_battling.h"
+
 #include <limits.h>
+
+/* hud_anchor: -1 left edge, +1 right edge, HUD_BATTLING lays out the
+ * Battling status HUD per vertex, 0 leaves the packet's own classification. */
+#define HUD_BATTLING 2
+
+/* Battling status HUD, authored in 4:3 coordinates. Each side has a column
+ * (Gear icon, its frame and red/blue gauges, small markers) at x 6..31 /
+ * 289..314, a name with its box at 30..99 / 222..291, and frame polylines
+ * from the central health bars out to the column. In a wider view the
+ * columns move to the screen edges, the polylines' column ends follow them,
+ * and each name box (with its name) stretches from the moved column to the
+ * unchanged central bars. Returns the X offset from the centred 4:3 plane. */
+static int64_t battling_hud_offset(int64_t x, int32_t left, int32_t right,
+                                   bool lines, int64_t margin) {
+    enum { LEFT_EDGE = 31, RIGHT_EDGE = 289,
+           LEFT_NAME_L = 30, LEFT_NAME_R = 99, RIGHT_NAME_L = 222, RIGHT_NAME_R = 290 };
+    const int32_t px = (int32_t)(x >> 16);
+    if (lines) return px <= LEFT_EDGE ? -margin : px >= RIGHT_EDGE ? margin : 0;
+    if (right <= LEFT_EDGE) return -margin;
+    if (left >= RIGHT_EDGE) return margin;
+    if (left >= LEFT_NAME_L - 1 && left <= LEFT_NAME_L + 1 && right <= LEFT_NAME_R + 1) {
+        int64_t c = x < (int64_t)LEFT_NAME_L * 65536 ? (int64_t)LEFT_NAME_L * 65536 : x;
+        if (c > (int64_t)LEFT_NAME_R * 65536) c = (int64_t)LEFT_NAME_R * 65536;
+        return -margin * ((int64_t)LEFT_NAME_R * 65536 - c) /
+               ((int64_t)(LEFT_NAME_R - LEFT_NAME_L) * 65536);
+    }
+    if (left >= RIGHT_NAME_L - 2 && right >= RIGHT_EDGE && right <= RIGHT_NAME_R + 2) {
+        int64_t c = x < (int64_t)RIGHT_NAME_L * 65536 ? (int64_t)RIGHT_NAME_L * 65536 : x;
+        if (c > (int64_t)RIGHT_NAME_R * 65536) c = (int64_t)RIGHT_NAME_R * 65536;
+        return margin * (c - (int64_t)RIGHT_NAME_L * 65536) /
+               ((int64_t)(RIGHT_NAME_R - RIGHT_NAME_L) * 65536);
+    }
+    return 0;
+}
 
 /* The host identifies the currently resident Field/World/Battle module from
  * its retail overlay tag. primary_overlay_identity is optional capture
@@ -26,6 +62,8 @@ static int hud_anchor(const XgSemanticSceneIdentity *scene, uint32_t packet,
                packet_array(packet, 0x0009c664u, 8u, 0x1cu) ||
                packet_array(packet, 0x0009c898u, 64u, 0x10u);
     }
+    if (scene->module == XG_SEMANTIC_MODULE_BATTLING)
+        return xg_render_battling_hud_packet(packet) ? HUD_BATTLING : 0;
     if (scene->module != XG_SEMANTIC_MODULE_BATTLE) return 0;
     if (battle_ui >= 0x80010000u && battle_ui <= 0x801fa25cu &&
         (battle_ui & 3u) == 0u) {
@@ -95,25 +133,39 @@ bool xg_render_hud_anchor(
         source->line_count > GPU_RENDER_SEMANTIC_LINE_CAPACITY ||
         source->native_view_effect != 0u)
         return false;
-    const int anchor = hud_anchor(&description->scene, command_id - 4u,
-                                  battle_graphics, battle_ui);
+    const int placement = hud_anchor(&description->scene, command_id - 4u,
+                                     battle_graphics, battle_ui);
+    const int anchor = placement == HUD_BATTLING ? 0 : placement;
     const bool lines = source->topology == GPU_RENDER_SEMANTIC_LINES;
     const uint32_t count = lines ? source->line_count : source->triangle_count;
     const uint32_t corners = lines ? 2u : 3u;
-    if (!anchor || count == 0u ||
+    if (!placement || count == 0u ||
         (!lines && source->topology != GPU_RENDER_SEMANTIC_TRIANGLES) ||
         (lines ? source->triangle_count != 0u : source->line_count != 0u))
         return false;
     const int64_t margin = (int64_t)display->native_offset_x * 65536;
-    /* Native producer coordinates already include the centre margin; packet
-     * coordinates do not. Translate the entire group by one reveal margin. */
+    int32_t left = INT32_MAX, right = INT32_MIN;
     for (uint32_t t = 0u; t < count; ++t)
         for (uint32_t v = 0u; v < corners; ++v) {
             const GpuRenderSemanticVertex *vertex = lines
                 ? &source->lines[t].vertices[v] : &source->triangles[t].vertices[v];
-            const int64_t x = vertex->native_view_position
-                ? (int64_t)vertex->native_view_x + anchor * margin
-                : (int64_t)vertex->x + (1 + anchor) * margin;
+            if (vertex->native_view_position && placement == HUD_BATTLING) return false;
+            const int32_t px = vertex->x >> 16;
+            if (px < left) left = px;
+            if (px > right) right = px;
+        }
+    /* Native producer coordinates already include the centre margin; packet
+     * coordinates do not. Translate the entire group by one reveal margin. */
+#define HUD_X(vertex) ((vertex)->native_view_position \
+        ? (int64_t)(vertex)->native_view_x + anchor * margin \
+        : (int64_t)(vertex)->x + (1 + anchor) * margin + \
+          (placement == HUD_BATTLING \
+               ? battling_hud_offset((vertex)->x, left, right, lines, margin) : 0))
+    for (uint32_t t = 0u; t < count; ++t)
+        for (uint32_t v = 0u; v < corners; ++v) {
+            const GpuRenderSemanticVertex *vertex = lines
+                ? &source->lines[t].vertices[v] : &source->triangles[t].vertices[v];
+            const int64_t x = HUD_X(vertex);
             if (x < INT32_MIN || x > INT32_MAX) return false;
         }
     *out = *source;
@@ -125,13 +177,12 @@ bool xg_render_hud_anchor(
         for (uint32_t v = 0u; v < corners; ++v) {
             GpuRenderSemanticVertex *vertex = lines
                 ? &out->lines[t].vertices[v] : &out->triangles[t].vertices[v];
-            vertex->native_view_x = (int32_t)(vertex->native_view_position
-                ? (int64_t)vertex->native_view_x + anchor * margin
-                : (int64_t)vertex->x + (1 + anchor) * margin);
+            vertex->native_view_x = (int32_t)HUD_X(vertex);
             if (!vertex->native_view_position) vertex->native_view_y = vertex->y;
             vertex->native_view_position = 1u;
             vertex->projective_position = 0u;
             vertex->interpolation_vertex_identity_valid = 0u;
         }
     return true;
+#undef HUD_X
 }

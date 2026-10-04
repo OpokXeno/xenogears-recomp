@@ -562,6 +562,7 @@ psxrecomp_add_runtime_target(psx-runtime
     GAME_EXTRA_IDENTITY_SHA256 "${XG_RENDER_GAME_IDENTITY_SHA256}"
     GAME_MANIFEST_DIGEST_SHA256 "${XG_RENDER_MANIFEST_IDENTITY_SHA256}"
     OVERLAY_PLAN_HASH          "${XG_OVERLAY_PLAN_HASH}"
+    PRELOADED_MODS_DIR         "${CMAKE_CURRENT_SOURCE_DIR}/mods/preloaded"
 )
 add_custom_command(TARGET psx-runtime POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
@@ -582,6 +583,7 @@ target_sources(psx-runtime PRIVATE
         "${XG_NATIVE_MOD_SYMBOLS}"
         native_renderer/src/core/xg_native_render_baseline.c
         src/mods/xenogears_field_pacing.c
+        src/mods/xenogears_battling_draw_distance.c
         src/mods/xenogears_map_reads.c
         src/mods/xenogears_card_service.c
         src/mods/xenogears_card_flow.c
@@ -611,6 +613,7 @@ if(TARGET psx-runtime-pgxp)
         "${XG_NATIVE_MOD_SYMBOLS}"
         native_renderer/src/core/xg_native_render_baseline.c
         src/mods/xenogears_field_pacing.c
+        src/mods/xenogears_battling_draw_distance.c
         src/mods/xenogears_map_reads.c
         src/mods/xenogears_card_service.c
         src/mods/xenogears_card_flow.c

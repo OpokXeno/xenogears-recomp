@@ -1,4 +1,5 @@
 #include "xg_world_terrain_water.h"
+#include "psx_render_nclip.h"
 
 #include "xg_world_terrain_water_source_capture.h"
 
@@ -150,9 +151,14 @@ static bool triangle_is_on_screen(
     return x_visible && y_visible;
 }
 
+/* The ground walk branches on NCLIP; in Native render mode the runtime
+ * replaces its MAC0 with the sign of the 16.16 screen accumulator, so a
+ * nearly edge-on cell whose integer area rounds to zero still draws. */
 static bool triangle_is_front_facing(
     const XgHost3dProjectedVertex vertices[3]) {
-    return xg_host_3d_nclip(vertices) > 0;
+    const int32_t x[3] = {vertices[0].x_16_16, vertices[1].x_16_16, vertices[2].x_16_16};
+    const int32_t y[3] = {vertices[0].y_16_16, vertices[1].y_16_16, vertices[2].y_16_16};
+    return psx_render_nclip(xg_host_3d_nclip(vertices), x, y) > 0;
 }
 
 static void decode_material(uint16_t tpage, uint16_t clut,

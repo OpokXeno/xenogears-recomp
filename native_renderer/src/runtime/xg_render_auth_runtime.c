@@ -21,6 +21,7 @@
 #include "xg_render_source_frame.h"
 #include "xg_render_native_work.h"
 #include "xg_render_battle_geometry.h"
+#include "xg_render_battling.h"
 #include "xg_render_submission.h"
 #include "xg_render_hud.h"
 #include "xg_render_surface_graph.h"
@@ -175,6 +176,12 @@ static const MotionSourceOwner motion_source_owners[] = {
     {0x8009f5b8u, 0x150u, 0x27bdffc8u},
     {0x8009f844u, 0xff4u, 0x27bdfef0u},
     {0x800a48ecu, 0x250u, 0x27bdffc0u},
+    /* Battling: hierarchy model draw (BattlingRenderModelPacket), arena
+     * heightfield walk, perimeter ring and actor ground shadow. */
+    {0x8008a63cu, 0xbcu, 0x27bdffe8u},
+    {0x80072d18u, 0x348u, 0xafb0fffcu},
+    {0x80082e60u, 0x368u, 0x27bdff78u},
+    {0x80087b74u, 0x2c4u, 0x27bdff60u},
 };
 
 typedef struct MotionSourceAuthority {
@@ -292,12 +299,12 @@ static void note_motion_source_candidate(const PsxXgRenderAuthCandidate *candida
     xg_render_motion_note(XG_MOTION_CANDIDATE_REGISTERED, pc);
 }
 
-bool xg_render_battle_geometry_authorizes_call(uint32_t call_pc) {
+/* A model-kernel call site inside a motion owner whose full-artifact
+ * dispatch receipt is current: jal SubmitModelPacket with a nop delay slot. */
+static bool motion_owner_kernel_call_authorized(uint32_t pc) {
     XgRenderRuntimeHostServices host;
     XgRenderResourceCapabilityMetadata metadata;
-    const uint32_t pc = (call_pc & 0x1fffffffu) | 0x80000000u;
-    if ((pc != 0x8009f6bcu && pc != 0x800a0064u && pc != 0x800a4ae4u) ||
-        state.requested_render_mode != GUEST_RENDER_RENDER_NATIVE ||
+    if (state.requested_render_mode != GUEST_RENDER_RENDER_NATIVE ||
         !xg_render_native_work_enabled() ||
         !xg_render_runtime_host_services(&host) || !host.read_word)
         return false;
@@ -315,6 +322,17 @@ bool xg_render_battle_geometry_authorizes_call(uint32_t call_pc) {
             host.read_word(pc) == 0x0c00b1c0u && host.read_word(pc + 4u) == 0u;
     }
     return false;
+}
+
+bool xg_render_battle_geometry_authorizes_call(uint32_t call_pc) {
+    const uint32_t pc = (call_pc & 0x1fffffffu) | 0x80000000u;
+    return (pc == 0x8009f6bcu || pc == 0x800a0064u || pc == 0x800a4ae4u) &&
+        motion_owner_kernel_call_authorized(pc);
+}
+
+bool xg_render_battling_model_authorizes_call(uint32_t call_pc) {
+    const uint32_t pc = (call_pc & 0x1fffffffu) | 0x80000000u;
+    return pc == 0x8008a6e0u && motion_owner_kernel_call_authorized(pc);
 }
 
 bool psx_xg_render_motion_source(uint32_t pc, XgRenderMotionSource *out) {
@@ -613,10 +631,22 @@ static bool accept_native_draw_impl(const GpuRenderSemantic *semantic) {
     if (!xg_render_native_work_enabled()) return true;
     if (semantic == NULL) return false;
     const bool described = psx_xg_render_auth_describe_native_work(&description);
-    if (semantic->submission_command_id <= UINT32_C(0x001ffffc) && described &&
-        xg_render_submission_resolve_command(&description,
-            (uint32_t)semantic->submission_command_id, semantic, &command))
+    /* Draw-distance mesh markers become MESH operations, never draws. */
+    if (described && description.scene.module == XG_SEMANTIC_MODULE_BATTLING &&
+        (xg_render_battling_accept_mesh_marker(semantic, psx_get_cycle_count()) ||
+         xg_render_battling_near_suppressed(semantic->submission_command_id)))
+        return true;
+    if (xg_render_submission_command_id_valid(semantic->submission_command_id) &&
+        described && xg_render_submission_resolve_command(&description,
+            (uint32_t)semantic->submission_command_id, semantic, &command)) {
+        /* Battling effects no producer bound take their tapped projection. */
+        if (description.scene.module == XG_SEMANTIC_MODULE_BATTLING &&
+            !command.producer_captured)
+            (void)xg_render_battling_bind_projected(&command.semantic);
         semantic = &command.semantic;
+    }
+    if (described && description.scene.module != XG_SEMANTIC_MODULE_BATTLING)
+        xg_render_battling_leave();
     if (described && semantic->submission_command_id <= UINT32_C(0x001ffffc)) {
         XgRenderRuntimeHostServices hud_host = {0};
         const bool battle_hud =

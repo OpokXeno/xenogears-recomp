@@ -1,5 +1,6 @@
 #include "xg_render_source_commit.h"
 #include "xg_render_resource_repository.h"
+#include "xg_render_native_mesh.h"
 
 #include <stdatomic.h>
 #include <stdlib.h>
@@ -474,6 +475,22 @@ static uint64_t commit_digest(const XgRenderSourceSlot *slot) {
         const XgRenderNativeOperation *operation =
             &slot->native_operations[index];
         HASH_FIELD(operation->kind);
+        if (operation->kind == XG_RENDER_NATIVE_OPERATION_MESH) {
+            /* The mesh's own content digest covers every triangle. */
+            HASH_FLUSH();
+            hash = hash_semantic(hash, &operation->semantic);
+            HASH_FIELD(operation->mesh.resource_id);
+            HASH_FIELD(operation->mesh.generation);
+            HASH_FIELD(operation->mesh.content_digest);
+            HASH_FIELD(operation->mesh_geometry.resource_id);
+            HASH_FIELD(operation->mesh_geometry.generation);
+            HASH_FIELD(operation->mesh_geometry.content_digest);
+            HASH_FIELD(operation->motion.motion.handle.resource_id);
+            HASH_FIELD(operation->motion.motion.handle.generation);
+            HASH_FIELD(operation->motion.motion.digest);
+            HASH_FIELD(operation->motion.motion_part_index);
+            continue;
+        }
         if (operation->kind == XG_RENDER_NATIVE_OPERATION_DRAW) {
             HASH_FLUSH();
             hash = hash_semantic(hash, &operation->semantic);
@@ -744,6 +761,14 @@ static void release_resources(XgRenderSourceSlot *slot) {
             (void)xg_render_resource_release((XgRenderResourceHandle){
                 operation->upload.resource_id, operation->upload.generation,
             });
+        else if (operation->kind == XG_RENDER_NATIVE_OPERATION_MESH) {
+            (void)xg_render_resource_release((XgRenderResourceHandle){
+                operation->mesh.resource_id, operation->mesh.generation,
+            });
+            (void)xg_render_resource_release((XgRenderResourceHandle){
+                operation->mesh_geometry.resource_id, operation->mesh_geometry.generation,
+            });
+        }
     }
     slot->header.native_operation_count = 0u;
 }
@@ -982,8 +1007,21 @@ static bool draw_valid(const XgSemanticDrawRecord *draw) {
 static bool native_operation_valid(const XgRenderNativeOperation *operation) {
     XgRenderResourceView view;
     if (operation == NULL ||
-        (uint32_t)operation->kind > XG_RENDER_NATIVE_OPERATION_READBACK)
+        (uint32_t)operation->kind > XG_RENDER_NATIVE_OPERATION_MESH)
         return false;
+    if (operation->kind == XG_RENDER_NATIVE_OPERATION_MESH) {
+        const XgRenderNativeMeshInstance *instance;
+        const XgRenderNativeMeshGeometry *geometry;
+        const GpuRenderSemantic *s = &operation->semantic;
+        return s->topology == GPU_RENDER_SEMANTIC_TRIANGLES && s->triangle_count == 0u &&
+            s->line_count == 0u && !operation->temporal.coverage.resource_id &&
+            !operation->temporal.component_id &&
+            xg_render_native_mesh_instance_view(operation->mesh, &instance) &&
+            !memcmp(&instance->geometry, &operation->mesh_geometry,
+                    sizeof(operation->mesh_geometry)) &&
+            xg_render_native_mesh_geometry_view(operation->mesh_geometry, &geometry) &&
+            xg_render_motion_mesh_binding_valid(&operation->motion);
+    }
     if (operation->kind == XG_RENDER_NATIVE_OPERATION_DRAW) {
         const XgRenderTemporalBinding *binding = &operation->temporal;
         if (binding->coverage.resource_id) {
@@ -1824,17 +1862,19 @@ static XgRenderSourceCommitResult retain_motion(
     const XgRenderMotionRef ref = binding->motion;
     const XgRenderMotionPose *pose;
     if (!ref.handle.resource_id) return XG_RENDER_SOURCE_COMMIT_OK;
-    if (!xg_render_motion_view(ref, &pose) ||
-        pose->presentation_epoch != slot->header.identity.presentation_epoch ||
-        pose->scene_generation != slot->header.identity.scene_generation)
-        return XG_RENDER_SOURCE_COMMIT_PROOF_REJECTED;
-    for (uint32_t i = 0; i < slot->header.motion_resource_count; ++i) {
+    /* Poses are immutable and each retained one was validated against this
+     * slot when retained; consecutive draws mostly share the newest. */
+    for (uint32_t i = slot->header.motion_resource_count; i-- > 0u;) {
         const XgRenderMotionRef prior = slot->motion_resources[i];
         if (prior.handle.resource_id == ref.handle.resource_id &&
             prior.handle.generation == ref.handle.generation)
             return prior.digest == ref.digest ? XG_RENDER_SOURCE_COMMIT_OK :
                 XG_RENDER_SOURCE_COMMIT_PROOF_REJECTED;
     }
+    if (!xg_render_motion_view(ref, &pose) ||
+        pose->presentation_epoch != slot->header.identity.presentation_epoch ||
+        pose->scene_generation != slot->header.identity.scene_generation)
+        return XG_RENDER_SOURCE_COMMIT_PROOF_REJECTED;
     if (slot->header.motion_resource_count == XG_RENDER_SCENE_RESOURCE_CAPACITY)
         return XG_RENDER_SOURCE_COMMIT_CAPACITY_EXCEEDED;
     if (xg_render_resource_acquire_snapshot(ref.handle, ref.digest) != XG_RENDER_RESOURCE_OK)
@@ -1916,6 +1956,25 @@ XgRenderSourceCommitResult xg_render_source_commit_append_native_operation(
                (result = retain_draw_metadata(slot, operation)) !=
                    XG_RENDER_SOURCE_COMMIT_OK) {
         /* Failed retain leaves the operation and resource arrays unchanged. */
+    } else if (operation->kind == XG_RENDER_NATIVE_OPERATION_MESH &&
+               (result = retain_motion(slot, &operation->motion)) !=
+                   XG_RENDER_SOURCE_COMMIT_OK) {
+        /* Nothing retained: the operation is not appended. */
+    } else if (operation->kind == XG_RENDER_NATIVE_OPERATION_MESH &&
+               xg_render_resource_acquire_snapshot(
+                   (XgRenderResourceHandle){operation->mesh.resource_id,
+                                            operation->mesh.generation},
+                   operation->mesh.content_digest) != XG_RENDER_RESOURCE_OK) {
+        /* The motion retain stays with the slot, released at its reset. */
+        result = XG_RENDER_SOURCE_COMMIT_PROOF_REJECTED;
+    } else if (operation->kind == XG_RENDER_NATIVE_OPERATION_MESH &&
+               xg_render_resource_acquire_snapshot(
+                   (XgRenderResourceHandle){operation->mesh_geometry.resource_id,
+                                            operation->mesh_geometry.generation},
+                   operation->mesh_geometry.content_digest) != XG_RENDER_RESOURCE_OK) {
+        (void)xg_render_resource_release((XgRenderResourceHandle){
+            operation->mesh.resource_id, operation->mesh.generation});
+        result = XG_RENDER_SOURCE_COMMIT_PROOF_REJECTED;
     } else if (operation->kind == XG_RENDER_NATIVE_OPERATION_UPLOAD &&
                xg_render_resource_acquire_snapshot(
                    (XgRenderResourceHandle){operation->upload.resource_id,
@@ -1931,6 +1990,11 @@ XgRenderSourceCommitResult xg_render_source_commit_append_native_operation(
             copy.motion = operation->motion;
             copy.temporal = operation->temporal;
             copy.hd_texture = operation->hd_texture;
+        } else if (operation->kind == XG_RENDER_NATIVE_OPERATION_MESH) {
+            copy.semantic = operation->semantic;
+            copy.motion = operation->motion;
+            copy.mesh = operation->mesh;
+            copy.mesh_geometry = operation->mesh_geometry;
         } else {
             copy.dst_x = operation->dst_x;
             copy.dst_y = operation->dst_y;

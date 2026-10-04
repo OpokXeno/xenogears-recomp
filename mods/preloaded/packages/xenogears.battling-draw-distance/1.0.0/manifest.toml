@@ -1,0 +1,22 @@
+format_version = 6
+id = "xenogears.battling-draw-distance"
+version = "1.0.0"
+name = "Battling Draw Distance"
+author = "XenogearsRecomp"
+description = "Battling shows the whole arena the camera looks at instead of cutting the ground off a short distance ahead."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00664"
+
+[[feature]]
+id = "draw-distance"
+name = "Battling Draw Distance"
+description = "The original game only draws the Battling ground in a short fan around the camera, so the arena visibly ends a few dozen cells ahead. With this enabled the Native renderer adds every other cell of the arena in view, textured and fogged exactly as the game draws its own. Game logic and timing are unchanged. Requires the Native renderer; takes effect on the next game start."
+group = "Enhancements"
+default_enabled = true
+
+[[plugin]]
+feature = "draw-distance"
+id = "xenogears.battling-draw-distance"

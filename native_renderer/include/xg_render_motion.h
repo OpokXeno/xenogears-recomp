@@ -15,6 +15,9 @@ typedef struct XgRenderMotionTrs {
     double translation[3];
     double rotation[4]; /* Unit quaternion, xyzw. */
     double scale[3];
+    /* Off-diagonal terms (xy, xz, yz) of the symmetric stretch S in
+     * M = R * S. Zero means S is the diagonal scale alone. */
+    double shear[3];
 } XgRenderMotionTrs;
 
 typedef enum XgRenderMotionPolicy {
@@ -148,6 +151,10 @@ typedef struct XgRenderMotionDrawBinding {
     XgRenderMotionRef motion;
     uint32_t motion_part_index;
     uint32_t triangle_count;
+    /* The draw's Native positions are the producer's own continuous
+     * projection of these locals under the pose's source matrix: binding
+     * needs no source-to-pose refinement. */
+    uint32_t native_exact;
     XgHost3dVector local[2][3];
     uint32_t vertex_ids[2][3];
 } XgRenderMotionDrawBinding;
@@ -202,6 +209,9 @@ bool xg_render_motion_publish(const XgRenderMotionSource *source, const XgRender
  * Retired generations remain valid; no guest reads or current-generation lookup. */
 bool xg_render_motion_view(XgRenderMotionRef ref, const XgRenderMotionPose **out);
 bool xg_render_motion_binding_valid(const XgRenderMotionDrawBinding *binding);
+/* A MESH operation's binding: pose and part only (triangle_count 0); its
+ * LOCAL corners live in the mesh. */
+bool xg_render_motion_mesh_binding_valid(const XgRenderMotionDrawBinding *binding);
 /* Guest-owner command cache. packet+4 is the command ID. NULL forgets a command.
  * Geometry is copied now, before the producer can mutate/reuse source RAM. */
 bool xg_render_motion_register_command(uint32_t command_id,
@@ -241,6 +251,46 @@ XgRenderMotionProjectResult xg_render_motion_project(const XgRenderMotionEvaluat
                                                       const XgRenderMotionDrawBinding *binding,
                                                       double screen_delta[2][3][3],
                                                       double native_delta[2][3][3]);
+
+/* The alpha-independent part of one projected LOCAL vertex: continuous
+ * projections under both endpoint transforms, the current Native projection
+ * and view depth, and both exact GTE anchors. Identical for every phase of
+ * an evaluated pose pair, so a frame computes it once and shares it. */
+typedef struct XgRenderMotionVertexEndpoints {
+    double projected[2][2], anchors[2][2];
+    double native_current[2], native_current_z;
+    uint32_t valid;
+} XgRenderMotionVertexEndpoints;
+/* Every binding corner's endpoints (valid 0: not projectable, or the pair is
+ * not interpolated). False for an invalid binding. */
+bool xg_render_motion_project_endpoints(const XgRenderMotionEvaluation *evaluation,
+                                        const XgRenderMotionDrawBinding *binding,
+                                        XgRenderMotionVertexEndpoints endpoints[2][3]);
+/* One vertex of an interpolated pair: its endpoints (false: not
+ * projectable), and its phase deltas over them (as one corner of
+ * xg_render_motion_project; false: not projectable), and optionally its
+ * phase view. */
+bool xg_render_motion_vertex_endpoints(const XgRenderMotionEvaluation *evaluation, uint32_t part,
+                                       const XgHost3dVector *local, XgRenderMotionVertexEndpoints *out);
+/* A vertex under the phase's Native camera: view-space position and the
+ * continuous projection it takes (screen = offset + view.xy * distance / z,
+ * exact in front of z = distance / 2), for clipping at the phase. */
+typedef struct XgRenderMotionPhaseView {
+    double view[3];
+    double screen_offset[2];
+    double distance;
+} XgRenderMotionPhaseView;
+bool xg_render_motion_vertex_phase(const XgRenderMotionEvaluation *evaluation, uint32_t part,
+                                   const XgHost3dVector *local, const XgRenderMotionVertexEndpoints *endpoints,
+                                   double screen_delta[3], double native_delta[3],
+                                   XgRenderMotionPhaseView *phase_view);
+/* xg_render_motion_project with precomputed endpoints per corner (NULL:
+ * compute them); bit-identical results. */
+XgRenderMotionProjectResult xg_render_motion_project_shared(const XgRenderMotionEvaluation *evaluation,
+                                                            const XgRenderMotionDrawBinding *binding,
+                                                            const XgRenderMotionVertexEndpoints (*endpoints)[3],
+                                                            double screen_delta[2][3][3],
+                                                            double native_delta[2][3][3]);
 
 #ifdef __cplusplus
 }

@@ -13,6 +13,7 @@
 #include "xg_render_primitive_utils.h"
 #include "xg_render_runtime_variant_auth.h"
 #include "xg_render_battle_geometry.h"
+#include "xg_render_battling.h"
 #include "xg_sprite_ft4.h"
 
 #include <math.h>
@@ -36,6 +37,7 @@ enum {
     FT4_PAYLOAD_TPAGE = 1u << 5,
     FT4_PAYLOAD_CLUT = 1u << 6,
     MODEL_DISPATCH_CALLER_BATTLE = XG_RENDER_MODEL_DISPATCH_CALLER_GEAR_HELPER + 1u,
+    MODEL_DISPATCH_CALLER_BATTLING,
 };
 
 typedef struct ModelContext {
@@ -549,6 +551,12 @@ static bool model_dispatch_caller_contract_matches(
         if (out_window_start != NULL) *out_window_start = return_address - 8u;
         return true;
     }
+    if (return_address >= 8u &&
+        xg_render_battling_model_authorizes_call(return_address - 8u)) {
+        if (out_contract != NULL) *out_contract = MODEL_DISPATCH_CALLER_BATTLING;
+        if (out_window_start != NULL) *out_window_start = return_address - 8u;
+        return true;
+    }
     if (gear_helper_mode1_proof.armed) {
         if (consume_gear_helper_mode1_proof(
                 cpu, return_address, &window_start)) {
@@ -586,6 +594,8 @@ static bool model_dispatch_context_contract_matches(
         uint32_t caller_window_start) {
     if (caller_contract == MODEL_DISPATCH_CALLER_BATTLE)
         return xg_render_battle_geometry_authorizes_call(caller_window_start);
+    if (caller_contract == MODEL_DISPATCH_CALLER_BATTLING)
+        return xg_render_battling_model_authorizes_call(caller_window_start);
     if (caller_contract == XG_RENDER_MODEL_DISPATCH_CALLER_RESIDENT) {
         return model_dispatch_instruction_window_matches(
             cpu, caller_window_start,
@@ -1380,6 +1390,16 @@ void xg_render_model_sprite_pipeline_model_begin(
         model_ft4.snapshot.last_dispatch_caller = cpu != NULL ? cpu->gpr[31] : 0u;
         model_ft4.snapshot.last_dispatch_mode = cpu != NULL ? cpu->gpr[7] : 0u;
         (void)xg_render_battle_geometry_capture(cpu, services ? services->lifecycle : NULL);
+        return;
+    }
+    if (caller_contract == MODEL_DISPATCH_CALLER_BATTLING) {
+        clear_model_ft4_pending();
+        clear_model_ft3_pending();
+        model_ft4.context.caller_contract = MODEL_DISPATCH_CALLER_BATTLING;
+        ++model_ft4.snapshot.dispatch_begin_count;
+        model_ft4.snapshot.last_dispatch_caller = cpu != NULL ? cpu->gpr[31] : 0u;
+        model_ft4.snapshot.last_dispatch_mode = cpu != NULL ? cpu->gpr[7] : 0u;
+        (void)xg_render_battling_model_capture(cpu, services ? services->lifecycle : NULL);
         return;
     }
     if (model_ft4.snapshot.blocked) return;
@@ -2982,7 +3002,8 @@ void xg_render_model_sprite_pipeline_model_end(void) {
 void xg_render_model_sprite_pipeline_capture_ft3_link(
         CPUState *cpu, GuestRenderRenderMode render_mode,
         const XgRenderModelSpritePipelineServices *services) {
-    if (model_ft4.context.caller_contract == MODEL_DISPATCH_CALLER_BATTLE) return;
+    if (model_ft4.context.caller_contract == MODEL_DISPATCH_CALLER_BATTLE ||
+        model_ft4.context.caller_contract == MODEL_DISPATCH_CALLER_BATTLING) return;
     const uint32_t packet = cpu != NULL ? cpu->gpr[19] : 0u;
     const uint32_t material_word = cpu != NULL && cpu->read_word != NULL
         ? cpu->read_word(packet + 4u) : 0u;
@@ -3111,7 +3132,8 @@ void xg_render_model_sprite_pipeline_capture_ft3_link(
 
 void xg_render_model_sprite_pipeline_finish_ft3_link(
         CPUState *cpu, const XgRenderModelSpritePipelineServices *services) {
-    if (model_ft4.context.caller_contract == MODEL_DISPATCH_CALLER_BATTLE) return;
+    if (model_ft4.context.caller_contract == MODEL_DISPATCH_CALLER_BATTLE ||
+        model_ft4.context.caller_contract == MODEL_DISPATCH_CALLER_BATTLING) return;
     const uint32_t packet = cpu != NULL ? cpu->gpr[19] : 0u;
     const uint32_t source_id = normalized_word_address(packet) + 4u;
     const XgRenderModelFt3SourceRecord *source =

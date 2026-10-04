@@ -27,8 +27,12 @@
 #define XG_RENDER_SCENE_SURFACE_EDGE_CAPACITY 64u
 #endif
 
+/* Operations per Native-work source commit (grown on demand). A guest frame
+ * past this is split into several commits, each compiled separately with its
+ * own canvas setup and seal: keep whole frames, extended ones included, in
+ * one commit. */
 #ifndef XG_RENDER_NATIVE_OPERATION_CAPACITY
-#define XG_RENDER_NATIVE_OPERATION_CAPACITY XG_RENDER_SCENE_DRAW_CAPACITY
+#define XG_RENDER_NATIVE_OPERATION_CAPACITY 16384u
 #endif
 
 #ifdef __cplusplus
@@ -219,6 +223,10 @@ typedef enum XgRenderNativeOperationKind {
     XG_RENDER_NATIVE_OPERATION_FILL,
     XG_RENDER_NATIVE_OPERATION_TARGET,
     XG_RENDER_NATIVE_OPERATION_READBACK,
+    /* A Native mesh (xg_render_native_mesh.h) under semantic's material,
+     * identity and depth policy (no triangles of its own), with motion's
+     * pose. Host geometry only: never in guest VRAM. */
+    XG_RENDER_NATIVE_OPERATION_MESH,
 } XgRenderNativeOperationKind;
 
 /* Pointer-free work for the native VRAM FIFO, not a scene fragment. Coordinates
@@ -249,6 +257,9 @@ typedef struct XgRenderNativeOperation {
     uint64_t readback_rgb_digest;
     /* DRAW only: host HD texture replacement decided at submission. */
     GpuRenderHdTexture hd_texture;
+    /* MESH only: the instance and the geometry it expands. */
+    XgSemanticResourceRef mesh;
+    XgSemanticResourceRef mesh_geometry;
 } XgRenderNativeOperation;
 
 typedef enum XgSemanticSurfaceEdgeKind {

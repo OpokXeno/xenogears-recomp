@@ -422,3 +422,17 @@ cutovers = [
   { pc = "0x8007412c", instruction = "0x266400b8", transfer = "local", continuation = "0x80074298" },
   { pc = "0x80074564", instruction = "0x8fbf0030", transfer = "observe", continuation = "0x00000000" },
 ]
+
+[[variants]]
+id = "battling-terrain-v1"
+base_address = "0x8006faf0"
+load_address = "0x8006faf0"
+artifact_size = 142953
+artifact_sha256 = "3e6df915e9c7f05f5fb997cb331392f1333e867dfb2628cd65e5e1ea1575646e"
+# BattlingRenderVisibleTerrainStrips: the arena heightfield walk.
+required_ranges = [
+  { start = "0x80072d18", size = 840, sha256 = "b337b709a21071817dca4575229f6cf1ec547703f931fdd0d80448b5ed9994aa" },
+]
+cutovers = [
+  { pc = "0x80072d18", instruction = "0xafb0fffc", transfer = "observe", continuation = "0x00000000" },
+]

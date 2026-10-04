@@ -142,6 +142,23 @@ bool xg_render_native_work_operation(const XgRenderNativeOperation *operation,
     return operation != NULL && append_operation(operation, guest_cycle);
 }
 
+bool xg_render_native_work_mesh(const GpuRenderSemantic *material,
+                                const XgRenderMotionDrawBinding *motion,
+                                XgSemanticResourceRef mesh, XgSemanticResourceRef geometry,
+                                uint64_t guest_cycle) {
+    if (material == NULL || !mesh.resource_id || !geometry.resource_id) return false;
+    XgRenderNativeOperation operation = {.kind = XG_RENDER_NATIVE_OPERATION_MESH};
+    operation.semantic = *material;
+    operation.semantic.triangle_count = 0u;
+    operation.semantic.line_count = 0u;
+    operation.semantic.topology = GPU_RENDER_SEMANTIC_TRIANGLES;
+    if (motion != NULL) operation.motion = *motion;
+    operation.motion.triangle_count = 0u;
+    operation.mesh = mesh;
+    operation.mesh_geometry = geometry;
+    return append_operation(&operation, guest_cycle);
+}
+
 static XgRenderNativeHdTextureHooks g_hd_texture;
 
 void xg_render_native_work_set_hd_texture_hooks(

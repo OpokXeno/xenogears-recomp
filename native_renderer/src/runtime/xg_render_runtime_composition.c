@@ -18,6 +18,7 @@
 #include "xg_host_3d.h"
 #include "xg_native_view.h"
 #include "xg_render_f4_sources.h"
+#include "xg_render_battling.h"
 #include "xg_render_cutover_dispatch.h"
 #include "xg_render_field_character_pipeline.h"
 #include "xg_render_field_polyline.h"
@@ -2319,6 +2320,16 @@ static XgRenderCutoverDispatchResult observe_cutover_route_impl(
             xg_render_gear_motion_observe(cpu,route->pc,&services);
         return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
     }
+    case XG_RENDER_CUTOVER_MODULE_BATTLING:
+        if (physical_address_equals(route->pc, UINT32_C(0x80043b48))) {
+            /* AddPrim also belongs to the F4 and overlay observers. */
+            if (state.render_mode == GUEST_RENDER_RENDER_NATIVE)
+                (void)xg_render_battling_add_prim_capture(cpu, lifecycle_services());
+            return XG_RENDER_CUTOVER_DISPATCH_CONTINUE;
+        }
+        if (state.render_mode == GUEST_RENDER_RENDER_NATIVE)
+            (void)xg_render_battling_terrain_capture(cpu, lifecycle_services());
+        return XG_RENDER_CUTOVER_DISPATCH_OBSERVED;
     case XG_RENDER_CUTOVER_MODULE_F4:
         return observe_f4_route(cpu, route, state.render_mode);
     case XG_RENDER_CUTOVER_MODULE_OVERLAY_ADD_PRIM:

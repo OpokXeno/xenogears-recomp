@@ -15,6 +15,14 @@ typedef struct XgRenderCutoverRoute {
 
 #define ROUTE_COUNT(routes) (sizeof(routes) / sizeof((routes)[0]))
 
+/* Battling overlay: BattlingRenderVisibleTerrainStrips entry, and the
+ * resident AddPrim that BattlingRenderArenaPerimeterRing links its walls with
+ * (shared with the F4 and overlay AddPrim observers, which still run). */
+static const XgRenderCutoverRoute battling_routes[] = {
+    { UINT32_C(0x80072d18), UINT32_C(0xafb0fffc), XG_CUTOVER_ROUTE_ONLY },
+    { UINT32_C(0x80043b48), UINT32_C(0x3c0600ff), XG_CUTOVER_ROUTE_ONLY },
+};
+
 static const XgRenderCutoverRoute f4_routes[] = {
     { UINT32_C(0x801c6f70), UINT32_C(0x27bdffb8),
       XG_CUTOVER_F4_FIXED_2A },
@@ -290,6 +298,8 @@ static const XgRenderCutoverModuleRoute modules[] = {
     { XG_RENDER_CUTOVER_MODULE_PREAMBLE, NULL, 0u, false, false, false },
     { XG_RENDER_CUTOVER_MODULE_GEAR_MOTION, gear_motion_routes,
       ROUTE_COUNT(gear_motion_routes), false, false, false },
+    { XG_RENDER_CUTOVER_MODULE_BATTLING, battling_routes,
+      ROUTE_COUNT(battling_routes), false, false, false },
     { XG_RENDER_CUTOVER_MODULE_F4, f4_routes, ROUTE_COUNT(f4_routes),
       false, false, false },
     { XG_RENDER_CUTOVER_MODULE_OVERLAY_ADD_PRIM, overlay_add_prim_routes,

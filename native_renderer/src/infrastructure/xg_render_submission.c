@@ -38,6 +38,7 @@ typedef struct XgRenderSourceCapture {
     XgRenderTemporalBinding temporal;
     uint32_t temporal_scope;
     bool consumed;
+    bool free_listed;   /* index is on capture_free */
 } XgRenderSourceCapture;
 
 /* Retain both packet arenas, independently of native-stream visual retirement.
@@ -47,8 +48,51 @@ typedef struct XgRenderSourceCapture {
 static XgRenderSourceCapture *source_captures;
 static uint32_t source_capture_capacity;
 static uint32_t source_capture_count;
-static uint32_t source_capture_by_command[UINT32_C(0x80000)];
+/* Command ids are packet + 4 addresses: main RAM, then the first 4 MiB of the
+ * enhancement GPU-DMA aperture, where host producers add packets of their own
+ * to a guest ordering table. Each aligned id has one slot. */
+#define COMMAND_RAM_LIMIT UINT32_C(0x00200000)
+#define COMMAND_APERTURE_BASE UINT32_C(0x00800000)
+#define COMMAND_APERTURE_LIMIT UINT32_C(0x00c00000)
+static uint32_t source_capture_by_command[UINT32_C(0x180000)];
+
+static uint32_t command_canonical(uint32_t command_id) {
+    const uint32_t physical = command_id & UINT32_C(0x1ffffffc);
+    return physical >= COMMAND_APERTURE_BASE && physical < COMMAND_APERTURE_LIMIT
+        ? physical : command_id & UINT32_C(0x001ffffc);
+}
+
+static uint32_t command_slot(uint32_t canonical) {
+    return canonical >= COMMAND_APERTURE_BASE
+        ? (COMMAND_RAM_LIMIT + canonical - COMMAND_APERTURE_BASE) >> 2u
+        : canonical >> 2u;
+}
+
+bool xg_render_submission_command_id_valid(uint64_t command_id) {
+    return command_id <= UINT32_C(0x001ffffc) ||
+           (command_id >= COMMAND_APERTURE_BASE && command_id < COMMAND_APERTURE_LIMIT);
+}
 static uint32_t source_capture_reuse_cursor;
+/* Indices of captures that became reusable (consumed), so a full table finds
+ * one without scanning thousands of 1 KiB records past unconsumed ones (the
+ * culled polygons of full-model capture). Entries are validated when taken. */
+static uint32_t *capture_free;
+static uint32_t capture_free_count, capture_free_capacity;
+
+static void capture_consumed(uint32_t index) {
+    XgRenderSourceCapture *capture = &source_captures[index];
+    capture->consumed = true;
+    if (capture->free_listed) return;
+    if (capture_free_count == capture_free_capacity) {
+        const uint32_t capacity = capture_free_capacity ? capture_free_capacity * 2u : 4096u;
+        uint32_t *grown = realloc(capture_free, (size_t)capacity * sizeof(*grown));
+        if (grown == NULL) return;
+        capture_free = grown;
+        capture_free_capacity = capacity;
+    }
+    capture_free[capture_free_count++] = index;
+    capture->free_listed = true;
+}
 static uint64_t capture_sequence;
 static uint64_t pre_scene_capture_sequences[XG_RENDER_IR_ITEM_CAPACITY];
 static XgRenderSubmissionDiagnostics submission_diagnostics;
@@ -65,6 +109,7 @@ static void clear_source_captures(void) {
     for (uint32_t i = 0; i < source_capture_count; ++i)
         release_temporal_capture(&source_captures[i]);
     source_capture_count = 0;
+    capture_free_count = 0;
 }
 
 void xg_render_submission_diagnostics(XgRenderSubmissionDiagnostics *out) {
@@ -105,14 +150,28 @@ static bool capture_source_command(const GpuRenderSemantic *semantic,
         capture_sequence == UINT64_MAX ||
         (generation = submission_services.scene_generation()) == 0u)
         return false;
-    command_id &= UINT32_C(0x001ffffc);
-    index = source_capture_by_command[command_id >> 2u];
+    command_id = command_canonical(command_id);
+    index = source_capture_by_command[command_slot(command_id)];
     if (index >= source_capture_count ||
         source_captures[index].command.command_id != command_id)
         index = source_capture_count;
     if (index == source_capture_count) {
         if (source_capture_count == source_capture_capacity) {
-            for (uint32_t probe = 0u; probe < source_capture_count; ++probe) {
+            while (capture_free_count != 0u) {
+                const uint32_t candidate = capture_free[--capture_free_count];
+                if (candidate >= source_capture_count) continue;
+                source_captures[candidate].free_listed = false;
+                if (source_captures[candidate].consumed ||
+                    source_captures[candidate].scene_generation != generation) {
+                    index = candidate;
+                    break;
+                }
+            }
+        }
+        if (index == source_capture_count && source_capture_count == source_capture_capacity) {
+            /* Bounded: past the free list, reuse is mostly a previous scene's
+             * captures; otherwise doubling the table is cheaper than walking it. */
+            for (uint32_t probe = 0u; probe < source_capture_count && probe < 256u; ++probe) {
                 const uint32_t candidate =
                     source_capture_reuse_cursor++ % source_capture_count;
                 if (source_captures[candidate].consumed ||
@@ -157,7 +216,7 @@ static bool capture_source_command(const GpuRenderSemantic *semantic,
         .scene_generation = generation,
         .capture_sequence = ++capture_sequence,
     };
-    source_capture_by_command[command_id >> 2u] = index;
+    source_capture_by_command[command_slot(command_id)] = index;
     return true;
 }
 
@@ -171,7 +230,7 @@ static void discard_source_visual(GpuRenderTransactionId visual) {
             source_captures[index] = source_captures[--source_capture_count];
             source_captures[source_capture_count].temporal = (XgRenderTemporalBinding){0};
             source_capture_by_command
-                [source_captures[index].command.command_id >> 2u] = index;
+                [command_slot(source_captures[index].command.command_id)] = index;
         } else {
             ++index;
         }
@@ -423,10 +482,11 @@ static bool captured_geometry_matches(const GpuRenderSemantic *capture,
 
 bool xg_render_submission_temporal_binding(
     const GpuRenderSemantic *semantic, XgRenderTemporalBinding *out) {
-    if (!semantic || !out || semantic->submission_command_id > UINT32_C(0x001ffffc) ||
+    if (!semantic || !out ||
+        !xg_render_submission_command_id_valid(semantic->submission_command_id) ||
         (semantic->submission_command_id & 3u)) return false;
     const uint32_t id = (uint32_t)semantic->submission_command_id;
-    const uint32_t index = source_capture_by_command[id >> 2];
+    const uint32_t index = source_capture_by_command[command_slot(id)];
     if (index >= source_capture_count) return false;
     const XgRenderSourceCapture *capture = &source_captures[index];
     const GpuRenderSemantic *source = &capture->command.semantic;
@@ -451,8 +511,8 @@ bool xg_render_submission_publish_temporal_coverage(
     /* Preflight all command captures before publishing anything. */
     for (uint32_t i = 0; i < binding_count; ++i) {
         const uint32_t id = bindings[i].command_id & UINT32_C(0x1fffffff);
-        if (id > UINT32_C(0x001ffffc) || (id & 3)) return false;
-        const uint32_t index = source_capture_by_command[id >> 2];
+        if (!xg_render_submission_command_id_valid(id) || (id & 3)) return false;
+        const uint32_t index = source_capture_by_command[command_slot(id)];
         if (index >= source_capture_count || source_captures[index].command.command_id != id ||
             source_captures[index].scene_generation != scene || source_captures[index].consumed) return false;
         const GpuRenderInterpolationIdentity *owner = &source_captures[index].command.semantic.interpolation_identity;
@@ -473,8 +533,8 @@ bool xg_render_submission_publish_temporal_coverage(
         for (uint32_t i = 0; i < source_capture_count; ++i)
             if (source_captures[i].temporal_scope == scope) release_temporal_capture(&source_captures[i]);
         for (uint32_t i = 0; i < binding_count; ++i) {
-            const uint32_t id = bindings[i].command_id & UINT32_C(0x001ffffc);
-            XgRenderSourceCapture *capture = &source_captures[source_capture_by_command[id >> 2]];
+            const uint32_t id = command_canonical(bindings[i].command_id);
+            XgRenderSourceCapture *capture = &source_captures[source_capture_by_command[command_slot(id)]];
             release_temporal_capture(capture);
             capture->temporal = (XgRenderTemporalBinding){ref, bindings[i].component_id};
             capture->temporal_scope = scope;
@@ -501,13 +561,13 @@ bool xg_render_submission_resolve_command(
         packet->triangle_count > GPU_RENDER_SEMANTIC_TRIANGLE_CAPACITY ||
         packet->line_count > GPU_RENDER_SEMANTIC_LINE_CAPACITY)
         return false;
-    command_id &= UINT32_C(0x001ffffc);
+    command_id = command_canonical(command_id);
     *out_command = (XgRenderSubmissionCommand){
         .semantic = *packet,
         .command_id = command_id,
         .source_primitive_index = command_id,
     };
-    const uint32_t capture_index = source_capture_by_command[command_id >> 2u];
+    const uint32_t capture_index = source_capture_by_command[command_slot(command_id)];
     if (capture_index < source_capture_count &&
         source_captures[capture_index].command.command_id == command_id &&
         source_captures[capture_index].scene_generation ==
@@ -672,10 +732,10 @@ bool xg_render_submission_resolve_command(
         }
         /* This hook runs at GPU acceptance in work mode. No legacy OT
          * completion follows to retire captures or drain pre-scene records. */
-        const uint32_t index = source_capture_by_command[command_id >> 2u];
+        const uint32_t index = source_capture_by_command[command_slot(command_id)];
         if (index < source_capture_count &&
             source_captures[index].command.command_id == command_id)
-            source_captures[index].consumed = true;
+            capture_consumed(index);
         if (pre_scene_index < pre_scene.count)
             (void)xg_render_submission_pre_scene_discard(
                 &pre_scene.records[pre_scene_index]);
@@ -1040,10 +1100,10 @@ bool xg_render_submission_complete_ordering_table(uint32_t start_address,
     for (uint32_t index = 0u; index < prepared_source_ot->draw_count; ++index) {
         const uint32_t command_id = prepared_source_ot->command_ids[index];
         const uint32_t capture_index =
-            source_capture_by_command[command_id >> 2u];
+            source_capture_by_command[command_slot(command_id)];
         if (capture_index < source_capture_count &&
             source_captures[capture_index].command.command_id == command_id)
-            source_captures[capture_index].consumed = true;
+            capture_consumed(capture_index);
         for (uint32_t capture = 0u; capture < pre_scene.count; ++capture) {
             const XgRenderPreScenePrimitive *record =
                 &pre_scene.records[capture];

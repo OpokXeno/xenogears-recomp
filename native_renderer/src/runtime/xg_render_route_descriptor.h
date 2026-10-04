@@ -38,6 +38,7 @@ typedef enum XgRenderCutoverModule {
     XG_RENDER_CUTOVER_MODULE_RESIDENT_TEXT,
     XG_RENDER_CUTOVER_MODULE_NATIVE_TARGET,
     XG_RENDER_CUTOVER_MODULE_GEAR_MOTION,
+    XG_RENDER_CUTOVER_MODULE_BATTLING,
 } XgRenderCutoverModule;
 
 typedef enum XgRenderCutoverAction {

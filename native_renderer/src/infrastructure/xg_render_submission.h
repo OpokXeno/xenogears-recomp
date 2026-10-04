@@ -205,6 +205,8 @@ bool xg_render_submission_pre_scene_flush(void);
 bool xg_render_submission_validate_authenticated_ir(
     const XgRenderAuthenticatedIrAccess *access);
 
+/* packet + 4 in main RAM, or in the first 4 MiB of the GPU-DMA aperture. */
+bool xg_render_submission_command_id_valid(uint64_t command_id);
 GuestRenderTransactionStatus xg_render_submission_stage_exact(
     GpuRenderTransactionId visual_id, uint64_t exact_command_id,
     const GpuRenderSemantic *semantic);
