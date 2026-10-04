@@ -14,7 +14,7 @@ if [[ -z "$ASSETS_DIR" ]]; then
 fi
 ASSETS_DIR="$(realpath "$ASSETS_DIR")"
 DISC_DIR="$(realpath "$DISC_DIR")"
-for asset in slus_006.64 SCPH1001.BIN; do
+for asset in slus_006.64 SCPH1001.BIN boxart.tga; do
     [[ -f "$ASSETS_DIR/$asset" ]] || {
         echo "missing private build asset: $ASSETS_DIR/$asset" >&2
         exit 1
@@ -40,18 +40,20 @@ command -v podman >/dev/null || {
 }
 
 BACKUP_DIR="$(mktemp -d)"
-for asset in slus_006.64 SCPH1001.BIN disc1.cue disc1.bin disc1.iso; do
+for asset in slus_006.64 SCPH1001.BIN boxart.tga disc1.cue disc1.bin disc1.iso; do
     destination="$ROOT/game/$asset"
     [[ "$asset" == "SCPH1001.BIN" ]] && destination="$ROOT/psxrecomp/bios/$asset"
+    [[ "$asset" == "boxart.tga" ]] && destination="$ROOT/assets/$asset"
     if [[ -e "$destination" ]]; then
         cp -p "$destination" "$BACKUP_DIR/$asset"
     fi
 done
 
 cleanup_staged_assets() {
-    for asset in slus_006.64 SCPH1001.BIN disc1.cue disc1.bin disc1.iso; do
+    for asset in slus_006.64 SCPH1001.BIN boxart.tga disc1.cue disc1.bin disc1.iso; do
         destination="$ROOT/game/$asset"
         [[ "$asset" == "SCPH1001.BIN" ]] && destination="$ROOT/psxrecomp/bios/$asset"
+        [[ "$asset" == "boxart.tga" ]] && destination="$ROOT/assets/$asset"
         if [[ -e "$BACKUP_DIR/$asset" ]]; then
             cp -p "$BACKUP_DIR/$asset" "$destination"
         else
@@ -78,6 +80,9 @@ podman run --rm --userns=keep-id \
     bash -euo pipefail -c '
         install -Dm644 /xgr-assets/slus_006.64 game/slus_006.64
         install -Dm644 /xgr-assets/SCPH1001.BIN psxrecomp/bios/SCPH1001.BIN
+        # Launcher box art from the private folder (CMake stages it when
+        # assets/boxart.tga exists at configure time).
+        install -Dm644 /xgr-assets/boxart.tga assets/boxart.tga
         if [[ "$XGR_DISC_KIND" == cue ]]; then
             install -Dm644 /xgr-disc/disc1.cue game/disc1.cue
             install -Dm644 /xgr-disc/disc1.bin game/disc1.bin
@@ -105,9 +110,12 @@ podman run --rm --userns=keep-id \
         }
         mkdir -p "$pkg/mods"
         cp -r "$XGR_RUNTIME_BUILD_DIR/mods/bundled" "$pkg/mods/"
-        rm -f "$pkg/assets/img/boxart.tga"
+        [[ -f "$pkg/assets/img/boxart.tga" ]] || {
+            echo "launcher box art was not staged: $pkg/assets/img/boxart.tga" >&2
+            exit 1
+        }
         tar -C dist -czf XenogearsRecomp-linux-x86_64.tar.gz XenogearsRecomp-linux-x86_64
         bash ci/check-linux-glibc.sh "$pkg/XenogearsRecomp" GLIBC_2.31
         rm -f game/slus_006.64 game/disc1.cue game/disc1.bin game/disc1.iso \
-            psxrecomp/bios/SCPH1001.BIN
+            psxrecomp/bios/SCPH1001.BIN assets/boxart.tga
     '

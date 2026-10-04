@@ -90,7 +90,7 @@ jobs:
 
       - name: Scrub staged assets
         if: always()
-        run: rm -f game/slus_006.64 game/disc1.cue game/disc1.bin game/disc1.iso psxrecomp/bios/SCPH1001.BIN
+        run: rm -f game/slus_006.64 game/disc1.cue game/disc1.bin game/disc1.iso psxrecomp/bios/SCPH1001.BIN assets/boxart.tga
 
   build-windows:
     name: Windows x86_64 (cross via llvm-mingw)
@@ -125,6 +125,8 @@ jobs:
           [ -f "$XGR_ASSETS_DIR/SCPH1001.BIN" ] || { echo "::error::$XGR_ASSETS_DIR/SCPH1001.BIN missing — see docs/self-hosted-runner.md"; exit 1; }
           install -Dm644 "$XGR_ASSETS_DIR/slus_006.64"  game/slus_006.64
           install -Dm644 "$XGR_ASSETS_DIR/SCPH1001.BIN" psxrecomp/bios/SCPH1001.BIN
+          [ -f "$XGR_ASSETS_DIR/boxart.tga" ] || { echo "::error::$XGR_ASSETS_DIR/boxart.tga missing (launcher box art)"; exit 1; }
+          install -Dm644 "$XGR_ASSETS_DIR/boxart.tga" assets/boxart.tga
           if [ -f "$XGR_DISC_DIR/disc1.cue" ]; then
             [ -f "$XGR_DISC_DIR/disc1.bin" ] || { echo "::error::$XGR_DISC_DIR/disc1.bin missing for disc1.cue — see docs/self-hosted-runner.md"; exit 1; }
             install -Dm644 "$XGR_DISC_DIR/disc1.cue" game/disc1.cue
@@ -241,12 +243,10 @@ jobs:
           }
           mkdir -p "$pkg/mods"
           cp -r build-win/mods/bundled "$pkg/mods/"
-          # Launcher assets (fonts + images) are staged next to the exe by the
-          # build and resolved from the exe dir at runtime — they must ship.
-          # Exclude boxart.tga: user-local copyrighted art (the launcher has a
-          # built-in fallback; users can drop their own next to the exe).
+          # Launcher assets (fonts + images, box art staged from the private
+          # folder) are resolved from the exe dir at runtime — they must ship.
           cp -r build-win/assets "$pkg/assets"
-          rm -f "$pkg/assets/img/boxart.tga"
+          [ -f "$pkg/assets/img/boxart.tga" ] || { echo "::error::launcher box art was not staged"; exit 1; }
           cmake -E chdir dist cmake -E tar cf ../XenogearsRecomp-windows-x86_64.zip --format=zip XenogearsRecomp-windows-x86_64
           cmake -DPROJECT_ROOT="$PWD" \
             -DARCHIVE="$PWD/XenogearsRecomp-windows-x86_64.zip" \
@@ -262,7 +262,7 @@ jobs:
 
       - name: Scrub staged assets
         if: always()
-        run: rm -f game/slus_006.64 game/disc1.cue game/disc1.bin game/disc1.iso psxrecomp/bios/SCPH1001.BIN
+        run: rm -f game/slus_006.64 game/disc1.cue game/disc1.bin game/disc1.iso psxrecomp/bios/SCPH1001.BIN assets/boxart.tga
 
   release:
     name: Publish GitHub Release

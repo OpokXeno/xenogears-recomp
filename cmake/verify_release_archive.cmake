@@ -57,7 +57,8 @@ function(is_banned_path relative_path output_variable)
             OR _lower_path MATCHES "(^|/)keybind[^/]*\\.(toml|ini|cfg)$"
             OR _lower_path MATCHES "(^|/)saves?(/|$)"
             OR _lower_path MATCHES "(^|/)[^/]*capture[^/]*($|/)"
-            OR _lower_path MATCHES "(^|/)boxart($|\\.)")
+            OR (_lower_path MATCHES "(^|/)boxart($|\\.)"
+                AND NOT _lower_path STREQUAL "assets/img/boxart.tga"))
         set(_banned TRUE)
     endif()
     set(${output_variable} "${_banned}" PARENT_SCOPE)
