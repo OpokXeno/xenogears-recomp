@@ -391,6 +391,7 @@ static uint64_t interpolation_scene_generation(void);
 static bool pending_variant_artifact_candidate_matches(uint32_t pc);
 static bool artifact_authority_for_pc(
     uint32_t pc, XgRenderArtifactAuthority *out_authority);
+static bool artifact_candidate_for_pc(uint32_t pc, PsxXgRenderAuthCandidate *out_candidate);
 static bool static_artifact_authority_for_cutover(
     uint32_t pc, uint32_t instruction_word,
     XgRenderArtifactAuthority *out_authority);
@@ -505,6 +506,7 @@ static const XgRenderRuntimeAuthSceneServices *composition_services(void) {
             composition_standalone_source_identity,
         .retained_movie_surface = composition_retained_movie_surface,
         .artifact_authority_for_pc = artifact_authority_for_pc,
+        .artifact_candidate_for_pc = artifact_candidate_for_pc,
         .static_artifact_authority_for_cutover =
             static_artifact_authority_for_cutover,
         .artifact_authorizes_pc = pending_variant_artifact_candidate_matches,
@@ -1232,14 +1234,12 @@ static bool current_artifact_range_contains_pc(uint32_t pc) {
     return artifact_authority_for_pc(pc, NULL);
 }
 
-static bool artifact_authority_for_pc(
-        uint32_t pc, XgRenderArtifactAuthority *out_authority) {
+/* The newest authenticated artifact whose code covers pc, or NULL. */
+static const XgRenderAuthenticatedArtifact *authorizing_artifact_for_pc(uint32_t pc) {
     const XgRenderAuthenticatedArtifact *selected = NULL;
     XgRenderRuntimeHostServices host = {0};
     const bool host_configured = xg_render_runtime_host_services(&host);
 
-    if (out_authority != NULL)
-        *out_authority = (XgRenderArtifactAuthority){0};
     for (uint32_t index = 0u;
          index < XG_RENDER_AUTH_ARTIFACT_CAPACITY; ++index) {
         const XgRenderAuthenticatedArtifact *record =
@@ -1273,12 +1273,42 @@ static bool artifact_authority_for_pc(
             (selected == NULL || record->generation > selected->generation))
             selected = record;
     }
+    return selected;
+}
+
+static bool artifact_authority_for_pc(
+        uint32_t pc, XgRenderArtifactAuthority *out_authority) {
+    const XgRenderAuthenticatedArtifact *selected = authorizing_artifact_for_pc(pc);
+
+    if (out_authority != NULL)
+        *out_authority = (XgRenderArtifactAuthority){0};
     if (selected == NULL) return false;
     if (out_authority != NULL)
         *out_authority = (XgRenderArtifactAuthority){
             .generation = selected->generation,
             .provenance = selected->provenance,
         };
+    return true;
+}
+
+/* The candidate of the authenticated artifact whose code holds pc. It confers
+ * no authority by itself: a producer owning a per-artifact proof (the Gear
+ * helper's model dispatch) checks that candidate and its exact call site. */
+static bool artifact_candidate_for_pc(uint32_t pc, PsxXgRenderAuthCandidate *out_candidate) {
+    const XgRenderAuthenticatedArtifact *selected = NULL;
+
+    if (out_candidate == NULL) return false;
+    for (uint32_t index = 0u; index < XG_RENDER_AUTH_ARTIFACT_CAPACITY; ++index) {
+        const XgRenderAuthenticatedArtifact *record = &state.authenticated_artifacts[index];
+        if (record->occupied && !record->static_text && record->generation &&
+            record->scene_generation == state.scene_generation &&
+            record->provenance.capability &&
+            range_contains(record->candidate.range_start, record->candidate.range_size, pc, 4u) &&
+            (selected == NULL || record->generation > selected->generation))
+            selected = record;
+    }
+    if (selected == NULL) return false;
+    *out_candidate = selected->candidate;
     return true;
 }
 
@@ -2678,7 +2708,13 @@ static void note_artifact_candidate_locked(
                 artifact_binary_identity_matches(
                     &record->candidate, candidate)) {
                 record->candidate = *candidate;
-                select_authenticated_artifact_primary(index);
+                /* Co-resident overlays (a Field event overlay beside the
+                 * Field module) both dispatch every frame. Re-entering one
+                 * must not flip the primary identity frame to frame: that
+                 * reads as a scene change and resets temporal history. */
+                if (!current_artifact_is_authorized() ||
+                    state.authenticated_artifact_primary_index == index)
+                    select_authenticated_artifact_primary(index);
                 return;
             }
         }

@@ -366,6 +366,9 @@ bool xg_render_native_work_vram_event(const GpuVramEvent *event,
         operation.kind = XG_RENDER_NATIVE_OPERATION_COPY;
         operation.src_x = event->source_x;
         operation.src_y = event->source_y;
+        if (gpu_native_field_wave_transfer(event->command_source_address))
+            operation.semantic.native_view_effect =
+                GPU_RENDER_NATIVE_VIEW_EFFECT_WAVE_GRID;
         break;
     case GPU_VRAM_EVENT_CLEAR:
         operation.kind = XG_RENDER_NATIVE_OPERATION_FILL;

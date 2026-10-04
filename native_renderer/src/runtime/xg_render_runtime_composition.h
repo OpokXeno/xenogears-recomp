@@ -4,6 +4,7 @@
 #include "cpu_state.h"
 #include "guest_render_types.h"
 #include "gpu_render.h"
+#include "xg_render_auth_candidate_types.h"
 #include "xg_render_auth_types.h"
 #include "xg_render_ir.h"
 #include "xg_render_snapshot_types.h"
@@ -62,6 +63,8 @@ typedef struct XgRenderRuntimeAuthSceneServices {
         XgSemanticResourceRef *out_surface);
     bool (*artifact_authority_for_pc)(
         uint32_t pc, XgRenderArtifactAuthority *out_authority);
+    bool (*artifact_candidate_for_pc)(
+        uint32_t pc, PsxXgRenderAuthCandidate *out_candidate);
     bool (*static_artifact_authority_for_cutover)(
         uint32_t pc, uint32_t instruction_word,
         XgRenderArtifactAuthority *out_authority);

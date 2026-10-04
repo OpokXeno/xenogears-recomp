@@ -1425,7 +1425,9 @@ void xg_render_model_sprite_pipeline_model_begin(
     }
     if (cpu->gpr[7] != XG_MODEL_FT4_RAW_DISPATCH_AVERAGE &&
         cpu->gpr[7] != XG_MODEL_FT4_RAW_DISPATCH_FARTHEST &&
-        cpu->gpr[7] != XG_MODEL_FT4_RAW_DISPATCH_RELIT) {
+        cpu->gpr[7] != XG_MODEL_FT4_RAW_DISPATCH_RELIT &&
+        cpu->gpr[7] != XG_MODEL_FT4_RAW_DISPATCH_AVERAGE_DEPTH_CUE &&
+        cpu->gpr[7] != XG_MODEL_FT4_RAW_DISPATCH_FARTHEST_DEPTH_CUE) {
         ++model_ft4.snapshot.dispatch_mode_reject_count;
         return;
     }
@@ -1594,6 +1596,29 @@ static uint32_t prepare_precondition_mask(CPUState *cpu) {
     return mask;
 }
 
+/* Dispatch modes 4/5 (field fog): the handler loads RGBC from 0x80059598 and
+ * DPCS moves it toward the GTE far color by the last projected vertex's IR0. */
+static bool model_dispatch_depth_cued(uint8_t mode) {
+    return mode == XG_MODEL_FT4_RAW_DISPATCH_AVERAGE_DEPTH_CUE ||
+        mode == XG_MODEL_FT4_RAW_DISPATCH_FARTHEST_DEPTH_CUE;
+}
+
+static void model_depth_cue_source(CPUState *cpu, uint32_t *color_word, int32_t far_color[3]) {
+    *color_word = cpu->read_word(UINT32_C(0x80059598));
+    for (uint32_t channel = 0u; channel < 3u; ++channel)
+        far_color[channel] = (int32_t)cpu->gte_ctrl[21u + channel];
+}
+
+static uint8_t model_depth_cue_channel(uint8_t color, int32_t far_color, int16_t depth_cue) {
+    int32_t step = far_color - (int32_t)color * 16;
+    if (step < INT16_MIN) step = INT16_MIN;
+    if (step > INT16_MAX) step = INT16_MAX;
+    const int64_t value = (int64_t)color * 16 * 4096 + (int64_t)depth_cue * step;
+    const int32_t mac = value >= 0 ? (int32_t)(value / 4096) : (int32_t)(-(((-value) + 4095) / 4096));
+    const int32_t channel = mac >= 0 ? mac / 16 : -(((-mac) + 15) / 16);
+    return (uint8_t)(channel < 0 ? 0 : channel > 255 ? 255 : channel);
+}
+
 static bool prepare_model_ft4(
         CPUState *cpu, GuestRenderRenderMode render_mode,
         const XgRenderModelSpritePipelineServices *services) {
@@ -1679,6 +1704,9 @@ static bool prepare_model_ft4(
                 source.ordering_shift =
                     cpu->read_word(UINT32_C(0x80050100));
                 source.dispatch_mode = context->dispatch_mode;
+                if (model_dispatch_depth_cued(context->dispatch_mode))
+                    model_depth_cue_source(cpu, &source.depth_cue_color_word,
+                                           source.far_color);
                 record->packet_address = source.packet_address;
                 const XgRenderModelFt4Template *material =
                     xg_render_model_repository_find_packet_template(
@@ -2256,6 +2284,7 @@ static bool build_ft3_record(
     input.projection = model_ft4.context.projection;
     if (!xg_host_3d_rot_trans_pers4(&input, &output)) return false;
     memcpy(record->vertices, output.vertices, sizeof(record->vertices));
+    const uint8_t mode = model_ft4.context.dispatch_mode;
     for (uint32_t vertex = 0u; vertex < 3u; ++vertex) {
         const uint32_t packed = (uint16_t)output.vertices[vertex].x |
             ((uint32_t)(uint16_t)output.vertices[vertex].y << 16u);
@@ -2276,8 +2305,19 @@ static bool build_ft3_record(
         if (output.vertices[vertex].z > max_depth)
             max_depth = output.vertices[vertex].z;
     }
-    record->ordering_bucket = max_depth >>
-        ((cpu->read_word(UINT32_C(0x80050100)) + 2u) & 31u);
+    /* Mode 4 orders by AVSZ3 (ZSF3 * (SZ1 + SZ2 + SZ3) >> 12); the far
+     * modes 2 and 5 by the farthest vertex, two buckets coarser. */
+    uint32_t insertion_depth = max_depth;
+    if (mode == XG_MODEL_FT4_RAW_DISPATCH_AVERAGE_DEPTH_CUE) {
+        const int64_t average = (int64_t)(int16_t)cpu->gte_ctrl[29] *
+            ((int64_t)output.vertices[0].z + output.vertices[1].z + output.vertices[2].z);
+        const int64_t otz = average >> 12;
+        insertion_depth = otz < 0 ? 0u : otz > 0xffff ? 0xffffu : (uint32_t)otz;
+        record->ordering_bucket = insertion_depth >>
+            (cpu->read_word(UINT32_C(0x80050100)) & 31u);
+    } else
+        record->ordering_bucket = max_depth >>
+            ((cpu->read_word(UINT32_C(0x80050100)) + 2u) & 31u);
     record->nclip_positive = model_ft3_nclip(output.vertices) > 0;
     record->guest_vertical_accepted = !all_below;
     record->guest_horizontal_accepted = !guest_all_horizontal_outside;
@@ -2287,13 +2327,24 @@ static bool build_ft3_record(
     record->guest_passed_screen_cull =
         record->nclip_positive && record->guest_screen_accepted;
     record->guest_accepted =
-        record->guest_passed_screen_cull && max_depth != 0u;
+        record->guest_passed_screen_cull && insertion_depth != 0u;
     record->passed_screen_cull = (int32_t)output.rtpt_flags >= 0 &&
         model_ft3_nclip(output.vertices) > 0 && !all_below &&
         !all_left && !all_right;
-    record->accepted = record->passed_screen_cull && max_depth != 0u;
+    record->accepted = record->passed_screen_cull && insertion_depth != 0u;
     record->packet_address = packet;
     record->material_word = material->material_word;
+    if (model_dispatch_depth_cued(mode)) {
+        uint32_t color_word;
+        int32_t far_color[3];
+        model_depth_cue_source(cpu, &color_word, far_color);
+        const int16_t depth_cue = (int16_t)output.depth_cue;
+        /* DPCS replaces the color and clears the raw-texture bit. */
+        record->material_word = (record->material_word & UINT32_C(0xfe000000)) |
+            model_depth_cue_channel((uint8_t)color_word, far_color[0], depth_cue) |
+            (uint32_t)model_depth_cue_channel((uint8_t)(color_word >> 8u), far_color[1], depth_cue) << 8u |
+            (uint32_t)model_depth_cue_channel((uint8_t)(color_word >> 16u), far_color[2], depth_cue) << 16u;
+    }
     memcpy(record->uv, material->uv, sizeof(record->uv));
     record->tpage = material->tpage;
     record->clut = material->clut;

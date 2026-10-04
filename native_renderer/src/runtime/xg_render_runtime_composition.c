@@ -1951,6 +1951,15 @@ static XgRenderCutoverDispatchResult observe_model_post_field_route(
             true, render_mode, model_sprite_services());
         break;
     case XG_CUTOVER_MODEL_BEGIN:
+        if (render_mode == GUEST_RENDER_RENDER_NATIVE && cpu != NULL &&
+            auth_scene.artifact_candidate_for_pc != NULL) {
+            /* The Gear helper's relit model calls carry its artifact proof:
+             * the pipeline checks it against the helper's own call sites. */
+            PsxXgRenderAuthCandidate candidate;
+            if (auth_scene.artifact_candidate_for_pc(cpu->gpr[31], &candidate))
+                (void)xg_render_model_sprite_pipeline_accept_gear_helper_mode1_proof(
+                    cpu, &candidate);
+        }
         xg_render_model_sprite_pipeline_model_begin(
             cpu, render_mode, model_sprite_services());
         break;

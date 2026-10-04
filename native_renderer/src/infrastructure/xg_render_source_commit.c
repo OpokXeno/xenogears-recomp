@@ -528,6 +528,7 @@ static uint64_t commit_digest(const XgRenderSourceSlot *slot) {
         if (operation->kind == XG_RENDER_NATIVE_OPERATION_COPY) {
             HASH_FIELD(operation->src_x);
             HASH_FIELD(operation->src_y);
+            HASH_FIELD(operation->semantic.native_view_effect);
         } else if (operation->kind == XG_RENDER_NATIVE_OPERATION_FILL) {
             HASH_FIELD(operation->fill_color);
         } else if (operation->kind == XG_RENDER_NATIVE_OPERATION_UPLOAD) {
@@ -2011,6 +2012,8 @@ XgRenderSourceCommitResult xg_render_source_commit_append_native_operation(
             else if (operation->kind == XG_RENDER_NATIVE_OPERATION_COPY) {
                 copy.src_x = operation->src_x;
                 copy.src_y = operation->src_y;
+                copy.semantic.native_view_effect =
+                    operation->semantic.native_view_effect;
             } else if (operation->kind == XG_RENDER_NATIVE_OPERATION_FILL) {
                 copy.fill_color = operation->fill_color;
             }
