@@ -179,7 +179,7 @@ frustum_plane_x_sites = ["0x80098850", "0x80098974"]
 render_mode = "native"
 debug_port = 4370
 window_title = "XenogearsRecomp"
-controller = "digital"
+controller = "dualshock"
 memcard_dir = "."
 # NEVER "instant" — known-hangy upstream (divisor=0 hangs at the PlayStation logo; and the
 # WORLDMAP crash).
@@ -191,7 +191,12 @@ bios_hle = true
 overlay_cache = false
 
 [controller]
-multitap_analog = true
+multitap_analog = false
+# The pad is always a DualShock in analog mode (lock_mode hides the choice).
+# Xenogears reads only the digital buttons, so the left stick also presses
+# the D-pad (input.ini ls_* rows); the D-pad itself works as usual.
+lock_mode = true
+stick_drives_dpad = true
 
 # Menu open (field Triangle 2125-> entry): datos dir 0x10. Ruta caliente acotada
 # (fails closed a 1x, XA intacto). Probado: 2256->2235 (21 frames) con matches=1.
