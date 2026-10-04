@@ -8,7 +8,9 @@ enum {
     XG_INIT_BIOS_UTILITY = 0x80040464u,
     XG_STORE_FILE_BYTES = 0x80040554u,
     XG_VSYNC = 0x8004B54Cu,
+    XG_VBLANK_COUNT = 0x80058960u, /* VSync's retrace counter */
     XG_MENU_CONTEXT = 0x800625A0u,
+    XG_MENU_FRAME_OFFSET = 0x2D8u, /* MenuDraw frame counter */
     /* Return addresses inside the menu overlay. */
     XG_RESTART_CALLS_BU_INIT = 0x801D9B38u,
     XG_SCAN_RESTART_RETURN = 0x801C95F8u,
@@ -17,7 +19,8 @@ enum {
     XG_SAVE_LOOP_DRAW_RETURN = 0x801CC460u,
     XG_LOAD_LOOP_DRAW_RETURN = 0x801CB678u,
     XG_SAVE_LOOP_WRITE_RETURN = 0x801CC470u,
-    XG_SAVE_CHUNK_BYTES = 0x400u
+    XG_SAVE_CHUNK_BYTES = 0x400u,
+    XG_LOAD_STEP_VBLANKS = 4u
 };
 
 /* The card check restarts the card interface twice: once when the menu opens
@@ -40,17 +43,36 @@ static int xg_card_flow_bu_init_entry(CPUState *cpu, uint32_t address) {
 
 /* Save and load move one 0x100-byte chunk per MenuDraw, and MenuDraw ends in
  * VSync(0). Inside those two loops the chunk, not the display, sets the pace,
- * so the wait is dropped. MenuDraw keeps its return address at +0x14. */
-static int xg_menu_draw_in_card_loop(uint32_t ra, uint32_t sp, uint32_t wait) {
+ * so the wait is dropped. MenuDraw keeps its return address at +0x14; the
+ * loop it was called from is returned (0 outside them). */
+static uint32_t xg_menu_draw_card_loop(uint32_t ra, uint32_t sp, uint32_t wait) {
     if (ra != XG_MENU_DRAW_VSYNC_RETURN || wait != 0u) return 0;
     const uint32_t caller = psx_mod_read_word(sp + 0x14u);
-    return caller == XG_SAVE_LOOP_DRAW_RETURN || caller == XG_LOAD_LOOP_DRAW_RETURN;
+    return caller == XG_SAVE_LOOP_DRAW_RETURN || caller == XG_LOAD_LOOP_DRAW_RETURN
+        ? caller : 0u;
 }
+
+/* MenuDraw counts its calls in the menu context (+0x2D8) and the loading
+ * text and red arrow blink from it (shown while count % 6 < 4, 0x801D00BC).
+ * At the original card speed the load loop takes one step per 4 VBlanks
+ * (measured: 6, 3, 3 VBlanks per step), a 24-VBlank blink. Without the wait
+ * the count would race, so a load-loop step that comes sooner takes its
+ * increment back. */
+static uint32_t xg_load_step_vblank;
 
 static int xg_card_flow_vsync_entry(CPUState *cpu, uint32_t address) {
     (void)address;
-    if (xg_menu_draw_in_card_loop(cpu->gpr[31], cpu->gpr[29], cpu->gpr[4]))
-        cpu->gpr[4] = UINT32_MAX;
+    const uint32_t loop = xg_menu_draw_card_loop(cpu->gpr[31], cpu->gpr[29], cpu->gpr[4]);
+    if (!loop) return 0;
+    cpu->gpr[4] = UINT32_MAX;
+    if (loop != XG_LOAD_LOOP_DRAW_RETURN) return 0;
+    const uint32_t vblank = psx_mod_read_word(XG_VBLANK_COUNT);
+    if (vblank - xg_load_step_vblank < XG_LOAD_STEP_VBLANKS) {
+        const uint32_t frame = psx_mod_read_word(XG_MENU_CONTEXT) + XG_MENU_FRAME_OFFSET;
+        psx_mod_write_word(frame, psx_mod_read_word(frame) - 1u);
+    } else {
+        xg_load_step_vblank = vblank;
+    }
     return 0;
 }
 
