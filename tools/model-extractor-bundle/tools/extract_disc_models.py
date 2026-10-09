@@ -28,6 +28,17 @@ USER_SECTOR = 2048
 MAX_RESOURCE_SIZE = 64 * 1024 * 1024
 MAX_MEMBERS = 4096
 MECHA_ANIMATION_FPS = 19.3
+# Descriptive labels for verified USA actor bundles; other revisions still use
+# the same parser and receive a hash-based fallback name.
+FIELD_ACTOR_LABELS = {
+    "42d88ff3385229ef53fdcf468b13ab61b6413a9ee47d756ece61756c246b8c52": "save-point",
+    "14c369fb7da20a5eca5b15753dbf6e8835929df58329c7275c6d0d16be75103e": "save-point-blue",
+    "95fd651dd4555fe3eb22e77a080ccd5a588e9b34dcdf7013b3b046bd58633451": "save-point-blue-large",
+    "fed1648acf4758bdffb60ebd04b762f4a69255aabe04e64d72c69dc3b893826c": "treasure-chest",
+    "5dedf5bf20c477f766167014c2b87f099b172e7d4c52ba09ddebd63ccbb5a54a": "treasure-chest-metal",
+    "80e5f24ad1cd784c62785e957ee78b9fca6c179c73ecce84ea552f5b9da0663c": "treasure-chest-metal-large",
+    "207868b4f6bef60699e5d1823cdd6191450182611fc7c9a5bee2904985288f07": "treasure-chest-metal-small",
+}
 
 ATTRIBUTE_SIZES = (4, 8, 4, 8, 4, 8, 4, 8, 4, 12, 4, 12, 4, 12, 4, 12, 4)
 PACKET_SIZES = (0x14, 0x20, 0x1C, 0x28, 0x14, 0x20, 0x1C, 0x28,
@@ -562,19 +573,24 @@ def _pointer_range(data: bytes, offset: int, size: int, label: str) -> None:
         raise ValueError(f"{label} leaves model archive")
 
 
-def parse_model_archive(data: bytes) -> ModelArchive:
-    if len(data) < 0x48:
+def parse_model_archive(data: bytes, *, single_part: bool = False) -> ModelArchive:
+    if len(data) < (0x38 if single_part else 0x48):
         raise ValueError("model archive is too small")
-    part_count, flags, reserved_08, reserved_0c = struct.unpack_from("<IIII", data)
-    if not 1 <= part_count <= MAX_MEMBERS or reserved_08 != 0 or reserved_0c != 0 or flags & ~3:
-        raise ValueError("invalid model archive header")
-    _pointer_range(data, 0x10, part_count * 0x38, "model part table")
+    if single_part:
+        part_count, flags, table_at = 1, 0, 0
+    else:
+        part_count, flags, reserved_08, reserved_0c = struct.unpack_from("<IIII", data)
+        if not 1 <= part_count <= MAX_MEMBERS or reserved_08 != 0 or reserved_0c != 0 or flags & ~3:
+            raise ValueError("invalid model archive header")
+        table_at = 0x10
+    _pointer_range(data, table_at, part_count * 0x38, "model part table")
+    resource_end = table_at + part_count * 0x38
     parts = []
     tpage: int | None = None
     clut: int | None = None
     metadata_total = 0
     for part_index in range(part_count):
-        at = 0x10 + part_index * 0x38
+        at = table_at + part_index * 0x38
         part_flags, vertex_count, primitive_count, group_count = struct.unpack_from("<HHHH", data, at)
         vertices_at, normals_at, groups_at, display_at = struct.unpack_from("<IIII", data, at + 8)
         deformation_at = u32(data, at + 0x1C)
@@ -659,11 +675,89 @@ def parse_model_archive(data: bytes) -> ModelArchive:
             group_cursor = descriptor_at + count * 8
         if parsed_primitives != primitive_count or packet_bytes != packet_buffer_size:
             raise ValueError("model primitive or packet census is inconsistent")
+        resource_end = max(resource_end, vertices_at + vertex_count * 8,
+                           normals_at + vertex_count * 8, group_cursor, display_cursor)
+        if single_part and deformation_at:
+            # Preserve deformation payloads whose extent is not decoded here.
+            _pointer_range(data, deformation_at, 4, "model deformation")
+            resource_end = len(data)
         parts.append(ModelPart(
             part_flags, vertices, normals, bounds_min, bounds_max,
             tuple(primitives), deformation_at, packet_buffer_size,
         ))
-    return ModelArchive(data, flags, tuple(parts), metadata_total)
+    return ModelArchive(data[:resource_end] if single_part else data,
+                        flags, tuple(parts), metadata_total)
+
+
+def field_actor_model_references(bundle: bytes) -> tuple[list[dict], list[dict]]:
+    """Follow entry 0's animation graph, including relative child headers.
+
+    Resident 0x800248D4 uses one-byte frames and the length ranges in its
+    0x8004FC40 table. F5 resolves a bare ModelPart at a signed operand-relative
+    24-bit offset; F6/F7 resolve a ModelFileHeader. FC uploads packed images.
+    No byte search is performed through the embedded pixels or geometry.
+    """
+    spans = offset_bundle(bundle)
+    if len(spans) < 3 or spans[0][0] != 8 + len(spans) * 4:
+        raise ValueError("invalid Field actor pointer bundle")
+    start, end = spans[0]
+    _pointer_range(bundle, start, 2, "actor animation table")
+    count = u16(bundle, start) & 0x3F
+    table_end = start + 2 + count * 2
+    if u16(bundle, start) >> 6 or not count or table_end > end:
+        raise ValueError("invalid Field actor animation count")
+    pending = []
+
+    def header(at: int, override: bool) -> None:
+        if at < table_end or at + 6 > end:
+            raise ValueError("Field actor animation header leaves entry 0")
+        pc = at + 2 + u16(bundle, at + 2)
+        if pc < at + 6 or pc >= end:
+            raise ValueError("Field actor bytecode leaves entry 0")
+        pending.append((pc, override))
+
+    for index in range(count):
+        header(start + u16(bundle, start + 2 + index * 2), False)
+    visited = set()
+    models, textures = [], []
+    while pending:
+        pc, override = pending.pop()
+        if (pc, override) in visited:
+            continue
+        if pc < table_end or pc >= end:
+            raise ValueError("Field actor branch leaves entry 0")
+        visited.add((pc, override))
+        opcode = bundle[pc]
+        length = (1 if opcode < 0xA0 else 2 if opcode < 0xC8
+                  else 3 if opcode < 0xF1 else 4)
+        if opcode in {0xBE, 0xD4}:
+            length = 3
+        if pc + length > end:
+            raise ValueError("truncated Field actor instruction")
+        if opcode in {0x80, 0x81, 0x82, 0x85, 0x8E}:
+            continue
+        if opcode == 0x8D:
+            override = True
+        if opcode in {0xD4, 0xE1, 0xE2, 0xE4, 0xFA}:
+            operand = pc + (2 if opcode == 0xFA else 1)
+            pending.append((pc + s16(bundle, operand), override))
+            if opcode in {0xD4, 0xE1}:
+                continue
+        elif opcode == 0xE0:
+            header(pc + 1 + s16(bundle, pc + 1), override)
+        elif opcode in {0xF5, 0xF6, 0xF7, 0xFC}:
+            target = pc + 1 + int.from_bytes(bundle[pc + 1:pc + 4], "little", signed=True)
+            if target < table_end or target >= end:
+                raise ValueError("Field actor resource pointer leaves entry 0")
+            reference = {"opcode": f"0x{opcode:02X}", "instruction_offset": pc,
+                         "resource_offset": target, "resource_boundary": end}
+            if opcode == 0xFC:
+                textures.append(reference)
+            else:
+                models.append({**reference, "single_part": opcode == 0xF5,
+                               "actor_tpage_override": override})
+        pending.append((pc + length, override))
+    return models, textures
 
 
 def parse_bone_links(data: bytes, part_count: int) -> list[dict]:
@@ -1674,7 +1768,7 @@ def _next_pointer(data: bytes, start: int, pointers: Iterable[int]) -> int:
     return min(candidates) if candidates else len(data)
 
 
-def scan_disc(path: Path, disc_index: int) -> tuple[dict, list[dict]]:
+def scan_disc(path: Path, disc_index: int, *, only_field_actors: bool = False) -> tuple[dict, list[dict]]:
     disc = open_disc(path)
     entries = parse_fat(disc.read_user_data(FAT_LBA, FAT_SECTORS * USER_SECTOR), disc.sector_count)
     directory = parse_directory_table(disc.read_user_data(DIRECTORY_LBA, DIRECTORY_COUNT * 2))
@@ -1721,6 +1815,15 @@ def scan_disc(path: Path, disc_index: int) -> tuple[dict, list[dict]]:
                         palette_count=len(tim.palettes), trailer_size=trailer_size, **context)
             elif format_name == "packed-tagged-images":
                 for record_index, start, upload, trailer_size in parse_packed_image_set(data):
+                    image_base = context.get("image_base")
+                    resolved = {}
+                    if isinstance(image_base, dict):
+                        resolved["resolved_origin"] = {
+                            "x_words": ((image_base["x_words"] if upload.tag == 0x1100
+                                         else upload.stored_x) + upload.relative_x),
+                            "y": ((image_base["y"] if upload.tag == 0x1100
+                                   else upload.stored_y) + upload.relative_y),
+                        }
                     add("texture_upload", upload.data, entry, fat_index, routes, chain + [{
                         "type": "packed_image_record", "record_index": record_index,
                         "decoded_offset": start,
@@ -1729,8 +1832,9 @@ def scan_disc(path: Path, disc_index: int) -> tuple[dict, list[dict]]:
                         stored_origin={"x_words": upload.stored_x, "y": upload.stored_y},
                         relative_origin={"x_words": upload.relative_x, "y": upload.relative_y},
                         width_words=upload.width_words, height=upload.height,
-                        placement_status="caller_mode_and_base_required",
-                        trailer_size=trailer_size, **context)
+                        placement_status=("serialized_actor_mode_1" if resolved
+                                          else "caller_mode_and_base_required"),
+                        trailer_size=trailer_size, **resolved, **context)
             elif format_name == "field-sector-graphics" and len(data) >= USER_SECTOR:
                 for descriptor_index, start, upload in parse_sector_graphics(data):
                     add("texture_upload", upload.data, entry, fat_index, routes, chain + [{
@@ -1752,11 +1856,13 @@ def scan_disc(path: Path, disc_index: int) -> tuple[dict, list[dict]]:
                    skeleton_format: str = "bone_links",
                    report_failure: bool = True, **context: object) -> ModelArchive | None:
         try:
-            model = parse_model_archive(data)
+            single_part = context.get("format") == "sprite-model-part"
+            model = parse_model_archive(data, single_part=single_part)
         except (ValueError, struct.error) as error:
             if report_failure:
                 report(f"model archive rejected: {error}", entry, fat_index, routes, chain)
             return None
+        data = model.raw
         add("model", data, entry, fat_index, routes, chain,
             part_count=len(model.parts), primitive_count=sum(len(part.primitives) for part in model.parts),
             **context)
@@ -1771,6 +1877,70 @@ def scan_disc(path: Path, disc_index: int) -> tuple[dict, list[dict]]:
                     format=skeleton_format, model_sha256=sha256(data), **context)
         return model
 
+    def add_field_actor_models(raw: bytes, padded: bytes, entry: FatEntry,
+                               fat_index: int, routes: list[dict], field_id: int) -> None:
+        chain = [{"type": "field_actor_section_lzss", "stored_offset": u32(raw, 0x13C)}]
+        try:
+            section, consumed = lzss_decompress(padded, u32(raw, 0x13C))
+            actors = offset_bundle(section)
+        except (ValueError, struct.error) as error:
+            report(f"Field actor section rejected: {error}", entry, fat_index, routes, chain)
+            return
+        chain[0]["consumed_size"] = consumed
+        for actor_index, (start, end) in enumerate(actors):
+            actor_chain = chain + [{"type": "field_actor_bundle", "actor_index": actor_index,
+                                    "decoded_offset": start}]
+            bundle = section[start:end]
+            try:
+                spans = offset_bundle(bundle)
+                if not spans:
+                    continue
+                bundle = bundle[:spans[-1][1]]
+                references, textures = field_actor_model_references(bundle)
+            except (ValueError, struct.error) as error:
+                report(f"Field actor animation rejected: {error}", entry, fat_index, routes, actor_chain)
+                continue
+            if not references:
+                continue
+            bundle_digest = sha256(bundle)
+            scene_key = f"field-actor:{bundle_digest}"
+            image_base = {"x_words": s16(raw, actor_index * 8),
+                          "y": s16(raw, actor_index * 8 + 2)}
+            context = {"scene_key": scene_key, "field_id": field_id,
+                       "actor_bundle_sha256": bundle_digest, "actor_index": actor_index,
+                       "image_base": image_base}
+            model_hashes = set()
+            for reference in references:
+                model_chain = actor_chain + [{"type": "sprite_animation_model", **reference}]
+                model = add_model(
+                    bundle[reference["resource_offset"]:reference["resource_boundary"]],
+                    entry, fat_index, routes, model_chain,
+                    format="sprite-model-part" if reference["single_part"] else "model-archive",
+                    actor_tpage_override=reference["actor_tpage_override"],
+                    **context,
+                )
+                if model is not None:
+                    model_hashes.add(sha256(model.raw))
+            if not model_hashes:
+                continue
+            for model_digest in sorted(model_hashes):
+                add("actor_animation", bundle, entry, fat_index, routes, actor_chain,
+                    format="sprite-animation-bundle", model_sha256=model_digest, **context)
+            for reference in textures:
+                texture_chain = actor_chain + [{"type": "sprite_animation_texture", **reference}]
+                data = bundle[reference["resource_offset"]:reference["resource_boundary"]]
+                try:
+                    uploads = parse_packed_image_set(data)
+                    if not uploads:
+                        raise ValueError("empty actor image package")
+                    size = max(start + 16 + len(upload.data) for _, start, upload, _ in uploads)
+                except (ValueError, struct.error) as error:
+                    report(f"Field actor textures rejected: {error}", entry, fat_index, routes, texture_chain)
+                    continue
+                for model_digest in sorted(model_hashes):
+                    add_texture_package(data[:size], entry, fat_index, routes, texture_chain,
+                                        "packed-tagged-images", model_sha256=model_digest, **context)
+
     for fat_index, entry in enumerate(entries):
         if entry.size <= 0 or entry.size > MAX_RESOURCE_SIZE:
             continue
@@ -1784,6 +1954,9 @@ def scan_disc(path: Path, disc_index: int) -> tuple[dict, list[dict]]:
         )
         if not relevant:
             continue
+        if only_field_actors and not any(d == 0x04 and 0xB8 <= f <= 0x66A
+                                        and (f - 0xB8) % 2 == 0 for d, f in ids):
+            continue
         padded = disc.read_user_data(entry.lba, entry.size, padded=True)
         raw = padded[:entry.size]
 
@@ -1793,6 +1966,9 @@ def scan_disc(path: Path, disc_index: int) -> tuple[dict, list[dict]]:
             scene_key = f"field:{field_id}"
             if len(raw) < 0x154:
                 scan_counts["field_placeholder_files"] += 1
+                continue
+            add_field_actor_models(raw, padded, entry, fat_index, routes, field_id)
+            if only_field_actors:
                 continue
             try:
                 section, consumed = lzss_decompress(padded, u32(raw, 0x138))
@@ -2203,7 +2379,7 @@ def materialize(output: Path, resources: list[dict], unit_scale: float, *,
     for (kind, digest), item in sorted(unique.items()):
         data = item["data"]
         if kind == "model":
-            model = parse_model_archive(data)
+            model = parse_model_archive(data, single_part=item["metadata"].get("format") == "sprite-model-part")
             root = output / "models" / digest
             gltf, binary = build_gltf(
                 model, unit_scale, lit_materials=lit_materials,
@@ -2341,7 +2517,8 @@ def materialize(output: Path, resources: list[dict], unit_scale: float, *,
         else:
             directory = {
                 "texture_package": "textures", "animation_container": "animations",
-                "animation_clip": "animations", "terrain": "terrain", "collision": "collision",
+                "animation_clip": "animations", "actor_animation": "animations",
+                "terrain": "terrain", "collision": "collision",
                 "texture_upload": "textures/uploads",
             }[kind]
             path = Path(directory) / f"{digest}.bin"
@@ -2358,6 +2535,9 @@ def materialize(output: Path, resources: list[dict], unit_scale: float, *,
 def _catalog_scene_path(scene_key: str, fat_index: int) -> Path:
     fields = scene_key.split(":")
     category = fields[0]
+    if category == "field-actor":
+        label = FIELD_ACTOR_LABELS.get(fields[1], "actor")
+        return Path("field") / "actors" / f"{label}-{fat_index:04d}-{fields[1][:12]}"
     values = [int(value) for value in fields[1:]]
     if category == "field":
         return Path("field") / f"field-{fat_index:04d}-{values[0]:04d}"
@@ -2626,7 +2806,20 @@ def _scene_occurrences(record: dict, scene_key: str, preferred_disc: int) -> lis
             and occurrence.get("resource_context", {}).get("scene_key") == "battling:common")
     ]
     preferred = [occurrence for occurrence in occurrences if occurrence.get("disc_index") == preferred_disc]
-    return preferred or occurrences
+    selected = preferred or occurrences
+    if scene_key.startswith("field-actor:") and selected:
+        # Each occurrence can use a different caller-assigned VRAM slot. Bake
+        # one consistent occurrence, rather than superimposing all map slots.
+        first = min(selected, key=lambda occurrence: (
+            occurrence["disc_index"], occurrence["fat_index"],
+            occurrence["resource_context"].get("actor_index", 0),
+        ))
+        context = first["resource_context"]
+        return [occurrence for occurrence in selected
+                if occurrence["disc_index"] == first["disc_index"]
+                and occurrence["fat_index"] == first["fat_index"]
+                and occurrence["resource_context"].get("actor_index") == context.get("actor_index")]
+    return selected
 
 
 def _write_vram_upload(vram: bytearray, coverage: bytearray, x: int, y: int,
@@ -3431,6 +3624,17 @@ def build_scene_catalog(catalog: Path, assets: Path, records: list[dict],
             source_gltf = json.loads(source_gltf_path.read_text(encoding="utf-8"))
             source_binary = (assets / model_record["binary_path"]).read_bytes()
             model_source_data = (assets / model_record["source_path"]).read_bytes()
+            if scene_key.startswith("field-actor:"):
+                selected = _scene_occurrences(model_record, scene_key, preferred_disc)[0]
+                context = selected["resource_context"]
+                if context.get("actor_tpage_override"):
+                    origin = context["image_base"]
+                    base_page = (origin["x_words"] >> 6) | ((origin["y"] & 0x100) >> 4)
+                    for material in source_gltf["materials"]:
+                        extras = material.get("extras", {})
+                        if extras.get("ps1_tpage") is not None:
+                            extras["ps1_tpage_serialized"] = extras["ps1_tpage"]
+                            extras["ps1_tpage"] = (extras["ps1_tpage"] & 0xFFE0) | base_page
             merged_models[model_digest] = _merge_gltf_model(
                 gltf, binary, source_gltf, source_binary, model_digest, model["contexts"],
             )
@@ -3556,6 +3760,8 @@ def build_scene_catalog(catalog: Path, assets: Path, records: list[dict],
                         })
                     individual_extension = individual_gltf["extensions"]["XENOGEARS_resource_bundle"]
                     individual_extension["animation_policy"] = (
+                        "Actor model states are exported separately; the original sprite animation bundle remains embedded."
+                        if scene_key.startswith("field-actor:") else
                         "All sequence tracks are decoded as timelines; deterministic VM scripts are evaluated as actions, and context-dependent scripts remain embedded."
                     )
                     individual_extension["texture_policy"] = (
@@ -3592,10 +3798,32 @@ def build_scene_catalog(catalog: Path, assets: Path, records: list[dict],
                 }
                 if world_model_index is not None:
                     model_entry["world_model_index"] = world_model_index
+                if scene_key.startswith("field-actor:"):
+                    model_entry["source_format"] = context.get("format")
+                    model_entry["actor_bundle_sha256"] = context["actor_bundle_sha256"]
+                    model_entry["field_ids"] = sorted({item["field_id"] for item in model["contexts"]})
+                    model_entry["model_resource_offsets"] = sorted({
+                        occurrence["transform_chain"][-1]["resource_offset"]
+                        for occurrence in model["occurrences"]
+                    })
                 model_entries.append(model_entry)
 
         model_roots = {merged["root"] for merged in merged_models.values()}
-        if scene_key.startswith("field:"):
+        if scene_key.startswith("field-actor:"):
+            # Static states share an actor origin in the game. Arrange them
+            # side by side in the inventory scene; standalone models retain
+            # their authored origin.
+            widths = [accessor["max"][0] - accessor["min"][0]
+                      for accessor in gltf["accessors"]
+                      if accessor.get("type") == "VEC3" and "min" in accessor]
+            spacing = max(widths, default=0.0) * 1.4
+            for state_index, model_entry in enumerate(sorted(
+                    model_entries, key=lambda entry: entry["model_resource_offsets"])):
+                root = gltf["nodes"][merged_models[model_entry["sha256"]]["root"]]
+                offset = model_entry["model_resource_offsets"][0]
+                root["name"] = f"actor_model_state_{offset:04x}"
+                root["translation"] = [spacing * state_index, 0.0, 0.0]
+        elif scene_key.startswith("field:"):
             placement = _dependency_with_format(dependencies, scene_key, "field-entity-initialization")
             if placement is not None:
                 gltf["scenes"][0]["nodes"] = [node for node in gltf["scenes"][0]["nodes"]
@@ -3806,6 +4034,8 @@ def build_scene_catalog(catalog: Path, assets: Path, records: list[dict],
             })
 
         gltf["extensions"]["XENOGEARS_resource_bundle"]["animation_policy"] = (
+            "Actor model states are exported separately; the original sprite animation bundle remains embedded."
+            if scene_key.startswith("field-actor:") else
             "All sequence tracks are decoded as timelines; deterministic VM scripts are evaluated as actions, and context-dependent scripts remain embedded."
         )
         gltf["extensions"]["XENOGEARS_resource_bundle"]["texture_policy"] = (
@@ -3858,14 +4088,15 @@ def build_scene_catalog(catalog: Path, assets: Path, records: list[dict],
 
 def extract_models(discs: Iterable[Path], output: Path, unit_scale: float, *,
                    lit_materials: bool = False,
-                   generate_missing_normals: bool = False) -> dict:
+                   generate_missing_normals: bool = False,
+                   only_field_actors: bool = False) -> dict:
     disc_paths = list(discs)
     if not disc_paths:
         raise ValueError("at least one disc is required")
     all_resources = []
     disc_records = []
     for disc_index, path in enumerate(disc_paths):
-        disc_record, resources = scan_disc(path, disc_index)
+        disc_record, resources = scan_disc(path, disc_index, only_field_actors=only_field_actors)
         disc_records.append(disc_record)
         all_resources.extend(resources)
     output = output.expanduser().absolute()
@@ -3909,6 +4140,7 @@ def extract_models(discs: Iterable[Path], output: Path, unit_scale: float, *,
             "export_options": {
                 "lit_materials": lit_materials,
                 "generate_missing_normals": generate_missing_normals,
+                "only_field_actors": only_field_actors,
             },
             "discs": disc_records, "summary": summary, "catalog": catalog,
         }
@@ -3930,7 +4162,9 @@ def extract_models(discs: Iterable[Path], output: Path, unit_scale: float, *,
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("discs", nargs="+", type=Path, help="one or more retail CUE, BIN, or ISO images")
-    parser.add_argument("--output", type=Path, default=Path("extracted-models"))
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--field-actors-only", action="store_true",
+                        help="extract only 3D actor models (default output: extracted-field-actors)")
     parser.add_argument("--unit-scale", type=float, default=1.0 / 4096.0,
                         help="glTF units per PS1 model unit (default: 1/4096)")
     parser.add_argument(
@@ -3944,15 +4178,18 @@ def main() -> int:
     args = parser.parse_args()
     if not math.isfinite(args.unit_scale) or args.unit_scale <= 0:
         parser.error("--unit-scale must be a finite positive number")
+    if args.output is None:
+        args.output = Path("extracted-field-actors" if args.field_actors_only else "extracted-models")
     manifest = extract_models(
         args.discs, args.output, args.unit_scale,
         lit_materials=args.lit_materials,
         generate_missing_normals=args.generate_missing_normals,
+        only_field_actors=args.field_actors_only,
     )
     print(
         f"Extracted {manifest['summary']['by_kind'].get('model', 0)} unique models, "
         f"{manifest['summary']['by_kind'].get('skeleton', 0)} skeletons, and "
-        f"{manifest['summary']['by_kind'].get('animation_clip', 0) + manifest['summary']['by_kind'].get('animation_container', 0)} "
+        f"{sum(manifest['summary']['by_kind'].get(kind, 0) for kind in ('animation_clip', 'animation_container', 'actor_animation'))} "
         f"animation resources from {manifest['summary']['occurrences']} occurrences."
     )
     print(f"Model catalog: {args.output / manifest['catalog']['path']}")
