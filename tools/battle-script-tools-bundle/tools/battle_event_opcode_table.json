@@ -1,0 +1,465 @@
+{
+  "schema": "xenogears-battle-event-opcodes/v1",
+  "source": [
+    "docs/xenogears/battle/07-battle-event-vm.md"
+  ],
+  "dispatch_range": "0x00..0x4B",
+  "opcodes": {
+    "00": {
+      "bytes": "1 logical",
+      "handler": "0x801E5C1C",
+      "function": "BattleEventOpcode00EndScript",
+      "behavior": "Release current slot, reset primary slot to entry 1, and end this entity's dispatch budget."
+    },
+    "01": {
+      "bytes": "3",
+      "handler": "0x801E5CE4",
+      "function": "BattleEventOpcode01Jump",
+      "behavior": "Set the current slot PC to absolute `targetOffset:u16`."
+    },
+    "02": {
+      "bytes": "8",
+      "handler": "0x801E5D24",
+      "function": "BattleEventOpcode02JumpUnless",
+      "behavior": "Evaluate typed `leftValue` and `rightValue`; continue on true or jump to `falseTarget:u16`."
+    },
+    "03": {
+      "bytes": "3",
+      "handler": "0x801E5DCC",
+      "function": "BattleEventOpcode03StartScript",
+      "behavior": "Start `packedEntry` on `targetEntity` in a free secondary slot; poll while all seven slots are occupied."
+    },
+    "04": {
+      "bytes": "3",
+      "handler": "0x801E5EF8",
+      "function": "BattleEventOpcode04StartScriptAndWaitForEntry",
+      "behavior": "Start `packedEntry` on `targetEntity`, then wait for its current-entry acknowledgement."
+    },
+    "05": {
+      "bytes": "3",
+      "handler": "0x801E5F8C",
+      "function": "BattleEventOpcode05StartScriptAndWaitForCompletion",
+      "behavior": "Start `packedEntry` on `targetEntity`, then wait for the entry tag to leave the target."
+    },
+    "06": {
+      "bytes": "6",
+      "handler": "0x801E6084",
+      "function": "BattleEventOpcode06SetVariable",
+      "behavior": "Store typed `sourceValue` in direct `destination`; the type mask is at `+5`."
+    },
+    "07": {
+      "bytes": "3",
+      "handler": "0x801E60E8",
+      "function": "BattleEventOpcode07SetVariableTrue",
+      "behavior": "Store 1 in direct `destination`."
+    },
+    "08": {
+      "bytes": "3",
+      "handler": "0x801E6118",
+      "function": "BattleEventOpcode08SetVariableFalse",
+      "behavior": "Store 0 in direct `destination`."
+    },
+    "09": {
+      "bytes": "6",
+      "handler": "0x801E6144",
+      "function": "BattleEventOpcode09AddVariable",
+      "behavior": "Add typed `addend` to direct `destination`."
+    },
+    "0A": {
+      "bytes": "6",
+      "handler": "0x801E61B4",
+      "function": "BattleEventOpcode0ASubtractVariable",
+      "behavior": "Subtract typed `subtrahend` from direct `destination`."
+    },
+    "0B": {
+      "bytes": "6",
+      "handler": "0x801E6224",
+      "function": "BattleEventOpcode0BOrVariable",
+      "behavior": "Apply `destination |= bitMask`."
+    },
+    "0C": {
+      "bytes": "6",
+      "handler": "0x801E6294",
+      "function": "BattleEventOpcode0CClearVariableBits",
+      "behavior": "Apply `destination &= ~bitMask`."
+    },
+    "0D": {
+      "bytes": "3",
+      "handler": "0x801E6304",
+      "function": "BattleEventOpcode0DIncrementVariable",
+      "behavior": "Increment direct `destination` with 16-bit wrapping."
+    },
+    "0E": {
+      "bytes": "3",
+      "handler": "0x801E633C",
+      "function": "BattleEventOpcode0EDecrementVariable",
+      "behavior": "Decrement direct `destination` with 16-bit wrapping."
+    },
+    "0F": {
+      "bytes": "6",
+      "handler": "0x801E6374",
+      "function": "BattleEventOpcode0FAndVariable",
+      "behavior": "Apply `destination &= bitMask`."
+    },
+    "10": {
+      "bytes": "6",
+      "handler": "0x801E63E4",
+      "function": "BattleEventOpcode10OrVariable",
+      "behavior": "Apply `destination |= bitMask`."
+    },
+    "11": {
+      "bytes": "6",
+      "handler": "0x801E6454",
+      "function": "BattleEventOpcode11XorVariable",
+      "behavior": "Apply `destination ^= bitMask`."
+    },
+    "12": {
+      "bytes": "5",
+      "handler": "0x801E64C4",
+      "function": "BattleEventOpcode12ShiftVariableLeft",
+      "behavior": "Shift direct `destination` left by `shiftCountVariable & 31`."
+    },
+    "13": {
+      "bytes": "5",
+      "handler": "0x801E6534",
+      "function": "BattleEventOpcode13ShiftVariableRight",
+      "behavior": "Logically shift direct `destination` right by `shiftCountVariable & 31`."
+    },
+    "14": {
+      "bytes": "3",
+      "handler": "0x801E65A4",
+      "function": "BattleEventOpcode14RandomVariable",
+      "behavior": "Store a random value in `0..0x7FFF` in direct `destination`."
+    },
+    "15": {
+      "bytes": "5",
+      "handler": "0x801E65FC",
+      "function": "BattleEventOpcode15RandomRangeVariable",
+      "behavior": "Store a random value selected with fixed `upperBound:u16` in direct `destination`."
+    },
+    "16": {
+      "bytes": "6",
+      "handler": "0x801E6660",
+      "function": "BattleEventOpcode16MultiplyVariable",
+      "behavior": "Store the low 16 bits of typed `leftValue * rightValue` in the first field's direct `destination`."
+    },
+    "17": {
+      "bytes": "6",
+      "handler": "0x801E66D8",
+      "function": "BattleEventOpcode17DivideVariable",
+      "behavior": "Store `dividend / divisor` in the first field's direct `destination`; divisor zero stores `0xFFFF`."
+    },
+    "18": {
+      "bytes": "4",
+      "handler": "0x801E71D4",
+      "function": "BattleEventOpcode18ShowDialog",
+      "behavior": "Display blocking `messageId:u16` with `dialogFlags` and the current entity's portrait."
+    },
+    "19": {
+      "bytes": "5",
+      "handler": "0x801E7230",
+      "function": "BattleEventOpcode19ShowDialogWithPortrait",
+      "behavior": "Display blocking `messageId:u16` with explicit `portraitId` and `dialogFlags`."
+    },
+    "1A": {
+      "bytes": "11",
+      "handler": "0x801E7278",
+      "function": "BattleEventOpcode1ASetDialogParameters",
+      "behavior": "Set v15 `x`, `y`, `width`, `height`, and `dialogFlags`; zero selects each geometry default."
+    },
+    "1B": {
+      "bytes": "2",
+      "handler": "0x801E7314",
+      "function": "BattleEventOpcode1BSetPortrait",
+      "behavior": "Set current entity `portraitId`; operands `F3..FF` index bytes from the resident party-ID array base, with `F3..F5` selecting the three active party IDs."
+    },
+    "1C": {
+      "bytes": "1",
+      "handler": "0x801E7358",
+      "function": "BattleEventOpcode1CEnterCutsceneMode",
+      "behavior": "Set central Battle mode `0x800C3E4C` to 2, the cutscene input path; `0x2B` waits count down only in this mode."
+    },
+    "1D": {
+      "bytes": "1",
+      "handler": "0x801E736C",
+      "function": "BattleEventOpcode1DEnterCombatMode",
+      "behavior": "Set central Battle mode `0x800C3E4C` to 1, active-time combat input and UI."
+    },
+    "1E": {
+      "bytes": "3",
+      "handler": "0x801E7380",
+      "function": "BattleEventOpcode1EFadeOut",
+      "behavior": "Call `BattleCreateFader(durationFrames, 2, 255, 255, 255)`: a subtractive fader toward white, which darkens the screen to black."
+    },
+    "1F": {
+      "bytes": "3",
+      "handler": "0x801E73D4",
+      "function": "BattleEventOpcode1FFadeIn",
+      "behavior": "Call `BattleCreateFader(durationFrames, 2, 0, 0, 0)`: return the subtractive fader to zero, restoring the screen; the fader then removes itself."
+    },
+    "20": {
+      "bytes": "1",
+      "handler": "0x801E746C",
+      "function": "BattleEventOpcode20StopForFinalHandoff",
+      "behavior": "Allow the final Event handoff and stop the Event VM; central combat continues until a result or cancellation is set."
+    },
+    "21": {
+      "bytes": "1",
+      "handler": "0x801E748C",
+      "function": "BattleEventOpcode21SetSilentResult",
+      "behavior": "Set the resident flag that selects silent Result presentation; reward and progression gates remain unchanged."
+    },
+    "22": {
+      "bytes": "1",
+      "handler": "0x801E74A0",
+      "function": "BattleEventOpcode22YieldToBattle",
+      "behavior": "Set pass-control state to 2 so update returns to Battle after this pass; the Event continues on its next update."
+    },
+    "23": {
+      "bytes": "7",
+      "handler": "0x801E74E0",
+      "function": "BattleEventOpcode23PlayMechaAnimationAndWait",
+      "behavior": "Call `BattleStartEventControlledMechaAnimation` for mecha slot `actorAlias - 0xF3`, target mask `1 << ((targetAlias + 0x0D) & 0xFF)`, and v15 `animationId`; poll entity `+0x34` (`0 -> 2 -> 1 -> 0`) until the animation end command marks it complete, then release animation resources."
+    },
+    "24": {
+      "bytes": "5",
+      "handler": "0x801E7700",
+      "function": "BattleEventOpcode24QueueNextBattle",
+      "behavior": "Store `formation + 1` in continuation request `0x8005947C` and `transitionEffect` in `0x8005954C`; after this Battle the resident dispatcher starts Battle again with that formation."
+    },
+    "25": {
+      "bytes": "1",
+      "handler": "0x801E775C",
+      "function": "BattleEventOpcode25ContinueOnDefeat",
+      "behavior": "Set request `0x800C3D5C`; on a defeat result (bit `0x80` set, bit `0x40` clear) with Battle Event enabled, central Battle selects exit mode 3 and rewrites the result to `0x01`."
+    },
+    "26": {
+      "bytes": "9",
+      "handler": "0x801E7770",
+      "function": "BattleEventOpcode26SetFieldReturn",
+      "behavior": "Commit v15 `returnFieldId`, `cameraYaw`, `worldMapPositionId`, and `worldMapMode`."
+    },
+    "27": {
+      "bytes": "9",
+      "handler": "0x801E77E4",
+      "function": "BattleEventOpcode27PlayMovie",
+      "behavior": "Set v15 `movieType | 0x80`, `movieNumber`, `fadeParameter`, and `completionValue`, then select return mode 1."
+    },
+    "28": {
+      "bytes": "6",
+      "handler": "0x801E786C",
+      "function": "BattleEventOpcode28CreateFader",
+      "behavior": "Call `BattleCreateFader(duration, mode, red, green, blue)` from five encoded bytes."
+    },
+    "29": {
+      "bytes": "9",
+      "handler": "0x801E78A8",
+      "function": "BattleEventOpcode29SetCameraTarget",
+      "behavior": "Pass v15 `targetX`, `targetY`, `targetZ`, and `transitionFrames` to `BattleSetEventCameraTarget`."
+    },
+    "2A": {
+      "bytes": "5",
+      "handler": "0x801E79E0",
+      "function": "BattleEventOpcode2APlaySpriteAnimation",
+      "behavior": "Apply v15 `animationId` to the Event sprite selected by `spriteEntityAlias`."
+    },
+    "2B": {
+      "bytes": "3",
+      "handler": "0x801E7B58",
+      "function": "BattleEventOpcode2BWait",
+      "behavior": "Initialize the entity timer to `waitUnits * 2` and poll until frame updates reach zero."
+    },
+    "2C": {
+      "bytes": "3",
+      "handler": "0x801E7C0C",
+      "function": "BattleEventOpcode2CSetPriority",
+      "behavior": "Store signed `priority`; `-2` moves the entity to queue front."
+    },
+    "2D": {
+      "bytes": "3",
+      "handler": "0x801E7E14",
+      "function": "BattleEventOpcode2DLoadMusic",
+      "behavior": "Load v15 `musicId` with initial volume `0x7F`."
+    },
+    "2E": {
+      "bytes": "3",
+      "handler": "0x801E7E5C",
+      "function": "BattleEventOpcode2ELoadMusicMuted",
+      "behavior": "Load v15 `musicId` with initial volume zero."
+    },
+    "2F": {
+      "bytes": "5",
+      "handler": "0x801E7EA4",
+      "function": "BattleEventOpcode2FSetLoadedMusicVolume",
+      "behavior": "Set v15 `volume` over `transitionFrames` and save `volume` for restoration."
+    },
+    "30": {
+      "bytes": "3",
+      "handler": "0x801E7F08",
+      "function": "BattleEventOpcode30SetLoadedMusicMuted",
+      "behavior": "Apply loaded-music `muted`: zero restores saved volume; nonzero sets volume to zero immediately."
+    },
+    "31": {
+      "bytes": "9",
+      "handler": "0x801E7F70",
+      "function": "BattleEventOpcode31PlaySoundEffect",
+      "behavior": "Play v15 `effectId` with `volume`, `pan`, and `bankSelector` (`0` Event bank, nonzero resident bank)."
+    },
+    "32": {
+      "bytes": "1",
+      "handler": "0x801E8074",
+      "function": "BattleEventOpcode32NoOperation",
+      "behavior": "Intentional advancing no-op."
+    },
+    "33": {
+      "bytes": "1",
+      "handler": "0x801E807C",
+      "function": "BattleEventOpcode33StopLoadedMusic",
+      "behavior": "Stop and free the Event-loaded music instance if active."
+    },
+    "34": {
+      "bytes": "1",
+      "handler": "0x801E80E8",
+      "function": "BattleEventOpcode34NoOperation",
+      "behavior": "Second intentional advancing no-op."
+    },
+    "35": {
+      "bytes": "5",
+      "handler": "0x801E7914",
+      "function": "BattleEventOpcode35CreateSprite",
+      "behavior": "Decompress file-3 `resourceIndex` and create the `spriteEntityAlias` sprite at the origin when its alive flag is clear."
+    },
+    "36": {
+      "bytes": "3",
+      "handler": "0x801E7B08",
+      "function": "BattleEventOpcode36DestroySprite",
+      "behavior": "Destroy the `spriteEntityAlias` sprite and free its bundle."
+    },
+    "37": {
+      "bytes": "1",
+      "handler": "0x801E74B8",
+      "function": "BattleEventOpcode37EndBattleSuccessfully",
+      "behavior": "Set result `0x01`, set cancellation byte `0x800D2FC4`, and stop the Event VM."
+    },
+    "38": {
+      "bytes": "7",
+      "handler": "0x801E75F0",
+      "function": "BattleEventOpcode38PlayMechaAnimation",
+      "behavior": "Start v15 `animationId` for Event entity `actorAlias - 0xF3` against resident target mask `1 << ((targetAlias + 0x0D) & 0xFF)`."
+    },
+    "39": {
+      "bytes": "1",
+      "handler": "0x801E80F0",
+      "function": "BattleEventOpcode39TransformPartyLeaderToGear",
+      "behavior": "Assign Gear ID 0 to party slot 0's live and persistent records, clear leader action state, relocate the slot to its Gear visual actor, release the character actor, and select Gear mode, command ring, HUD, status, and UI-refresh state."
+    },
+    "3A": {
+      "bytes": "5",
+      "handler": "0x801E818C",
+      "function": "BattleEventOpcode3APlayCharacterAnimation",
+      "behavior": "Resolve `characterId` and start v15 `animationId` on its sprite through `SpriteStartAnimationById`; negative IDs first prepare special animation data."
+    },
+    "3B": {
+      "bytes": "3",
+      "handler": "0x801E81EC",
+      "function": "BattleEventOpcode3BRestartCharacterAnimation",
+      "behavior": "Resolve `characterId` and start its sprite's current animation (`+0xAF`) again."
+    },
+    "3C": {
+      "bytes": "3",
+      "handler": "0x801E823C",
+      "function": "BattleEventOpcode3CResetCharacterFrame",
+      "behavior": "Resolve `characterId` and clear the sprite's frame timer `+0x34`, sync counter `+0x9E`, and decoded tile count (bits 2..7 of `+0x40`) so its frame is decoded again."
+    },
+    "3D": {
+      "bytes": "3",
+      "handler": "0x801E828C",
+      "function": "BattleEventOpcode3DClearAnimationSyncCounter",
+      "behavior": "Resolve `characterId` and clear the sprite actor's animation-script synchronization counter at `+0x9E`."
+    },
+    "3E": {
+      "bytes": "9",
+      "handler": "0x801E82DC",
+      "function": "BattleEventOpcode3EMoveEntity",
+      "behavior": "Start linear movement of `characterId` to v15 `targetX`, `targetY`, `targetZ`, then poll completion."
+    },
+    "3F": {
+      "bytes": "9",
+      "handler": "0x801E83C0",
+      "function": "BattleEventOpcode3FMoveEntityAlternate",
+      "behavior": "Start eased movement of `characterId` to v15 `targetX`, `targetY`, `targetZ`, then poll completion."
+    },
+    "40": {
+      "bytes": "3",
+      "handler": "0x801E7B2C",
+      "function": "BattleEventOpcode40DestroySpriteAndReset",
+      "behavior": "Destroy the `spriteEntityAlias` sprite and reset camera/disposal state."
+    },
+    "41": {
+      "bytes": "7",
+      "handler": "0x801E7FF4",
+      "function": "BattleEventOpcode41SetSoundEffectVolume",
+      "behavior": "Set the volume of playing instances of v15 `effectId` to `volume`, with `bankSelector` (`0` Event bank, nonzero resident bank) selecting the effect ID's bank."
+    },
+    "42": {
+      "bytes": "1",
+      "handler": "0x801E86D0",
+      "function": "BattleEventOpcode42InitializeGearTurnUi",
+      "behavior": "Call `BattleInitializeGearTurnUi(0)`."
+    },
+    "43": {
+      "bytes": "1",
+      "handler": "0x801E86F4",
+      "function": "BattleEventOpcode43FreeTurnRenderWorkspace",
+      "behavior": "Call `BattleFreeTurnRenderWorkspace(0)`."
+    },
+    "44": {
+      "bytes": "1",
+      "handler": "0x801E8718",
+      "function": "BattleEventOpcode44ClearMechaEventFlags",
+      "behavior": "Clear the Event-controlled animation flag `+0x35` of the eleven mecha slots at `0x800D3368`."
+    },
+    "45": {
+      "bytes": "9",
+      "handler": "0x801E84A4",
+      "function": "BattleEventOpcode45LoadCharacterSprite",
+      "behavior": "Resolve `destinationCharacterId` and `sourceCharacterId`, set `sourceSpriteMode`, asynchronously replace the destination sprite, start `animationId`, and poll completion."
+    },
+    "46": {
+      "bytes": "7",
+      "handler": "0x801E8600",
+      "function": "BattleEventOpcode46SwapCharacterSprite",
+      "behavior": "Prepare `destinationCharacterId` with `swapEffectId`, then commit the state swap with `sourceCharacterId`."
+    },
+    "47": {
+      "bytes": "1",
+      "handler": "0x801E86AC",
+      "function": "BattleEventOpcode47ClearAnimationData",
+      "behavior": "Call `BattleClearAnimationData` to finish disc transfer and release temporary animation resources."
+    },
+    "48": {
+      "bytes": "5",
+      "handler": "0x801E8750",
+      "function": "BattleEventOpcode48PlayIndexedAudioClipBlocking",
+      "behavior": "Play `clipGroup` and `clipIndex` through `BattlePlayIndexedAudioClipBlocking`."
+    },
+    "49": {
+      "bytes": "3",
+      "handler": "0x801E7424",
+      "function": "BattleEventOpcode49SetReturnMode",
+      "behavior": "Set v15 `fieldReturnMode`."
+    },
+    "4A": {
+      "bytes": "1",
+      "handler": "0x801E7660",
+      "function": "BattleEventOpcode4AActivateSlot0GearHyper",
+      "behavior": "Call `BattleActivateGearHyperMode(0)` to set slot 0 AL to `4`, duration to `3`, and character 0's persistent Gear-special availability bit `0x4000`."
+    },
+    "4B": {
+      "bytes": "3",
+      "handler": "0x801E7684",
+      "function": "BattleEventOpcode4BSuppressCriticalPose",
+      "behavior": "Resolve `characterId` and set combatant flag `+0x36` bit 0, which keeps the mecha out of its critical-HP idle pose."
+    }
+  }
+}
