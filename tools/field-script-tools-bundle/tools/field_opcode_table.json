@@ -1082,14 +1082,14 @@
     "B3": {
       "bytes": "3",
       "handler": "0x8009731C",
-      "name": "FadeOut",
-      "behavior": "starts a script fade-out."
+      "name": "FadeIn",
+      "behavior": "rebuilds the fade packets and returns the subtractive Field fade from 255 to zero over the duration, restoring the screen; skipped unless the screen is faded out."
     },
     "B4": {
       "bytes": "3",
       "handler": "0x80097364",
-      "name": "FadeIn",
-      "behavior": "starts a script fade-in."
+      "name": "FadeOut",
+      "behavior": "raises the subtractive Field fade from zero to 255 over the duration, darkening the screen to black and marking it faded out; skipped when it already is."
     },
     "B5": {
       "bytes": "5",

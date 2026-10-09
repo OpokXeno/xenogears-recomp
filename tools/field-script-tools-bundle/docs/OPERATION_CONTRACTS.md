@@ -2572,24 +2572,24 @@ Handler: `0x8009A5E0`; encoded length: 2 byte(s).
 **Inputs:**
 - `camera_animation_mask` (byte +1): primary handler 0x8009A5E0 operand: camera animation mask; encoded byte (0..255); may be a subfield of a larger value.
 
-### `B3` — `FadeOut`
+### `B3` — `FadeIn`
 
 Handler: `0x8009731C`; encoded length: 3 byte(s).
 
-**Effect:** starts a script fade-out.
+**Effect:** rebuilds the fade packets and returns the subtractive Field fade from 255 to zero over the duration, restoring the screen; skipped unless the screen is faded out.
 
-**XGS form:** `visual.fade_out(<fade_duration>);`
+**XGS form:** `visual.fade_in(<fade_duration>);`
 
 **Inputs:**
 - `fade_duration` (byte +1): primary handler 0x8009731C operand: fade duration; 0..32767 immediate or declared VM variable; word bit 15 selects immediate.
 
-### `B4` — `FadeIn`
+### `B4` — `FadeOut`
 
 Handler: `0x80097364`; encoded length: 3 byte(s).
 
-**Effect:** starts a script fade-in.
+**Effect:** raises the subtractive Field fade from zero to 255 over the duration, darkening the screen to black and marking it faded out; skipped when it already is.
 
-**XGS form:** `visual.fade_in(<fade_duration>);`
+**XGS form:** `visual.fade_out(<fade_duration>);`
 
 **Inputs:**
 - `fade_duration` (byte +1): primary handler 0x80097364 operand: fade duration; 0..32767 immediate or declared VM variable; word bit 15 selects immediate.

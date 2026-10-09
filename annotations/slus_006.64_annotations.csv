@@ -73,7 +73,7 @@
 0x80033B34, SystemDecodeStringCodes — maps input codes through system-data table 0x1B, emits one or two bytes per code, and NUL-terminates the destination.
 0x80039F18, SoundPlayEffect — starts a packed sound-effect ID with explicit volume and pan.
 0x8003A14C, SoundStopEffectById — stops active sound-effect instances matching a packed effect ID.
-0x8003A2E4, SoundEffectSetPanById — updates pan for active sound-effect events matching a packed ID and marks pan state dirty.
+0x8003A2E4, SoundEffectSetVolumeById — updates volume for active sound-effect events matching a packed ID and marks their voice volumes dirty.
 0x8003A89C, SoundInstanceSetVolumeFade — sets an audio instance target volume immediately or over a timed fade and resumes it when required.
 0x8003E290, SoundComputeLfoStep — conditionally scales a signed LFO step from duration and mode parameters.
 0x8003E3E0, SoundLfoRestart — restores configured LFO phase/step state, clears its accumulator, and marks it active.

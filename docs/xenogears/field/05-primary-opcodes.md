@@ -185,8 +185,8 @@ The byte at the active PC directly selects one of these 256 entries.
 | `B0` | 4 | `0x80090CB8` | `ReadOrWriteCameraDip` | writes the captured projection dip to a variable when the control byte is zero or replaces it from the operand otherwise, then advances four bytes. |
 | `B1` | 4 | `0x80090D50` | `ReadOrWriteCameraDepth` | writes the captured scaled projection depth to a variable when the control byte is zero or replaces it with the unsigned operand otherwise, then advances four bytes. |
 | `B2` | 2 | `0x8009A5E0` | `YieldUntilCameraAnimationMaskClears` | yields script execution while any camera animation flag selected by the immediate mask remains set. |
-| `B3` | 3 | `0x8009731C` | `FadeOut` | starts a script fade-out. |
-| `B4` | 3 | `0x80097364` | `FadeIn` | starts a script fade-in. |
+| `B3` | 3 | `0x8009731C` | `FadeIn` | rebuilds the fade packets and returns the subtractive Field fade from 255 to zero over the duration, restoring the screen; skipped unless the screen is faded out. |
+| `B4` | 3 | `0x80097364` | `FadeOut` | raises the subtractive Field fade from zero to 255 over the duration, darkening the screen to black and marking it faded out; skipped when it already is. |
 | `B5` | 5 | `0x8009B8E4` | `SetCameraDirectionTimed` | snaps the camera direction when interpolation is disabled, otherwise waits for an active rotation or starts a timed direction change, then advances five bytes and yields. |
 | `B6` | 5 | `0x8009B6AC` | `InterpolateProjectionDepth` | applies or interpolates projection depth to the scripted value over the scripted duration. |
 | `B7` | 1 | `0x8009ADDC` | `DisableCameraHeightCheck` | disables automatic camera height checking and advances the script. |

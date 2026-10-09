@@ -210,11 +210,13 @@ Portrait opcode `0x1B` remaps every operand in `0xF3..0xFF` by reading byte
 therefore select the three current party character IDs; `0xF6..0xFF` read the
 resident bytes immediately following that three-byte array.
 
-Event sprite and mecha actor aliases use `value - 0xF3` to select an Event
-entity. Mecha target aliases use a separate Battle-combatant space:
-`(value + 0x0D) & 0xFF` becomes the bit index in a resident combatant mask.
-Thus `0xF3`, `0xF4`, and `0xF5` select resident combatant bits 0, 1, and 2 as
-mecha targets rather than Event entities.
+Event sprite aliases use `value - 0xF3` to select the Event entity that owns
+the sprite. Mecha opcodes `0x23` and `0x38` use the Battle-combatant space for
+both operands: the actor `value - 0xF3` indexes the mecha slot array at
+`0x800D3368`, and the target `(value + 0x0D) & 0xFF` becomes the bit index in a
+resident combatant mask. Thus `0xF3`, `0xF4`, and `0xF5` are party combatants 0,
+1, and 2. `0x23` records completion in the Event entity with the same index as
+the actor slot.
 
 ## 9. Variable And Operand Encoding
 
@@ -375,16 +377,16 @@ Every value `0x00..0x4B` has a dispatch entry.
 | `19` | 5 | `0x801E7230` | `BattleEventOpcode19ShowDialogWithPortrait` | Display blocking `messageId:u16` with explicit `portraitId` and `dialogFlags`. |
 | `1A` | 11 | `0x801E7278` | `BattleEventOpcode1ASetDialogParameters` | Set v15 `x`, `y`, `width`, `height`, and `dialogFlags`; zero selects each geometry default. |
 | `1B` | 2 | `0x801E7314` | `BattleEventOpcode1BSetPortrait` | Set current entity `portraitId`; operands `F3..FF` index bytes from the resident party-ID array base, with `F3..F5` selecting the three active party IDs. |
-| `1C` | 1 | `0x801E7358` | `BattleEventOpcode1CSetCameraMode2` | Set central Battle mode to 2. |
-| `1D` | 1 | `0x801E736C` | `BattleEventOpcode1DSetCameraMode1` | Set central Battle mode to 1. |
-| `1E` | 3 | `0x801E7380` | `BattleEventOpcode1EFadeToWhite` | Create or retarget a white Battle fader for v15 `durationFrames`. |
-| `1F` | 3 | `0x801E73D4` | `BattleEventOpcode1FFadeToBlack` | Create or retarget a black Battle fader for v15 `durationFrames`. |
+| `1C` | 1 | `0x801E7358` | `BattleEventOpcode1CEnterCutsceneMode` | Set central Battle mode `0x800C3E4C` to 2, the cutscene input path; `0x2B` waits count down only in this mode. |
+| `1D` | 1 | `0x801E736C` | `BattleEventOpcode1DEnterCombatMode` | Set central Battle mode `0x800C3E4C` to 1, active-time combat input and UI. |
+| `1E` | 3 | `0x801E7380` | `BattleEventOpcode1EFadeOut` | Call `BattleCreateFader(durationFrames, 2, 255, 255, 255)`: a subtractive fader toward white, which darkens the screen to black. |
+| `1F` | 3 | `0x801E73D4` | `BattleEventOpcode1FFadeIn` | Call `BattleCreateFader(durationFrames, 2, 0, 0, 0)`: return the subtractive fader to zero, restoring the screen; the fader then removes itself. |
 | `20` | 1 | `0x801E746C` | `BattleEventOpcode20StopForFinalHandoff` | Allow the final Event handoff and stop the Event VM; central combat continues until a result or cancellation is set. |
 | `21` | 1 | `0x801E748C` | `BattleEventOpcode21SetSilentResult` | Set the resident flag that selects silent Result presentation; reward and progression gates remain unchanged. |
-| `22` | 1 | `0x801E74A0` | `BattleEventOpcode22PauseEvent` | Set pass-control state to 2 so update returns after this pass. |
-| `23` | 7 | `0x801E74E0` | `BattleEventOpcode23SetupMecha` | Start asynchronous setup for Event entity `actorAlias - 0xF3`, resident target mask `1 << ((targetAlias + 0x0D) & 0xFF)`, and v15 `animationId`; poll state `0 -> 2 -> 1 -> 0`. |
-| `24` | 5 | `0x801E7700` | `BattleEventOpcode24SetBattleTransition` | Set `battleInitializationMode + 1` and `transitionEffect`. |
-| `25` | 1 | `0x801E775C` | `BattleEventOpcode25SetExitMode3Request` | Set the resident exit-mode request flag; central Battle selects mode 3 when result bit `0x80` is set, bit `0x40` is clear, and Battle Event is enabled. |
+| `22` | 1 | `0x801E74A0` | `BattleEventOpcode22YieldToBattle` | Set pass-control state to 2 so update returns to Battle after this pass; the Event continues on its next update. |
+| `23` | 7 | `0x801E74E0` | `BattleEventOpcode23PlayMechaAnimationAndWait` | Call `BattleStartEventControlledMechaAnimation` for mecha slot `actorAlias - 0xF3`, target mask `1 << ((targetAlias + 0x0D) & 0xFF)`, and v15 `animationId`; poll entity `+0x34` (`0 -> 2 -> 1 -> 0`) until the animation end command marks it complete, then release animation resources. |
+| `24` | 5 | `0x801E7700` | `BattleEventOpcode24QueueNextBattle` | Store `formation + 1` in continuation request `0x8005947C` and `transitionEffect` in `0x8005954C`; after this Battle the resident dispatcher starts Battle again with that formation. |
+| `25` | 1 | `0x801E775C` | `BattleEventOpcode25ContinueOnDefeat` | Set request `0x800C3D5C`; on a defeat result (bit `0x80` set, bit `0x40` clear) with Battle Event enabled, central Battle selects exit mode 3 and rewrites the result to `0x01`. |
 | `26` | 9 | `0x801E7770` | `BattleEventOpcode26SetFieldReturn` | Commit v15 `returnFieldId`, `cameraYaw`, `worldMapPositionId`, and `worldMapMode`. |
 | `27` | 9 | `0x801E77E4` | `BattleEventOpcode27PlayMovie` | Set v15 `movieType \| 0x80`, `movieNumber`, `fadeParameter`, and `completionValue`, then select return mode 1. |
 | `28` | 6 | `0x801E786C` | `BattleEventOpcode28CreateFader` | Call `BattleCreateFader(duration, mode, red, green, blue)` from five encoded bytes. |
@@ -405,24 +407,24 @@ Every value `0x00..0x4B` has a dispatch entry.
 | `37` | 1 | `0x801E74B8` | `BattleEventOpcode37EndBattleSuccessfully` | Set result `0x01`, set cancellation byte `0x800D2FC4`, and stop the Event VM. |
 | `38` | 7 | `0x801E75F0` | `BattleEventOpcode38PlayMechaAnimation` | Start v15 `animationId` for Event entity `actorAlias - 0xF3` against resident target mask `1 << ((targetAlias + 0x0D) & 0xFF)`. |
 | `39` | 1 | `0x801E80F0` | `BattleEventOpcode39TransformPartyLeaderToGear` | Assign Gear ID 0 to party slot 0's live and persistent records, clear leader action state, relocate the slot to its Gear visual actor, release the character actor, and select Gear mode, command ring, HUD, status, and UI-refresh state. |
-| `3A` | 5 | `0x801E818C` | `BattleEventOpcode3ASetEntityCameraAnimation` | Resolve `characterId` and bind v15 `cameraAnimationId` to its sprite. |
-| `3B` | 3 | `0x801E81EC` | `BattleEventOpcode3BHideEntity` | Resolve `characterId` and apply the sprite's stashed idle animation. |
-| `3C` | 3 | `0x801E823C` | `BattleEventOpcode3CShowEntity` | Resolve `characterId`, reset sprite frame/wait state, and clear hidden render bits. |
+| `3A` | 5 | `0x801E818C` | `BattleEventOpcode3APlayCharacterAnimation` | Resolve `characterId` and start v15 `animationId` on its sprite through `SpriteStartAnimationById`; negative IDs first prepare special animation data. |
+| `3B` | 3 | `0x801E81EC` | `BattleEventOpcode3BRestartCharacterAnimation` | Resolve `characterId` and start its sprite's current animation (`+0xAF`) again. |
+| `3C` | 3 | `0x801E823C` | `BattleEventOpcode3CResetCharacterFrame` | Resolve `characterId` and clear the sprite's frame timer `+0x34`, sync counter `+0x9E`, and decoded tile count (bits 2..7 of `+0x40`) so its frame is decoded again. |
 | `3D` | 3 | `0x801E828C` | `BattleEventOpcode3DClearAnimationSyncCounter` | Resolve `characterId` and clear the sprite actor's animation-script synchronization counter at `+0x9E`. |
 | `3E` | 9 | `0x801E82DC` | `BattleEventOpcode3EMoveEntity` | Start linear movement of `characterId` to v15 `targetX`, `targetY`, `targetZ`, then poll completion. |
 | `3F` | 9 | `0x801E83C0` | `BattleEventOpcode3FMoveEntityAlternate` | Start eased movement of `characterId` to v15 `targetX`, `targetY`, `targetZ`, then poll completion. |
 | `40` | 3 | `0x801E7B2C` | `BattleEventOpcode40DestroySpriteAndReset` | Destroy the `spriteEntityAlias` sprite and reset camera/disposal state. |
-| `41` | 7 | `0x801E7FF4` | `BattleEventOpcode41PlaySequenceEntry` | Play v15 `sequenceId` at `volume` from `bankSelector` (`0` Event bank, nonzero resident bank). |
+| `41` | 7 | `0x801E7FF4` | `BattleEventOpcode41SetSoundEffectVolume` | Set the volume of playing instances of v15 `effectId` to `volume`, with `bankSelector` (`0` Event bank, nonzero resident bank) selecting the effect ID's bank. |
 | `42` | 1 | `0x801E86D0` | `BattleEventOpcode42InitializeGearTurnUi` | Call `BattleInitializeGearTurnUi(0)`. |
 | `43` | 1 | `0x801E86F4` | `BattleEventOpcode43FreeTurnRenderWorkspace` | Call `BattleFreeTurnRenderWorkspace(0)`. |
-| `44` | 1 | `0x801E8718` | `BattleEventOpcode44ClearResidentSpriteAliveFlags` | Clear the alive flag on each of the eleven resident sprite tasks. |
-| `45` | 9 | `0x801E84A4` | `BattleEventOpcode45LoadCharacterSprite` | Resolve `destinationCharacterId` and `sourceCharacterId`, set `sourceSpriteMode`, asynchronously replace the destination sprite, bind `cameraAnimationId`, and poll completion. |
+| `44` | 1 | `0x801E8718` | `BattleEventOpcode44ClearMechaEventFlags` | Clear the Event-controlled animation flag `+0x35` of the eleven mecha slots at `0x800D3368`. |
+| `45` | 9 | `0x801E84A4` | `BattleEventOpcode45LoadCharacterSprite` | Resolve `destinationCharacterId` and `sourceCharacterId`, set `sourceSpriteMode`, asynchronously replace the destination sprite, start `animationId`, and poll completion. |
 | `46` | 7 | `0x801E8600` | `BattleEventOpcode46SwapCharacterSprite` | Prepare `destinationCharacterId` with `swapEffectId`, then commit the state swap with `sourceCharacterId`. |
 | `47` | 1 | `0x801E86AC` | `BattleEventOpcode47ClearAnimationData` | Call `BattleClearAnimationData` to finish disc transfer and release temporary animation resources. |
 | `48` | 5 | `0x801E8750` | `BattleEventOpcode48PlayIndexedAudioClipBlocking` | Play `clipGroup` and `clipIndex` through `BattlePlayIndexedAudioClipBlocking`. |
 | `49` | 3 | `0x801E7424` | `BattleEventOpcode49SetReturnMode` | Set v15 `fieldReturnMode`. |
 | `4A` | 1 | `0x801E7660` | `BattleEventOpcode4AActivateSlot0GearHyper` | Call `BattleActivateGearHyperMode(0)` to set slot 0 AL to `4`, duration to `3`, and character 0's persistent Gear-special availability bit `0x4000`. |
-| `4B` | 3 | `0x801E7684` | `BattleEventOpcode4BMarkCharacterDead` | Resolve `characterId` and set the low death/status bit in its combat state. |
+| `4B` | 3 | `0x801E7684` | `BattleEventOpcode4BSuppressCriticalPose` | Resolve `characterId` and set combatant flag `+0x36` bit 0, which keeps the mecha out of its critical-HP idle pose. |
 
 Opcodes above `0x4B` skip handler dispatch and apply the stale `s0` delta through
 the common PC-update path.
@@ -436,7 +438,7 @@ Zero-return polling is used by:
 | `03` | A free secondary slot becomes available. |
 | `04`, `05` | Target entity slot/tag state changes. |
 | `18`, `19` | Dialogue state machine closes and tears down. |
-| `23` | Mecha setup callback changes entity `+0x34` from 2 to 1. |
+| `23` | The mecha animation end command calls `BattleMarkEventMechaCommandComplete` (`0x80080C6C`), which changes entity `+0x34` from 2 to 1. |
 | `2B` | Central Battle input mode 2 decrements entity `+0x26` while graphics-control byte `+0x56` is nonzero. |
 | `3E`, `3F` | Sprite move callback clears per-entity async byte `+0x804`. |
 | `45` | Character sprite replacement callback clears the same async byte. |
@@ -497,8 +499,9 @@ the new sequence, records ID/volume, and creates a sound instance. `0x2F`
 sets its volume over a transition period, `0x30` mutes or restores the saved
 volume immediately, and `0x33` stops and frees it.
 
-`0x31` and `0x41` can select between the Event sequence bank and resident Battle
-sequence state. `0x48` synchronously loads and plays an indexed audio clip
+`0x31` plays a sound effect and `0x41` changes the volume of an effect already
+playing; both select between the Event sequence bank and the resident Battle
+bank. `0x48` synchronously loads and plays an indexed audio clip
 through `BattlePlayIndexedAudioClipBlocking`, rendering during load/playback and
 releasing temporary resources afterward.
 
@@ -514,8 +517,8 @@ entity +0x35 -> alive flag
 
 `0x35` creates only when the alive flag is clear. `0x36` and `0x40` unregister
 callbacks, free the task and bundle, and clear ownership; `0x40` additionally
-resets camera/disposal state. `0x44` clears the resident alive bytes while
-retaining the tasks and bundles.
+resets camera/disposal state. `0x44` clears the Event-controlled animation
+flag of the resident mecha slots; it does not touch Event-created sprites.
 
 Visual manipulation opcodes `0x3A..0x3F` resolve a character ID to one of the
 eleven Battle visual slots. Movement opcodes set an asynchronous flag, start a
@@ -524,9 +527,9 @@ that flag. The normal and alternate helpers use different interpolation paths;
 the script-visible distinction is linear versus eased movement.
 
 `0x29` passes a signed XYZ target plus `transitionFrames` to
-`BattleSetEventCameraTarget` (`0x800B3658`). `0x3A` changes a sprite-bound camera
-animation. Camera effects use central Battle camera state and sprite animation
-callbacks.
+`BattleSetEventCameraTarget` (`0x800B3658`). `0x23` hands the camera to the
+mecha animation while it plays; `0x38` starts its animation without Event camera
+control.
 
 ## 17. Battle And Module Lifecycle
 
@@ -542,9 +545,12 @@ central entry points are:
 `BattleMain` calls Event update once immediately after load. Event bytecode can
 then:
 
-- Configure transition and return state with `0x24`, `0x26`, and `0x49`.
+- Queue a follow-up battle with `0x24` and configure return state with `0x26`
+  and `0x49`.
+- Turn a party defeat into an Event victory with `0x25`.
+- Switch central Battle between cutscene and combat modes with `0x1C` and `0x1D`.
 - End or skip combat successfully with `0x37`.
-- Pause an Event phase with `0x22`.
+- Return control to Battle after the current pass with `0x22`.
 - Stop Event execution and permit the final Event handoff with `0x20`.
 - Enter movie mode with `0x27`.
 
@@ -595,7 +601,7 @@ clear and the resident music state requests playback.
 | `0x801E7DE4` | `BattleEventSetLoadedMusicVolume` |
 | `0x801E879C` | `BattleEventUpdate` |
 | `0x801E93E8` | `BattleEventSpriteAnimationComplete` |
-| `0x801E9430` | `BattleEventSetSpriteCameraAnimation` |
+| `0x801E9430` | `BattleEventStartCharacterAnimation` |
 | `0x801E95E4` | `BattleEventStartSpriteMove` |
 | `0x801E9694` | `BattleEventStartSpriteMoveAlternate` |
 | `0x801E9894` | `BattleEventStartCharacterSpriteLoad` |

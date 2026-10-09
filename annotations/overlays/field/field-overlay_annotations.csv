@@ -34,9 +34,9 @@
 0x80071D08, function start — ConfigureFadeTransition; configures Field fade parameters.
 0x80071D40, function start — FieldFadeParametersContinueGreenBlue; continues fade setup by deriving green and blue per-frame deltas, recording duration and mode, activating the fade, and committing all color deltas.
 0x80071D4C, function start — FieldFadeParametersContinueGreenDivision; continues fade setup at the green-delta division, then derives the blue delta and commits duration, mode, activation, and all color deltas.
-0x80071DCC, function start — BeginWhiteFade; starts a white Field fade.
-0x80071E58, function start — BeginBlackFade; starts a black Field fade.
-0x80071EC4, function start — FieldFadeToBlackContinueCommit; continues black-fade setup by selecting fade mode two and assigning the prepared negative delta to red, green, and blue.
+0x80071DCC, function start — BeginFieldFadeOut; when the screen is not faded out, marks it faded and raises the subtractive (mode 2) fade colour from 0 to 255, darkening the screen to black.
+0x80071E58, function start — BeginFieldFadeIn; when the screen is faded out, clears the mark and lowers the subtractive (mode 2) fade colour from 255 to 0, restoring the screen.
+0x80071EC4, function start — FieldFadeInContinueCommit; continues fade-in setup by selecting subtractive mode two and assigning the prepared negative delta to red, green, and blue.
 0x80071EE8, function start — InitializeFieldInputDevices; initializes Field input devices.
 0x80071F64, function start — SetFieldClipRectangle; configures the Field draw clip.
 0x80071FB0, function start — PrepareFieldRenderContexts; initializes Field render contexts.
@@ -679,8 +679,8 @@
 0x80097264, function start — RestorePartyHealth; restores HP.
 0x800972AC, function start — RestorePartyMana; restores MP.
 0x800972F4, function start — FieldScriptYieldCurrentCycle; requests a VM yield and advances one byte.
-0x8009731C, function start — BeginSceneFadeOut; starts a script fade-out.
-0x80097364, function start — BeginSceneFadeIn; starts a script fade-in.
+0x8009731C, function start — BeginSceneFadeIn; script opcode B3: rebuilds the fade packets and starts a fade-in from black.
+0x80097364, function start — BeginSceneFadeOut; script opcode B4: starts a fade-out to black.
 0x800973A4, function start — FieldScriptWaitForArchiveFile; requests or waits for the selected archive file.
 0x80097410, function start — FieldScriptSkipScriptTriplets; advances by three plus three times the evaluated signed count.
 0x8009744C, function start — ReadPlayerFacingDirection; returns the player actor direction.
@@ -927,7 +927,7 @@
 0x800A5600, function start — FieldZoomSetNextContextColor; sets RGB on next-context zoom polygons.
 0x800A5694, instruction site — commits the authenticated Field zoom RGB update.
 0x800A56A8, function start — FieldFadeFromWhite; initializes a white fade with negative deltas.
-0x800A5710, function start — FieldFadeFromBlack; initializes a black fade with positive deltas.
+0x800A5710, function start — FieldFadeToWhite; initializes an additive (mode 1) fade whose colour rises from 0 toward white.
 0x800A5774, function start — FieldSetVramStpBits; sets bit 15 across a VRAM strip.
 0x800A5884, function start — FieldPrepareZoomFadeImage; prepares zoom packets and VRAM strips.
 0x800A5924, function start — FieldProcessScriptedTransitionRequest; services pending fade, hold, and radial mosaic transition modes, renders their frames, restores saved video memory, and clears the request.

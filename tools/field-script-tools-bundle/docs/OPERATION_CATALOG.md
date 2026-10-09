@@ -353,8 +353,8 @@ Fades, lighting, models, particles, effects, and video.
 | Opcode | Bytes | DSL form | Handler | Original function | Behavior |
 |---|---:|---|---|---|---|
 | `73` | 2 or 8 | `visual.initialize_particle_system_command(particle_parameter_1, particle_parameter_2, particle_parameter_3)` | `0x80086C34` | `InitializeParticleSystemCommand` | skips the disabled subcommand or initializes default particle banks and global particle parameters from three script arguments. |
-| `B3` | 3 | `visual.fade_out(fade_duration)` | `0x8009731C` | `FadeOut` | starts a script fade-out. |
-| `B4` | 3 | `visual.fade_in(fade_duration)` | `0x80097364` | `FadeIn` | starts a script fade-in. |
+| `B3` | 3 | `visual.fade_in(fade_duration)` | `0x8009731C` | `FadeIn` | rebuilds the fade packets and returns the subtractive Field fade from 255 to zero over the duration, restoring the screen; skipped unless the screen is faded out. |
+| `B4` | 3 | `visual.fade_out(fade_duration)` | `0x80097364` | `FadeOut` | raises the subtractive Field fade from zero to 255 over the duration, darkening the screen to black and marking it faded out; skipped when it already is. |
 | `DA` | 17 | `visual.create_line_scroll_effect(source_x, source_y, source_width, source_total_height, row_count, destination_x, destination_y, initial_scroll_byte)` | `0x800921E8` | `CreateLineScrollEffect` | allocates and fills a line-scroll byte buffer, allocates and initializes its descriptor from six geometry parameters, registers up to 32 effects, and advances seventeen bytes. |
 | `FE 1B` | 6 | `visual.adjust_current_model_red_green(red_delta, green_delta)` | `0x8008B5D4` | `AdjustCurrentModelRedGreen` | adds signed red and green deltas to every current-model vertex and mirrors the colors into the alternate render buffer. |
 | `FE 1D` | 9 | `visual.set_global_model_translation_step(x, z, y)` | `0x800984EC` | `SetGlobalModelTranslationStep` | sets the global XYZ model translation increments and enables their application. |
