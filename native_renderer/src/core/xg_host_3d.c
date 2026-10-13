@@ -529,12 +529,19 @@ int xg_host_3d_native_project(const XgHost3dProjection *projection,
         if (view[r] < -2147483648.0 || view[r] >= 2147483648.0)
             view[r] -= floor((view[r] + 2147483648.0) / 4294967296.0) * 4294967296.0;
     }
-    const double q = view[2] <= 0 ? 131071.0 / 65536.0 :
-        fmin(projection->projection_distance / fmin(view[2], 65535.0), 131071.0 / 65536.0);
+    /* All three coordinates are finite above. Direct clamps avoid repeated
+     * libm calls while retaining the same quotient and saturation limits. */
+    const double divisor = view[2] < 65535.0 ? view[2] : 65535.0;
+    double q = view[2] <= 0 ? 131071.0 / 65536.0 :
+        projection->projection_distance / divisor;
+    if (q > 131071.0 / 65536.0) q = 131071.0 / 65536.0;
+    const double vx = view[0] < -32768.0 ? -32768.0 :
+        (view[0] > 32767.0 ? 32767.0 : view[0]);
+    const double vy = view[1] < -32768.0 ? -32768.0 :
+        (view[1] > 32767.0 ? 32767.0 : view[1]);
     xy[0] = (double)projection->screen_offset_x + native_view_center_offset_x_16_16 +
-        fmax(-32768.0, fmin(view[0], 32767.0)) * q * 65536.0;
-    xy[1] = projection->screen_offset_y +
-        fmax(-32768.0, fmin(view[1], 32767.0)) * q * 65536.0;
+        vx * q * 65536.0;
+    xy[1] = projection->screen_offset_y + vy * q * 65536.0;
     for (unsigned a = 0; a < 2; ++a)
         if (!isfinite(xy[a]) || xy[a] < INT32_MIN || xy[a] > INT32_MAX) return 0;
     *out_x = (int32_t)llround(xy[0]); *out_y = (int32_t)llround(xy[1]);
