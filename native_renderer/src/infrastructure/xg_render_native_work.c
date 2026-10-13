@@ -15,6 +15,8 @@ static XgRenderNativeWorkServices g_services;
 static XgRenderSourceBuilder g_builder;
 static XgRenderSourceCommitHandle g_pending;
 static uint64_t g_epoch;
+static uint64_t g_work_epoch;
+static uint64_t g_work_cycle;
 static uint64_t g_receipt;
 static uint32_t g_scene_generation;
 static uint32_t g_operation_count;
@@ -23,23 +25,57 @@ static uint32_t g_temporal_count;
 static bool g_building;
 static bool g_sealed;
 static bool g_pending_boundary;
+static const char *g_failure_stage;
+static int g_failure_result;
+
+static bool reject_work(const char *stage, int result) {
+    if (g_failure_stage == NULL) {
+        g_failure_stage = stage;
+        g_failure_result = result;
+    }
+    return false;
+}
+
+static void clear_rejection(void) {
+    g_failure_stage = NULL;
+    g_failure_result = 0;
+}
 
 static bool lane_ready(XgRenderPresentationDiagnostics *out_diagnostics) {
     XgRenderPresentationDiagnostics diagnostics;
-    if (!xg_render_native_work_enabled()) return false;
+    if (!xg_render_native_work_enabled()) return reject_work("disabled", 0);
     xg_render_semantic_presentation_diagnostics(&diagnostics);
-    if (!diagnostics.publication_open || diagnostics.epoch_terminal ||
-        diagnostics.source_lane_blocked ||
-        (g_epoch != 0u && g_epoch != diagnostics.presentation_epoch))
-        return false;
+    if (!diagnostics.publication_open) return reject_work("publication-closed", 0);
+    if (diagnostics.epoch_terminal) return reject_work("epoch-exhausted", 0);
+    if (diagnostics.source_lane_blocked) return reject_work("compiler-lane-blocked", 0);
+    if (g_epoch != 0u && g_epoch != diagnostics.presentation_epoch)
+        return reject_work("collector-epoch-mismatch", 0);
+    if (g_work_epoch != diagnostics.presentation_epoch) {
+        g_work_epoch = diagnostics.presentation_epoch;
+        g_work_cycle = 0u;
+    }
     g_epoch = diagnostics.presentation_epoch;
     if (out_diagnostics != NULL) *out_diagnostics = diagnostics;
     return true;
 }
 
 static bool wait_for_worker(void) {
-    return lane_ready(NULL) && g_services.wait != NULL &&
-        g_services.wait(g_services.user_data) && lane_ready(NULL);
+    if (!lane_ready(NULL)) return false;
+    if (g_services.wait == NULL) return reject_work("wait-unavailable", 0);
+    if (!g_services.wait(g_services.user_data)) return reject_work("host-wait", 0);
+    return lane_ready(NULL);
+}
+
+/* Device catch-up replays pending DMA events with their original cycle stamp,
+ * which can precede CPU work already received by this FIFO. Keep publication
+ * time monotonic without changing the device clock or dropping the transfer.
+ * A display boundary is another lower bound for work published after it. */
+static uint64_t publication_cycle(uint64_t guest_cycle, uint64_t boundary_cycle) {
+    if (guest_cycle < boundary_cycle)
+        guest_cycle = boundary_cycle;
+    if (guest_cycle > g_work_cycle)
+        g_work_cycle = guest_cycle;
+    return g_work_cycle;
 }
 
 static bool publish_pending(void) {
@@ -55,25 +91,28 @@ static bool publish_pending(void) {
             g_services.notify(g_services.user_data);
             return lane_ready(NULL);
         }
-        if (result != XG_RENDER_TIMELINE_WOULD_BLOCK || !wait_for_worker())
-            return false;
+        if (result != XG_RENDER_TIMELINE_WOULD_BLOCK)
+            return reject_work("queue-publish", result);
+        if (!wait_for_worker()) return false;
     }
     return true;
 }
 
 static bool begin_chunk(uint64_t guest_cycle) {
-    if (!lane_ready(NULL) || !publish_pending()) return false;
+    XgRenderPresentationDiagnostics diagnostics;
+    if (!lane_ready(&diagnostics) || !publish_pending()) return false;
+    guest_cycle = publication_cycle(guest_cycle, diagnostics.guest_cycle);
     if (g_building) return true;
     for (;;) {
         XgRenderSourceFrameDescription description = {0};
         XgPresentationIdentity identity;
         XgRenderSourceCommitResult result;
         if (!lane_ready(NULL)) return false;
-        if (!g_services.describe(&description) ||
-            xg_render_timeline_next_work_identity(
-                description.scene_generation, guest_cycle, &identity) !=
-                XG_RENDER_TIMELINE_OK || identity.presentation_epoch != g_epoch)
-            return false;
+        if (!g_services.describe(&description)) return reject_work("describe", 0);
+        const XgRenderTimelineResult next = xg_render_timeline_next_work_identity(
+            description.scene_generation, guest_cycle, &identity);
+        if (next != XG_RENDER_TIMELINE_OK) return reject_work("begin-identity", next);
+        if (identity.presentation_epoch != g_epoch) return reject_work("begin-epoch", 0);
         if (!xg_render_source_queue_has_capacity()) {
             if (!wait_for_worker()) return false;
             continue;
@@ -86,11 +125,11 @@ static bool begin_chunk(uint64_t guest_cycle) {
             if (!wait_for_worker()) return false;
             continue;
         }
-        if (result != XG_RENDER_SOURCE_COMMIT_OK) return false;
+        if (result != XG_RENDER_SOURCE_COMMIT_OK) return reject_work("commit-begin", result);
         g_building = true;
         g_scene_generation = description.scene_generation;
-        return xg_render_source_commit_set_native_work(g_builder, false) ==
-            XG_RENDER_SOURCE_COMMIT_OK;
+        result = xg_render_source_commit_set_native_work(g_builder, false);
+        return result == XG_RENDER_SOURCE_COMMIT_OK || reject_work("commit-native-work", result);
     }
 }
 
@@ -107,13 +146,15 @@ static bool append_operation(const XgRenderNativeOperation *operation,
         result = xg_render_source_commit_append_native_operation(
             g_builder, operation);
     }
-    if (result != XG_RENDER_SOURCE_COMMIT_OK) return false;
+    if (result != XG_RENDER_SOURCE_COMMIT_OK) return reject_work("append-operation", result);
     ++g_operation_count;
     if (operation->kind == XG_RENDER_NATIVE_OPERATION_UPLOAD) ++g_upload_count;
-    return g_services.service == NULL || g_services.service(g_services.user_data);
+    return g_services.service == NULL || g_services.service(g_services.user_data) ||
+        reject_work("host-service", 0);
 }
 
 bool xg_render_native_work_configure(const XgRenderNativeWorkServices *services) {
+    clear_rejection();
     if (services == NULL) {
         g_services = (XgRenderNativeWorkServices){0};
         return true;
@@ -134,11 +175,16 @@ void xg_render_native_work_snapshot(XgRenderNativeWorkSnapshot *out_snapshot) {
         .buffered_uploads = g_upload_count,
         .building = g_building,
         .sealed = g_sealed,
+        .failure_stage = g_failure_stage,
+        .failure_result = g_failure_result,
+        .publication_epoch = g_work_epoch,
+        .publication_cycle = g_work_cycle,
     };
 }
 
 bool xg_render_native_work_operation(const XgRenderNativeOperation *operation,
                                      uint64_t guest_cycle) {
+    clear_rejection();
     return operation != NULL && append_operation(operation, guest_cycle);
 }
 
@@ -146,6 +192,7 @@ bool xg_render_native_work_mesh(const GpuRenderSemantic *material,
                                 const XgRenderMotionDrawBinding *motion,
                                 XgSemanticResourceRef mesh, XgSemanticResourceRef geometry,
                                 uint64_t guest_cycle) {
+    clear_rejection();
     if (material == NULL || !mesh.resource_id || !geometry.resource_id) return false;
     XgRenderNativeOperation operation = {.kind = XG_RENDER_NATIVE_OPERATION_MESH};
     operation.semantic = *material;
@@ -196,6 +243,7 @@ static void hd_texture_note_vram_event(const GpuVramEvent *event) {
 
 bool xg_render_native_work_draw(const GpuRenderSemantic *semantic,
                                 uint64_t guest_cycle) {
+    clear_rejection();
     XgRenderNativeOperation operation = {.kind = XG_RENDER_NATIVE_OPERATION_DRAW};
     if (semantic == NULL ||
         semantic->triangle_count > GPU_RENDER_SEMANTIC_TRIANGLE_CAPACITY ||
@@ -254,7 +302,7 @@ bool xg_render_native_work_temporal_coverage(
         .presentation_epoch = g_epoch,
         .source_sequence = timeline.source_sequence,
         .guest_vblank_sequence = timeline.guest_vblank_sequence,
-        .guest_cycle = guest_cycle,
+        .guest_cycle = publication_cycle(guest_cycle, timeline.guest_cycle),
         .scene_generation = g_scene_generation,
     };
     if (!xg_render_temporal_coverage_create(&identity, timeline.guest_vblank_sequence + 1,
@@ -275,7 +323,9 @@ bool xg_render_native_work_temporal_coverage(
 bool xg_render_native_work_flush(bool display_boundary, uint64_t guest_cycle) {
     XgRenderSourceCommitResult result;
     XgPresentationIdentity identity;
-    if (!lane_ready(NULL)) return false;
+    XgRenderPresentationDiagnostics diagnostics;
+    if (!lane_ready(&diagnostics)) return false;
+    guest_cycle = publication_cycle(guest_cycle, diagnostics.guest_cycle);
     if (g_sealed) {
         const bool was_boundary = g_pending_boundary;
         if (!publish_pending()) return false;
@@ -288,28 +338,27 @@ bool xg_render_native_work_flush(bool display_boundary, uint64_t guest_cycle) {
     if (display_boundary) {
         XgRenderSourceFrameDescription description = {0};
         const XgSemanticDisplayState *display = &description.display;
-        if (!g_services.describe(&description) ||
-            description.scene_generation != g_scene_generation ||
+        if (!g_services.describe(&description)) return reject_work("boundary-describe", 0);
+        if (description.scene_generation != g_scene_generation ||
             display->display_x >= 1024u || display->display_y >= 512u ||
             (!display->disabled &&
              (display->width == 0u || display->width > 1024u ||
               display->height == 0u || display->height > 512u ||
-              display->aspect_num == 0u || display->aspect_den == 0u)) ||
-            xg_render_source_commit_set_native_display(g_builder, display) !=
-                XG_RENDER_SOURCE_COMMIT_OK)
-            return false;
+              display->aspect_num == 0u || display->aspect_den == 0u)))
+            return reject_work("boundary-display", 0);
+        result = xg_render_source_commit_set_native_display(g_builder, display);
+        if (result != XG_RENDER_SOURCE_COMMIT_OK) return reject_work("commit-display", result);
     }
-    if (xg_render_source_commit_set_native_work(g_builder, display_boundary) !=
-        XG_RENDER_SOURCE_COMMIT_OK)
-        return false;
-    if (xg_render_timeline_next_work_identity(
-            g_scene_generation, guest_cycle, &identity) != XG_RENDER_TIMELINE_OK ||
-        xg_render_source_commit_set_native_identity(g_builder, &identity) !=
-            XG_RENDER_SOURCE_COMMIT_OK)
-        return false;
+    result = xg_render_source_commit_set_native_work(g_builder, display_boundary);
+    if (result != XG_RENDER_SOURCE_COMMIT_OK) return reject_work("seal-native-work", result);
+    const XgRenderTimelineResult next = xg_render_timeline_next_work_identity(
+        g_scene_generation, guest_cycle, &identity);
+    if (next != XG_RENDER_TIMELINE_OK) return reject_work("seal-identity", next);
+    result = xg_render_source_commit_set_native_identity(g_builder, &identity);
+    if (result != XG_RENDER_SOURCE_COMMIT_OK) return reject_work("commit-identity", result);
     result = xg_render_source_commit_seal(g_builder, &g_pending);
     g_building = false;
-    if (result != XG_RENDER_SOURCE_COMMIT_OK) return false;
+    if (result != XG_RENDER_SOURCE_COMMIT_OK) return reject_work("commit-seal", result);
     g_sealed = true;
     g_pending_boundary = display_boundary;
     return publish_pending();
@@ -347,7 +396,8 @@ bool xg_render_native_work_vram_event(const GpuVramEvent *event,
     uint8_t *bytes;
     size_t pixel_count;
     bool success = false;
-    if (event == NULL || !xg_render_native_work_enabled()) return false;
+    clear_rejection();
+    if (event == NULL || !xg_render_native_work_enabled()) return reject_work("event-input", 0);
     hd_texture_note_vram_event(event);
     switch (event->operation) {
     case GPU_VRAM_EVENT_READBACK:
@@ -379,7 +429,7 @@ bool xg_render_native_work_vram_event(const GpuVramEvent *event,
         operation.kind = XG_RENDER_NATIVE_OPERATION_UPLOAD;
         break;
     default:
-        return false;
+        return reject_work("event-kind", event->operation);
     }
     operation.dst_x = event->destination_x;
     operation.dst_y = event->destination_y;
@@ -389,7 +439,7 @@ bool xg_render_native_work_vram_event(const GpuVramEvent *event,
         XgRenderPresentationDiagnostics diagnostics;
         xg_render_semantic_presentation_diagnostics(&diagnostics);
         if (g_epoch != 0u && g_epoch == diagnostics.presentation_epoch)
-            return false;
+            return reject_work("restore-without-invalidation", 0);
         xg_render_native_work_cancel_pending();
         if (!xg_render_native_work_drain(guest_cycle)) return false;
         operation.dst_x = 0u;
@@ -406,16 +456,16 @@ bool xg_render_native_work_vram_event(const GpuVramEvent *event,
     if (operation.dst_x >= 1024u || operation.dst_y >= 512u ||
         operation.width == 0u || operation.width > 1024u ||
         operation.height == 0u || operation.height > 512u ||
-        event->pixels == NULL || event->pixel_count != pixel_count ||
-        !begin_chunk(guest_cycle))
-        return false;
+        event->pixels == NULL || event->pixel_count != pixel_count)
+        return reject_work("upload-input", 0);
+    if (!begin_chunk(guest_cycle)) return false;
     if ((g_upload_count >= NATIVE_WORK_UPLOAD_CAPACITY ||
          g_operation_count >= XG_RENDER_NATIVE_OPERATION_CAPACITY) &&
         (!xg_render_native_work_flush(false, guest_cycle) ||
          !begin_chunk(guest_cycle)))
         return false;
     bytes = malloc(pixel_count * 2u);
-    if (bytes == NULL) return false;
+    if (bytes == NULL) return reject_work("upload-allocation", 0);
     for (size_t index = 0u; index < pixel_count; ++index) {
         bytes[index * 2u] = (uint8_t)event->pixels[index];
         bytes[index * 2u + 1u] = (uint8_t)(event->pixels[index] >> 8u);
@@ -452,15 +502,17 @@ bool xg_render_native_work_vram_event(const GpuVramEvent *event,
         if (attempt != 0u &&
             (!xg_render_native_work_drain(guest_cycle) || !begin_chunk(guest_cycle)))
             break;
-        if (g_receipt == UINT64_MAX) break;
+        if (g_receipt == UINT64_MAX) { reject_work("upload-receipt-exhausted", 0); break; }
         metadata.receipt = ++g_receipt;
         metadata.owner_generation = g_scene_generation;
         import.owner_generation = g_scene_generation;
         capability_result = xg_render_resource_capability_register(
             &metadata, &import.provenance);
-        if (capability_result == XG_RENDER_RESOURCE_CAPABILITY_CAPACITY_EXCEEDED)
+        if (capability_result == XG_RENDER_RESOURCE_CAPABILITY_CAPACITY_EXCEEDED && attempt == 0u)
             continue;
-        if (capability_result != XG_RENDER_RESOURCE_CAPABILITY_OK) break;
+        if (capability_result != XG_RENDER_RESOURCE_CAPABILITY_OK) {
+            reject_work("upload-capability-register", capability_result); break;
+        }
         import_result = xg_render_resource_import_native(&import, &handle);
         if (import_result == XG_RENDER_RESOURCE_OK) {
             XgRenderResourceResult retire_result;
@@ -471,14 +523,22 @@ bool xg_render_native_work_vram_event(const GpuVramEvent *event,
             /* append acquired the snapshot; only that retain survives to ACK. */
             retire_result = xg_render_resource_retire_current(handle);
             capability_result = xg_render_resource_capability_retire(import.provenance);
+            if (retire_result != XG_RENDER_RESOURCE_OK)
+                reject_work("upload-resource-retire", retire_result);
+            if (capability_result != XG_RENDER_RESOURCE_CAPABILITY_OK)
+                reject_work("upload-capability-retire", capability_result);
             success = success && retire_result == XG_RENDER_RESOURCE_OK &&
                 capability_result == XG_RENDER_RESOURCE_CAPABILITY_OK;
             break;
         }
         capability_result = xg_render_resource_capability_retire(import.provenance);
-        if (import_result != XG_RENDER_RESOURCE_CAPACITY_EXCEEDED ||
-            capability_result != XG_RENDER_RESOURCE_CAPABILITY_OK)
+        if (capability_result != XG_RENDER_RESOURCE_CAPABILITY_OK) {
+            reject_work("upload-capability-retire", capability_result);
             break;
+        }
+        if (import_result != XG_RENDER_RESOURCE_CAPACITY_EXCEEDED || attempt != 0u) {
+            reject_work("upload-import", import_result); break;
+        }
     }
     free(bytes);
     return success;

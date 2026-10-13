@@ -33,10 +33,19 @@ typedef struct XgRenderNativeWorkSnapshot {
     uint32_t buffered_uploads;
     bool building;
     bool sealed;
+    /* First rejection in the current request. Static string, no ownership.
+     * result is the failing subsystem's result code (zero for boolean checks). */
+    const char *failure_stage;
+    int failure_result;
+    uint64_t publication_epoch;
+    uint64_t publication_cycle;
 } XgRenderNativeWorkSnapshot;
 /* Guest-owner only. Unpublished work is not included in the core FIFO depth. */
 void xg_render_native_work_snapshot(XgRenderNativeWorkSnapshot *out_snapshot);
 /* Inputs are borrowed only for the call and copied into immutable source work.
+ * Device catch-up stamps may precede earlier CPU receipts. Publication uses
+ * the latest received cycle or display boundary within the current epoch;
+ * every operation still retains its FIFO position and original payload.
  * False means disabled, unavailable wait, failed lane, invalid input or epoch
  * cancellation; the caller must stop, not skip the rejected GPU operation. */
 bool xg_render_native_work_draw(const GpuRenderSemantic *semantic,
