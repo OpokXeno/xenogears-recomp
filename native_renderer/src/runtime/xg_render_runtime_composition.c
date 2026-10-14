@@ -1,5 +1,8 @@
 #include "xg_render_runtime_composition.h"
 #include <time.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include "xg_render_auth_runtime_diagnostics.h"
 #include "xg_render_backend.h"
 #include "xg_render_primitive_utils.h"
@@ -2248,9 +2251,17 @@ static struct {
 } g_capture_profile;
 
 static uint64_t capture_profile_now(void) {
+#if defined(_WIN32)
+    LARGE_INTEGER c, f;
+    QueryPerformanceCounter(&c);
+    QueryPerformanceFrequency(&f);
+    return (uint64_t)c.QuadPart / (uint64_t)f.QuadPart * UINT64_C(1000000000) +
+           (uint64_t)c.QuadPart % (uint64_t)f.QuadPart * UINT64_C(1000000000) / (uint64_t)f.QuadPart;
+#else
     struct timespec t;
     clock_gettime(CLOCK_MONOTONIC, &t);
     return (uint64_t)t.tv_sec * UINT64_C(1000000000) + (uint64_t)t.tv_nsec;
+#endif
 }
 
 uint64_t xg_render_capture_profile_begin(void) {
