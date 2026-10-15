@@ -14,9 +14,13 @@ _Static_assert(XG_RENDER_PRESENTATION_BATCH_CAPACITY >= 2u,
 #define XG_RENDER_GUEST_CYCLES_PER_SECOND UINT64_C(33868800)
 /* The pacer rebases beyond 250 ms of debt; never date work later than that. */
 #define XG_RENDER_VISUAL_LAG_LIMIT_NS UINT64_C(250000000)
-/* Lag recovery slope: deadlines approach each other by 1/16 of elapsed time,
- * under one 240 Hz tick per 50 ms source interval. */
-#define XG_RENDER_VISUAL_LAG_DECAY_SHIFT 4u
+/* Release ordinary scheduling jitter slowly: a 1/16 recovery compressed a
+ * 30 Hz source interval by 2 ms, repeating/skipping ready 240 Hz phases.
+ * Larger guest debt still recovers at the original rate. The slow band is
+ * bounded to half a guest vblank, so it adds less than one frame of latency. */
+#define XG_RENDER_VISUAL_LAG_NOISE_NS UINT64_C(8333334)
+#define XG_RENDER_VISUAL_LAG_DECAY_SHIFT 10u
+#define XG_RENDER_VISUAL_DEBT_DECAY_SHIFT 4u
 
 typedef enum XgRenderPresentationBatchState {
     XG_RENDER_BATCH_FREE = 0,
@@ -1597,8 +1601,14 @@ bool xg_render_presenter_sync_source_clock(
         const uint64_t lag = guest_lag_ns < XG_RENDER_VISUAL_LAG_LIMIT_NS
             ? guest_lag_ns : XG_RENDER_VISUAL_LAG_LIMIT_NS;
         if (guest_time_ns > g_visual_lag_time_ns) {
-            const uint64_t decay = (guest_time_ns - g_visual_lag_time_ns) >>
-                XG_RENDER_VISUAL_LAG_DECAY_SHIFT;
+            const uint64_t elapsed = guest_time_ns - g_visual_lag_time_ns;
+            uint64_t decay = elapsed >> XG_RENDER_VISUAL_LAG_DECAY_SHIFT;
+            if (g_visual_lag_ns > XG_RENDER_VISUAL_LAG_NOISE_NS) {
+                const uint64_t excess = g_visual_lag_ns - XG_RENDER_VISUAL_LAG_NOISE_NS;
+                const uint64_t fast = elapsed >> XG_RENDER_VISUAL_DEBT_DECAY_SHIFT;
+                const uint64_t release = fast < excess ? fast : excess;
+                if (release > decay) decay = release;
+            }
             g_visual_lag_ns = g_visual_lag_ns > decay ? g_visual_lag_ns - decay : 0u;
             g_visual_lag_time_ns = guest_time_ns;
         }

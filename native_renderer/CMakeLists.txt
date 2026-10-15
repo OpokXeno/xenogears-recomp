@@ -940,6 +940,11 @@ if(BUILD_TESTING)
     target_link_libraries(test_xg_render_native_work PRIVATE xg_semantic_presentation)
     add_test(NAME xg_render_native_work COMMAND test_xg_render_native_work)
 
+    add_executable(test_xg_render_source_clock
+        tests/infrastructure/test_xg_render_source_clock.c)
+    target_link_libraries(test_xg_render_source_clock PRIVATE xg_semantic_presentation)
+    add_test(NAME xg_render_source_clock COMMAND test_xg_render_source_clock)
+
     add_executable(test_xg_render_ui_source_commit
         tests/infrastructure/test_xg_render_ui_source_commit.c)
     target_link_libraries(test_xg_render_ui_source_commit PRIVATE
