@@ -10,7 +10,7 @@ name: Release
 # runner registered on the maintainer's Linux PC. The Linux release is built
 # inside a pinned glibc-2.31 container so the host distribution cannot raise
 # the minimum runtime ABI. Only the compiled archives are uploaded. Setup:
-# docs/self-hosted-runner.md.
+# docs/xenogears/release-runner.md.
 #
 # macOS is not built by this workflow (no Mac runner available); the doc
 # explains how to add one later.
@@ -45,6 +45,9 @@ env:
   XGR_ASSETS_DIR: ${{ vars.XGR_ASSETS_DIR || '/home/pc/xenogears-assets' }}
   XGR_DISC_DIR: ${{ vars.XGR_DISC_DIR || vars.XGR_ASSETS_DIR || '/home/pc/xenogears-assets' }}
   XGR_DEPS_DIR: ${{ vars.XGR_DEPS_DIR || '/home/pc/xenogears-port/deps' }}
+  XGR_BUILD_JOBS: ${{ vars.XGR_BUILD_JOBS || '4' }}
+  # Private OpenBIOS Disc 1 slot 0, shared by the two target-specific trainers.
+  XGR_PGO_SAVESTATE: ${{ vars.XGR_PGO_SAVESTATE }}
 
 jobs:
   build-linux:
@@ -59,11 +62,14 @@ jobs:
       - name: Check host dependencies
         run: |
           set -e
-          for t in cmake git podman python3; do
-            command -v "$t" >/dev/null || { echo "::error::missing host tool: $t — see docs/self-hosted-runner.md"; exit 1; }
+          for t in cmake git podman python3 nm; do
+            command -v "$t" >/dev/null || { echo "::error::missing host tool: $t — see docs/xenogears/release-runner.md"; exit 1; }
           done
           python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else "Python 3.11 or newer is required")'
           podman info >/dev/null
+          pgo_state="${XGR_PGO_SAVESTATE:-$XGR_ASSETS_DIR/pgo/slot00.pst}"
+          [ -s "$pgo_state" ] || { echo "::error::missing private PGO savestate: $pgo_state"; exit 1; }
+          python3 -c 'import os; from ci.pgo_training import graphical_environment; print("PGO display:", graphical_environment(os.environ)["DISPLAY"])'
 
       - name: Test release archive verifier
         run: cmake -DPROJECT_ROOT="$PWD" -DTEST_WORK_DIR="$RUNNER_TEMP/xgr-release-verifier-tests-linux" -P cmake/tests/test_verify_release_archive.cmake
@@ -71,7 +77,10 @@ jobs:
       - name: Test Native build verifier
         run: python3 -m unittest discover -s tools -p test_verify_native_release.py
 
-      - name: Build and package Linux release with glibc 2.31
+      - name: Test PGO training and release checks
+        run: python3 -m unittest discover -s ci -p 'test_*pgo*.py'
+
+      - name: Build, train PGO and verify Linux release with LTO (glibc 2.31)
         run: bash ci/build-linux-release.sh "$XGR_ASSETS_DIR"
 
       - name: Verify Linux release archive
@@ -90,7 +99,9 @@ jobs:
 
       - name: Scrub staged assets
         if: always()
-        run: rm -f game/slus_006.64 game/disc1.cue game/disc1.bin game/disc1.iso psxrecomp/bios/SCPH1001.BIN assets/boxart.tga
+        run: |
+          rm -f game/slus_006.64 game/disc1.cue game/disc1.bin game/disc1.iso psxrecomp/bios/SCPH1001.BIN assets/boxart.tga
+          rm -rf build-linux-release/pgo
 
   build-windows:
     name: Windows x86_64 (cross via llvm-mingw)
@@ -99,8 +110,6 @@ jobs:
     env:
       LLVM_MINGW_VER: "20260616"
       SDL2_VER: "2.32.10"
-      # Private OpenBIOS Disc 1 slot 0 in an interpolation-heavy field scene.
-      XGR_PGO_SAVESTATE: ${{ vars.XGR_PGO_SAVESTATE }}
       XGR_PGO_PROTON_ROOT: ${{ vars.XGR_PGO_PROTON_ROOT || '/home/pc/.local/share/Steam/compatibilitytools.d/GE-Proton10-34' }}
     steps:
       - uses: actions/checkout@v5
@@ -111,13 +120,13 @@ jobs:
         run: |
           set -e
           for t in cmake ninja git curl python3 tar umu-run; do
-            command -v "$t" >/dev/null || { echo "::error::missing host tool: $t — see docs/self-hosted-runner.md"; exit 1; }
+            command -v "$t" >/dev/null || { echo "::error::missing host tool: $t — see docs/xenogears/release-runner.md"; exit 1; }
           done
           python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else "Python 3.11 or newer is required")'
           pgo_state="${XGR_PGO_SAVESTATE:-$XGR_ASSETS_DIR/pgo/slot00.pst}"
           [ -s "$pgo_state" ] || { echo "::error::missing private PGO savestate: $pgo_state"; exit 1; }
           [ -f "$XGR_PGO_PROTON_ROOT/proton" ] || { echo "::error::missing GE-Proton: $XGR_PGO_PROTON_ROOT"; exit 1; }
-          python3 -c 'import os; from ci.train_windows_pgo import graphical_environment; print("PGO display:", graphical_environment(os.environ)["DISPLAY"])'
+          python3 -c 'import os; from ci.pgo_training import graphical_environment; print("PGO display:", graphical_environment(os.environ)["DISPLAY"])'
 
       - name: Test release archive verifier
         run: cmake -DPROJECT_ROOT="$PWD" -DTEST_WORK_DIR="$RUNNER_TEMP/xgr-release-verifier-tests-windows" -P cmake/tests/test_verify_release_archive.cmake
@@ -125,17 +134,20 @@ jobs:
       - name: Test Native build verifier
         run: python3 -m unittest discover -s tools -p test_verify_native_release.py
 
+      - name: Test PGO training and release checks
+        run: python3 -m unittest discover -s ci -p 'test_*pgo*.py'
+
       - name: Stage private build inputs from local disk (never uploaded)
         run: |
           set -e
-          [ -f "$XGR_ASSETS_DIR/slus_006.64" ]  || { echo "::error::$XGR_ASSETS_DIR/slus_006.64 missing — see docs/self-hosted-runner.md"; exit 1; }
-          [ -f "$XGR_ASSETS_DIR/SCPH1001.BIN" ] || { echo "::error::$XGR_ASSETS_DIR/SCPH1001.BIN missing — see docs/self-hosted-runner.md"; exit 1; }
+          [ -f "$XGR_ASSETS_DIR/slus_006.64" ]  || { echo "::error::$XGR_ASSETS_DIR/slus_006.64 missing — see docs/xenogears/release-runner.md"; exit 1; }
+          [ -f "$XGR_ASSETS_DIR/SCPH1001.BIN" ] || { echo "::error::$XGR_ASSETS_DIR/SCPH1001.BIN missing — see docs/xenogears/release-runner.md"; exit 1; }
           install -Dm644 "$XGR_ASSETS_DIR/slus_006.64"  game/slus_006.64
           install -Dm644 "$XGR_ASSETS_DIR/SCPH1001.BIN" psxrecomp/bios/SCPH1001.BIN
           [ -f "$XGR_ASSETS_DIR/boxart.tga" ] || { echo "::error::$XGR_ASSETS_DIR/boxart.tga missing (launcher box art)"; exit 1; }
           install -Dm644 "$XGR_ASSETS_DIR/boxart.tga" assets/boxart.tga
           if [ -f "$XGR_DISC_DIR/disc1.cue" ]; then
-            [ -f "$XGR_DISC_DIR/disc1.bin" ] || { echo "::error::$XGR_DISC_DIR/disc1.bin missing for disc1.cue — see docs/self-hosted-runner.md"; exit 1; }
+            [ -f "$XGR_DISC_DIR/disc1.bin" ] || { echo "::error::$XGR_DISC_DIR/disc1.bin missing for disc1.cue — see docs/xenogears/release-runner.md"; exit 1; }
             install -Dm644 "$XGR_DISC_DIR/disc1.cue" game/disc1.cue
             install -Dm644 "$XGR_DISC_DIR/disc1.bin" game/disc1.bin
             echo "XGR_DISC_IMAGE=$PWD/game/disc1.cue" >> "$GITHUB_ENV"
@@ -146,7 +158,7 @@ jobs:
             install -Dm644 "$XGR_DISC_DIR/disc1.iso" game/disc1.iso
             echo "XGR_DISC_IMAGE=$PWD/game/disc1.iso" >> "$GITHUB_ENV"
           else
-            echo "::error::Xenogears Disc 1 missing in $XGR_DISC_DIR — see docs/self-hosted-runner.md"
+            echo "::error::Xenogears Disc 1 missing in $XGR_DISC_DIR — see docs/xenogears/release-runner.md"
             exit 1
           fi
 
@@ -167,7 +179,7 @@ jobs:
             -DBUILD_TESTING=OFF \
             -DPSX_GAME_EXTRA_IDENTITY_SHA256="$XGR_GAME_IDENTITY_SHA256" \
             -DPSX_GAME_MANIFEST_DIGEST_SHA256="$XGR_MANIFEST_IDENTITY_SHA256"
-          cmake --build psxrecomp/recompiler/build -j "$(nproc)"
+          cmake --build psxrecomp/recompiler/build --target psxrecomp-game psxrecomp-bios -j "$XGR_BUILD_JOBS"
 
       - name: Game codegen from the local EXE
         run: |
@@ -180,7 +192,7 @@ jobs:
         run: |
           set -e
           for bios in OpenBIOS SCPH1001; do
-            PSXRECOMP_BIOS_BUILD="$PWD/psxrecomp/recompiler/build" \
+            PSXRECOMP_BIOS_BUILD="$PWD/psxrecomp/recompiler/build" CMAKE_BUILD_PARALLEL_LEVEL="$XGR_BUILD_JOBS" \
               bash psxrecomp/tools/regen_bios.sh --config "$PWD/psxrecomp/bios/$bios.toml"
           done
 
@@ -214,7 +226,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DPSX_RUNTIME_IPO=ON \
             -DPSX_PGO=generate \
-            -DCMAKE_EXE_LINKER_FLAGS="-Wl,--threads=4" \
+            -DCMAKE_EXE_LINKER_FLAGS="-Wl,--threads=$XGR_BUILD_JOBS" \
             -DXG_RENDER_NATIVE=ON \
             -DXG_RENDER_VALIDATE_OVERLAYS=OFF \
             -DXG_DISC_IMAGE="$XGR_DISC_IMAGE" \
@@ -227,7 +239,6 @@ jobs:
 
       - name: Train Windows PGO at 30 and 240 FPS (private inputs)
         run: |
-          python3 -m unittest discover -s ci -p test_train_windows_pgo.py
           python3 ci/train_windows_pgo.py --build-dir build-win \
             --llvm-root "$LLVM_MINGW_ROOT" \
             --proton "$XGR_PGO_PROTON_ROOT" \

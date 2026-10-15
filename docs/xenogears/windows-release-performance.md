@@ -7,6 +7,9 @@ toolchain's** `llvm-profdata`, then rebuilds with `PSX_PGO=use` before packaging
 The final executable contains the optimized code, not profiling counters.
 The final PGO-use executable also runs a 120-vblank smoke test at each FPS
 setting before packaging, using the same slot-load and renderer checks.
+The check also rejects a final executable that still contains the profiling
+runtime. See [runner setup](release-runner.md) for the Linux pipeline
+and common dependencies.
 
 ## Private runner inputs
 

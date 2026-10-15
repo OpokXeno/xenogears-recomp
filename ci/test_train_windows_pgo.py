@@ -1,6 +1,7 @@
 import copy
 import argparse
 import fcntl
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -36,19 +37,33 @@ class TrainingValidationTests(unittest.TestCase):
 
     def test_explicit_display_takes_precedence(self):
         env = {"DISPLAY": ":7", "XAUTHORITY": "/chosen/auth"}
-        with patch("train_windows_pgo.subprocess.run") as run:
+        with patch("pgo_training.subprocess.run") as run:
             self.assertEqual(graphical_environment(env), env)
             run.assert_not_called()
 
     def test_runner_imports_only_display_session_values(self):
         result = argparse.Namespace(returncode=0, stdout="DISPLAY=:0\nXAUTHORITY=/session/auth\nUNRELATED_TOKEN=private\n")
-        with patch("train_windows_pgo.shutil.which", return_value="/usr/bin/systemctl"), \
-                patch("train_windows_pgo.subprocess.run", return_value=result):
-            env = graphical_environment({"EXISTING": "preserved"})
-        self.assertEqual(env, {"EXISTING": "preserved", "DISPLAY": ":0", "XAUTHORITY": "/session/auth"})
+        with patch("pgo_training.shutil.which", return_value="/usr/bin/systemctl"), \
+                patch("pgo_training.subprocess.run", return_value=result):
+            env = graphical_environment({"EXISTING": "preserved", "XDG_RUNTIME_DIR": "/run/user/test"})
+        self.assertEqual(env, {"EXISTING": "preserved", "DISPLAY": ":0", "XAUTHORITY": "/session/auth",
+                               "XDG_RUNTIME_DIR": "/run/user/test"})
+
+    def test_system_service_can_find_its_graphical_user_bus(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory) / str(os.getuid())
+            runtime.mkdir()
+            (runtime / "bus").touch()
+            result = argparse.Namespace(returncode=0, stdout="DISPLAY=:0\nXAUTHORITY=/session/auth\n")
+            with patch("pgo_training.Path", return_value=Path(directory)), \
+                    patch("pgo_training.shutil.which", return_value="/usr/bin/systemctl"), \
+                    patch("pgo_training.subprocess.run", return_value=result) as run:
+                env = graphical_environment({})
+            self.assertEqual(run.call_args.kwargs["env"]["XDG_RUNTIME_DIR"], str(runtime))
+            self.assertEqual(env["DISPLAY"], ":0")
 
     def test_missing_graphical_session_fails_before_training(self):
-        with patch("train_windows_pgo.shutil.which", return_value=None):
+        with patch("pgo_training.shutil.which", return_value=None):
             with self.assertRaisesRegex(ValueError, "DISPLAY and XAUTHORITY"):
                 graphical_environment({})
 

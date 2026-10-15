@@ -26,6 +26,8 @@
 #
 # Set CMAKE_GENERATOR env to override the CMake generator, e.g.:
 #   CMAKE_GENERATOR="Unix Makefiles" ./build.sh
+# PSX_RUNTIME_IPO and PSX_PGO optionally select runtime LTO and PGO. Set
+# CMAKE_EXE_LINKER_FLAGS to update link flags even in an existing CMake cache.
 
 set -euo pipefail
 
@@ -56,6 +58,11 @@ RUNTIME_CMAKE_ARGS=(
     "-DSDL_WAYLAND=${PSX_SDL_WAYLAND:-ON}"
     "-DXG_RENDER_VALIDATE_OVERLAYS=OFF"
 )
+for option in PSX_RUNTIME_IPO PSX_PGO CMAKE_EXE_LINKER_FLAGS; do
+    if [[ -v "$option" ]]; then
+        RUNTIME_CMAKE_ARGS+=("-D$option=${!option}")
+    fi
+done
 if [[ "$BUILD_TYPE" == "Debug" || "$BUILD_TYPE" == "RelWithDebInfo" ]]; then
     RUNTIME_CMAKE_ARGS+=("-DPSX_DEBUG_TOOLS=ON" "-DPSX_DEBUG_OVERLAY=ON")
 else

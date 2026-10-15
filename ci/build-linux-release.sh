@@ -4,9 +4,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ASSETS_DIR="${1:-${XGR_ASSETS_DIR:-}}"
 DISC_DIR="${XGR_DISC_DIR:-$ASSETS_DIR}"
-BUILD_DIR="${2:-build}"
+BUILD_DIR="${2:-build-linux-release}"
 RECOMPILER_BUILD="${3:-${PSX_RECOMPILER_BUILD:-psxrecomp/recompiler/build-glibc-2.31}}"
 IMAGE="${XGR_LINUX_BUILD_IMAGE:-localhost/xenogearsrecomp-linux-glibc:2.31}"
+BUILD_JOBS="${XGR_BUILD_JOBS:-4}"
 
 if [[ -z "$ASSETS_DIR" ]]; then
     echo "usage: $0 <private-assets-directory> [runtime-build-dir] [recompiler-build-dir]" >&2
@@ -14,6 +15,21 @@ if [[ -z "$ASSETS_DIR" ]]; then
 fi
 ASSETS_DIR="$(realpath "$ASSETS_DIR")"
 DISC_DIR="$(realpath "$DISC_DIR")"
+PGO_STATE="${XGR_PGO_SAVESTATE:-$ASSETS_DIR/pgo/slot00.pst}"
+[[ -s "$PGO_STATE" ]] || { echo "missing private PGO savestate: $PGO_STATE" >&2; exit 1; }
+PGO_STATE="$(realpath "$PGO_STATE")"
+[[ "$BUILD_JOBS" =~ ^[1-9][0-9]*$ ]] || { echo "XGR_BUILD_JOBS must be a positive integer" >&2; exit 1; }
+# The host and container must refer to the same build trees. Keep these inside
+# the checkout; the dedicated default also avoids reusing a host compiler cache.
+for variable in BUILD_DIR RECOMPILER_BUILD; do
+    value="${!variable}"
+    [[ "$value" == /* ]] || value="$ROOT/$value"
+    value="$(realpath -m "$value")"
+    [[ "$value" == "$ROOT/"* ]] || { echo "$variable must be inside $ROOT" >&2; exit 1; }
+    printf -v "$variable" '%s' "${value#"$ROOT/"}"
+done
+cd "$ROOT"
+python3 -c 'import os; from ci.pgo_training import graphical_environment; print("PGO display:", graphical_environment(os.environ)["DISPLAY"])'
 for asset in slus_006.64 SCPH1001.BIN boxart.tga; do
     [[ -f "$ASSETS_DIR/$asset" ]] || {
         echo "missing private build asset: $ASSETS_DIR/$asset" >&2
@@ -67,55 +83,29 @@ trap cleanup_staged_assets EXIT
 podman build --pull=always \
     --file "$ROOT/ci/linux-glibc-2.31.Dockerfile" \
     --tag "$IMAGE" "$ROOT/ci"
+# Another local build may update the tag while training runs on the host.
+# Keep the compiler image identical across all passes of this release.
+BUILD_IMAGE_ID="$(podman image inspect "$IMAGE" --format '{{.Id}}')"
 
-podman run --rm --userns=keep-id \
+container_pass() {
+    podman run --rm --userns=keep-id \
     --env HOME=/tmp --env PYTHON=python3 \
     --env "XGR_RUNTIME_BUILD_DIR=$BUILD_DIR" \
     --env "PSX_RECOMPILER_BUILD=$RECOMPILER_BUILD" \
     --env "XGR_DISC_KIND=$DISC_KIND" \
+    --env "BUILD_JOBS=$BUILD_JOBS" \
     --volume "$ROOT:/workspace:Z" \
     --volume "$ASSETS_DIR:/xgr-assets:ro,Z" \
     --volume "$DISC_DIR:/xgr-disc:ro,Z" \
-    --workdir /workspace "$IMAGE" \
-    bash -euo pipefail -c '
-        install -Dm644 /xgr-assets/slus_006.64 game/slus_006.64
-        install -Dm644 /xgr-assets/SCPH1001.BIN psxrecomp/bios/SCPH1001.BIN
-        # Launcher box art from the private folder (CMake stages it when
-        # assets/boxart.tga exists at configure time).
-        install -Dm644 /xgr-assets/boxart.tga assets/boxart.tga
-        if [[ "$XGR_DISC_KIND" == cue ]]; then
-            install -Dm644 /xgr-disc/disc1.cue game/disc1.cue
-            install -Dm644 /xgr-disc/disc1.bin game/disc1.bin
-        else
-            install -Dm644 "/xgr-disc/disc1.$XGR_DISC_KIND" \
-                "game/disc1.$XGR_DISC_KIND"
-        fi
-        export LDFLAGS="${LDFLAGS:-} -static-libgcc -static-libstdc++"
-        # Bullseye has no libdecor development package. A Wayland SDL build
-        # would therefore create undecorated desktop windows; use XWayland,
-        # which is available on supported desktops and Steam Deck.
-        XG_RENDER_NATIVE=ON PSX_SDL_WAYLAND=OFF \
-            ./build.sh "$XGR_RUNTIME_BUILD_DIR" Release
-        python3 tools/verify_native_release.py --build-dir "$XGR_RUNTIME_BUILD_DIR"
-        pkg=dist/XenogearsRecomp-linux-x86_64
-        rm -rf "$pkg"
-        mkdir -p "$pkg"
-        strip "$XGR_RUNTIME_BUILD_DIR/XenogearsRecomp" -o "$pkg/XenogearsRecomp"
-        cp game.toml LICENSE README.md MODS.md MOD_AUTHORING.md "$pkg/"
-        cp -r "$XGR_RUNTIME_BUILD_DIR/bios" "$pkg/bios"
-        cp -r "$XGR_RUNTIME_BUILD_DIR/assets" "$pkg/assets"
-        [[ -d "$XGR_RUNTIME_BUILD_DIR/mods/bundled" ]] || {
-            echo "missing staged mod catalog: $XGR_RUNTIME_BUILD_DIR/mods/bundled" >&2
-            exit 1
-        }
-        mkdir -p "$pkg/mods"
-        cp -r "$XGR_RUNTIME_BUILD_DIR/mods/bundled" "$pkg/mods/"
-        [[ -f "$pkg/assets/img/boxart.tga" ]] || {
-            echo "launcher box art was not staged: $pkg/assets/img/boxart.tga" >&2
-            exit 1
-        }
-        tar -C dist -czf XenogearsRecomp-linux-x86_64.tar.gz XenogearsRecomp-linux-x86_64
-        bash ci/check-linux-glibc.sh "$pkg/XenogearsRecomp" GLIBC_2.31
-        rm -f game/slus_006.64 game/disc1.cue game/disc1.bin game/disc1.iso \
-            psxrecomp/bios/SCPH1001.BIN assets/boxart.tga
-    '
+    --workdir /workspace "$BUILD_IMAGE_ID" \
+    bash ci/build-linux-release-container.sh "$1"
+}
+
+container_pass generate
+python3 ci/train_linux_pgo.py --build-dir "$BUILD_DIR" \
+    --savestate "$PGO_STATE" --disc "$ROOT/game/disc1.$DISC_KIND"
+container_pass use
+python3 ci/train_linux_pgo.py --verify-only --vblanks 120 --build-dir "$BUILD_DIR" \
+    --savestate "$PGO_STATE" --disc "$ROOT/game/disc1.$DISC_KIND"
+# Packaging only happens after the optimized executable has passed gameplay.
+container_pass package

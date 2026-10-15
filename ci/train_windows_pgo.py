@@ -15,111 +15,13 @@ import shutil
 import subprocess
 import sys
 
-
-def graphical_environment(environment: dict[str, str]) -> dict[str, str]:
-    env = dict(environment)
-    if env.get("DISPLAY"):
-        return env
-    # A self-hosted runner service does not necessarily inherit the desktop's
-    # environment. Import only display-related values, never evaluate shell
-    # text or copy unrelated session variables into the build.
-    systemctl = shutil.which("systemctl")
-    if systemctl:
-        result = subprocess.run([systemctl, "--user", "show-environment"],
-                                capture_output=True, text=True, check=False, timeout=5)
-        if result.returncode == 0:
-            for line in result.stdout.splitlines():
-                key, separator, value = line.partition("=")
-                if separator and key in {"DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR"}:
-                    env[key] = value
-    if not env.get("DISPLAY"):
-        raise ValueError("PGO rendering needs an accessible X11/XWayland desktop; configure DISPLAY and XAUTHORITY for the runner")
-    return env
+from pgo_training import (SETTINGS, graphical_environment, neutral_replay,
+                          validate_training, verify_optimized_binary)
 
 
 def windows_path(path: Path) -> str:
     # Wine's standard Z: mapping exposes absolute Unix paths, including spaces.
     return "Z:" + path.resolve().as_posix()
-
-
-def validate_training(evidence: dict, log: str, fps: int, vblanks: int) -> None:
-    if "savestate: LOADED slot 0" not in log:
-        raise ValueError("PGO training did not load slot 0")
-    if (evidence.get("completion") != "trace_complete" or
-            evidence.get("runtime_status") != "PASS" or
-            evidence.get("render_mode") != "native" or
-            evidence.get("backend") != "opengl"):
-        raise ValueError("PGO training did not complete healthy Native/OpenGL gameplay")
-    replay = evidence.get("replay", {})
-    if replay.get("trace_index", 0) < vblanks:
-        raise ValueError("PGO training stopped before the vblank budget")
-    # The legacy midpoint diagnostic clamps its reported target to >= 60,
-    # even when Native presentation is configured to run at 30 FPS.
-    if fps > 30 and evidence.get("native_midpoint", {}).get("target_fps") != fps:
-        raise ValueError("PGO training used the wrong Native FPS setting")
-    work = evidence.get("native_work", {})
-    if (not work.get("executed") or work.get("health") != "healthy" or
-            not work.get("errors") or any(work["errors"].values())):
-        raise ValueError("PGO training reported Native work errors")
-    if fps > 30:
-        motion = work.get("motion", {})
-        if (not work.get("presentation", {}).get("presented_holds", 0) or
-                not motion.get("last_endpoint_phase_count", 0) or
-                not motion.get("evaluations", 0)):
-            raise ValueError("PGO training did not exercise interpolated presentation")
-
-
-def neutral_replay(vblanks: int) -> str:
-    return f'''schema = "xenogears.native-render-replay/v3"
-complete = true
-record_on_close = true
-vblank_budget = {vblanks}
-
-[[vblank]]
-repeat = {vblanks}
-p1_connected = true
-p1_mode = "analog"
-p1_buttons = []
-p1_left_x = 0
-p1_left_y = 0
-p1_right_x = 0
-p1_right_y = 0
-p1_trigger_left = 0
-p1_trigger_right = 0
-p2_connected = false
-p2_mode = "digital"
-p2_buttons = []
-p2_left_x = 0
-p2_left_y = 0
-p2_right_x = 0
-p2_right_y = 0
-p2_trigger_left = 0
-p2_trigger_right = 0
-'''
-
-
-SETTINGS = '''[video]
-renderer = "opengl"
-supersampling = 3
-window_width = 960
-fullscreen = 0
-vsync = "immediate"
-fps = {fps}
-aspect_ratio = "16:9"
-z_buffer = true
-backdrop_stretch = true
-antialiasing = "smaa"
-antialiasing_factor = 16
-texture_filtering = "nearest"
-sprite_filtering = "nearest"
-anisotropic_filtering = 16
-bios_hle = true
-dithering = false
-[controller]
-p1_device = "keyboard"
-p1_mode = "analog"
-p2_device = "none"
-'''
 
 
 def train(args: argparse.Namespace) -> None:
@@ -147,6 +49,8 @@ def _train(args: argparse.Namespace) -> None:
     pgo_mode = "use" if args.verify_only else "generate"
     if f"PSX_PGO:STRING={pgo_mode}\n" not in cache or "PSX_RUNTIME_IPO:BOOL=ON\n" not in cache:
         raise ValueError(f"this pass requires PSX_PGO={pgo_mode} and PSX_RUNTIME_IPO=ON")
+    if args.verify_only:
+        verify_optimized_binary(exe, args.llvm_root / "bin/llvm-nm")
     wine = shutil.which("umu-run" if args.proton else "wine")
     if not wine:
         raise ValueError("umu-run (Proton) or Wine is required to train the Windows executable")
@@ -211,7 +115,7 @@ def _train(args: argparse.Namespace) -> None:
                                         stderr=subprocess.STDOUT, timeout=args.timeout)
             finally:
                 # The prefix belongs exclusively to this training run. Stop
-                # child processes too if Wine or its Xvfb wrapper times out.
+                # child processes too if Wine times out.
                 server = (str(args.proton / "files/bin/wineserver") if args.proton
                           else shutil.which("wineserver"))
                 if server:
