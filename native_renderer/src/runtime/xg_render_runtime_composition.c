@@ -3049,6 +3049,10 @@ void xg_render_runtime_composition_set_terrain_temporal_coverage(bool enabled) {
     xg_render_world_simple_set_terrain_temporal_coverage(enabled);
 }
 
+void xg_render_runtime_composition_restore_world_materials(void) {
+    xg_render_world_model_repository_note_savestate_restore();
+}
+
 void xg_render_runtime_composition_set_exec_phase_exchange(
         int (*exchange)(int phase)) {
     xg_render_world_coordinator_set_exec_phase_exchange(exchange);

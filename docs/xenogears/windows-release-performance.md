@@ -56,12 +56,64 @@ useful profile data, but does not validate performance on native Windows.
 
 ## Workers and GPU support
 
-The Native phase pool uses the OS CPU affinity mask on Linux and Windows,
-with at most four workers. A process restricted to one logical CPU creates one
-phase worker. The count is sampled when the pool starts; restart the game after
-changing affinity to resize an existing pool. On Windows, an unavailable or
-zero mask (including some multi-group configurations) falls back to SDL's CPU
-count.
+Original-resolution guest VRAM is rasterized on the CPU on all platforms and
+at every FPS setting. Native VIEW geometry and temporal phases remain GPU work.
+Guest VRAM also supplies CPU texture, palette and copy inputs; keeping it on the
+CPU avoids repeated synchronous GPU readbacks before phase generation. The WGL
+round trips can otherwise consume the interpolation window in feedback-heavy
+scenes, despite a correct FPS selection. `PSX_NATIVE_GPU_CANONICAL=1` enables
+the GPU canonical raster explicitly for diagnostic comparisons.
+
+Static phase triangle parameters use CPU preparation for batches of at most
+128 triangles; larger batches retain compute setup. The decision uses captured
+triangle counts, including every face in a mesh command, before geometry is
+prepared. This changes where the existing attribute/depth calculations run,
+without changing their precision or the GPU rasterizer. `PSX_NATIVE_GPU_SETUP=0`
+forces CPU preparation and `=1` forces available GPU setup for A/B diagnostics.
+The hidden-GL `native_gpu_scale_test --setup-benchmark` measures geometry,
+material packing, upload and compute completion together, and checks exact
+CPU/GPU parameter-buffer equality. On this machine's single E-core under Linux,
+64 triangles took about 19 us on CPU versus 35 us with compute setup; 128 took
+37 versus 45 us, while 256 was already near the crossover (63 versus 60 us).
+The conservative 128-face cutoff avoids moving large world meshes onto a
+single CPU core and leaves margin for variation in GPU submission costs.
+
+Native phase compilation, CPU reference bands, CPU recipe stripes and HD texture
+decoding size their workers from the OS CPU affinity mask on Linux and Windows.
+There is no fixed three/four-worker ceiling. Each subsystem uses at most one
+worker per available logical CPU and no more workers than its independent work
+items (phases, raster rows or pending/in-flight images). Recipe stripes include
+the calling thread in that count. Phase and texture pools grow on demand and
+retain idle workers for reuse; reference bands are created on their first draw.
+Restart the game after changing affinity to resize retained pools. Failed thread
+creation keeps a smaller working pool or falls back to serial rendering.
+
+Performance checks must also launch with affinity restricted to one E-core,
+verify the game threads retain that mask, and compare both Original and 240 FPS
+in a field scene and the worldmap. Repeat the check without timing diagnostics.
+Check guest vblank progress and interpolated phase selections together: a
+240-Hz presentation counter alone can include repeated images while simulation
+falls below 60 vblanks/s. Use the same affinity, state and settings for the
+before/after comparison.
+
+On Windows, an unavailable or zero mask (including some multi-group
+configurations) falls back to SDL's CPU count for rendering and the C++ hardware
+CPU count for texture decoding. Game simulation remains ordered on its guest
+thread; additional workers do not change guest execution order or GL ownership.
+
+Geometry preparation also splits a single mesh into primitive ranges. Endpoint
+transforms, per-phase vertex projection, entity evaluation/copies, draw projection
+and immutable texture copies use a shared pool, so their CPU parallelism is not
+limited by the number of interpolation phases. Draw rejection is merged in
+submission order before phase publication. Nested jobs help execute pending work
+instead of waiting for another pool; idle threads are retained for reuse.
+
+MDEC parses the compressed stream on the guest owner, then runs independent
+IDCT/color-conversion blocks and native-frame tiles on that same shared pool.
+The owner waits before publishing FIFO bytes, frame metadata or command
+completion. CPU count and task scheduling do not change serialized MDEC state.
+For diagnostic A/B runs, `PSX_HOST_PARALLEL=0` executes these shared-pool ranges
+on the caller; the default uses all available CPUs. Restart after changing it.
 
 The fast Native GL path checks driver capabilities, not GPU brands. Its ordered
 fragment path needs `GL_ARB_fragment_shader_interlock`; compute triangle setup
@@ -77,3 +129,22 @@ setup, which may have a lower performance ceiling. Logs confirm activation:
 Native GPU: compute triangle setup ready
 Native GPU: image fingerprint compute ready
 ```
+
+## Native GPU measurement and image checks
+
+Normal play does not allocate Native GPU timestamp queries. Set
+`PSX_NATIVE_GPU_TIMING=1`, or request `PSX_NATIVE_TIMING_OUT`, to collect them;
+`PSX_NATIVE_GPU_TIMING=0` explicitly disables them. These spans include queue
+idle time between source slices and measure latency rather than GPU utilization.
+For a controlled comparison in the same executable,
+`PSX_NATIVE_GENERIC_RASTER=1` restores the generic shader arithmetic and eager
+attribute loads, and `PSX_NATIVE_FLUSH_SLICES=1` restores per-slice submission.
+Keep the replay, FPS, resolution and quality fixed, and report GPU clocks and
+power alongside utilization because the driver changes its operating frequency.
+
+The Native GPU scale test compares full RGBA and integer depth images between
+both shaders at 1x through 8x, with fractional coordinates, perspective, Gouraud
+shading, raw textures, masks and blending. `--raster-benchmark` additionally
+measures repeated GPU draws. Its UI check confirms that clipping the overlay to
+menu/popup bounds preserves the game pixels outside those bounds. Custom ImGui
+draw callbacks retain full-window composition.

@@ -968,6 +968,7 @@ if(BUILD_TESTING)
         ${PSXRECOMP_ROOT}/runtime/src/ws_aspect_cone_math.c
         ${PSXRECOMP_ROOT}/runtime/src/ws_ui_group.c
         ${PSXRECOMP_ROOT}/runtime/src/gpu_gl_renderer.c
+        ${PSXRECOMP_ROOT}/runtime/src/host_parallel.cpp
         ${PSXRECOMP_ROOT}/runtime/src/host_cpu.c)
     target_include_directories(gpu_gl_mask_order_test PRIVATE
         ${PSXRECOMP_ROOT}/runtime/include ${PSX_SDL_INCLUDE_DIRS})

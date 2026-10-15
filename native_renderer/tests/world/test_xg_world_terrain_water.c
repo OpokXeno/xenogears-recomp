@@ -442,6 +442,42 @@ static int test_interpolation_identity_survives_tile_slot_movement(void) {
     return 1;
 }
 
+static int test_edge_on_water_uses_native_winding(void) {
+    static XgWorldTerrainWaterRecord records[
+        XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY];
+    TestReader reader = {0};
+    XgWorldTerrainWaterCapture capture;
+    uint32_t count = 0u;
+    bool found = false;
+
+    CHECK(capture_source(&reader, &capture) ==
+          XG_WORLD_TERRAIN_WATER_CAPTURE_OK);
+    /* A shallow view of the animated surface. Primitive 207 faces the Native
+     * camera, but MAC flooring and the GTE divide reverse its fractional
+     * screen-space winding. Culling it exposes the sky through the water. */
+    capture.source.camera = (XgHost3dMatrix){
+        .rotation = {{4096, 0, 0}, {0, 4095, -81}, {0, 81, 4095}},
+        .translation = {3600, -72, -1300},
+    };
+    capture.source.projection_distance = 160u;
+    capture.source.screen_offset_x = 160 * INT32_C(65536);
+    capture.source.screen_offset_y = 108 * INT32_C(65536);
+    xg_host_3d_configure_native_view(1, 0);
+    const XgWorldTerrainWaterResult result = xg_world_terrain_water_build(
+        &capture.source, records,
+        XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY, &count);
+    xg_host_3d_configure_native_view(0, 0);
+    CHECK(result == XG_WORLD_TERRAIN_WATER_OK);
+    for (uint32_t index = 0u; index < count; ++index) {
+        if (records[index].source_primitive_index != 207u) continue;
+        CHECK(records[index].animated_height);
+        CHECK(xg_host_3d_nclip(records[index].projected_vertices) > 0);
+        found = true;
+    }
+    CHECK(found);
+    return 1;
+}
+
 static int test_exact_packet_stop_rule(void) {
     static XgWorldTerrainWaterRecord records[
         XG_WORLD_TERRAIN_WATER_RECORD_CAPACITY];
@@ -753,6 +789,7 @@ int main(void) {
     int ok = 1;
 
     ok &= test_capture_and_all_ft3_variants();
+    ok &= test_edge_on_water_uses_native_winding();
     ok &= test_interpolation_identity_survives_tile_slot_movement();
     ok &= test_exact_packet_stop_rule();
     ok &= test_quadrant_cull_and_scratch_page_seven();

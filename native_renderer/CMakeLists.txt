@@ -622,6 +622,14 @@ if(BUILD_TESTING)
     target_link_libraries(test_xg_world_models PRIVATE xg_world_models)
     add_test(NAME xg_world_models COMMAND test_xg_world_models)
 
+    add_executable(test_xg_world_model_restore
+        tests/world/test_xg_world_model_restore.c
+        src/producers/world/xg_render_world_model_repository.c)
+    target_include_directories(test_xg_world_model_restore PRIVATE
+        include ${XG_RENDER_PRIVATE_INCLUDE_DIRS}
+        "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
+    add_test(NAME xg_world_model_restore COMMAND test_xg_world_model_restore)
+
     add_executable(test_xg_world_actor_sprites
         tests/world/test_xg_world_actor_sprites.c)
     target_link_libraries(test_xg_world_actor_sprites PRIVATE

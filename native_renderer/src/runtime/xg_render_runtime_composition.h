@@ -19,6 +19,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+void xg_render_runtime_composition_restore_world_materials(void);
+
 typedef struct XgRenderRuntimeAuthSceneState {
     GuestRenderRenderMode render_mode;
     XgRenderAuthTier pending_tier;

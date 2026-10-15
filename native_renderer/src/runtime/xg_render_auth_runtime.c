@@ -4452,6 +4452,7 @@ bool psx_xg_render_auth_note_vram_event(
                 scene_boundary_locked();
             }
             state.movie_active_owner = event->movie_owner_kind;
+            xg_render_runtime_composition_restore_world_materials();
             unlock_presentation_lifecycle();
         }
         return xg_render_native_work_vram_event(event, guest_cycle);

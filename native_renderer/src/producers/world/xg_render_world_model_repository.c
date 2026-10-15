@@ -3,6 +3,7 @@
 #include "xg_render_model_repository.h"
 
 #include <limits.h>
+#include <stdlib.h>
 #include <string.h>
 
 enum {
@@ -85,6 +86,7 @@ static XgRenderWorldModelPacketCopyRange packet_copy_ranges[
 static uint32_t packet_copy_range_count;
 static bool templates_populated;
 static bool initializer_populated;
+static bool restored_materials_allowed;
 static uint32_t template_read_failure;
 static uint64_t resource_epoch;
 static uint32_t template_epoch = 1u;
@@ -181,6 +183,7 @@ static XgRenderWorldModelColorWrite *color_write_find(
 }
 
 void xg_render_world_model_repository_invalidate(void) {
+    restored_materials_allowed = false;
     packet_copy = (XgRenderWorldModelPacketCopyContext){0};
     packet_copy_range_count = 0u;
     snapshot.packet_copy_range_count = 0u;
@@ -196,6 +199,13 @@ void xg_render_world_model_repository_invalidate(void) {
         ++template_epoch;
     }
     xg_render_model_repository_reset_templates();
+}
+
+void xg_render_world_model_repository_note_savestate_restore(void) {
+    /* The saved scene can reuse packet addresses. Discard materials from the
+     * previous RAM contents before accepting the restored packet buffers. */
+    xg_render_world_model_repository_invalidate();
+    restored_materials_allowed = true;
 }
 
 void xg_render_world_model_repository_invalidate_initializer(void) {
@@ -713,6 +723,111 @@ fail:
     xg_render_world_model_repository_invalidate();
 }
 
+/* A cold savestate contains the model's packet buffers, but no initializer
+ * receipts from the process which created them. Recover only their persistent
+ * material/packet state, walking authenticated model topology to identify each
+ * packet. Geometry still comes from model vertices and transforms; packet XY
+ * never becomes a source of Native positions. Normal prepare/commit validation
+ * must also succeed before the recovered records can replace guest draws. */
+static bool restore_model_templates(
+        const XgRenderWorldModelRepositoryReaderContext *reader,
+        uint32_t model, uint32_t base) {
+    static const uint8_t attribute_sizes[] = {
+        4, 8, 4, 8, 4, 8, 4, 8, 4, 12, 4, 12, 4, 12, 4, 12, 4,
+    };
+    static const uint8_t packet_strides[] = {
+        0x14, 0x20, 0x1c, 0x28, 0x14, 0x20, 0x1c, 0x28,
+        0x18, 0x28, 0x24, 0x34, 0x18, 0x28, 0x24, 0x34, 0x20,
+    };
+    if (!restored_materials_allowed || !reader || !reader->cpu || !services_valid(reader->services) ||
+        !reader->cpu->read_word || !reader->cpu->read_half ||
+        !reader->cpu->read_byte || resource_epoch == UINT64_MAX)
+        return false;
+    CPUState *cpu = reader->cpu;
+    const XgRenderWorldModelRepositoryServices *services = reader->services;
+    uint64_t generation;
+    if (!services->authentication_generation(&generation) || !generation ||
+        !services->authorize_guest_range(model, 0x38u, 4u, false))
+        return false;
+    const uint32_t groups = cpu->read_half(model + 6u);
+    const uint32_t primitive_count = cpu->read_half(model + 4u);
+    const uint32_t capacity = cpu->read_word(model + 0x34u);
+    if (!groups || groups > 256u || !primitive_count ||
+        primitive_count > XG_RENDER_WORLD_MODEL_TEMPLATE_CAPACITY ||
+        !capacity || capacity > UINT32_MAX - base ||
+        !services->authorize_guest_range(base, capacity, 4u, false))
+        return false;
+    XgRenderWorldModelTemplate *recovered = calloc(primitive_count, sizeof(*recovered));
+    if (!recovered) return false;
+    uint32_t topology = cpu->read_word(model + 0x10u);
+    uint32_t attribute = cpu->read_word(model + 0x14u);
+    uint32_t packet = base, ordinal = 0u;
+    bool ok = false;
+    for (uint32_t group = 0u; group < groups; ++group) {
+        if (!services->authorize_guest_range(topology, 4u, 2u, false)) goto done;
+        const uint32_t family = cpu->read_byte(topology);
+        const uint32_t count = cpu->read_half(topology + 2u);
+        if (family >= XG_WORLD_MODELS_PRIMITIVE_FAMILY_COUNT || !count ||
+            count > primitive_count - ordinal ||
+            topology > UINT32_MAX - (4u + count * 8u) ||
+            !services->authorize_guest_range(topology, 4u + count * 8u, 2u, false))
+            goto done;
+        const uint32_t table = UINT32_C(0x8004fe50) + family * 0x28u;
+        if (!services->authorize_guest_range(table, 0x28u, 4u, false) ||
+            !physical_address_equals(cpu->read_word(table + 0x18u), initializer_functions[family]) ||
+            cpu->read_word(table + 0x1cu) != 8u ||
+            cpu->read_word(table + 0x20u) != attribute_sizes[family] ||
+            cpu->read_word(table + 0x24u) != packet_strides[family])
+            goto done;
+        for (uint32_t p = 0u; p < count; ++p, ++ordinal) {
+            uint32_t controls;
+            for (controls = 0u; controls < XG_WORLD_MODELS_MAX_CONTROL_COMMANDS_PER_PRIMITIVE; ++controls) {
+                if (!services->authorize_guest_range(attribute, 4u, 4u, false)) goto done;
+                const uint8_t command = cpu->read_byte(attribute + 3u);
+                if (command != 0xc4u && command != 0xc8u) break;
+                if (attribute > UINT32_MAX - 4u) goto done;
+                attribute += 4u;
+            }
+            if (controls == XG_WORLD_MODELS_MAX_CONTROL_COMMANDS_PER_PRIMITIVE ||
+                packet - base > capacity || packet_strides[family] > capacity - (packet - base) ||
+                attribute > UINT32_MAX - attribute_sizes[family] ||
+                !services->authorize_guest_range(attribute, attribute_sizes[family], 4u, false))
+                goto done;
+            XgRenderWorldModelTemplate *entry = &recovered[ordinal];
+            *entry = (XgRenderWorldModelTemplate){
+                .resource_epoch = resource_epoch + 1u, .table_epoch = template_epoch,
+                .owner_cpu = cpu, .model_address = normalized_word_address(model),
+                .packet_base = normalized_word_address(base), .primitive_ordinal = ordinal,
+                .packet_address = normalized_word_address(packet),
+                .attribute_address = normalized_word_address(attribute),
+                .primitive_family = (uint8_t)family, .word_count = packet_strides[family] / 4u,
+                .active = true, .valid = true,
+            };
+            for (uint32_t w = 0u; w < entry->word_count; ++w)
+                entry->words[w] = cpu->read_word(packet + w * 4u);
+            const uint32_t payload = entry->words[0] >> 24u;
+            if (payload != entry->word_count - 1u &&
+                !(family == 8u && payload == entry->word_count - 2u))
+                goto done;
+            packet += packet_strides[family];
+            attribute += attribute_sizes[family];
+        }
+        topology += 4u + count * 8u;
+    }
+    if (ordinal != primitive_count || packet - base != capacity) goto done;
+    for (uint32_t i = 0u; i < ordinal; ++i) {
+        XgRenderWorldModelTemplate *entry = template_find(recovered[i].packet_address, true);
+        if (!entry) { xg_render_world_model_repository_invalidate(); goto done; }
+        *entry = recovered[i];
+    }
+    ++resource_epoch;
+    templates_populated = true;
+    ok = true;
+done:
+    free(recovered);
+    return ok;
+}
+
 bool xg_render_world_model_repository_read_packet_template(
         void *context, uint32_t model_header_address,
         uint32_t packet_base_address, uint32_t packet_address,
@@ -731,6 +846,8 @@ bool xg_render_world_model_repository_read_packet_template(
         return false;
     }
     entry = template_find(packet_address, false);
+    if (entry == NULL && restore_model_templates(reader, model_header_address, packet_base_address))
+        entry = template_find(packet_address, false);
     if (entry == NULL) {
         if (snapshot.first_missing_packet_address == 0u) {
             snapshot.first_missing_model_address = model_header_address;

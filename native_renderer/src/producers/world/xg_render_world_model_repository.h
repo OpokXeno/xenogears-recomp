@@ -75,6 +75,7 @@ bool xg_render_world_model_repository_update_template_words(
     const uint32_t *words, uint8_t word_count, uint32_t word_write_mask);
 
 void xg_render_world_model_repository_invalidate(void);
+void xg_render_world_model_repository_note_savestate_restore(void);
 void xg_render_world_model_repository_invalidate_initializer(void);
 void xg_render_world_model_repository_snapshot(
     PsxXgRenderWorldNativeSnapshot *out_snapshot);
