@@ -16,6 +16,27 @@ import subprocess
 import sys
 
 
+def graphical_environment(environment: dict[str, str]) -> dict[str, str]:
+    env = dict(environment)
+    if env.get("DISPLAY"):
+        return env
+    # A self-hosted runner service does not necessarily inherit the desktop's
+    # environment. Import only display-related values, never evaluate shell
+    # text or copy unrelated session variables into the build.
+    systemctl = shutil.which("systemctl")
+    if systemctl:
+        result = subprocess.run([systemctl, "--user", "show-environment"],
+                                capture_output=True, text=True, check=False, timeout=5)
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                key, separator, value = line.partition("=")
+                if separator and key in {"DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR"}:
+                    env[key] = value
+    if not env.get("DISPLAY"):
+        raise ValueError("PGO rendering needs an accessible X11/XWayland desktop; configure DISPLAY and XAUTHORITY for the runner")
+    return env
+
+
 def windows_path(path: Path) -> str:
     # Wine's standard Z: mapping exposes absolute Unix paths, including spaces.
     return "Z:" + path.resolve().as_posix()
@@ -131,12 +152,7 @@ def _train(args: argparse.Namespace) -> None:
         raise ValueError("umu-run (Proton) or Wine is required to train the Windows executable")
     if args.proton and not (args.proton / "proton").is_file():
         raise ValueError(f"missing Proton runner: {args.proton}")
-    wrapper = []
-    if not os.environ.get("DISPLAY"):
-        xvfb = shutil.which("xvfb-run")
-        if not xvfb:
-            raise ValueError("PGO rendering requires DISPLAY or xvfb-run")
-        wrapper = [xvfb, "-a", "-s", "-screen 0 1280x1024x24"]
+    env = graphical_environment(os.environ)
     profile_dir.mkdir(parents=True, exist_ok=True)
     # Never merge stale data left by a prior revision or a failed training run.
     if not args.verify_only:
@@ -144,9 +160,8 @@ def _train(args: argparse.Namespace) -> None:
             path.unlink(missing_ok=True)
     replay = profile_dir / ("verification.toml" if args.verify_only else "training.toml")
     replay.write_text(neutral_replay(args.vblanks))
-    env = os.environ.copy()
     env.pop("PSX_HEADLESS", None)
-    # Training selects an X11 DISPLAY (real or Xvfb). Wine's Wayland driver
+    # Training selects an X11 DISPLAY. Wine's Wayland driver
     # can otherwise take precedence and fail WGL pixel-format creation.
     env.pop("WAYLAND_DISPLAY", None)
     env["WINEDLLOVERRIDES"] = env.get("WINEDLLOVERRIDES", "") + ";winewayland.drv=d"
@@ -185,9 +200,9 @@ def _train(args: argparse.Namespace) -> None:
         if args.proton:
             # A Windows path selects Proton's direct Wine launch. Its /unix
             # launcher detaches GUI stdout and can discard application logs.
-            command = [*wrapper, wine, *game_command]
+            command = [wine, *game_command]
         else:
-            command = [*wrapper, wine, str(exe), *game_command[1:]]
+            command = [wine, str(exe), *game_command[1:]]
         action = "Verifying optimized" if args.verify_only else "Training"
         print(f"{action} Windows Native at {fps} FPS ({args.vblanks} vblanks)...", flush=True)
         with log_path.open("w") as log:

@@ -10,10 +10,13 @@ setting before packaging, using the same slot-load and renderer checks.
 
 ## Private runner inputs
 
-Install `umu-run` and GE-Proton and either provide an accessible `DISPLAY` to the runner or
-install `xvfb-run` with working OpenGL support. Training renders a real window;
-headless mode skips the presentation paths we want to optimize. Xvfb can use a
-software GL driver, so a hardware display is preferable when available.
+Install `umu-run` and GE-Proton and provide an accessible X11/XWayland desktop.
+Training renders a real window; headless mode skips the presentation paths we
+want to optimize. If the runner service lacks `DISPLAY`, the script imports
+only `DISPLAY`, `XAUTHORITY` and `XDG_RUNTIME_DIR` from its user's active
+systemd session. Otherwise configure those variables explicitly. A logged-in
+graphical session with working OpenGL is required; Xvfb alone did not expose
+usable displays through this GE-Proton setup and is not an automatic fallback.
 The Actions variable `XGR_PGO_PROTON_ROOT` selects the installed GE-Proton
 directory; the default is the maintainer's GE-Proton10-34 installation. UMU's
 installed Steam runtime is reused without checking for updates during training.

@@ -4,8 +4,9 @@ import fcntl
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from train_windows_pgo import train, validate_training
+from train_windows_pgo import graphical_environment, train, validate_training
 
 
 class TrainingValidationTests(unittest.TestCase):
@@ -32,6 +33,24 @@ class TrainingValidationTests(unittest.TestCase):
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 with self.assertRaisesRegex(ValueError, "another PGO training"):
                     train(argparse.Namespace(build_dir=build))
+
+    def test_explicit_display_takes_precedence(self):
+        env = {"DISPLAY": ":7", "XAUTHORITY": "/chosen/auth"}
+        with patch("train_windows_pgo.subprocess.run") as run:
+            self.assertEqual(graphical_environment(env), env)
+            run.assert_not_called()
+
+    def test_runner_imports_only_display_session_values(self):
+        result = argparse.Namespace(returncode=0, stdout="DISPLAY=:0\nXAUTHORITY=/session/auth\nUNRELATED_TOKEN=private\n")
+        with patch("train_windows_pgo.shutil.which", return_value="/usr/bin/systemctl"), \
+                patch("train_windows_pgo.subprocess.run", return_value=result):
+            env = graphical_environment({"EXISTING": "preserved"})
+        self.assertEqual(env, {"EXISTING": "preserved", "DISPLAY": ":0", "XAUTHORITY": "/session/auth"})
+
+    def test_missing_graphical_session_fails_before_training(self):
+        with patch("train_windows_pgo.shutil.which", return_value=None):
+            with self.assertRaisesRegex(ValueError, "DISPLAY and XAUTHORITY"):
+                graphical_environment({})
 
     def test_30fps_accepts_clamped_legacy_diagnostic(self):
         self.evidence["native_midpoint"]["target_fps"] = 60

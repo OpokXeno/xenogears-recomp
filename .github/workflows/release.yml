@@ -117,9 +117,7 @@ jobs:
           pgo_state="${XGR_PGO_SAVESTATE:-$XGR_ASSETS_DIR/pgo/slot00.pst}"
           [ -s "$pgo_state" ] || { echo "::error::missing private PGO savestate: $pgo_state"; exit 1; }
           [ -f "$XGR_PGO_PROTON_ROOT/proton" ] || { echo "::error::missing GE-Proton: $XGR_PGO_PROTON_ROOT"; exit 1; }
-          if [ -z "${DISPLAY:-}" ]; then
-            command -v xvfb-run >/dev/null || { echo "::error::PGO requires DISPLAY or xvfb-run"; exit 1; }
-          fi
+          python3 -c 'import os; from ci.train_windows_pgo import graphical_environment; print("PGO display:", graphical_environment(os.environ)["DISPLAY"])'
 
       - name: Test release archive verifier
         run: cmake -DPROJECT_ROOT="$PWD" -DTEST_WORK_DIR="$RUNNER_TEMP/xgr-release-verifier-tests-windows" -P cmake/tests/test_verify_release_archive.cmake
