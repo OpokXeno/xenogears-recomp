@@ -2089,20 +2089,18 @@ static bool publish_model_ft4(
         const XgRenderModelSpritePipelineServices *services) {
     for (uint32_t index = 0u; index < model_ft4.count; ++index) {
         const ModelFt4Record *record = &model_ft4.records[index];
-        const XgRenderModelFt4SourceRecord source = {
-            .primitive = record->native.primitive,
-            .lifecycle = record->lifecycle,
-            .source_id =
-                (record->packet_address & UINT32_C(0x1fffffff)) + 4u,
-            .interpolation_producer_id = record->interpolation_producer_id,
-            .interpolation_primitive_id = record->interpolation_primitive_id,
-            .opcode = (uint8_t)(record->material_word >> 24u),
-            .interpolation_identity_valid =
-                record->interpolation_identity_valid,
-            .valid = true,
-        };
         if (!record->guest_observed_accepted || !record->output_validated)
             continue;
+        XgRenderModelFt4SourceRecord source;
+        source.primitive=record->native.primitive;
+        source.lifecycle=record->lifecycle;
+        source.source_id=(record->packet_address & UINT32_C(0x1fffffff))+4u;
+        source.interpolation_producer_id=record->interpolation_producer_id;
+        source.interpolation_primitive_id=record->interpolation_primitive_id;
+        source.opcode=(uint8_t)(record->material_word>>24u);
+        source.interpolation_identity_valid=record->interpolation_identity_valid;
+        source.valid=true;
+        /* The repository initializes its lazy semantic cache on first use. */
         if (!xg_render_model_repository_store_ft4_source(
                 &source, &(XgRenderModelSourcePublication){
                     .resource_address = record->packet_address + 4u,

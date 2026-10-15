@@ -2053,6 +2053,25 @@ bool xg_render_presentation_phase_alpha(uint64_t phase_index,
     return true;
 }
 
+void xg_render_semantic_presentation_publication_state(
+        XgRenderPublicationState *out_state) {
+    if (out_state == NULL) return;
+    lock_ready();
+    *out_state = (XgRenderPublicationState){
+        .presentation_epoch = g_diagnostics.presentation_epoch,
+        .source_sequence = g_diagnostics.source_sequence,
+        .guest_vblank_sequence = g_diagnostics.guest_vblank_sequence,
+        .guest_cycle = g_diagnostics.guest_cycle,
+        .source_queue_depth = g_source_count,
+        .source_lane_blocked = g_diagnostics.source_lane_blocked,
+        .worker_busy = g_worker_operations != 0u ||
+            g_deferred_compile_retirements != 0u,
+        .publication_open = g_publication_open,
+        .epoch_terminal = g_epoch_terminal,
+    };
+    state_unlock();
+}
+
 void xg_render_semantic_presentation_diagnostics(
         XgRenderPresentationDiagnostics *out_diagnostics) {
     uint32_t index;

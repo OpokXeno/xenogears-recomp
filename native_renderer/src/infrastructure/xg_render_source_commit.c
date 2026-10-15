@@ -3,6 +3,7 @@
 #include "xg_render_native_mesh.h"
 
 #include <stdatomic.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -1985,7 +1986,13 @@ XgRenderSourceCommitResult xg_render_source_commit_append_native_operation(
     } else {
         /* Only defined fields of the selected operation enter the immutable
          * stream. The upload retain above and append are one transaction. */
-        XgRenderNativeOperation copy = {.kind = operation->kind};
+        XgRenderNativeOperation copy;
+        if(operation->kind==XG_RENDER_NATIVE_OPERATION_DRAW || operation->kind==XG_RENDER_NATIVE_OPERATION_MESH) {
+            memset(&copy,0,offsetof(XgRenderNativeOperation,semantic));
+            const size_t tail=offsetof(XgRenderNativeOperation,semantic)+sizeof(copy.semantic);
+            memset((uint8_t *)&copy+tail,0,sizeof(copy)-tail);
+        } else memset(&copy,0,sizeof(copy));
+        copy.kind=operation->kind;
         if (operation->kind == XG_RENDER_NATIVE_OPERATION_DRAW) {
             copy.semantic = operation->semantic;
             copy.motion = operation->motion;

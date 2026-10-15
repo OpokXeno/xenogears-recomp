@@ -203,19 +203,20 @@ static bool capture_source_command(const GpuRenderSemantic *semantic,
         if (index == source_capture_count) ++source_capture_count;
     }
     release_temporal_capture(&source_captures[index]);
-    source_captures[index] = (XgRenderSourceCapture){
-        .command =
-            {
-                .semantic = *semantic,
-                .provenance = provenance,
-                .command_id = command_id,
-                .source_primitive_index = source_primitive_index,
-                .has_provenance = provenance.state_id.scene_epoch != 0u,
-                .producer_captured = true,
-            },
-        .scene_generation = generation,
-        .capture_sequence = ++capture_sequence,
-    };
+    XgRenderSourceCapture *capture = &source_captures[index];
+    _Static_assert(offsetof(XgRenderSourceCapture, command.semantic) == 0u,
+                   "capture semantic prefix");
+    /* The complete semantic is overwritten. Clear only ownership/lifecycle
+     * metadata instead of clearing and copying the same 1 KiB payload. */
+    memset((uint8_t *)capture + sizeof(*semantic), 0, sizeof(*capture) - sizeof(*semantic));
+    capture->command.semantic = *semantic;
+    capture->command.provenance = provenance;
+    capture->command.command_id = command_id;
+    capture->command.source_primitive_index = source_primitive_index;
+    capture->command.has_provenance = provenance.state_id.scene_epoch != 0u;
+    capture->command.producer_captured = true;
+    capture->scene_generation = generation;
+    capture->capture_sequence = ++capture_sequence;
     source_capture_by_command[command_slot(command_id)] = index;
     return true;
 }
@@ -552,7 +553,7 @@ bool xg_render_submission_resolve_command(
     const GpuRenderSemantic *packet, XgRenderSubmissionCommand *out_command) {
     XgRenderSourceCapture *capture = NULL;
     GpuRenderSemantic pre_scene_semantic;
-    XgRenderSubmissionCommand pre_scene_command = {0};
+    XgRenderSubmissionCommand pre_scene_command;
     const XgRenderSubmissionCommand *source = NULL;
     uint32_t pre_scene_index = UINT32_MAX;
 
@@ -562,11 +563,6 @@ bool xg_render_submission_resolve_command(
         packet->line_count > GPU_RENDER_SEMANTIC_LINE_CAPACITY)
         return false;
     command_id = command_canonical(command_id);
-    *out_command = (XgRenderSubmissionCommand){
-        .semantic = *packet,
-        .command_id = command_id,
-        .source_primitive_index = command_id,
-    };
     const uint32_t capture_index = source_capture_by_command[command_slot(command_id)];
     if (capture_index < source_capture_count &&
         source_captures[capture_index].command.command_id == command_id &&
@@ -608,8 +604,19 @@ bool xg_render_submission_resolve_command(
         source = &pre_scene_command;
         break;
     }
+    const bool geometry_matches = source != NULL &&
+        captured_geometry_matches(&source->semantic, packet);
+    /* Most model packets have a matching capture. Copy that once, rather than
+     * first copying the full packet geometry only to overwrite it below. */
+    if (!geometry_matches) {
+        *out_command = (XgRenderSubmissionCommand){
+            .semantic = *packet,
+            .command_id = command_id,
+            .source_primitive_index = command_id,
+        };
+    }
     if (source != NULL) {
-        if (!captured_geometry_matches(&source->semantic, packet)) {
+        if (!geometry_matches) {
             ++submission_diagnostics.geometry_rejected;
             submission_diagnostics.last_rejected_command = command_id;
             /* A pending producer/packet disagreement is not a licence to

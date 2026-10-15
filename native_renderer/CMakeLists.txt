@@ -884,6 +884,23 @@ if(BUILD_TESTING)
     add_test(NAME xg_render_model_resources
         COMMAND test_xg_render_model_resources)
 
+    # Isolate packet/template invalidation from the full producer-auth fixture.
+    # Discard unrelated repository entry points and their runtime dependencies.
+    if(NOT MSVC AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" AND NOT APPLE)
+        add_executable(test_xg_render_model_templates
+            tests/infrastructure/test_xg_render_model_templates.c
+            src/producers/model/xg_render_model_repository.c
+            src/infrastructure/xg_render_address_lookup.c)
+        target_include_directories(test_xg_render_model_templates PRIVATE
+            include ${XG_RENDER_PRIVATE_INCLUDE_DIRS}
+            "${XG_REPOSITORY_ROOT}/psxrecomp/runtime/include")
+        target_compile_features(test_xg_render_model_templates PRIVATE c_std_11)
+        target_compile_options(test_xg_render_model_templates PRIVATE
+            -ffunction-sections -fdata-sections)
+        target_link_options(test_xg_render_model_templates PRIVATE -Wl,--gc-sections)
+        add_test(NAME xg_render_model_templates COMMAND test_xg_render_model_templates)
+    endif()
+
     add_executable(test_xg_render_vram_resources
         tests/infrastructure/test_xg_render_vram_resources.c
         src/infrastructure/xg_render_vram_resources.c

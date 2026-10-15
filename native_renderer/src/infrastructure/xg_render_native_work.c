@@ -4,6 +4,7 @@
 #include "gpu_primitive_reject.h"
 
 #include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
 
 
@@ -41,10 +42,10 @@ static void clear_rejection(void) {
     g_failure_result = 0;
 }
 
-static bool lane_ready(XgRenderPresentationDiagnostics *out_diagnostics) {
-    XgRenderPresentationDiagnostics diagnostics;
+static bool lane_ready(XgRenderPublicationState *out_diagnostics) {
+    XgRenderPublicationState diagnostics;
     if (!xg_render_native_work_enabled()) return reject_work("disabled", 0);
-    xg_render_semantic_presentation_diagnostics(&diagnostics);
+    xg_render_semantic_presentation_publication_state(&diagnostics);
     if (!diagnostics.publication_open) return reject_work("publication-closed", 0);
     if (diagnostics.epoch_terminal) return reject_work("epoch-exhausted", 0);
     if (diagnostics.source_lane_blocked) return reject_work("compiler-lane-blocked", 0);
@@ -99,7 +100,7 @@ static bool publish_pending(void) {
 }
 
 static bool begin_chunk(uint64_t guest_cycle) {
-    XgRenderPresentationDiagnostics diagnostics;
+    XgRenderPublicationState diagnostics;
     if (!lane_ready(&diagnostics) || !publish_pending()) return false;
     guest_cycle = publication_cycle(guest_cycle, diagnostics.guest_cycle);
     if (g_building) return true;
@@ -194,7 +195,11 @@ bool xg_render_native_work_mesh(const GpuRenderSemantic *material,
                                 uint64_t guest_cycle) {
     clear_rejection();
     if (material == NULL || !mesh.resource_id || !geometry.resource_id) return false;
-    XgRenderNativeOperation operation = {.kind = XG_RENDER_NATIVE_OPERATION_MESH};
+    XgRenderNativeOperation operation;
+    memset(&operation,0,offsetof(XgRenderNativeOperation,semantic));
+    const size_t tail=offsetof(XgRenderNativeOperation,semantic)+sizeof(operation.semantic);
+    memset((uint8_t *)&operation+tail,0,sizeof(operation)-tail);
+    operation.kind=XG_RENDER_NATIVE_OPERATION_MESH;
     operation.semantic = *material;
     operation.semantic.triangle_count = 0u;
     operation.semantic.line_count = 0u;
@@ -244,12 +249,16 @@ static void hd_texture_note_vram_event(const GpuVramEvent *event) {
 bool xg_render_native_work_draw(const GpuRenderSemantic *semantic,
                                 uint64_t guest_cycle) {
     clear_rejection();
-    XgRenderNativeOperation operation = {.kind = XG_RENDER_NATIVE_OPERATION_DRAW};
     if (semantic == NULL ||
         semantic->triangle_count > GPU_RENDER_SEMANTIC_TRIANGLE_CAPACITY ||
         (semantic->topology == GPU_RENDER_SEMANTIC_TRIANGLES &&
          semantic->triangle_count == 0u)) return false;
-    operation.semantic = *semantic;
+    XgRenderNativeOperation operation;
+    memset(&operation,0,offsetof(XgRenderNativeOperation,semantic));
+    const size_t tail=offsetof(XgRenderNativeOperation,semantic)+sizeof(operation.semantic);
+    memset((uint8_t *)&operation+tail,0,sizeof(operation)-tail);
+    operation.kind=XG_RENDER_NATIVE_OPERATION_DRAW;
+    operation.semantic=*semantic;
     if (g_hd_texture.resolve != NULL)
         (void)g_hd_texture.resolve(semantic, &operation.hd_texture);
     (void)xg_render_motion_bind_command(semantic->submission_command_id, &operation);
@@ -294,7 +303,7 @@ bool xg_render_native_work_temporal_coverage(
     uint32_t scope, const XgRenderTemporalComponent *components, uint32_t component_count,
     const XgRenderTemporalSample *samples, uint32_t sample_count,
     uint64_t guest_cycle, XgSemanticResourceRef *out) {
-    XgRenderPresentationDiagnostics timeline;
+    XgRenderPublicationState timeline;
     XgSemanticResourceRef ref;
     if (!out || !begin_chunk(guest_cycle) || !lane_ready(&timeline) ||
         timeline.guest_vblank_sequence == UINT64_MAX) return false;
@@ -323,7 +332,7 @@ bool xg_render_native_work_temporal_coverage(
 bool xg_render_native_work_flush(bool display_boundary, uint64_t guest_cycle) {
     XgRenderSourceCommitResult result;
     XgPresentationIdentity identity;
-    XgRenderPresentationDiagnostics diagnostics;
+    XgRenderPublicationState diagnostics;
     if (!lane_ready(&diagnostics)) return false;
     guest_cycle = publication_cycle(guest_cycle, diagnostics.guest_cycle);
     if (g_sealed) {
@@ -367,7 +376,7 @@ bool xg_render_native_work_flush(bool display_boundary, uint64_t guest_cycle) {
 bool xg_render_native_work_drain(uint64_t guest_cycle) {
     if (!xg_render_native_work_flush(false, guest_cycle)) return false;
     for (;;) {
-        XgRenderPresentationDiagnostics diagnostics;
+        XgRenderPublicationState diagnostics;
         if (!lane_ready(&diagnostics)) return false;
         if (diagnostics.source_queue_depth == 0u && !diagnostics.worker_busy)
             return true;
@@ -436,8 +445,8 @@ bool xg_render_native_work_vram_event(const GpuVramEvent *event,
     operation.width = event->width;
     operation.height = event->height;
     if (event->operation == GPU_VRAM_EVENT_RESTORE) {
-        XgRenderPresentationDiagnostics diagnostics;
-        xg_render_semantic_presentation_diagnostics(&diagnostics);
+        XgRenderPublicationState diagnostics;
+        xg_render_semantic_presentation_publication_state(&diagnostics);
         if (g_epoch != 0u && g_epoch == diagnostics.presentation_epoch)
             return reject_work("restore-without-invalidation", 0);
         xg_render_native_work_cancel_pending();

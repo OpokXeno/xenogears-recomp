@@ -71,6 +71,8 @@ static bool ft3_source_linear_fallback;
  * decide invalidation. Avoid dozens of cold word lookups per unrelated store. */
 static uint8_t ft3_source_pages[0x200000u / 4096u];
 static uint8_t ft4_source_pages[0x200000u / 4096u];
+static uint8_t packet_template_pages[0x200000u / 4096u];
+static uint8_t descriptor_template_pages[0x200000u / 4096u];
 static uint32_t ft3_source_words[XG_RENDER_LOOKUP_WORD_CAPACITY / 32u];
 static uint32_t ft4_source_words[XG_RENDER_LOOKUP_WORD_CAPACITY / 32u];
 static uint32_t packet_words[XG_RENDER_LOOKUP_WORD_CAPACITY / 32u];
@@ -533,6 +535,21 @@ bool xg_render_model_repository_store_ft3_source(
     return true;
 }
 
+/* The semantic is a lazy derived cache and is invalidated on every store.
+ * Copy authored input only; callers need not construct an unused 1 KiB cache. */
+static void ft4_source_store_payload(XgRenderModelFt4SourceRecord *target,
+                                    const XgRenderModelFt4SourceRecord *record) {
+    target->primitive=record->primitive;
+    target->lifecycle=record->lifecycle;
+    target->source_id=record->source_id;
+    target->interpolation_producer_id=record->interpolation_producer_id;
+    target->interpolation_primitive_id=record->interpolation_primitive_id;
+    target->opcode=record->opcode;
+    target->interpolation_identity_valid=record->interpolation_identity_valid;
+    target->valid=record->valid;
+    target->semantic_ready=false;
+}
+
 bool xg_render_model_repository_store_ft4_source(
         const XgRenderModelFt4SourceRecord *record,
         const XgRenderModelSourcePublication *publication,
@@ -542,11 +559,10 @@ bool xg_render_model_repository_store_ft4_source(
     if (record == NULL || !record->valid) return false;
     target = ft4_source_upsert(record->source_id);
     if (target == NULL) return false;
-    *target = *record;
+    ft4_source_store_payload(target,record);
     ft4_source_producers[target - ft4_sources] = target->interpolation_producer_id;
     include_anchor_index(ft4_anchor_ranges, target->interpolation_producer_id,
         (uint32_t)(target - ft4_sources));
-    target->semantic_ready = false;
     xg_render_lookup_put(
         ft4_source_lookup, ft4_source_lookup_epoch, target->source_id,
         (uint32_t)(target - ft4_sources));
@@ -593,10 +609,9 @@ bool xg_render_model_repository_store_ft4_sources(
     }
     for (uint32_t index = 0u; index < count; ++index) {
         XgRenderModelFt4SourceRecord *target = &ft4_sources[targets[index]];
-        *target = records[index];
+        ft4_source_store_payload(target,&records[index]);
         ft4_source_producers[targets[index]] = target->interpolation_producer_id;
         include_anchor_index(ft4_anchor_ranges, target->interpolation_producer_id, targets[index]);
-        target->semantic_ready = false;
         xg_render_lookup_put(
             ft4_source_lookup, ft4_source_lookup_epoch,
             target->source_id, targets[index]);
@@ -836,6 +851,7 @@ bool xg_render_model_repository_store_template(
         packet_lookup, packet_lookup_epoch, packet->material.packet_address,
         packet_index);
     include_word(packet_words, packet->material.packet_address);
+    include_source_pages(packet_template_pages, packet->material.packet_address, 0x28u);
 
     if (!new_descriptor)
         xg_render_lookup_remove(
@@ -848,6 +864,7 @@ bool xg_render_model_repository_store_template(
         descriptor_lookup, descriptor_lookup_epoch,
         descriptor->material.descriptor_address, descriptor_index);
     include_word(descriptor_words, descriptor->material.descriptor_address);
+    include_source_pages(descriptor_template_pages, descriptor->material.descriptor_address, 12u);
     if (new_packet) ++packet_template_count;
     if (new_descriptor) ++descriptor_template_count;
     return true;
@@ -906,6 +923,8 @@ void xg_render_model_repository_reset_templates(void) {
     xg_render_lookup_reset(descriptor_lookup, &descriptor_lookup_epoch);
     memset(packet_words, 0, sizeof(packet_words));
     memset(descriptor_words, 0, sizeof(descriptor_words));
+    memset(packet_template_pages, 0, sizeof(packet_template_pages));
+    memset(descriptor_template_pages, 0, sizeof(descriptor_template_pages));
     memset(descriptor_packet_heads, 0, sizeof(descriptor_packet_heads));
     if (template_table_epoch == UINT32_MAX) {
         memset(packet_templates, 0, sizeof(packet_templates));
@@ -1083,10 +1102,14 @@ void xg_render_model_repository_invalidate_overlapping(
                 record->source_id, index);
         }
     }
-    if (packet_template_count != 0u || descriptor_template_count != 0u) {
+    /* Like source geometry, template pages conservatively retain membership
+     * until reset. Skip word probes only when no template can overlap. */
+    if ((packet_template_count != 0u || descriptor_template_count != 0u) &&
+        source_pages_overlap(packet_template_pages, write_begin, write_end))
         invalidate_packet_candidates(address, size);
+    if ((packet_template_count != 0u || descriptor_template_count != 0u) &&
+        source_pages_overlap(descriptor_template_pages, write_begin, write_end))
         invalidate_descriptor_candidates(address, size);
-    }
 }
 
 void xg_render_model_repository_handle_invalidation(

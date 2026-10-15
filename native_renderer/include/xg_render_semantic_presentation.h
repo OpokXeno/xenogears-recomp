@@ -258,6 +258,20 @@ typedef struct XgRenderPresentationTraceEvent {
     XgRenderPresenterResult presenter_result;
 } XgRenderPresentationTraceEvent;
 
+/* Collector admission state, sampled under the presentation lock without
+ * copying counters or scanning endpoint batches for every accepted packet. */
+typedef struct XgRenderPublicationState {
+    uint64_t presentation_epoch;
+    uint64_t source_sequence;
+    uint64_t guest_vblank_sequence;
+    uint64_t guest_cycle;
+    uint32_t source_queue_depth;
+    bool source_lane_blocked;
+    bool worker_busy;
+    bool publication_open;
+    bool epoch_terminal;
+} XgRenderPublicationState;
+
 typedef struct XgRenderPresentationDiagnostics {
     uint64_t presentation_epoch;
     uint64_t source_sequence; /* Last published work, including mutation-only. */
@@ -477,6 +491,8 @@ bool xg_render_presentation_phase_alpha(
     uint64_t *out_denominator);
 void xg_render_semantic_presentation_diagnostics(
     XgRenderPresentationDiagnostics *out_diagnostics);
+void xg_render_semantic_presentation_publication_state(
+    XgRenderPublicationState *out_state);
 /* Trace sequences are monotonic; get returns false after ring eviction. */
 uint64_t xg_render_presentation_trace_total(void);
 bool xg_render_presentation_trace_get(

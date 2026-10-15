@@ -12,6 +12,9 @@
 #define MOTION_INITIAL_INSTANCE_CAPACITY 512u
 #define MOTION_INITIAL_COMMAND_CAPACITY 16384u
 #define MOTION_COMMAND_MAXIMUM (0x200000u / 4u)
+_Static_assert((MOTION_INITIAL_COMMAND_CAPACITY & (MOTION_INITIAL_COMMAND_CAPACITY - 1u)) == 0u &&
+               (MOTION_COMMAND_MAXIMUM & (MOTION_COMMAND_MAXIMUM - 1u)) == 0u,
+               "motion command tables grow between power-of-two capacities");
 #define MOTION_TOMBSTONE UINT32_MAX
 #define MOTION_WATCH_CAPACITY (XG_RENDER_MOTION_NODE_CAPACITY * 3u + 4u)
 
@@ -63,7 +66,9 @@ static unsigned command_page(uint32_t command_id) {
  * bits of a 64-bit Fibonacci product instead. */
 static unsigned command_home(uint32_t command_id, uint32_t capacity) {
     const uint64_t product = (uint64_t)(command_id >> 2u) * UINT64_C(11400714819323198485);
-    return (unsigned)((product >> 32u) % capacity);
+    /* Growth only doubles a power-of-two table. Preserve the exact hash slots
+     * without dividing for every packet lookup and each collision probe. */
+    return (unsigned)(product >> 32u) & (capacity - 1u);
 }
 
 static bool commands_dirty;
@@ -158,7 +163,7 @@ static bool rehash_commands(uint32_t capacity) {
         const MotionCommand *c = &commands[i];
         if (!c->command_id || c->command_id == MOTION_TOMBSTONE) continue;
         uint32_t slot = command_home(c->command_id, capacity);
-        while (grown[slot].command_id) slot = (slot + 1u) % capacity;
+        while (grown[slot].command_id) slot = (slot + 1u) & (capacity - 1u);
         grown[slot] = *c;
         if (!command_paged(c->command_id)) continue;
         pages[(size_t)(command_page(c->command_id)) * (capacity / 64u) + slot / 64u] |= UINT64_C(1) << (slot % 64u);
@@ -756,7 +761,7 @@ bool xg_render_motion_register_command(uint32_t command_id,
     const unsigned start = command_home(command_id, command_capacity);
     MotionCommand *empty = NULL, *slot = NULL;
     for (unsigned i = 0; i < command_capacity; ++i) {
-        MotionCommand *c = &commands[(start + i) % command_capacity];
+        MotionCommand *c = &commands[(start + i) & (command_capacity - 1u)];
         if (c->command_id == command_id) {
             slot = c;
             break;
@@ -1086,7 +1091,7 @@ bool xg_render_motion_bind_command(uint32_t command_id, XgRenderNativeOperation 
     if (!command_capacity) return false;
     const unsigned start = command_home(command_id, command_capacity);
     for (unsigned i = 0; i < command_capacity; ++i) {
-        const MotionCommand *c = &commands[(start + i) % command_capacity];
+        const MotionCommand *c = &commands[(start + i) & (command_capacity - 1u)];
         if (!c->command_id)
             break;
         if (!command_id || c->command_id != command_id)
@@ -1289,7 +1294,8 @@ static bool evaluate_transform(const XgRenderMotionPose *a, const XgRenderMotion
                                bool initialized, XgRenderMotionTransform *out) {
     XgRenderMotionTrs locals[XG_RENDER_MOTION_NODE_CAPACITY], camera;
     double world[XG_RENDER_MOTION_NODE_CAPACITY][3][4];
-    if (!initialized) memset(out, 0, sizeof(*out));
+    if (!initialized) memset(out, 0, offsetof(XgRenderMotionTransform,model_to_view)+
+        b->node_count*sizeof(out->model_to_view[0]));
     interpolate_trs(&a->camera, &b->camera, alpha, &camera);
     double camera_world[3][4];
     matrix_trs(&camera, camera_world);
@@ -1380,7 +1386,19 @@ bool xg_render_motion_evaluate(XgRenderMotionRef previous, XgRenderMotionRef cur
         a = b;
         alpha = 1;
     }
-    memset(out, 0, sizeof(*out));
+    /* Evaluation consumers address live nodes only. Keep their padding and
+     * transform headers deterministic without touching inactive matrix tails. */
+    memset(out,0,offsetof(XgRenderMotionEvaluation,phase));
+    const size_t live_transform=offsetof(XgRenderMotionTransform,model_to_view)+
+        b->node_count*sizeof(out->phase.model_to_view[0]);
+    memset(&out->phase,0,live_transform);
+    memset(&out->native_phase,0,live_transform);
+    memset(&out->native_current,0,live_transform);
+    for(unsigned endpoint=0u;endpoint<2u;++endpoint) {
+        memset(&out->endpoints[endpoint],0,live_transform);
+        memset(out->source_projection[endpoint],0,b->node_count*sizeof(out->source_projection[endpoint][0]));
+        memset(out->curve_endpoints[endpoint],0,b->node_count*sizeof(out->curve_endpoints[endpoint][0]));
+    }
     out->current = current;
     out->previous = interpolate ? previous : current;
     out->node_count = b->node_count;
