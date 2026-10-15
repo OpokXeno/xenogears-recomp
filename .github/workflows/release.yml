@@ -244,6 +244,14 @@ jobs:
       - name: Verify Native build before packaging
         run: python3 tools/verify_native_release.py --build-dir build-win
 
+      - name: Verify optimized Windows runtime at 30 and 240 FPS
+        run: |
+          python3 ci/train_windows_pgo.py --verify-only --vblanks 120 \
+            --build-dir build-win --llvm-root "$LLVM_MINGW_ROOT" \
+            --proton "$XGR_PGO_PROTON_ROOT" \
+            --savestate "${XGR_PGO_SAVESTATE:-$XGR_ASSETS_DIR/pgo/slot00.pst}" \
+            --disc "$XGR_DISC_IMAGE"
+
       - name: Verify exe imports only system DLLs
         run: |
           exe=build-win/XenogearsRecomp.exe

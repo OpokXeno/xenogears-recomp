@@ -17,6 +17,7 @@ class TrainingValidationTests(unittest.TestCase):
             "native_midpoint": {"target_fps": 240},
             "native_work": {"executed": True, "health": "healthy",
                             "errors": {"compose_failures": 0},
+                            "motion": {"last_endpoint_phase_count": 7, "evaluations": 1},
                             "presentation": {"presented_holds": 7000}},
         }
         self.log = "savestate: LOADED slot 0"
@@ -60,6 +61,10 @@ class TrainingValidationTests(unittest.TestCase):
             validate_training(self.evidence, self.log, 240, 1800)
         self.evidence["native_midpoint"]["target_fps"] = 240
         self.evidence["native_work"]["presentation"]["presented_holds"] = 0
+        with self.assertRaisesRegex(ValueError, "interpolated"):
+            validate_training(self.evidence, self.log, 240, 1800)
+        self.evidence["native_work"]["presentation"]["presented_holds"] = 7000
+        self.evidence["native_work"]["motion"]["last_endpoint_phase_count"] = 0
         with self.assertRaisesRegex(ValueError, "interpolated"):
             validate_training(self.evidence, self.log, 240, 1800)
 

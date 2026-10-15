@@ -5,6 +5,8 @@ build. It compiles `PSX_PGO=generate`, runs that Windows executable through
 GE-Proton/UMU at 30 and 240 Native FPS, merges its Clang profiles with the **same
 toolchain's** `llvm-profdata`, then rebuilds with `PSX_PGO=use` before packaging.
 The final executable contains the optimized code, not profiling counters.
+The final PGO-use executable also runs a 120-vblank smoke test at each FPS
+setting before packaging, using the same slot-load and renderer checks.
 
 ## Private runner inputs
 

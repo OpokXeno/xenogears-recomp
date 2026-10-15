@@ -40,8 +40,12 @@ def validate_training(evidence: dict, log: str, fps: int, vblanks: int) -> None:
     if (not work.get("executed") or work.get("health") != "healthy" or
             not work.get("errors") or any(work["errors"].values())):
         raise ValueError("PGO training reported Native work errors")
-    if fps > 30 and not work.get("presentation", {}).get("presented_holds", 0):
-        raise ValueError("PGO training did not exercise interpolated presentation")
+    if fps > 30:
+        motion = work.get("motion", {})
+        if (not work.get("presentation", {}).get("presented_holds", 0) or
+                not motion.get("last_endpoint_phase_count", 0) or
+                not motion.get("evaluations", 0)):
+            raise ValueError("PGO training did not exercise interpolated presentation")
 
 
 def neutral_replay(vblanks: int) -> str:
@@ -119,8 +123,9 @@ def _train(args: argparse.Namespace) -> None:
         if not path.is_file():
             raise ValueError(f"missing PGO input: {path}")
     cache = (build / "CMakeCache.txt").read_text()
-    if "PSX_PGO:STRING=generate\n" not in cache or "PSX_RUNTIME_IPO:BOOL=ON\n" not in cache:
-        raise ValueError("PGO training requires PSX_PGO=generate and PSX_RUNTIME_IPO=ON")
+    pgo_mode = "use" if args.verify_only else "generate"
+    if f"PSX_PGO:STRING={pgo_mode}\n" not in cache or "PSX_RUNTIME_IPO:BOOL=ON\n" not in cache:
+        raise ValueError(f"this pass requires PSX_PGO={pgo_mode} and PSX_RUNTIME_IPO=ON")
     wine = shutil.which("umu-run" if args.proton else "wine")
     if not wine:
         raise ValueError("umu-run (Proton) or Wine is required to train the Windows executable")
@@ -134,9 +139,10 @@ def _train(args: argparse.Namespace) -> None:
         wrapper = [xvfb, "-a", "-s", "-screen 0 1280x1024x24"]
     profile_dir.mkdir(parents=True, exist_ok=True)
     # Never merge stale data left by a prior revision or a failed training run.
-    for path in [*profile_dir.glob("*.profraw"), profile_dir / "default.profdata"]:
-        path.unlink(missing_ok=True)
-    replay = profile_dir / "training.toml"
+    if not args.verify_only:
+        for path in [*profile_dir.glob("*.profraw"), profile_dir / "default.profdata"]:
+            path.unlink(missing_ok=True)
+    replay = profile_dir / ("verification.toml" if args.verify_only else "training.toml")
     replay.write_text(neutral_replay(args.vblanks))
     env = os.environ.copy()
     env.pop("PSX_HEADLESS", None)
@@ -144,15 +150,16 @@ def _train(args: argparse.Namespace) -> None:
     # can otherwise take precedence and fail WGL pixel-format creation.
     env.pop("WAYLAND_DISPLAY", None)
     env["WINEDLLOVERRIDES"] = env.get("WINEDLLOVERRIDES", "") + ";winewayland.drv=d"
-    env.update(WINEPREFIX=str(profile_dir / ("proton-prefix" if args.proton else "wine")), WINEDEBUG="-all",
+    env.update(WINEPREFIX=str(profile_dir / ("proton-prefix" if args.proton else "wine")),
+               WINEDEBUG="-all,+debugstr" if args.verify_only else "-all",
                PSX_LOAD_SLOT="0", PSX_HOST_MUTE="1", PSX_VSYNC="0",
                PSX_FRAME_INTERPOLATION="0")
     env["__GL_SYNC_TO_VBLANK"] = "0"
     if args.proton:
         env.update(PROTONPATH=str(args.proton.resolve()), GAMEID="umu-default", UMU_LOG="info",
-                   UMU_RUNTIME_UPDATE="0")
+                   UMU_RUNTIME_UPDATE="0", PROTON_USE_XALIA="0")
     for fps in (240, 30):
-        state = profile_dir / f"train-{fps}"
+        state = profile_dir / f"{'verify' if args.verify_only else 'train'}-{fps}"
         slot = state / "memcards/openbios/state_80019524_disc1_slot00.pst"
         slot.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(args.savestate, slot)
@@ -161,7 +168,10 @@ def _train(args: argparse.Namespace) -> None:
         evidence.unlink(missing_ok=True)
         log_path = state / "runtime.log"
         env["PSX_NATIVE_INTERPOLATION_FPS"] = str(fps)
-        env["LLVM_PROFILE_FILE"] = windows_path(profile_dir / f"train-{fps}-%p.profraw")
+        if args.verify_only:
+            env.pop("LLVM_PROFILE_FILE", None)
+        else:
+            env["LLVM_PROFILE_FILE"] = windows_path(profile_dir / f"train-{fps}-%p.profraw")
         if args.proton:
             # Proton may detach GUI stdout unless its logging is enabled.
             env.update(PROTON_LOG="1", PROTON_LOG_DIR=str(state))
@@ -178,7 +188,8 @@ def _train(args: argparse.Namespace) -> None:
             command = [*wrapper, wine, *game_command]
         else:
             command = [*wrapper, wine, str(exe), *game_command[1:]]
-        print(f"Training Windows Native at {fps} FPS ({args.vblanks} vblanks)...", flush=True)
+        action = "Verifying optimized" if args.verify_only else "Training"
+        print(f"{action} Windows Native at {fps} FPS ({args.vblanks} vblanks)...", flush=True)
         with log_path.open("w") as log:
             try:
                 result = subprocess.run(command, cwd=build, env=env, stdout=log,
@@ -200,8 +211,11 @@ def _train(args: argparse.Namespace) -> None:
             runtime_log += proton_log.read_text(errors="replace")
         validate_training(json.loads(evidence.read_text()), runtime_log,
                           fps, args.vblanks)
-        if not any(p.stat().st_size for p in profile_dir.glob(f"train-{fps}-*.profraw")):
+        if not args.verify_only and not any(p.stat().st_size for p in profile_dir.glob(f"train-{fps}-*.profraw")):
             raise ValueError(f"Windows training at {fps} FPS did not flush a profile")
+    if args.verify_only:
+        print("Optimized Windows runtime verified at 30 and 240 FPS", flush=True)
+        return
     raw_profiles = sorted(profile_dir.glob("*.profraw"))
     output = profile_dir / "default.profdata"
     subprocess.run([str(profdata), "merge", "-sparse", *map(str, raw_profiles),
@@ -217,6 +231,7 @@ def main() -> None:
     parser.add_argument("--savestate", type=Path, required=True)
     parser.add_argument("--disc", type=Path, required=True)
     parser.add_argument("--proton", type=Path, help="GE-Proton root; launch via umu-run")
+    parser.add_argument("--verify-only", action="store_true", help="validate the final PGO-use executable without modifying profiles")
     parser.add_argument("--vblanks", type=int, default=1800)
     parser.add_argument("--timeout", type=int, default=600)
     args = parser.parse_args()
