@@ -99,6 +99,9 @@ jobs:
     env:
       LLVM_MINGW_VER: "20260616"
       SDL2_VER: "2.32.10"
+      # Private OpenBIOS Disc 1 slot 0 in an interpolation-heavy field scene.
+      XGR_PGO_SAVESTATE: ${{ vars.XGR_PGO_SAVESTATE }}
+      XGR_PGO_PROTON_ROOT: ${{ vars.XGR_PGO_PROTON_ROOT || '/home/pc/.local/share/Steam/compatibilitytools.d/GE-Proton10-34' }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -107,10 +110,16 @@ jobs:
       - name: Check host dependencies
         run: |
           set -e
-          for t in cmake ninja git curl python3 tar; do
+          for t in cmake ninja git curl python3 tar umu-run; do
             command -v "$t" >/dev/null || { echo "::error::missing host tool: $t — see docs/self-hosted-runner.md"; exit 1; }
           done
           python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else "Python 3.11 or newer is required")'
+          pgo_state="${XGR_PGO_SAVESTATE:-$XGR_ASSETS_DIR/pgo/slot00.pst}"
+          [ -s "$pgo_state" ] || { echo "::error::missing private PGO savestate: $pgo_state"; exit 1; }
+          [ -f "$XGR_PGO_PROTON_ROOT/proton" ] || { echo "::error::missing GE-Proton: $XGR_PGO_PROTON_ROOT"; exit 1; }
+          if [ -z "${DISPLAY:-}" ]; then
+            command -v xvfb-run >/dev/null || { echo "::error::PGO requires DISPLAY or xvfb-run"; exit 1; }
+          fi
 
       - name: Test release archive verifier
         run: cmake -DPROJECT_ROOT="$PWD" -DTEST_WORK_DIR="$RUNNER_TEMP/xgr-release-verifier-tests-windows" -P cmake/tests/test_verify_release_archive.cmake
@@ -200,11 +209,14 @@ jobs:
           echo "LLVM_MINGW_ROOT=$XGR_DEPS_DIR/$lmdir" >> "$GITHUB_ENV"
           echo "SDL2_MINGW_ROOT=$XGR_DEPS_DIR/$sdl" >> "$GITHUB_ENV"
 
-      - name: Cross-compile runtime for Windows
+      - name: Cross-compile instrumented Windows runtime with LTO
         run: |
           cmake -S . -B build-win -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-windows-x86_64-llvm-mingw.cmake \
             -DCMAKE_BUILD_TYPE=Release \
+            -DPSX_RUNTIME_IPO=ON \
+            -DPSX_PGO=generate \
+            -DCMAKE_EXE_LINKER_FLAGS="-Wl,--threads=4" \
             -DXG_RENDER_NATIVE=ON \
             -DXG_RENDER_VALIDATE_OVERLAYS=OFF \
             -DXG_DISC_IMAGE="$XGR_DISC_IMAGE" \
@@ -213,7 +225,21 @@ jobs:
             -DPSX_DEBUG_TOOLS=OFF \
             -DPSX_DEBUG_OVERLAY=OFF \
             -DBUILD_TESTING=OFF
-          cmake --build build-win --target psx-runtime -j "$(nproc)"
+          cmake --build build-win --target psx-runtime -j "${XGR_BUILD_JOBS:-4}"
+
+      - name: Train Windows PGO at 30 and 240 FPS (private inputs)
+        run: |
+          python3 -m unittest discover -s ci -p test_train_windows_pgo.py
+          python3 ci/train_windows_pgo.py --build-dir build-win \
+            --llvm-root "$LLVM_MINGW_ROOT" \
+            --proton "$XGR_PGO_PROTON_ROOT" \
+            --savestate "${XGR_PGO_SAVESTATE:-$XGR_ASSETS_DIR/pgo/slot00.pst}" \
+            --disc "$XGR_DISC_IMAGE"
+
+      - name: Rebuild Windows release with LTO and trained PGO
+        run: |
+          cmake -S . -B build-win -DPSX_RUNTIME_IPO=ON -DPSX_PGO=use
+          cmake --build build-win --target psx-runtime -j "${XGR_BUILD_JOBS:-4}"
 
       - name: Verify Native build before packaging
         run: python3 tools/verify_native_release.py --build-dir build-win
@@ -262,7 +288,9 @@ jobs:
 
       - name: Scrub staged assets
         if: always()
-        run: rm -f game/slus_006.64 game/disc1.cue game/disc1.bin game/disc1.iso psxrecomp/bios/SCPH1001.BIN assets/boxart.tga
+        run: |
+          rm -f game/slus_006.64 game/disc1.cue game/disc1.bin game/disc1.iso psxrecomp/bios/SCPH1001.BIN assets/boxart.tga
+          rm -rf build-win/pgo
 
   release:
     name: Publish GitHub Release

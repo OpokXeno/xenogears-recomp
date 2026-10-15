@@ -77,6 +77,11 @@ option(XG_RENDER_VALIDATE_OVERLAYS
     "Verify private native-render overlay artifacts during the build"
     OFF)
 if(BUILD_TESTING)
+    add_executable(psx_host_cpu_test
+        psxrecomp/runtime/tests/test_host_cpu.c psxrecomp/runtime/src/host_cpu.c)
+    target_include_directories(psx_host_cpu_test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp/runtime/include")
+    add_test(NAME psx_host_cpu_affinity COMMAND psx_host_cpu_test)
     add_executable(xenogears_map_reads_test
         tests/xenogears_map_reads_test.c src/mods/xenogears_map_reads.c)
     target_include_directories(xenogears_map_reads_test PRIVATE
@@ -962,7 +967,8 @@ if(BUILD_TESTING)
         ${PSXRECOMP_ROOT}/runtime/src/ram_provenance.c
         ${PSXRECOMP_ROOT}/runtime/src/ws_aspect_cone_math.c
         ${PSXRECOMP_ROOT}/runtime/src/ws_ui_group.c
-        ${PSXRECOMP_ROOT}/runtime/src/gpu_gl_renderer.c)
+        ${PSXRECOMP_ROOT}/runtime/src/gpu_gl_renderer.c
+        ${PSXRECOMP_ROOT}/runtime/src/host_cpu.c)
     target_include_directories(gpu_gl_mask_order_test PRIVATE
         ${PSXRECOMP_ROOT}/runtime/include ${PSX_SDL_INCLUDE_DIRS})
     target_compile_definitions(gpu_gl_mask_order_test PRIVATE
