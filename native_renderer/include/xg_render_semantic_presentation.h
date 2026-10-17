@@ -372,6 +372,7 @@ typedef struct XgRenderPresentationDiagnostics {
     uint64_t duplicate_presents;
     /* Current guest-lag envelope added to new source deadlines. */
     uint64_t visual_lag_ns;
+    uint64_t render_lag_ns;
 } XgRenderPresentationDiagnostics;
 
 /*

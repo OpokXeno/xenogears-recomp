@@ -21,6 +21,9 @@ _Static_assert(XG_RENDER_PRESENTATION_BATCH_CAPACITY >= 2u,
 #define XG_RENDER_VISUAL_LAG_NOISE_NS UINT64_C(8333334)
 #define XG_RENDER_VISUAL_LAG_DECAY_SHIFT 10u
 #define XG_RENDER_VISUAL_DEBT_DECAY_SHIFT 4u
+#define XG_RENDER_RENDER_LAG_LIMIT_NS UINT64_C(100000000)
+#define XG_RENDER_RENDER_LAG_DECAY_SHIFT 6u
+#define XG_RENDER_RENDER_LAG_RISE_SHIFT 2u
 
 typedef enum XgRenderPresentationBatchState {
     XG_RENDER_BATCH_FREE = 0,
@@ -66,6 +69,7 @@ typedef struct XgRenderPresentationBatch {
     void *compile_fence_status_user_data;
     void *completion_fence_status_user_data;
     uint64_t presentation_deadline_ns; /* Fixed at FIFO acceptance; zero is whole-only. */
+    uint64_t render_lag_ns; /* Render reserve the worker planned this batch with. */
     uint64_t phase_count; /* Effective denominator N+1; zero means whole-only. */
     uint64_t phase_index;
     uint64_t phase_interval_ns; /* Window the phases span, ending at the deadline. */
@@ -138,6 +142,10 @@ static uint64_t g_visual_budget_interval_ns;
 /* Envelope of how late the guest runs behind its paced schedule. */
 static uint64_t g_visual_lag_ns;
 static uint64_t g_visual_lag_time_ns;
+/* Envelope of how long before its deadline the worker must plan to finish a
+ * batch so phase 1 is still selectable once the GPU has executed it. */
+static uint64_t g_render_lag_ns;
+static uint64_t g_render_lag_time_ns;
 static bool g_visual_origin_seen;
 static bool g_visual_realtime;
 static uint32_t g_worker_operations;
@@ -441,6 +449,8 @@ static void initialize_locked(void) {
     g_visual_budget_interval_ns = 0u;
     g_visual_lag_ns = 0u;
     g_visual_lag_time_ns = 0u;
+    g_render_lag_ns = 0u;
+    g_render_lag_time_ns = 0u;
     g_visual_realtime = true;
     g_worker_operations = 0u;
     g_presenter_busy = false;
@@ -1092,7 +1102,7 @@ XgRenderTimelineResult xg_render_source_queue_publish(
 bool xg_render_worker_source_deadline(
         XgRenderSourceCommitHandle commit, uint64_t *out_deadline_ns) {
     XgRenderPresentationBatchHandle handle;
-    const XgRenderPresentationBatch *batch = NULL;
+    XgRenderPresentationBatch *batch = NULL;
     bool available = false;
 
     if (out_deadline_ns == NULL || commit.slot >= XG_RENDER_SOURCE_COMMIT_CAPACITY ||
@@ -1106,7 +1116,13 @@ bool xg_render_worker_source_deadline(
         batch->commit.slot == commit.slot &&
         batch->commit.generation == commit.generation &&
         source_head_locked() == pack_handle(commit.slot, commit.generation)) {
-        *out_deadline_ns = batch->presentation_deadline_ns;
+        /* Phase planning targets the deadline minus the measured render
+         * reserve: GPU execution trails the worker's CPU-side time boxing,
+         * and a later presentation deadline would only buy more phases that
+         * land just as late. The presentation deadline itself never moves. */
+        const uint64_t deadline = batch->presentation_deadline_ns;
+        batch->render_lag_ns = deadline > g_render_lag_ns ? g_render_lag_ns : 0u;
+        *out_deadline_ns = deadline - batch->render_lag_ns;
         available = true;
     }
     state_unlock();
@@ -1258,6 +1274,7 @@ XgRenderWorkerResult xg_render_worker_compile_next(
         batch->has_commit = true;
         batch->identity = header.identity;
         batch->presentation_deadline_ns = g_source_deadlines[g_source_head];
+        batch->render_lag_ns = 0u;
         g_work_batch = pack_handle(index, generation);
         trace_mark_batch_locked(
             batch, XG_RENDER_PRESENTATION_TRACE_COMPILE_STARTED);
@@ -1593,6 +1610,8 @@ bool xg_render_presenter_sync_source_clock(
         g_visual_origin_seen = true;
         g_visual_lag_ns = 0u;
         g_visual_lag_time_ns = guest_time_ns;
+        g_render_lag_ns = 0u;
+        g_render_lag_time_ns = 0u;
     }
     if (realtime && g_visual_origin_seen) {
         /* Rise at once (late sources need the slack now), recover slowly so
@@ -1801,7 +1820,49 @@ static XgRenderPresenterResult presenter_present(
         }
     }
     if (clock_valid) {
-        bool due = now >= deadline_ns;
+        bool due;
+
+        if (!hold && batch->phase_count >= 2u) {
+            /* Reserve this batch needed: the one it was planned with plus how
+             * late phase 1 became selectable (negative when early). This does
+             * not depend on the current envelope, so the loop stays stable.
+             * Only batches the worker plans later see the update. */
+            const uint64_t count = batch->phase_count;
+            const uint64_t interval = batch->phase_interval_ns != 0u
+                ? batch->phase_interval_ns : endpoint.temporal_interval_ns;
+            const uint64_t quotient = interval / count;
+            const uint64_t remainder = interval % count;
+            const uint64_t whole = count - 1u;
+            const uint64_t offset = quotient * whole + remainder * whole / count;
+
+            if (deadline_ns >= offset) {
+                const uint64_t open = deadline_ns - offset;
+                const uint64_t ready = now + batch->render_lag_ns;
+                const uint64_t needed = ready > open ? ready - open : 0u;
+
+                if (g_render_lag_time_ns == 0u) {
+                    g_render_lag_time_ns = now;
+                } else if (now > g_render_lag_time_ns) {
+                    const uint64_t elapsed = now - g_render_lag_time_ns;
+                    /* Recover slowly: an oversized reserve only costs phases,
+                     * an undersized one costs every phase. */
+                    const uint64_t decay = elapsed >> XG_RENDER_RENDER_LAG_DECAY_SHIFT;
+                    g_render_lag_ns = g_render_lag_ns > decay ? g_render_lag_ns - decay : 0u;
+                    g_render_lag_time_ns = now;
+                }
+                /* Rise a quarter of the shortfall per batch: sustained GPU
+                 * lag is met within a few batches, while one hitch (a load,
+                 * a shader compile) cannot park the reserve near its cap
+                 * and starve every following batch of phases. */
+                if (needed > g_render_lag_ns) {
+                    g_render_lag_ns += (needed - g_render_lag_ns) >> XG_RENDER_RENDER_LAG_RISE_SHIFT;
+                    if (g_render_lag_ns > XG_RENDER_RENDER_LAG_LIMIT_NS)
+                        g_render_lag_ns = XG_RENDER_RENDER_LAG_LIMIT_NS;
+                }
+                g_diagnostics.render_lag_ns = g_render_lag_ns;
+            }
+        }
+        due = now >= deadline_ns;
         uint64_t phase = batch->phase_count;
 
         if (batch->phase_count != 0u && !due) {
