@@ -76,5 +76,3 @@ The script restores any pre-existing staged private inputs on exit. Local
 profiles remain in the selected build directory for inspection. The workflow
 runs on tags matching `v*` or manual dispatch, and publishes a release after
 both platform jobs succeed.
-For a validation-only run, dispatch with `publish=false`; both jobs still build,
-train, verify and upload their archives, but no tag or release is created.

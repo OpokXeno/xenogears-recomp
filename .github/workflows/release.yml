@@ -27,11 +27,6 @@ on:
         required: true
         type: boolean
         default: true
-      publish:
-        description: "Publish a release after validation (disable for build checks only)"
-        required: true
-        type: boolean
-        default: true
   push:
     tags:
       - "v*"
@@ -328,7 +323,6 @@ jobs:
 
   release:
     name: Publish GitHub Release
-    if: github.event_name != 'workflow_dispatch' || inputs.publish
     needs: [build-linux, build-windows]
     runs-on: ubuntu-latest
     permissions:

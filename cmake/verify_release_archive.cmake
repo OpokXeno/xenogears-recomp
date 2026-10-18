@@ -17,6 +17,9 @@ set(OPENBIOS_IMAGE "${PROJECT_ROOT}/psxrecomp/bios/openbios.bin")
 set(OPENBIOS_LICENSE "${PROJECT_ROOT}/psxrecomp/bios/OpenBIOS.LICENSE")
 set(OPENBIOS_PROFILE "${PROJECT_ROOT}/psxrecomp/bios/OpenBIOS.toml")
 set(BUILTIN_MODS_CATALOG "${PROJECT_ROOT}/psxrecomp/mods/builtin/packages")
+set(RUNTIME_LICENSES "${PROJECT_ROOT}/psxrecomp/runtime/licenses")
+file(GLOB _runtime_license_names RELATIVE "${RUNTIME_LICENSES}"
+    "${RUNTIME_LICENSES}/*.txt")
 include("${PROJECT_ROOT}/cmake/xg_release_mods.cmake")
 xg_release_mod_packages("${PROJECT_ROOT}" RELEASE_MOD_PACKAGES)
 set(REQUIRED_BUILTIN_MOD_MANIFESTS
@@ -155,10 +158,14 @@ set(_required_archive_entries
     "${PACKAGE_ROOT}/mods/bundled"
     "${PACKAGE_ROOT}/game.toml"
     "${PACKAGE_ROOT}/LICENSE"
+    "${PACKAGE_ROOT}/licenses"
     "${PACKAGE_ROOT}/MODS.md"
     "${PACKAGE_ROOT}/MOD_AUTHORING.md"
     "${PACKAGE_ROOT}/README.md"
     "${PACKAGE_ROOT}/${EXECUTABLE_NAME}")
+foreach(_license IN LISTS _runtime_license_names)
+    list(APPEND _required_archive_entries "${PACKAGE_ROOT}/licenses/${_license}")
+endforeach()
 foreach(_entry IN LISTS _archive_entries)
     if(_entry STREQUAL "")
         continue()
@@ -255,6 +262,7 @@ set(_required_top_level
     mods
     game.toml
     LICENSE
+    licenses
     MODS.md
     MOD_AUTHORING.md
     README.md)
@@ -286,6 +294,17 @@ endif()
 if(NOT IS_DIRECTORY "${_package_directory}/mods")
     fail("Archive mods path is not a directory")
 endif()
+foreach(_license IN LISTS _runtime_license_names)
+    set(_bundled_license "${_package_directory}/licenses/${_license}")
+    if(NOT EXISTS "${_bundled_license}" OR IS_DIRECTORY "${_bundled_license}")
+        fail("Archive is missing runtime license: ${_license}")
+    endif()
+    file(SHA256 "${RUNTIME_LICENSES}/${_license}" _canonical_hash)
+    file(SHA256 "${_bundled_license}" _bundled_hash)
+    if(NOT _bundled_hash STREQUAL _canonical_hash)
+        fail("Bundled runtime license does not match canonical notice: ${_license}")
+    endif()
+endforeach()
 
 # The release catalog: the allowlisted framework packages plus the game's own.
 set(_canonical_mod_entries "")
