@@ -47,7 +47,9 @@ def validate_training(evidence: dict, log: str, fps: int, vblanks: int) -> None:
             evidence.get("runtime_status") != "PASS" or
             evidence.get("render_mode") != "native" or
             evidence.get("backend") != "opengl"):
-        raise ValueError("PGO training did not complete healthy Native/OpenGL gameplay")
+        raise ValueError("PGO training did not complete healthy Native/OpenGL gameplay: " +
+                         ", ".join(f"{key}={evidence.get(key)}" for key in
+                                   ("completion", "runtime_status", "runtime_reason", "render_mode", "backend")))
     replay = evidence.get("replay", {})
     if replay.get("trace_index", 0) < vblanks:
         raise ValueError("PGO training stopped before the vblank budget")

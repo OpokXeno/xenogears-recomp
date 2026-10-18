@@ -11,6 +11,11 @@ Provide CMake, Git, Python 3.11+, Podman, Ninja, curl, tar and binutils (`nm`).
 Windows training also needs `umu-run`, an installed GE-Proton and its cached
 Steam runtime. The workflow downloads llvm-mingw and SDL2-mingw into
 `XGR_DEPS_DIR` if they are absent. SDL3 is built from the project's dependency.
+Vulkan-Headers and `glslc` are provisioned from pinned releases by
+`ci/provision-vulkan-tools.sh`: inside the glibc 2.31 image for Linux, and under
+`XGR_DEPS_DIR/vulkan-tools` for the Windows cross-build. Both targets require
+Vulkan at configure time and embed their SPIR-V shaders into the executable.
+The build verifier checks the effective compile definitions and shader output.
 
 The runner must use an accessible graphical X11/XWayland session with working
 OpenGL. When `DISPLAY` is missing, the trainers import only `DISPLAY`,
@@ -71,3 +76,5 @@ The script restores any pre-existing staged private inputs on exit. Local
 profiles remain in the selected build directory for inspection. The workflow
 runs on tags matching `v*` or manual dispatch, and publishes a release after
 both platform jobs succeed.
+For a validation-only run, dispatch with `publish=false`; both jobs still build,
+train, verify and upload their archives, but no tag or release is created.

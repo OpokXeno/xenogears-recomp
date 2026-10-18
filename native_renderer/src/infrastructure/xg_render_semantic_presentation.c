@@ -2,6 +2,7 @@
 #include "xg_threads.h"
 
 #include <stdatomic.h>
+#include <stdlib.h>
 #include <string.h>
 
 _Static_assert(XG_RENDER_SOURCE_COMMIT_CAPACITY > 0u, "FIFO must have capacity");
@@ -146,6 +147,7 @@ static uint64_t g_visual_lag_time_ns;
  * batch so phase 1 is still selectable once the GPU has executed it. */
 static uint64_t g_render_lag_ns;
 static uint64_t g_render_lag_time_ns;
+static uint32_t g_source_buffer_intervals = 2u;
 static bool g_visual_origin_seen;
 static bool g_visual_realtime;
 static uint32_t g_worker_operations;
@@ -257,7 +259,9 @@ static uint64_t source_deadline_locked(const XgRenderSourceCommitHeader *header)
          * successive endpoints the same presentation time and erasing their
          * phase window. The longest ordinary guest interval observed in this
          * scene establishes the delay; host completion time never moves it. */
-        budget_ns = 2u * g_visual_budget_interval_ns +
+        const char *buffering = getenv("PSX_NATIVE_PRESENT_INTERVALS");
+        const uint64_t intervals = buffering ? (buffering[0] == '3' ? 3u : 2u) : g_source_buffer_intervals;
+        budget_ns = intervals * g_visual_budget_interval_ns +
             (UINT64_C(1000000000) + header->display.temporal_hz - 1u) / header->display.temporal_hz;
     }
     /* A guest running behind its paced schedule publishes late by the same
@@ -452,6 +456,7 @@ static void initialize_locked(void) {
     g_render_lag_ns = 0u;
     g_render_lag_time_ns = 0u;
     g_visual_realtime = true;
+    g_source_buffer_intervals = 2u;
     g_worker_operations = 0u;
     g_presenter_busy = false;
     g_publication_open = false;
@@ -1602,6 +1607,7 @@ bool xg_render_presenter_sync_source_clock(
     }
     if (g_visual_realtime != realtime || rebase) g_visual_origin_seen = false;
     g_visual_realtime = realtime;
+    g_source_buffer_intervals = services->source_buffer_intervals == 3u ? 3u : 2u;
     if (realtime && !g_visual_origin_seen && services->clock_ns != NULL) {
         /* This pair comes from the simulation pacer, even if all recent
          * sources were duplicate/APPLIED-only. Never date an old hold as now. */

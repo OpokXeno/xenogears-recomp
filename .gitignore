@@ -67,6 +67,7 @@ Thumbs.db
 # ---- Local test/build artifacts ----------------------------------------------
 Testing/
 *.pst
+*.thumb
 # Local one-shot savestate migration marker
 /.pst_bios_isolated
 

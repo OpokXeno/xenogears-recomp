@@ -77,7 +77,16 @@ def verify_build(root: Path, build: Path) -> dict:
     ))
     if cache.get("XG_RENDER_NATIVE", "").upper() not in {"ON", "TRUE", "1", "YES"}:
         raise ValueError("release requires XG_RENDER_NATIVE=ON")
+    definitions = (build / "psx-runtime_compile_definitions.txt").read_text().splitlines()
+    if "PSX_HAVE_VULKAN=1" not in definitions:
+        raise ValueError("release requires the compiled Vulkan backend")
+    shaders = build / "psx-runtime_vkgen/vk_shaders_spv.h"
+    if not shaders.is_file() or shaders.stat().st_size == 0:
+        raise ValueError("release requires embedded Vulkan shaders")
     config = read_toml(root / "game.toml")
+    video = config.get("video", {})
+    if video.get("renderer") != "vulkan" or video.get("offer_vulkan") is not True:
+        raise ValueError("release game.toml must default to and offer Vulkan")
     runtime = config.get("runtime", {})
     if runtime.get("render_mode") != "native":
         raise ValueError("release game.toml must select render_mode = native")

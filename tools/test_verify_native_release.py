@@ -20,8 +20,11 @@ class NativeReleaseVerificationTests(unittest.TestCase):
         self.write("game/fixture", "synthetic executable")
         self.write("native_renderer/xg_render_manifest.toml", "synthetic manifest")
         self.write("game.toml", '[game]\nexe = "game/fixture"\n'
+                   '[video]\nrenderer = "vulkan"\noffer_vulkan = true\n'
                    '[runtime]\nrender_mode = "native"\noverlay_cache = false\n')
         self.write("build/CMakeCache.txt", "XG_RENDER_NATIVE:BOOL=ON\n")
+        self.write("build/psx-runtime_compile_definitions.txt", "PSX_HAVE_VULKAN=1\n")
+        self.write("build/psx-runtime_vkgen/vk_shaders_spv.h", "// compiled shaders\n")
         self.write("native_renderer/xg_render_resident_plan.txt",
                    "psxrecomp-source-observation-plan-v5\n"
                    "cutover 80010000 27BDFFE0 observe 00000000\n"
@@ -74,8 +77,28 @@ class NativeReleaseVerificationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "XG_RENDER_NATIVE=ON"):
             verify_build(self.root, self.build)
 
+    def test_vulkan_stub_is_rejected_even_with_enable_option(self) -> None:
+        self.write("build/CMakeCache.txt", "XG_RENDER_NATIVE:BOOL=ON\nPSX_ENABLE_VULKAN:BOOL=ON\n")
+        self.write("build/psx-runtime_compile_definitions.txt", "")
+        with self.assertRaisesRegex(ValueError, "compiled Vulkan backend"):
+            verify_build(self.root, self.build)
+
+    def test_missing_embedded_shaders_are_rejected(self) -> None:
+        (self.build / "psx-runtime_vkgen/vk_shaders_spv.h").unlink()
+        with self.assertRaisesRegex(ValueError, "embedded Vulkan shaders"):
+            verify_build(self.root, self.build)
+
+    def test_non_vulkan_default_is_rejected(self) -> None:
+        config = self.root / "game.toml"
+        config.write_text(config.read_text().replace('renderer = "vulkan"',
+                                                    'renderer = "opengl"'))
+        with self.assertRaisesRegex(ValueError, "default to and offer Vulkan"):
+            verify_build(self.root, self.build)
+
     def test_original_selected_in_package_config(self) -> None:
-        self.write("game.toml", '[runtime]\nrender_mode = "original"\n')
+        config = self.root / "game.toml"
+        config.write_text(config.read_text().replace('render_mode = "native"',
+                                                    'render_mode = "original"'))
         with self.assertRaisesRegex(ValueError, "render_mode"):
             verify_build(self.root, self.build)
 

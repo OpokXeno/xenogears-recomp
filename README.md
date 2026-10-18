@@ -70,6 +70,9 @@ and continue from your save. Savestates are kept per disc.
 
 Official Linux and Windows releases are 64-bit x86-64 builds with SDL3 linked
 statically; no separate SDL installation is required.
+Vulkan is the default and recommended renderer; OpenGL remains selectable.
+Vulkan shaders are embedded in the executable. Playing requires a working GPU
+driver, but no Vulkan SDK installation.
 Selected paths persist next to the executable (`settings.toml`). Delete it to pick different files or reset settings.
 
 ### 2. Build from Source
@@ -109,6 +112,19 @@ The disc and BIOS paths used to play are configured through the launcher GUI.
 > The `disc` and `bios_path` fields in `game.toml` can be set as a fallback, but are optional. The launcher prompts for the disc on first run and uses OpenBIOS unless you select the matching retail BIOS in Settings.
 
 #### 2.3 Build
+
+Install Vulkan headers and the `glslc` shader compiler before building. On
+Windows, install the [Vulkan SDK](https://vulkan.lunarg.com/sdk/home) and reopen
+your terminal so `VULKAN_SDK` is available. Linux can use its Vulkan development
+packages and `glslc`, or the SDK. For the same pinned tools as CI:
+
+```sh
+bash ci/provision-vulkan-tools.sh "$HOME/.local/xgr-vulkan"
+export VULKAN_SDK="$HOME/.local/xgr-vulkan"
+```
+
+Normal builds require Vulkan (`PSX_REQUIRE_VULKAN=ON`): missing headers or a
+shader compiler stop configuration rather than silently omitting the backend.
 
 **Linux / macOS:**
 

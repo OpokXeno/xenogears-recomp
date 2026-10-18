@@ -35,6 +35,7 @@
         Windows component to use clang-cl) or MinGW/MSYS2
       - SDL3 3.4+ development library (vcpkg, MSYS2, or manually)
       - Python 3.11+
+      - Vulkan SDK (headers + glslc; installer sets VULKAN_SDK)
       - For source builds, place your legally obtained PlayStation BIOS dump at .\psxrecomp\bios\SCPH1001.BIN
       - Place your legally owned Xenogears Disc 1 at .\game\disc1.cue, disc1.bin, or disc1.iso
       - Place its EXE at .\game\slus_006.64; extracted overlay binaries are not required

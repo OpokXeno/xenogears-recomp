@@ -14,6 +14,7 @@
 #   - pkg-config
 #   - SDL3 3.4+ development library
 #   - Python 3.11+
+#   - Vulkan SDK headers and glslc (VULKAN_SDK or system packages)
 #   - Place your legally owned Xenogears Disc 1 at ./game/disc1.cue,
 #     ./game/disc1.bin, or ./game/disc1.iso; extracted overlay binaries are not required
 #   - Place its boot EXE at ./game/slus_006.64
@@ -26,7 +27,8 @@
 #
 # Set CMAKE_GENERATOR env to override the CMake generator, e.g.:
 #   CMAKE_GENERATOR="Unix Makefiles" ./build.sh
-# PSX_RUNTIME_IPO and PSX_PGO optionally select runtime LTO and PGO. Set
+# PSX_RUNTIME_IPO and PSX_PGO optionally select runtime LTO and PGO.
+# PSX_REQUIRE_VULKAN=ON fails configure when the Vulkan backend cannot be built. Set
 # CMAKE_EXE_LINKER_FLAGS to update link flags even in an existing CMake cache.
 
 set -euo pipefail
@@ -58,7 +60,7 @@ RUNTIME_CMAKE_ARGS=(
     "-DSDL_WAYLAND=${PSX_SDL_WAYLAND:-ON}"
     "-DXG_RENDER_VALIDATE_OVERLAYS=OFF"
 )
-for option in PSX_RUNTIME_IPO PSX_PGO CMAKE_EXE_LINKER_FLAGS; do
+for option in PSX_RUNTIME_IPO PSX_PGO PSX_REQUIRE_VULKAN CMAKE_EXE_LINKER_FLAGS; do
     if [[ -v "$option" ]]; then
         RUNTIME_CMAKE_ARGS+=("-D$option=${!option}")
     fi

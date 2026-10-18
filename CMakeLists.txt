@@ -4,6 +4,9 @@
 cmake_minimum_required(VERSION 3.20)
 project(XenogearsRecomp C CXX)
 
+# The default renderer must be present in every normal local/release build.
+option(PSX_REQUIRE_VULKAN "Require the Native Vulkan renderer" ON)
+
 include(CTest)
 find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
 
@@ -77,6 +80,10 @@ option(XG_RENDER_VALIDATE_OVERLAYS
     "Verify private native-render overlay artifacts during the build"
     OFF)
 if(BUILD_TESTING)
+    add_executable(renderer_selection_test tests/renderer_selection_test.cpp)
+    target_include_directories(renderer_selection_test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/psxrecomp/runtime/src")
+    add_test(NAME renderer_selection COMMAND renderer_selection_test)
     add_executable(psx_host_cpu_test
         psxrecomp/runtime/tests/test_host_cpu.c psxrecomp/runtime/src/host_cpu.c)
     target_include_directories(psx_host_cpu_test PRIVATE

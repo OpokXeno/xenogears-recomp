@@ -165,6 +165,10 @@ typedef struct XgRenderPresenterServices {
      * in one host tick use this same sample, excluding wake/compose jitter. */
     uint64_t clock_sample_ns;
     bool clock_sample_valid;
+    /* Source-frame buffering for temporal replay. Zero keeps the two-interval
+     * default; three gives a GPU backend one extra source interval to finish
+     * its complete phase set before presentation starts. */
+    uint32_t source_buffer_intervals;
 } XgRenderPresenterServices;
 
 typedef enum XgRenderWorkerResult {
