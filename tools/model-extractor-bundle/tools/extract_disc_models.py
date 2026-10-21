@@ -689,6 +689,165 @@ def parse_model_archive(data: bytes, *, single_part: bool = False) -> ModelArchi
                         flags, tuple(parts), metadata_total)
 
 
+def parse_tmd(data: bytes) -> tuple[ModelArchive, list[dict]]:
+    if len(data) < 40 or u32(data, 0) != 0x41 or u32(data, 4) != 0:
+        raise ValueError("not an unrelocated TMD")
+    count = u32(data, 8)
+    if not 1 <= count <= 512 or 12 + count * 28 > len(data):
+        raise ValueError("TMD object table outside file")
+    parts, metadata = [], []
+    end = 12 + count * 28
+    for obj in range(count):
+        vp, vc, np_, nc, pp, pc, scale = struct.unpack_from("<6Ii", data, 12 + obj * 28)
+        vp += 12; np_ += 12; pp += 12
+        if not vc and not nc and not pc:
+            metadata.append({"object_index": obj, "empty_object": True})
+            continue
+        if not vc or not pc or vc > 65535 or pc > 65535 or nc > 65535 or not -31 <= scale <= 31:
+            raise ValueError("invalid TMD object counts/scale")
+        if (min(vp, pp) < 12 + count * 28 or vp + vc * 8 > len(data)
+                or (nc and (np_ < 12 + count * 28 or np_ + nc * 8 > len(data)))):
+            raise ValueError("TMD data pointers outside file")
+        vertices = tuple(struct.unpack_from("<hhhh", data, vp + i * 8) for i in range(vc))
+        source_normals = [struct.unpack_from("<hhhh", data, np_ + i * 8) for i in range(nc)]
+        primitives, packets = [], []
+        for index in range(pc):
+            if pp + 4 > len(data): raise ValueError("truncated TMD packet header")
+            olen, ilen, flags, mode = data[pp:pp + 4]
+            stop = pp + 4 + ilen * 4
+            if not ilen or not olen or flags & ~7 or mode & 0xE0 != 0x20 or stop > len(data):
+                raise ValueError("unsupported/truncated TMD polygon packet")
+            p = data[pp + 4:stop]
+            n = 4 if mode & 8 else 3
+            textured, gouraud, unlit = bool(mode & 4), bool(mode & 16), bool(flags & 1)
+            tail_size = ((n * (4 if gouraud else 2) if not unlit else n * 2) + (0 if unlit or gouraud else 2) + 3) & ~3
+            start_indices = len(p) - tail_size
+            uv_bytes = n * 4 if textured else 0
+            color_bytes = start_indices - uv_bytes
+            if color_bytes < 0 or color_bytes % 4 or color_bytes // 4 not in (0, 1, n):
+                raise ValueError("unrecognized TMD polygon attribute layout")
+            if unlit:
+                indices = struct.unpack_from(f"<{n}H", p, start_indices)
+                normals = []
+            elif gouraud:
+                pairs = [struct.unpack_from("<HH", p, start_indices + i * 4) for i in range(n)]
+                normals, indices = [q[0] for q in pairs], tuple(q[1] for q in pairs)
+            else:
+                normals = [u16(p, start_indices)]
+                indices = struct.unpack_from(f"<{n}H", p, start_indices + 2)
+            if any(v >= vc for v in indices) or any(v >= nc for v in normals):
+                raise ValueError("TMD topology index outside vertex/normal arrays")
+            colors = [list(p[i:i + 3]) for i in range(uv_bytes, start_indices, 4)]
+            color = tuple(round(sum(c[k] for c in colors) / len(colors)) for k in range(3)) if colors else (180, 180, 180)
+            family = 12 if n == 4 else 4
+            padded = tuple(indices) + (0,) * (4 - n)
+            primitives.append(Primitive(family, padded, 0x28 if n == 4 else 0x20,
+                                          (*color, 255), (), None, None, "not_applicable", ()))
+            packets.append({"mode": mode, "flags": flags, "input_words": ilen, "output_words": olen,
+                            "vertex_indices": indices, "normal_indices": normals, "colors": colors,
+                            "uv_words": [u32(p, i * 4) for i in range(n)] if textured else []})
+            pp = stop
+        low = tuple(min(v[k] for v in vertices) for k in range(3)) + (0,)
+        high = tuple(max(v[k] for v in vertices) for k in range(3)) + (0,)
+        parts.append(ModelPart(0, vertices, vertices, low, high, tuple(primitives), 0, 0))
+        metadata.append({"object_index": obj, "scale_shift_not_applied": scale,
+                         "normals": source_normals, "packets": packets})
+        end = max(end, vp + vc * 8, np_ + nc * 8 if nc else 0, pp)
+    if not parts: raise ValueError("empty TMD")
+    return ModelArchive(data[:end], 0, tuple(parts), 0), metadata
+
+
+def parse_model_resource(data: bytes, metadata: dict | None = None) -> ModelArchive:
+    metadata = metadata or {}
+    if (metadata.get("format") == "sony-tmd" or
+            len(data) >= 12 and data[:8] == b"A\0\0\0\0\0\0\0" and u32(data, 8)):
+        return parse_tmd(data)[0]
+    return parse_model_archive(data, single_part=metadata.get("format") == "sprite-model-part")
+
+
+def _read_disc_slice(disc: DiscLayout, logical_offset: int, size: int) -> bytes:
+    sector, within = divmod(logical_offset, USER_SECTOR)
+    return disc.read_user_data(sector, size + within)[within:]
+
+
+def iter_tmd_models(disc: DiscLayout, lba: int, size: int, *,
+                    chunk_sectors: int = 4096) -> Iterable[tuple[int, ModelArchive]]:
+    """Find complete TMDs, rereading candidates across chunk boundaries.
+
+    Search all bytes rather than assuming a package route or file extension.
+    Only strict, complete polygon models are returned; recovery heuristics stay
+    in the separate forensic tools.
+    """
+    signature = b"A\0\0\0\0\0\0\0"
+    carry = b""
+    seen_offsets: set[int] = set()
+    with disc.data_path.open("rb") as source:
+        for sector_offset in range(0, (size + USER_SECTOR - 1) // USER_SECTOR, chunk_sectors):
+            count = min(chunk_sectors, (size + USER_SECTOR - 1) // USER_SECTOR - sector_offset)
+            source.seek((lba + sector_offset) * disc.sector_size)
+            raw = source.read(count * disc.sector_size)
+            if len(raw) != count * disc.sector_size:
+                raise ValueError("truncated TMD search extent")
+            if disc.sector_size == USER_SECTOR:
+                payload = raw
+            else:
+                payload = b"".join(raw[at + disc.user_offset:at + disc.user_offset + USER_SECTOR]
+                                   for at in range(0, len(raw), disc.sector_size))
+            payload = payload[:size - sector_offset * USER_SECTOR]
+            data = carry + payload
+            base = sector_offset * USER_SECTOR - len(carry)
+            cursor = 0
+            while (at := data.find(signature, cursor)) >= 0:
+                cursor = at + 1
+                offset = base + at
+                if offset in seen_offsets:
+                    continue
+                seen_offsets.add(offset)
+                remaining = size - offset
+                candidate = memoryview(data)[at:]
+                if remaining < 40:
+                    continue
+                if len(candidate) >= 12 and not 1 <= u32(candidate, 8) <= 512:
+                    continue
+                try:
+                    model, _ = parse_tmd(candidate)
+                except (ValueError, struct.error, IndexError):
+                    # A header, object table or data array may straddle a read
+                    # boundary. Validate counts/pointers before a bounded read.
+                    header = _read_disc_slice(disc, lba * USER_SECTOR + offset, 12)
+                    objects = u32(header, 8)
+                    if not 1 <= objects <= 512 or 12 + objects * 28 > remaining:
+                        continue
+                    table = _read_disc_slice(disc, lba * USER_SECTOR + offset, 12 + objects * 28)
+                    needed, plausible = len(table), True
+                    for obj in range(objects):
+                        vp, vc, np_, nc, pp, pc, scale = struct.unpack_from("<6Ii", table, 12 + obj * 28)
+                        if vc == nc == pc == 0:
+                            continue
+                        if (not 1 <= vc <= 65535 or not 1 <= pc <= 65535 or nc > 65535
+                                or not -31 <= scale <= 31
+                                or min(vp + 12, pp + 12) < len(table)
+                                or vp + 12 + vc * 8 > remaining or pp + 16 > remaining
+                                or nc and (np_ + 12 < len(table) or np_ + 12 + nc * 8 > remaining)):
+                            plausible = False
+                            break
+                        needed = max(needed, vp + 12 + vc * 8,
+                                     np_ + 12 + nc * 8 if nc else 0, pp + 12 + pc * 1024)
+                    if not plausible:
+                        continue
+                    candidate = _read_disc_slice(disc, lba * USER_SECTOR + offset,
+                                                 min(remaining, needed, MAX_RESOURCE_SIZE))
+                    try:
+                        model, _ = parse_tmd(candidate)
+                    except (ValueError, struct.error, IndexError):
+                        continue
+                model.raw = bytes(model.raw)
+                yield offset, model
+            # Retain incomplete signatures, including a count field at the
+            # start of the next chunk. Candidate data is reread from the disc.
+            carry = data[-11:]
+
+
 def field_actor_model_references(bundle: bytes) -> tuple[list[dict], list[dict]]:
     """Follow entry 0's animation graph, including relative child headers.
 
@@ -1754,7 +1913,7 @@ def write_if_changed(path: Path, content: bytes) -> None:
     temporary.replace(path)
 
 
-def _occurrence(disc_index: int, disc_name: str, fat_index: int, entry: FatEntry,
+def _occurrence(disc_index: int, disc_name: str, fat_index: int | None, entry: FatEntry,
                 routes: list[dict], chain: list[dict]) -> dict:
     return {
         "disc_index": disc_index, "disc_name": disc_name, "fat_index": fat_index,
@@ -1768,7 +1927,8 @@ def _next_pointer(data: bytes, start: int, pointers: Iterable[int]) -> int:
     return min(candidates) if candidates else len(data)
 
 
-def scan_disc(path: Path, disc_index: int, *, only_field_actors: bool = False) -> tuple[dict, list[dict]]:
+def scan_disc(path: Path, disc_index: int, *, only_field_actors: bool = False,
+              resource_kinds: frozenset[str] | None = None) -> tuple[dict, list[dict]]:
     disc = open_disc(path)
     entries = parse_fat(disc.read_user_data(FAT_LBA, FAT_SECTORS * USER_SECTOR), disc.sector_count)
     directory = parse_directory_table(disc.read_user_data(DIRECTORY_LBA, DIRECTORY_COUNT * 2))
@@ -1786,6 +1946,8 @@ def scan_disc(path: Path, disc_index: int, *, only_field_actors: bool = False) -
 
     def add(kind: str, data: bytes, entry: FatEntry, fat_index: int, routes: list[dict],
             chain: list[dict], **metadata: object) -> None:
+        if resource_kinds is not None and kind not in resource_kinds:
+            return
         occurrence = _occurrence(disc_index, path.name, fat_index, entry, routes, chain)
         if metadata:
             occurrence["resource_context"] = metadata
@@ -1949,7 +2111,7 @@ def scan_disc(path: Path, disc_index: int, *, only_field_actors: bool = False) -
         if not ids:
             continue
         relevant = any(
-            directory_id in {0x04, 0x0D, 0x0F, 0x24, 0x29, 0x30, 0x31}
+            directory_id in {0x04, 0x0D, 0x0F, 0x24, 0x28, 0x29, 0x30, 0x31}
             for directory_id, _ in ids
         )
         if not relevant:
@@ -1959,6 +2121,45 @@ def scan_disc(path: Path, disc_index: int, *, only_field_actors: bool = False) -
             continue
         padded = disc.read_user_data(entry.lba, entry.size, padded=True)
         raw = padded[:entry.size]
+
+        special_gear_file = next((f for d, f in ids if d == 0x28 and f in {1, 3, 5}), None)
+        if special_gear_file is not None:
+            scene_key = f"special-gear:{special_gear_file}"
+            name = "Siebzehn" if special_gear_file == 1 else "Buntline"
+            chain = [{"type": "special_gear_package", "file_id": special_gear_file}]
+            try:
+                members = offset_bundle(raw)
+                if len(members) < 3:
+                    raise ValueError("special Gear package has no model/skeleton members")
+                a, b = members[1]; model_data = raw[a:b]
+                a, b = members[2]; skeleton = raw[a:b]
+                model = add_model(model_data, entry, fat_index, routes,
+                                  chain + [{"type": "model_member", "member_index": 1,
+                                            "stored_offset": members[1][0]}],
+                                  skeleton=skeleton, scene_key=scene_key,
+                                  special_gear_file_id=special_gear_file, display_name=name)
+                if model is None:
+                    continue
+                texture_start, texture_end = members[0]
+                add_texture_package(raw[texture_start:texture_end], entry, fat_index, routes,
+                                    chain + [{"type": "texture_member", "member_index": 0,
+                                              "stored_offset": texture_start}],
+                                    "packed-tagged-images", scene_key=scene_key,
+                                    special_gear_file_id=special_gear_file, display_name=name,
+                                    model_sha256=sha256(model.raw))
+                animation_fat = next((index for index, candidate in routes_by_index.items()
+                                      if (0x28, special_gear_file + 1) in route_ids(candidate)), None)
+                if animation_fat is not None and entries[animation_fat].size > 0:
+                    animation_entry = entries[animation_fat]
+                    add("animation_container", disc.read_user_data(animation_entry.lba, animation_entry.size),
+                        animation_entry, animation_fat, routes_by_index.get(animation_fat, []),
+                        [{"type": "special_gear_animation_file"}],
+                        format="mecha-keyframes-and-vm", model_sha256=sha256(model_data),
+                        scene_key=scene_key, special_gear_file_id=special_gear_file, display_name=name)
+                scan_counts["special_gear_packages"] += 1
+            except (ValueError, struct.error, IndexError) as error:
+                report(f"special Gear package rejected: {error}", entry, fat_index, routes, chain)
+            continue
 
         field_route = next(((d, f) for d, f in ids if d == 0x04 and f >= 0xB8 and f <= 0x66A and (f - 0xB8) % 2 == 0), None)
         if field_route:
@@ -2346,6 +2547,34 @@ def scan_disc(path: Path, disc_index: int, *, only_field_actors: bool = False) -
 
             recurse(0, len(raw), 0, [{"type": "battle_gear_resource"}])
 
+    if not only_field_actors and (resource_kinds is None or "model" in resource_kinds):
+        for fat_index, entry in enumerate(entries):
+            if entry.size <= 0:
+                continue
+            routes = routes_by_index.get(fat_index, [])
+            for offset, model in iter_tmd_models(disc, entry.lba, entry.size):
+                digest = sha256(model.raw)
+                add("model", model.raw, entry, fat_index, routes,
+                    [{"type": "sony_tmd_payload", "stored_offset": offset}],
+                    format="sony-tmd", scene_key=f"effect-tmd:{digest}",
+                    part_count=len(model.parts),
+                    primitive_count=sum(len(part.primitives) for part in model.parts),
+                    conversion="geometry_and_average_face_colors; runtime textures and effect choreography unresolved")
+                scan_counts["sony_tmd_models"] += 1
+        # The PlayStation boot logo is a TMD outside the game's FAT.
+        if disc.sector_count >= 12:
+            boot_size = 7 * USER_SECTOR
+            for offset, model in iter_tmd_models(disc, 5, boot_size):
+                digest = sha256(model.raw)
+                add("model", model.raw, FatEntry(5, boot_size), None, [],
+                    [{"type": "system_boot_tmd", "logical_offset": 5 * USER_SECTOR + offset}],
+                    format="sony-tmd", scene_key=f"system-tmd:{digest}",
+                    part_count=len(model.parts),
+                    primitive_count=sum(len(part.primitives) for part in model.parts),
+                    display_name="PlayStation boot logo",
+                    conversion="geometry_and_average_face_colors; runtime textures unresolved")
+                scan_counts["system_tmd_models"] += 1
+
     return {
         "disc_index": disc_index, "disc_name": path.name,
         "input_path": str(path.resolve()), "data_file": disc.data_path.name,
@@ -2379,7 +2608,12 @@ def materialize(output: Path, resources: list[dict], unit_scale: float, *,
     for (kind, digest), item in sorted(unique.items()):
         data = item["data"]
         if kind == "model":
-            model = parse_model_archive(data, single_part=item["metadata"].get("format") == "sprite-model-part")
+            source_format = item["metadata"].get("format", "xenogears-model")
+            tmd_objects = None
+            if source_format == "sony-tmd":
+                model, tmd_objects = parse_tmd(data)
+            else:
+                model = parse_model_resource(data, item["metadata"])
             root = output / "models" / digest
             gltf, binary = build_gltf(
                 model, unit_scale, lit_materials=lit_materials,
@@ -2406,7 +2640,13 @@ def materialize(output: Path, resources: list[dict], unit_scale: float, *,
                     for part in model.parts for primitive in part.primitives
                 ).items())),
                 "occurrences": item["occurrences"],
+                "source_format": source_format,
             }
+            if tmd_objects is not None:
+                metadata["tmd_objects"] = tmd_objects
+                metadata["conversion"] = item["metadata"].get(
+                    "conversion", "geometry_and_average_face_colors; runtime textures and effect choreography unresolved",
+                )
             write_if_changed(root / "model.gltf", (json.dumps(gltf, indent=2) + "\n").encode("utf-8"))
             write_if_changed(root / "model.bin", binary)
             write_if_changed(root / "source.bin", data)
@@ -2418,7 +2658,11 @@ def materialize(output: Path, resources: list[dict], unit_scale: float, *,
                 "primitive_count": metadata["primitive_count"],
                 "texture_state_counts": metadata["texture_state_counts"],
                 "occurrences": item["occurrences"],
+                "source_format": source_format,
             })
+            if tmd_objects is not None:
+                records[-1]["tmd_objects"] = tmd_objects
+                records[-1]["conversion"] = metadata["conversion"]
         elif kind == "texture_image":
             tim = parse_tim(data)
             root = output / "textures" / "images" / digest
@@ -2532,9 +2776,17 @@ def materialize(output: Path, resources: list[dict], unit_scale: float, *,
     return records
 
 
-def _catalog_scene_path(scene_key: str, fat_index: int) -> Path:
+def _catalog_fat_label(fat_index: int | None) -> str:
+    return "system" if fat_index is None else f"{fat_index:04d}"
+
+
+def _catalog_scene_path(scene_key: str, fat_index: int | None) -> Path:
     fields = scene_key.split(":")
     category = fields[0]
+    if category == "effect-tmd":
+        return Path("effects") / f"tmd-{_catalog_fat_label(fat_index)}-{fields[1][:12]}"
+    if category == "system-tmd":
+        return Path("system") / f"tmd-{fields[1][:12]}"
     if category == "field-actor":
         label = FIELD_ACTOR_LABELS.get(fields[1], "actor")
         return Path("field") / "actors" / f"{label}-{fat_index:04d}-{fields[1][:12]}"
@@ -2554,6 +2806,9 @@ def _catalog_scene_path(scene_key: str, fat_index: int) -> Path:
                 / f"set-{values[0]:02d}-{fat_index:04d}-visual-{values[1]:02d}")
     if category == "battle-gear":
         return Path("battle") / "gears" / f"file-{fat_index:04d}-{values[0]:03d}"
+    if category == "special-gear":
+        name = "siebzehn" if values[0] == 1 else "buntline"
+        return Path("battle") / "special-gears" / f"{name}-{fat_index:04d}-{values[0]:03d}"
     safe = re.sub(r"[^a-zA-Z0-9._-]+", "-", scene_key).strip("-") or "unknown"
     return Path("unclassified") / f"scene-{fat_index:04d}-{safe}"
 
@@ -2579,6 +2834,15 @@ def _append_glb_payload(gltf: dict, binary: bytearray, payload: bytes, name: str
         "buffer": 0, "byteOffset": offset, "byteLength": length, "name": name,
     })
     return index
+
+
+def _model_source_entry(record: dict, source_view: int) -> dict:
+    entry = {"kind": "model_source", "sha256": record["sha256"], "bufferView": source_view,
+             "mimeType": "application/x-xenogears-model"}
+    if record.get("source_format") == "sony-tmd":
+        entry.update(mimeType="application/x-playstation-tmd", format="sony-tmd",
+                     tmdObjects=record["tmd_objects"], conversion=record["conversion"])
+    return entry
 
 
 def _merge_gltf_model(gltf: dict, binary: bytearray, source: dict, source_binary: bytes,
@@ -3659,10 +3923,8 @@ def build_scene_catalog(catalog: Path, assets: Path, records: list[dict],
             source_view = _append_glb_payload(
                 gltf, binary, model_source_data, f"model_source_{model_digest[:12]}",
             )
-            gltf["extensions"]["XENOGEARS_resource_bundle"]["resources"].append({
-                "kind": "model_source", "sha256": model_digest, "bufferView": source_view,
-                "mimeType": "application/x-xenogears-model",
-            })
+            gltf["extensions"]["XENOGEARS_resource_bundle"]["resources"].append(
+                _model_source_entry(model_record, source_view))
             model_occurrence = min(
                 model["occurrences"],
                 key=lambda occurrence: (
@@ -3703,7 +3965,7 @@ def build_scene_catalog(catalog: Path, assets: Path, records: list[dict],
 
             use_models_directory = len(scene_models) > 1 or len(individual_variants) > 1
             for world_model_index, individual_source_gltf, individual_source_binary in individual_variants:
-                model_directory = f"model-{model_fat_index:04d}-{model_digest}"
+                model_directory = f"model-{_catalog_fat_label(model_fat_index)}-{model_digest}"
                 if world_model_index is not None:
                     model_directory += f"-part-{world_model_index:04d}"
                 individual_path = Path(model_directory) / "model.glb"
@@ -3743,11 +4005,7 @@ def build_scene_catalog(catalog: Path, assets: Path, records: list[dict],
                         f"model_source_{model_digest[:12]}",
                     )
                     individual_resources = individual_gltf["extensions"]["XENOGEARS_resource_bundle"]["resources"]
-                    individual_resources.append({
-                        "kind": "model_source", "sha256": model_digest,
-                        "bufferView": individual_source_view,
-                        "mimeType": "application/x-xenogears-model",
-                    })
+                    individual_resources.append(_model_source_entry(model_record, individual_source_view))
                     for dependency in associated_dependencies:
                         view = _append_glb_payload(
                             individual_gltf, individual_binary,
@@ -3760,11 +4018,15 @@ def build_scene_catalog(catalog: Path, assets: Path, records: list[dict],
                         })
                     individual_extension = individual_gltf["extensions"]["XENOGEARS_resource_bundle"]
                     individual_extension["animation_policy"] = (
+                        "Stored TMD geometry only; attack choreography requires runtime state."
+                        if model_record.get("source_format") == "sony-tmd" else
                         "Actor model states are exported separately; the original sprite animation bundle remains embedded."
                         if scene_key.startswith("field-actor:") else
                         "All sequence tracks are decoded as timelines; deterministic VM scripts are evaluated as actions, and context-dependent scripts remain embedded."
                     )
                     individual_extension["texture_policy"] = (
+                        "TMD preview uses average face colors; authored UVs, normals and packets remain in the source resource. Runtime VRAM textures are unresolved."
+                        if model_record.get("source_format") == "sony-tmd" else
                         "Textures required by this model are baked from the scene VRAM into standard embedded PNG images."
                     )
                     individual_bindings = bind_scene_material_textures(
@@ -3796,6 +4058,12 @@ def build_scene_catalog(catalog: Path, assets: Path, records: list[dict],
                     "unsupported_vm_opcodes": animation_stats["unsupported_vm_opcodes"],
                     "skipped_vm_action_count": animation_stats["skipped_vm_action_count"],
                 }
+                if model_record.get("source_format") == "sony-tmd":
+                    model_entry["source_format"] = "sony-tmd"
+                    model_entry["conversion"] = model_record["conversion"]
+                display_name = next((c["display_name"] for c in model["contexts"] if "display_name" in c), None)
+                if display_name is not None:
+                    model_entry["display_name"] = display_name
                 if world_model_index is not None:
                     model_entry["world_model_index"] = world_model_index
                 if scene_key.startswith("field-actor:"):
@@ -4034,11 +4302,15 @@ def build_scene_catalog(catalog: Path, assets: Path, records: list[dict],
             })
 
         gltf["extensions"]["XENOGEARS_resource_bundle"]["animation_policy"] = (
+            "Stored TMD geometry only; attack choreography requires runtime state."
+            if scene_key.startswith(("effect-tmd:", "system-tmd:")) else
             "Actor model states are exported separately; the original sprite animation bundle remains embedded."
             if scene_key.startswith("field-actor:") else
             "All sequence tracks are decoded as timelines; deterministic VM scripts are evaluated as actions, and context-dependent scripts remain embedded."
         )
         gltf["extensions"]["XENOGEARS_resource_bundle"]["texture_policy"] = (
+            "TMD preview uses average face colors; original UVs, normals and packets are retained without guessing VRAM texture state."
+            if scene_key.startswith(("effect-tmd:", "system-tmd:")) else
             "Decoded TIMs are standard images; unresolved VRAM uploads remain original embedded packages."
         )
         material_texture_bindings = bind_scene_material_textures(
@@ -4133,6 +4405,8 @@ def extract_models(discs: Iterable[Path], output: Path, unit_scale: float, *,
             "individual_model_glbs": catalog["individual_model_glbs"],
             "material_texture_bindings": catalog["material_texture_bindings"],
             "texture_state_counts": dict(sorted(texture_state_counts.items())),
+            "model_formats": dict(sorted(Counter(record.get("source_format", "xenogears-model")
+                                                  for record in records if record["kind"] == "model").items())),
         }
         shutil.rmtree(assets)
         manifest = {
