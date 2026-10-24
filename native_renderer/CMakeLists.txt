@@ -885,6 +885,13 @@ if(BUILD_TESTING)
     add_test(NAME xg_render_resource_repository
         COMMAND test_xg_render_resource_repository)
 
+    add_executable(test_xg_render_resource_concurrency
+        tests/infrastructure/test_xg_render_resource_concurrency.c)
+    target_link_libraries(test_xg_render_resource_concurrency PRIVATE
+        xg_semantic_presentation)
+    add_test(NAME xg_render_resource_concurrency
+        COMMAND test_xg_render_resource_concurrency)
+
     add_executable(test_xg_render_model_resources
         tests/infrastructure/test_xg_render_model_resources.c)
     target_link_libraries(test_xg_render_model_resources PRIVATE
@@ -993,6 +1000,7 @@ if(BUILD_TESTING)
             test_xg_render_source_timeline
             test_xg_render_temporal_submission
             test_xg_render_resource_repository
+            test_xg_render_resource_concurrency
             test_xg_render_model_resources
             test_xg_render_vram_resources
             test_xg_render_ui_movie

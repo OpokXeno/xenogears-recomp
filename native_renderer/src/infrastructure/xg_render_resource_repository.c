@@ -2,6 +2,7 @@
 #include "xg_render_array.h"
 
 #include <stdlib.h>
+#include <limits.h>
 #include <stdatomic.h>
 #include <string.h>
 #include <time.h>
@@ -41,7 +42,9 @@ static XgRenderResourceDiagnostics g_diagnostics;
 static uint64_t g_next_generation = 1u;
 static uint64_t g_next_capability = 1u;
 static uint64_t g_capability_session;
-static atomic_flag g_lock = ATOMIC_FLAG_INIT;
+/* High bit reserves a writer; low bits count readers already inside. */
+#define REPOSITORY_WRITER (UINT_MAX / 2u + 1u)
+static atomic_uint g_lock = 0u;
 static XgRenderResourceRestoreFault g_restore_fault;
 static uint32_t g_restore_fail_after;
 static bool g_capability_restore_active;
@@ -55,12 +58,48 @@ enum {
     XG_RENDER_CAPABILITY_CHECKPOINT_PAYLOAD_SIZE = 192u,
 };
 
+static void repository_pause(void) {
+#if defined(__i386__) || defined(__x86_64__)
+    __builtin_ia32_pause();
+#elif defined(__aarch64__) && (defined(__GNUC__) || defined(__clang__))
+    __asm__ volatile("yield");
+#endif
+}
+
 static void repository_lock(void) {
-    while (atomic_flag_test_and_set_explicit(&g_lock, memory_order_acquire)) {}
+    unsigned state = atomic_load_explicit(&g_lock, memory_order_relaxed);
+    for (;;) {
+        if (!(state & REPOSITORY_WRITER) &&
+            atomic_compare_exchange_weak_explicit(&g_lock, &state,
+                state | REPOSITORY_WRITER, memory_order_acquire, memory_order_relaxed))
+            break;
+        repository_pause();
+        state = atomic_load_explicit(&g_lock, memory_order_relaxed);
+    }
+    /* Once reserved, new readers cannot prolong this writer's wait. The
+     * acquire observes the last reader's release before changing storage. */
+    while (atomic_load_explicit(&g_lock, memory_order_acquire) != REPOSITORY_WRITER)
+        repository_pause();
 }
 
 static void repository_unlock(void) {
-    atomic_flag_clear_explicit(&g_lock, memory_order_release);
+    atomic_store_explicit(&g_lock, 0u, memory_order_release);
+}
+
+static void repository_read_lock(void) {
+    unsigned state = atomic_load_explicit(&g_lock, memory_order_relaxed);
+    for (;;) {
+        if (state < REPOSITORY_WRITER - 1u &&
+            atomic_compare_exchange_weak_explicit(&g_lock, &state, state + 1u,
+                memory_order_acquire, memory_order_relaxed))
+            return;
+        repository_pause();
+        state = atomic_load_explicit(&g_lock, memory_order_relaxed);
+    }
+}
+
+static void repository_read_unlock(void) {
+    atomic_fetch_sub_explicit(&g_lock, 1u, memory_order_release);
 }
 
 static void checkpoint_write_u32(uint8_t **cursor, uint32_t value) {
@@ -664,7 +703,7 @@ XgRenderResourceCapabilityResult xg_render_resource_capability_validate(
 static XgRenderResourceEntry *find_entry(XgRenderResourceHandle handle) {
     /* Hint only: every hit revalidates the occupied slot and complete handle
      * under the repository lock. Retirement/reuse cannot authorize a stale hit. */
-    static size_t hints[1024];
+    static _Thread_local size_t hints[1024];
     uint64_t hash=handle.resource_id^(handle.generation*UINT64_C(0x9e3779b97f4a7c15));
     hash^=hash>>32u;
     const size_t bucket=(size_t)hash&1023u;
@@ -1758,15 +1797,17 @@ XgRenderResourceResult xg_render_resource_view(XgRenderResourceHandle handle,
         XgRenderResourceView *out_view) {
     XgRenderResourceEntry *entry;
     if (out_view == NULL) return XG_RENDER_RESOURCE_INVALID_ARGUMENT;
-    repository_lock();
+    repository_read_lock();
     entry = find_entry(handle);
     if (entry == NULL) {
+        repository_read_unlock();
+        repository_lock();
         g_diagnostics.stale_accesses++;
         repository_unlock();
         return XG_RENDER_RESOURCE_NOT_FOUND;
     }
     *out_view = entry->view;
-    repository_unlock();
+    repository_read_unlock();
     return XG_RENDER_RESOURCE_OK;
 }
 

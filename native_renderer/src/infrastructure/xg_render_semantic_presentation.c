@@ -1444,6 +1444,14 @@ outcome:
                     XG_RENDER_GUEST_CYCLES_PER_SECOND;
                 if (g_visual_source_interval_ns > g_visual_budget_interval_ns)
                     g_visual_budget_interval_ns = g_visual_source_interval_ns;
+                /* UI/display boundaries can be closer together than motion
+                 * endpoints. Keep the full authored phase interval inside
+                 * the same scene's presentation delay. */
+                const uint64_t phase_interval = batch->endpoint.temporal_interval_ns;
+                if (batch->endpoint.temporal_phase_count &&
+                    phase_interval <= XG_RENDER_TEMPORAL_BUDGET_NS &&
+                    phase_interval > g_visual_budget_interval_ns)
+                    g_visual_budget_interval_ns = phase_interval;
             }
         } else {
             g_visual_source_interval_ns = 0u;
