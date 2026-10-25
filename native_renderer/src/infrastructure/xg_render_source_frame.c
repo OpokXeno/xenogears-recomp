@@ -117,6 +117,8 @@ static bool frame_description_equal(
         left->display.native_height == right->display.native_height &&
         left->display.native_offset_x == right->display.native_offset_x &&
         left->display.temporal_hz == right->display.temporal_hz &&
+        left->display.render_width == right->display.render_width &&
+        left->display.render_height == right->display.render_height &&
         left->display.dithering_disabled == right->display.dithering_disabled &&
         left->display.native_depth_test == right->display.native_depth_test &&
         (left->display.render_scale ? left->display.render_scale : 1u) ==

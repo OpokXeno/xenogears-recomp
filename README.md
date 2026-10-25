@@ -58,7 +58,7 @@ Grab the x86-64 archive for your platform from [Releases](https://github.com/Opo
 
 1. **Set the game discs** — on first launch, locate your legally obtained *Xenogears* (USA) disc images. Choose **Disc 1** in **Disc Selection** and browse for its `.cue` file, then do the same for **Disc 2**. Each image is recognized by its own serial, so it always lands on the right disc, and both locations are remembered. The launcher verifies the ISO9660 header, region, and serial.
 2. **Optional: select a retail BIOS** — OpenBIOS runs by default. To use the retail backend, select your legally obtained matching `SCPH1001.BIN` (a 512 KB file dumped from your own console) via Settings → System → Browse.
-3. Optionally adjust renderer, supersampling, screen look, widescreen, and controller settings, then press **Launch**. Your choices are remembered.
+3. Optionally adjust renderer, internal resolution, screen look, widescreen, and controller settings, then press **Launch**. Your choices are remembered.
 
 **Accepted disc formats:** `.cue` + `.bin` and `.chd`. If the header or game ID
 does not match a Xenogears (USA) disc, the launcher warns and tries to run the

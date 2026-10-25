@@ -97,6 +97,10 @@ typedef struct XgSemanticDisplayState {
     /* Captured host option. True enables the per-pixel Native depth test for
      * producer-classified 3D draws in VIEW/phase planes; guest VRAM never. */
     bool native_depth_test;
+    /* Optional exact host raster size. Both zero selects integer render_scale;
+     * otherwise VIEW geometry is rasterized at these physical dimensions. */
+    uint16_t render_width;
+    uint16_t render_height;
 } XgSemanticDisplayState;
 
 typedef enum XgSemanticPassLoadOperation {

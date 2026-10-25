@@ -204,13 +204,13 @@ The runtime option is `gl_renderer_set_native_depth_test`. Only the debug overla
 
 No family currently uses `TEST`. Billboards (character cards, world trees) write the depth of their projected card, so crossing cards can intersect. Blended texels never write, so semi-transparent shadows and effects keep only testing where they blend.
 
-The bias makes the tested key `D + (D >> bias)`, so the surface is taken about 2⁻ᵇⁱᵃˢ nearer. A shadow or a character card resting on a certified floor still passes where the two meet. The bias never changes a written key.
+The bias makes the tested depth `D * (1 + 2^-bias)` (or `D` for bias zero), so the surface is taken about 2⁻ᵇⁱᵃˢ nearer. A shadow or a character card resting on a certified floor still passes where the two meet. The bias never changes a written key.
 
 The rasterizer then applies the draw's final geometry:
 
 - A triangle without view depth on all three vertices behaves as `NONE`. This covers the 2D quads of mixed producers (residual, F4).
 - Screen-space 2D draws, Native view effects and lines behave as `NONE`.
-- A triangle whose key gradient exceeds the fixed-point range (an edge-on sliver) behaves as `NONE`.
+- A finite steep triangle keeps its depth gradient; only coefficients outside the FP32 range use a constant depth from the farthest corner.
 
 ### Depth values
 
@@ -227,16 +227,15 @@ Interpolated phases use a depth that matches their positions:
 
 ### Key and plane
 
-The key is `D = 2^40 / z_q12`, which is affine in screen space. `0` means far.
+Depth is reverse-Z in FP32: `D = 4096 / z_q12 = 1 / view_z`, affine in screen space. Larger values are nearer; `0` means far.
 
-Each triangle gets one integer plane: `N0` (D in Q8 at an integer raster origin) and Q8 gradients `a`, `b` per logical pixel. The gradients are limited to 2²² in magnitude.
+The existing `R32UI` / `R32_UINT` images and CPU/capture words store the **bits of the float**, without conversion to an integer depth. Positive finite floats preserve their ordering when these bits are compared as unsigned integers. This keeps the same four bytes per texel and the existing transfer, interlock and capture layouts. Plane 0's independent 0/1 provenance values retain their original meaning.
 
-Both rasterizers evaluate it with modular 32-bit arithmetic:
+Each triangle gets an FP32 seed at an integer raster origin and two FP32 gradients, prepared with double-precision intermediates. GPU upload divides the gradients by the render scale and converts the origin to physical pixels once per draw. Each fragment evaluates the plane with two explicit FP32 fused multiply-adds; GL 3.3 without `ARB_gpu_shader5` uses separate multiply/add operations. There are no per-fragment scale multiplications/divisions, scale branches or integer depth quantization. Samples use the same physical pixel corners as coverage and UV at every render scale. The CPU reference uses the same fused evaluation at logical pixel corners.
 
-- The CPU reference and the GPU at scale 1 produce identical keys.
-- At scale S the GPU produces the same key at the subpixel that coincides with the CPU sample, and it extends the plane exactly to the other subpixels.
+Finite steep triangles no longer hit a fixed-point slope limit. A plane with coefficients outside FP32 range uses the farthest corner's depth as a conservative flat fallback. Evaluation clamps to the smallest positive normal FP32 value so zero stays reserved for far.
 
-The plane passes through the fractional (Q16) Native vertex positions, and the key is sampled at the same point as colour and UV. Depth is therefore subpixel-precise at every render scale.
+The Vulkan bounds cache widens its FP32 corner extrema for rounding error before skipping a depth read. Debug views decode the float bits before computing their logarithmic colour range.
 
 ### Rules
 
@@ -245,7 +244,7 @@ Invariant: a texel holds the key of the certified opaque surface visible there, 
 | Fragment | Test | Key after it is written |
 |---|---|---|
 | Blended (semi-transparent texel or material) | as its draw | unchanged |
-| Unblended, `TEST_WRITE` | `D + (D >> bias) >= stored - (stored >> 10)` | `D` |
+| Unblended, `TEST_WRITE` | `biased_D >= stored * (1 - 2^-10)` | `D` |
 | Unblended, `TEST` | same | far |
 | Unblended, `NONE` | none | far |
 | FILL/UPLOAD, partial copies, seeds, margins, recipe clears | none | far |
@@ -506,6 +505,15 @@ entries still retained, so newer successful frames do not hide the first
 available source-to-screen divergence. Stale or invalidated work that already
 completed swap remains history rather than a false loss; unswapped stale or
 invalidated work is reported as anomalous evidence.
+
+`native_vk_services.executor` reports `layout_cache_resets`,
+`layout_cache_evictions` and `layout_cache_evicted_bytes`. A raster layout
+change discards cached Vulkan surfaces from the previous layout; endpoint
+images still in use remain alive until their presentation fences retire.
+Unused cached surfaces also expire after 32 executor works, so a temporary
+peak in interpolation phases does not reserve that peak storage indefinitely.
+The byte counter estimates discarded color/key storage and is cumulative,
+not a measurement of current device memory usage.
 
 With `PSX_NATIVE_VISUAL_TRUTH=1`, revision 3 additionally enables the GL
 backend's canonical software-raster mirror and captures its display rectangle

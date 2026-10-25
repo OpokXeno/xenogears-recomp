@@ -171,6 +171,8 @@ static bool display_equal(const XgSemanticDisplayState *left,
         left->native_height == right->native_height &&
         left->native_offset_x == right->native_offset_x &&
         left->temporal_hz == right->temporal_hz &&
+        left->render_width == right->render_width &&
+        left->render_height == right->render_height &&
         left->dithering_disabled == right->dithering_disabled &&
         left->native_depth_test == right->native_depth_test &&
         (left->render_scale ? left->render_scale : 1u) ==

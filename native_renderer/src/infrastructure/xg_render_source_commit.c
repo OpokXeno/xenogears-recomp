@@ -450,6 +450,8 @@ static uint64_t commit_digest(const XgRenderSourceSlot *slot) {
     const uint16_t render_scale = slot->header.display.render_scale
         ? slot->header.display.render_scale : 1u;
     HASH_FIELD(render_scale);
+    HASH_FIELD(slot->header.display.render_width);
+    HASH_FIELD(slot->header.display.render_height);
     HASH_FIELD(slot->header.display.dithering_disabled);
     HASH_FIELD(slot->header.display.native_depth_test);
     HASH_FIELD(slot->header.source_interval_vblanks);
@@ -1345,7 +1347,9 @@ static XgRenderSourceCommitResult source_commit_begin_unlocked(
 
     if (identity == NULL || scene == NULL || display == NULL ||
         out_builder == NULL || identity->presentation_epoch == 0u ||
-        identity->source_sequence == 0u || display->render_scale > XG_SEMANTIC_RENDER_SCALE_MAX)
+        identity->source_sequence == 0u || (display->render_scale > XG_SEMANTIC_RENDER_SCALE_MAX ||
+         (display->render_width == 0u) != (display->render_height == 0u) ||
+         display->render_width > 16384u || display->render_height > 16384u))
         return XG_RENDER_SOURCE_COMMIT_INVALID_ARGUMENT;
     for (index = 0; index < XG_RENDER_SOURCE_COMMIT_CAPACITY; index++) {
         XgRenderSourceSlot *slot = g_slots[index];
@@ -1823,7 +1827,9 @@ XgRenderSourceCommitResult xg_render_source_commit_set_native_display(
     XgRenderSourceSlot *slot = builder_slot(builder);
     if (slot == NULL || !slot->header.native_work) {
         result = XG_RENDER_SOURCE_COMMIT_INVALID_TRANSITION;
-    } else if (display == NULL || display->render_scale > XG_SEMANTIC_RENDER_SCALE_MAX) {
+    } else if (display == NULL || (display->render_scale > XG_SEMANTIC_RENDER_SCALE_MAX ||
+         (display->render_width == 0u) != (display->render_height == 0u) ||
+         display->render_width > 16384u || display->render_height > 16384u)) {
         result = XG_RENDER_SOURCE_COMMIT_INVALID_ARGUMENT;
     } else {
         slot->header.display = *display;
