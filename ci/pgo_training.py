@@ -112,7 +112,6 @@ antialiasing = "smaa"
 antialiasing_factor = 16
 texture_filtering = "nearest"
 sprite_filtering = "nearest"
-anisotropic_filtering = 16
 bios_hle = true
 dithering = false
 [controller]

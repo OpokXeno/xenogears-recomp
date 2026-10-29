@@ -139,6 +139,12 @@ tools/sprite-extractor-bundle/extracted-sprites
 tools/image-extractor-bundle/extracted-images
 !tools/model-extractor-bundle
 tools/model-extractor-bundle/extracted-models
+tools/model-extractor-bundle/.extracted-models.tmp/
+tools/model-extractor-bundle/extracted-models-jp-disc1/
+tools/model-extractor-bundle/.extracted-models-jp-disc1.tmp/
+tools/model-extractor-bundle/extracted-models-demo-slus90028/
+tools/model-extractor-bundle/.extracted-models-demo-slus90028.tmp/
+tools/model-extractor-bundle/deep-scan-*/
 !tools/field-script-tools-bundle
 tools/field-script-tools-bundle/extracted-field-scripts
 !tools/battle-script-tools-bundle
@@ -168,3 +174,4 @@ tools/battle-script-tools-bundle/extracted-battle-scripts
 !tools/test_overlay_annotations.py
 !tools/generate_emulator_field_pacing_patch.py
 !tools/test_generate_emulator_field_pacing_patch.py
+!tools/xa-romhack

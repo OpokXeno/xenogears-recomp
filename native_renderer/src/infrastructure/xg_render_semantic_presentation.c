@@ -80,6 +80,8 @@ typedef struct XgRenderPresentationBatch {
     bool has_endpoint;
     bool stale_counted;
     bool temporal_disabled;
+    bool phase_early; /* Arrived before its first phase was due. */
+    bool phase_feedback; /* Its arrival already adjusted g_phase_cap. */
 } XgRenderPresentationBatch;
 
 typedef struct XgRenderRetirement {
@@ -146,6 +148,11 @@ static uint64_t g_visual_lag_time_ns;
 /* Envelope of how long before its deadline the worker must plan to finish a
  * batch so phase 1 is still selectable once the GPU has executed it. */
 static uint64_t g_render_lag_ns;
+/* Most phases the next batches may plan; zero is uncapped. A batch's phases
+ * become selectable together once its whole GPU work completes, so every phase
+ * due before then is rendered and never shown. The cap follows the phases the
+ * host actually delivers in time instead of the display cadence. */
+static uint64_t g_phase_cap;
 static uint64_t g_render_lag_time_ns;
 static uint32_t g_source_buffer_intervals = 2u;
 static bool g_visual_origin_seen;
@@ -455,6 +462,7 @@ static void initialize_locked(void) {
     g_visual_lag_time_ns = 0u;
     g_render_lag_ns = 0u;
     g_render_lag_time_ns = 0u;
+    g_phase_cap = 0u;
     g_visual_realtime = true;
     g_source_buffer_intervals = 2u;
     g_worker_operations = 0u;
@@ -1134,6 +1142,15 @@ bool xg_render_worker_source_deadline(
     return available;
 }
 
+uint32_t xg_render_worker_phase_cap(void) {
+    uint64_t cap;
+
+    state_lock();
+    cap = g_phase_cap;
+    state_unlock();
+    return cap > UINT32_MAX ? UINT32_MAX : (uint32_t)cap;
+}
+
 bool xg_render_worker_acquire_next_source(
         XgRenderSourceCommitHandle current, XgRenderSourceCommitHandle after,
         XgRenderSourceCommitHandle *out_next,
@@ -1626,6 +1643,7 @@ bool xg_render_presenter_sync_source_clock(
         g_visual_lag_time_ns = guest_time_ns;
         g_render_lag_ns = 0u;
         g_render_lag_time_ns = 0u;
+        g_phase_cap = 0u;
     }
     if (realtime && g_visual_origin_seen) {
         /* Rise at once (late sources need the slack now), recover slowly so
@@ -1911,6 +1929,7 @@ static XgRenderPresenterResult presenter_present(
          * reserved temporal budget must not become discrete input latency. */
         if (!hold && batch->phase_count != 0u && g_retained_batch != 0u && !due) {
             g_diagnostics.selection_guard_empties++;
+            batch->phase_early = true;
             batch->state = XG_RENDER_BATCH_PENDING;
             refresh_batch_pending_locked();
             state_unlock();
@@ -1918,6 +1937,26 @@ static XgRenderPresenterResult presenter_present(
             return XG_RENDER_PRESENTER_EMPTY;
         }
         selected_phase = phase > batch->phase_index ? phase : batch->phase_index;
+        if (!hold && batch->phase_count >= 2u && !batch->phase_feedback) {
+            /* Phases before the selected one were due before this batch was
+             * ready. Shrink the cap by them, at most by half per batch so one
+             * hitch cannot collapse it; batches planned above the cap predate
+             * the last cut. Every batch ready in time earns one more phase. */
+            const uint64_t rendered = batch->phase_count - 1u;
+            batch->phase_feedback = true;
+            if (batch->phase_early || selected_phase <= 1u) {
+                if (g_phase_cap != 0u && rendered >= g_phase_cap) g_phase_cap++;
+            } else if (g_phase_cap == 0u || rendered <= g_phase_cap) {
+                const uint64_t skipped =
+                    (selected_phase < batch->phase_count ? selected_phase : batch->phase_count) - 1u;
+                uint64_t cap = rendered > skipped ? rendered - skipped : 1u;
+                if (cap < rendered / 2u) cap = rendered / 2u;
+                g_phase_cap = cap != 0u ? cap : 1u;
+                g_diagnostics.phase_late_batches++;
+                g_diagnostics.phase_late_skipped += skipped;
+            }
+            g_diagnostics.phase_cap = g_phase_cap;
+        }
         g_diagnostics.selection_last_phase = selected_phase;
         g_diagnostics.selection_last_remaining_ms =
             deadline_ns >= now

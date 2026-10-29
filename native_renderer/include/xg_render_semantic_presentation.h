@@ -377,6 +377,11 @@ typedef struct XgRenderPresentationDiagnostics {
     /* Current guest-lag envelope added to new source deadlines. */
     uint64_t visual_lag_ns;
     uint64_t render_lag_ns;
+    /* Phase budget learned from batch arrival (0 = uncapped), the batches
+     * that arrived after their first phase was due and the phases they lost. */
+    uint64_t phase_cap;
+    uint64_t phase_late_batches;
+    uint64_t phase_late_skipped;
 } XgRenderPresentationDiagnostics;
 
 /*
@@ -440,6 +445,9 @@ XgRenderWorkerResult xg_render_worker_compile_next(
  * the snapshot does not prevent subsequent epoch invalidation. */
 bool xg_render_worker_source_deadline(
     XgRenderSourceCommitHandle commit, uint64_t *out_deadline_ns);
+/* Most visual phases a new batch should plan (0 = uncapped): the phases recent
+ * batches delivered before they were due. Lock-only snapshot, no state writes. */
+uint32_t xg_render_worker_phase_cap(void);
 /* Active FIFO-head compiler only: acquire a read lease on the immediate
  * successor of current or an already prepared FIFO prefix (after), together
  * with that source's fixed deadline. The caller releases
