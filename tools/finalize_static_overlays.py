@@ -226,7 +226,8 @@ def _normalized_variants(variants: list[dict]) -> list[dict]:
     return unique
 
 
-def _dispatch_shard_source(index: int, variants: list[dict]) -> str:
+def _dispatch_shard_source(index: int, variants: list[dict],
+                           entry_index: dict[int, int]) -> str:
     by_address: dict[int, list[dict]] = {}
     for variant in variants:
         by_address.setdefault(variant["addr"], []).append(variant)
@@ -299,6 +300,7 @@ def _dispatch_shard_source(index: int, variants: list[dict]) -> str:
         "extern uint64_t psx_ov_static_hits;",
         "extern uint64_t psx_ov_static_variant_misses;",
         "extern uint64_t psx_ov_static_address_misses;",
+        "extern uint64_t psx_ov_entry_hits[];",
         "",
     ]
     for symbol in sorted({variant["symbol"] for variant in variants}):
@@ -407,6 +409,7 @@ def _dispatch_shard_source(index: int, variants: list[dict]) -> str:
                 "dispatch_pc))",
                 "                    return 0;",
                 "                psx_ov_static_hits++;",
+                f"                psx_ov_entry_hits[{entry_index[address]}u]++;",
             ]
             if variant["resume"]:
                 lines.append(
@@ -453,8 +456,9 @@ def generate_dispatch_shards(
         [variant for address in group for variant in variants_by_address[address]]
         for group in address_groups
     ]
+    entry_index = {address: index for index, address in enumerate(addresses)}
     shard_sources = [
-        _dispatch_shard_source(index, group)
+        _dispatch_shard_source(index, group, entry_index)
         for index, group in enumerate(shard_variants)
     ]
 
@@ -541,6 +545,26 @@ def generate_dispatch_shards(
         "static uint64_t psx_ov_static_image_checks = 0;",
         "static uint64_t psx_ov_static_image_hits = 0;",
         "static uint64_t psx_ov_static_image_misses = 0;",
+        "",
+        "/* Dispatch entries sorted by address: occupant count and dispatches",
+        " * served (the overlay_static_entries debug command). */",
+        f"uint64_t psx_ov_entry_hits[{len(addresses)}];",
+        "static const struct { uint32_t addr; uint32_t n; } "
+        f"psx_ov_entries[{len(addresses)}] = {{",
+        *[
+            f"    {{0x{address:08X}u, {len(variants_by_address[address])}u}},"
+            for address in addresses
+        ],
+        "};",
+        f"uint32_t psx_overlay_static_entry_count(void) {{ return {len(addresses)}u; }}",
+        "int psx_overlay_static_entry_stats(uint32_t index, uint32_t *addr,",
+        "                                   uint32_t *variants, uint64_t *hits) {",
+        f"    if (index >= {len(addresses)}u) return 0;",
+        "    if (addr) *addr = psx_ov_entries[index].addr;",
+        "    if (variants) *variants = psx_ov_entries[index].n;",
+        "    if (hits) *hits = psx_ov_entry_hits[index];",
+        "    return 1;",
+        "}",
         "",
     ]
     for index in range(len(shard_sources)):
