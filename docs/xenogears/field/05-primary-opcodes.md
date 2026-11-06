@@ -26,8 +26,8 @@ The byte at the active PC directly selects one of these 256 entries.
 | `11` | 4 or 9 | `0x80098C3C` | `MoveActorToPositionWithLimit` | phase zero initializes bounded interpolated movement and advances nine bytes; nonzero phases continue it, reread coordinates nine bytes earlier on completion, and resume four bytes after the continuation. The wrapper reads a limit at current IP+11 when its counter is uninitialized. |
 | `12` | 9 | `0x80093200` | `StartCustomFieldTransition` | waits for coordinator readiness, stages the destination field and entry parameter, records the transition mode and fade length, and yields for in-place map replacement. |
 | `13` | 1 | `0x800A2FC0` | `Nop` | Field script no-op handler. |
-| `14` | 1 | `0x80093C48` | `DisableRandomEncounters` | disables encounters. |
-| `15` | 1 | `0x80093C6C` | `EnableRandomEncounters` | enables random encounters. |
+| `14` | 1 | `0x80093C48` | `UnlockPlayerControl` | clears the player-control lock, restoring player input and random encounter updates. |
+| `15` | 1 | `0x80093C6C` | `LockPlayerControl` | once transition readiness permits, sets the player-control lock, blocking player input and random encounter updates; otherwise retries without advancing. |
 | `16` | 3 | `0x800A08B8` | `InitializePlayableActor` | initializes a playable-character actor, updates player and party mappings, selects party or replacement graphics, applies entry placement, and handles missing-party fallback. |
 | `17` | 18 | `0x8009E91C` | `SetupMovementBoundingZone` | allocates and loads four movement-boundary vertices. |
 | `18` | 5 | `0x8009E83C` | `SetActorCollisionDimensions` | sets actor collision bounds. |

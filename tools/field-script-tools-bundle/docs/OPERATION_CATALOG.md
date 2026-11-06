@@ -224,8 +224,8 @@ Maps, encounters, triggers, transitions, and scene state.
 |---|---:|---|---|---|---|
 | `0A` | 4 | `if (inside_trigger_2d(...)) call label` | `0x8009533C` | `CallTriggerZone2D` | conditionally calls the encoded target when the physically controlled actor lies inside the indexed trigger's inclusive XZ quadrilateral, otherwise advances four bytes. |
 | `12` | 9 | `world.start_custom_field_transition(destination_field, entry_point, transition_mode, transition_duration)` | `0x80093200` | `StartCustomFieldTransition` | waits for coordinator readiness, stages the destination field and entry parameter, records the transition mode and fade length, and yields for in-place map replacement. |
-| `14` | 1 | `world.encounters.enabled = false` | `0x80093C48` | `DisableRandomEncounters` | disables encounters. |
-| `15` | 1 | `world.encounters.enabled = true` | `0x80093C6C` | `EnableRandomEncounters` | enables random encounters. |
+| `14` | 1 | `world.player_control_locked = false` | `0x80093C48` | `UnlockPlayerControl` | clears the player-control lock, restoring player input and random encounter updates. |
+| `15` | 1 | `world.player_control_locked = true` | `0x80093C6C` | `LockPlayerControl` | once transition readiness permits, sets the player-control lock, blocking player input and random encounter updates; otherwise retries without advancing. |
 | `47` | 6 | `world.walk_player_and_change_field(destination_field, entry_point) -> (map_entry_point)` | `0x80092EA0` | `WalkPlayerAndChangeField` | waits for transition systems, enables scripted player control, and walks the player toward the current actor's offset exit point while committing the pending field transition. |
 | `56` | 10 | `world.start_world_map_transition(return_field, start_position, camera_yaw, world_map_mode)` | `0x80093014` | `StartWorldMapTransition` | waits for loading and audio readiness, persists current Field state, disables encounters, stores the return field, initial position, camera yaw, and World Map mode, requests the World Map handoff, and advances ten bytes. |
 | `76` | 1 | `world.clear_scene_flag8000(...)` | `0x80093A68` | `ClearSceneFlag8000` | clears scene flag 0x8000. |

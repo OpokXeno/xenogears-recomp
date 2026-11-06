@@ -995,7 +995,7 @@ def instruction_form(instruction, symbols: dict, *, lossless=False) -> Instructi
         suffix = "_preserve_ip" if op == 0x0C else ""
         form.template = f"actor.process_player_control_if_owned{suffix}();"
     elif op in {0x14, 0x15, 0x22, 0x23, 0x2A, 0x2B}:
-        prop = "world.encounters.enabled" if op in {0x14, 0x15} else "actor.self.visible" if op in {0x22, 0x23} else "actor.self.dialogue_enabled"
+        prop = "world.player_control_locked" if op in {0x14, 0x15} else "actor.self.visible" if op in {0x22, 0x23} else "actor.self.dialogue_enabled"
         form.template = f"{prop} = {'true' if op in {0x15, 0x22, 0x2B} else 'false'};"
     elif op in {0x16, 0x5C}:
         form.template = f"actor.bind_{'playable_character' if op == 0x16 else 'party_slot'}({arg('v80', 1)});"

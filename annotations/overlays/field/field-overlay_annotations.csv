@@ -585,8 +585,8 @@
 0x80093BD4, function start — FieldScriptDisableFieldMenu; prevents the player from opening the normal Field menu.
 0x80093BFC, function start — RestoreCompassOverlay; enables the Field compass.
 0x80093C20, function start — SuppressCompassOverlay; disables the Field compass.
-0x80093C48, function start — SuppressRandomEncounters; disables encounters.
-0x80093C6C, function start — FieldScriptEnableRandomEncounters; enables random encounters.
+0x80093C48, function start — FieldScriptUnlockPlayerControl; clears the player-control lock, restoring directional player input and random encounter updates.
+0x80093C6C, function start — FieldScriptLockPlayerControl; once transition readiness permits, sets the player-control lock, blocking directional player input and random encounter updates; otherwise retries without advancing.
 0x80093CD0, function start — FieldScriptWriteScriptU8ToVariable; writes a script byte to a variable.
 0x80093D48, function start — FieldScriptWriteScriptS16ToVariable; writes a script halfword to a variable.
 0x80093E30, function start — FieldScriptRotateActorAndSetStateFlag; rotates an actor over 30 steps and sets its state flag.

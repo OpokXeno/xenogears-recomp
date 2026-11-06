@@ -87,8 +87,8 @@ Consequences:
 | Opcode | Effect |
 |---:|---|
 | `0C` | Run the player-control update while preserving the current VM instruction pointer |
-| `14` | Disable random encounters |
-| `15` | Enable random encounters |
+| `14` | Unlock player control, restoring input and random encounter updates |
+| `15` | Once transition readiness permits, lock player control, blocking input and random encounter updates |
 | `71` | Start an explicit battle after transition readiness |
 | `F7` | Configure interval and unique active timers |
 | `FE 4F` | Allow the player to open the normal Field menu |

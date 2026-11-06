@@ -1118,6 +1118,8 @@ def operation_namespace(name: str) -> str:
     if name in {
         "EnableEncountersFieldMenuAndCompass",
         "DisableEncountersFieldMenuAndCompass",
+        "UnlockPlayerControl",
+        "LockPlayerControl",
     }:
         return "world"
     if lowered.startswith(("yield", "wait", "sleep", "return", "call", "jump", "skip")):

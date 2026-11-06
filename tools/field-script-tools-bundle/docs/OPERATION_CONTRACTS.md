@@ -340,24 +340,24 @@ Handler: `0x800A2FC0`; encoded length: 1 byte(s).
 **Inputs:**
 - None.
 
-### `14` — `DisableRandomEncounters`
+### `14` — `UnlockPlayerControl`
 
 Handler: `0x80093C48`; encoded length: 1 byte(s).
 
-**Effect:** disables encounters.
+**Effect:** clears the player-control lock, restoring player input and random encounter updates.
 
-**XGS form:** `world.encounters.enabled = false;`
+**XGS form:** `world.player_control_locked = false;`
 
 **Inputs:**
 - None.
 
-### `15` — `EnableRandomEncounters`
+### `15` — `LockPlayerControl`
 
 Handler: `0x80093C6C`; encoded length: 1 byte(s).
 
-**Effect:** enables random encounters.
+**Effect:** once transition readiness permits, sets the player-control lock, blocking player input and random encounter updates; otherwise retries without advancing.
 
-**XGS form:** `world.encounters.enabled = true;`
+**XGS form:** `world.player_control_locked = true;`
 
 **Inputs:**
 - None.

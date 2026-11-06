@@ -128,14 +128,14 @@
     "14": {
       "bytes": "1",
       "handler": "0x80093C48",
-      "name": "DisableRandomEncounters",
-      "behavior": "disables encounters."
+      "name": "UnlockPlayerControl",
+      "behavior": "clears the player-control lock, restoring player input and random encounter updates."
     },
     "15": {
       "bytes": "1",
       "handler": "0x80093C6C",
-      "name": "EnableRandomEncounters",
-      "behavior": "enables random encounters."
+      "name": "LockPlayerControl",
+      "behavior": "once transition readiness permits, sets the player-control lock, blocking player input and random encounter updates; otherwise retries without advancing."
     },
     "16": {
       "bytes": "3",

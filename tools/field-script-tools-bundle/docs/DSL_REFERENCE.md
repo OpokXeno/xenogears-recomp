@@ -281,7 +281,7 @@ Some opcodes are clearer when expressed as property changes:
 actor.self.visible = true;
 actor[8].visible = false;
 actor.self.dialogue_enabled = false;
-world.encounters.enabled = true;
+world.player_control_locked = true;
 input.accumulated = 0;
 ```
 

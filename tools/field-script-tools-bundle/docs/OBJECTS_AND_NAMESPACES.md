@@ -107,7 +107,7 @@ Typical state:
 Representative operations:
 
 ```text
-world.encounters.enabled = false;
+world.player_control_locked = true;
 world.change_field_when_ready(...);
 world.walk_player_and_change_field(...);
 if (inside_trigger_2d(4)) call L_1200;
@@ -352,7 +352,7 @@ actor.self.dialogue_enabled = true;
 ### Map Change
 
 ```text
-world.encounters.enabled = false;
+world.player_control_locked = true;
 world.change_field_when_ready(...);
 stall_forever;
 ```
