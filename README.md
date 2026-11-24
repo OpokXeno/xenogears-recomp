@@ -1,3 +1,5 @@
+**Abandoned Project**: When I started this project, there were no other public efforts to port the game to PC without a direct emulator. Since then, a considerable number of such projects have emerged, some of which are better and have more community support. Therefore, I have decided to focus on other projects and abandon this one. I recommend checking out those other projects!
+
 # XenogearsRecomp
 
 **Static recompilation of *Xenogears* (USA) for the PlayStation 1.**
